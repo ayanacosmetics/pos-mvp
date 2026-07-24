@@ -1,0 +1,2888 @@
+import { formatExpiryValue, parseExpiryDate } from './date.mjs';
+import { quoteBasket as quoteOffline } from './pricing.mjs';
+import { deviceIdentity, enqueueCommand, listCommands, migrateLegacyQueue, removeCommand, updateCommand } from './offline-store.mjs';
+import { clearStoredAuth, isAuthStorageEvent, loadAuth, saveAuth } from './auth-store.mjs';
+
+const storedAuth = loadAuth();
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [] };
+const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
+const el = (id) => document.getElementById(id);
+const posDevice = deviceIdentity();
+const roleLabels = { OWNER: 'Owner', ADMIN: 'Admin', CASHIER: 'Kasir', PURCHASING: 'Pembelian', WAREHOUSE: 'Gudang' };
+let refreshPromise = null;
+let deferredInstallPrompt = null;
+let quoteRevision = 0;
+let quoteVerificationTimer = null;
+let barcodeCameraStream = null;
+let barcodeCameraTimer = null;
+let barcodeCameraTarget = null;
+let barcodeCameraControls = null;
+let barcodeCameraCompleting = false;
+
+function storeAuth(data) {
+  const auth = saveAuth(data, state);
+  state.token = auth.token;
+  state.refreshToken = auth.refreshToken;
+  state.expiresAt = auth.expiresAt;
+}
+
+function clearAuth() {
+  state.token = null; state.refreshToken = null; state.expiresAt = null;
+  clearStoredAuth();
+}
+
+async function refreshSession(allowStorageRecovery = true) {
+  const latest = loadAuth();
+  if (latest.refreshToken && latest.refreshToken !== state.refreshToken) {
+    state.token = latest.token;
+    state.refreshToken = latest.refreshToken;
+    state.expiresAt = latest.expiresAt;
+  }
+  if (!refreshPromise) {
+    const attemptedRefreshToken = state.refreshToken;
+    refreshPromise = fetch('/api/refresh', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(attemptedRefreshToken ? { refreshToken: attemptedRefreshToken } : {})
+    }).then(async (response) => {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (allowStorageRecovery && [400,401,403].includes(response.status)) {
+          const recovered = loadAuth();
+          if (recovered.refreshToken && recovered.refreshToken !== attemptedRefreshToken) {
+            state.token = recovered.token;
+            state.refreshToken = recovered.refreshToken;
+            state.expiresAt = recovered.expiresAt;
+            if (recovered.token) return recovered;
+          }
+        }
+        const error = new Error(data.error ?? 'Sesi berakhir');
+        error.status = [400,401,403].includes(response.status) ? 401 : response.status;
+        throw error;
+      }
+      storeAuth(data);
+      return data;
+    }).finally(() => { refreshPromise = null; });
+  }
+  return refreshPromise;
+}
+
+async function request(path, options = {}, allowRefresh = true) {
+  const headers = { 'content-type': 'application/json', ...(options.headers ?? {}) };
+  if (state.token) headers.authorization = `Bearer ${state.token}`;
+  if (state.session && state.activeOutletId) headers['x-outlet-id'] = state.activeOutletId;
+  headers['x-device-id'] = posDevice.id;
+  let response;
+  try {
+    response = await fetch(path, { ...options, headers });
+  } catch {
+    const error = new Error(navigator.onLine ? 'Server belum dapat dihubungi. Coba lagi beberapa saat.' : 'Perangkat sedang offline. Periksa koneksi internet.');
+    error.code = 'NETWORK_ERROR';
+    throw error;
+  }
+  const data = await response.json().catch(() => ({}));
+  if (response.status === 401 && allowRefresh && !['/api/login','/api/refresh'].includes(path) && state.refreshToken) {
+    try { await refreshSession(); return request(path, options, false); }
+    catch (error) { if ([401,403].includes(error.status)) clearAuth(); throw error; }
+  }
+  if (!response.ok) { const error = new Error(data.error ?? 'Permintaan gagal'); error.status = response.status; throw error; }
+  return data;
+}
+
+function toast(message) {
+  el('toast').textContent = message;
+  el('toast').classList.add('show');
+  setTimeout(() => el('toast').classList.remove('show'), 2400);
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
+}
+
+async function login(email, password) {
+  const data = await request('/api/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+  storeAuth(data);
+  await bootstrap({ reportError: true });
+}
+
+function saveBootstrapCache(data) {
+  const session = { ...data.session };
+  delete session.token;
+  localStorage.setItem('pos_bootstrap_cache', JSON.stringify({ ...data, session, cachedAt: new Date().toISOString() }));
+}
+
+function cacheCurrentShift() {
+  const cached = localStorage.getItem('pos_bootstrap_cache');
+  if (!cached) return;
+  const data = JSON.parse(cached);
+  data.currentShift = state.currentShift;
+  data.cachedAt = new Date().toISOString();
+  localStorage.setItem('pos_bootstrap_cache', JSON.stringify(data));
+}
+
+async function applyBootstrap(data, { offline = false } = {}) {
+  state.session = data.session;
+  state.business = data.business ?? state.business;
+  state.deviceSettings = { ...state.deviceSettings, ...(data.deviceSettings ?? {}) };
+  state.outlets = data.outlets ?? [];
+  state.activeOutletId = data.activeOutletId ?? state.outlets[0]?.id ?? null;
+  state.products = data.products;
+  state.promotions = data.promotions;
+  state.customers = data.customers;
+  state.suppliers = data.suppliers;
+  state.locations = data.locations ?? [];
+  state.currentShift = data.currentShift;
+  renderOutletSwitcher();
+  await migrateLegacyQueue(state.session.user.id);
+  await updateQueueCount();
+  el('user-name').textContent = state.session.user.displayName;
+  el('user-role').textContent = state.session.user.role;
+  document.querySelectorAll('[data-permission]').forEach((node) => node.classList.toggle('hidden', !state.session.permissions.includes(node.dataset.permission)));
+  el('session-view').classList.add('hidden');
+  el('login-view').classList.add('hidden');
+  el('app-view').classList.remove('hidden');
+  renderProducts();
+  renderProductTable();
+  renderRestock();
+  renderRelations();
+  renderPromotionEditorOptions();
+  renderPromotionList();
+  renderShift();
+  renderImportLocations();
+  await updateQuote();
+  if (!offline && state.session.permissions.includes('purchasing.view_cost')) await loadPurchaseOrders();
+  if (!offline && state.session.permissions.includes('purchasing.view_cost')) await loadRecentSupplierReturns();
+  if (!offline && state.session.permissions.includes('inventory.manage')) await loadInventory();
+  if (!offline && state.session.permissions.includes('report.view')) await loadReport();
+  if (!offline && state.session.permissions.includes('audit.view')) { await loadSyncReview(); await loadImportHistory(); }
+  if (!offline && state.session.permissions.includes('identity.manage')) await loadBackupHistory();
+  if (!offline && state.session.permissions.includes('identity.manage')) await loadSettings();
+  if (!offline && state.session.permissions.includes('identity.manage')) await loadSystemHealth();
+  if (!offline && state.session.permissions.includes('catalog.manage')) await loadProductManagement();
+  if (!offline && state.session.permissions.includes('promotion.manage')) await loadPromotionManagement();
+  if (!offline && state.session.permissions.includes('pos.sell')) await loadHeldSales();
+  if (!offline && state.session.permissions.includes('pos.sell')) await loadCustomerAging();
+  if (!offline && state.session.permissions.includes('sales.return')) await loadRecentReturns();
+}
+
+async function bootstrap({ reportError = false } = {}) {
+  try {
+    const data = await request('/api/bootstrap');
+    saveBootstrapCache(data);
+    await applyBootstrap(data);
+  } catch (error) {
+    const cached = localStorage.getItem('pos_bootstrap_cache');
+    if (!error.status && cached) {
+      await applyBootstrap(JSON.parse(cached), { offline: true });
+      toast('Mode offline aktif. Katalog terakhir siap digunakan.');
+      return;
+    }
+    if ([401,403].includes(error.status)) clearAuth();
+    el('session-view').classList.add('hidden');
+    el('login-view').classList.remove('hidden');
+    el('app-view').classList.add('hidden');
+    if (![401,403].includes(error.status)) el('login-error').textContent = `Sesi masih tersimpan, tetapi data gagal dimuat: ${error.message}`;
+    if (reportError) throw error;
+  }
+}
+
+async function refreshCatalog() {
+  const data = await request('/api/bootstrap');
+  saveBootstrapCache(data);
+  state.products = data.products;
+  state.business = data.business ?? state.business;
+  state.deviceSettings = { ...state.deviceSettings, ...(data.deviceSettings ?? {}) };
+  state.outlets = data.outlets ?? state.outlets;
+  state.activeOutletId = data.activeOutletId ?? state.activeOutletId;
+  state.promotions = data.promotions;
+  state.customers = data.customers;
+  state.suppliers = data.suppliers;
+  state.locations = data.locations ?? state.locations;
+  state.currentShift = data.currentShift;
+  renderOutletSwitcher();
+  renderProducts(el('product-search').value);
+  renderProductTable();
+  renderRelations();
+  renderPromotionEditorOptions();
+  renderPromotionList();
+  renderShift();
+  renderImportLocations();
+  if (state.session.permissions.includes('catalog.manage')) await loadProductManagement();
+}
+
+function renderProducts(query = '') {
+  const normalized = query.trim().toLowerCase();
+  const list = state.products.filter((product) => !normalized || `${product.name} ${product.sku} ${product.units.map((unit) => unit.barcode).join(' ')}`.toLowerCase().includes(normalized));
+  el('product-grid').innerHTML = list.map((product) => {
+    const unit = product.units[0];
+    const rule = product.priceRules.find((item) => item.customerGroupId === 'retail') ?? product.priceRules[0];
+    const empty = Number(product.stockBase ?? 0) <= 0;
+    return `<button class="product-card ${empty ? 'out-of-stock' : ''}" data-product="${product.id}" data-unit="${unit.id}" ${empty ? 'disabled' : ''}><span class="category">${product.category}</span><strong>${product.name}</strong><small>${empty ? 'STOK KOSONG' : `${money.format(rule?.unitPriceBase ?? 0)} · stok ${product.stockBase} pcs`}</small></button>`;
+  }).join('');
+  document.querySelectorAll('.product-card').forEach((button) => button.addEventListener('click', () => addToCart(button.dataset.product, button.dataset.unit)));
+}
+
+async function loadProductManagement() {
+  try {
+    const data=await request('/api/products/manage');
+    state.managedProducts=data.products??[];
+  } catch {
+    state.managedProducts=state.products.map((product)=>({...product,active:true}));
+  }
+  renderProductTable();
+}
+
+function productPrices(product) {
+  return {
+    retail:product.priceRules.find((rule)=>rule.customerGroupId==='retail'&&rule.minBaseQty===1)?.unitPriceBase??0,
+    wholesale:product.priceRules.find((rule)=>rule.customerGroupId==='wholesale'&&rule.minBaseQty===1)?.unitPriceBase??0,
+    tierQty:product.priceRules.find((rule)=>!rule.customerGroupId&&rule.minBaseQty>1)?.minBaseQty??0,
+    tierPrice:product.priceRules.find((rule)=>!rule.customerGroupId&&rule.minBaseQty>1)?.unitPriceBase??0
+  };
+}
+
+function renderProductTable() {
+  const query=el('product-admin-search')?.value.trim().toLowerCase()??'';
+  const status=el('product-admin-status')?.value??'ACTIVE';
+  const all=state.managedProducts;
+  const list=all.filter((product)=>{
+    const matches=!query||`${product.sku} ${product.name} ${product.brand??''} ${product.category} ${product.variantGroup??''} ${product.variantName??''} ${product.units.map((unit)=>unit.barcode??'').join(' ')}`.toLowerCase().includes(query);
+    const statusMatch=status==='ALL'||(status==='ACTIVE'&&product.active)||(status==='INACTIVE'&&!product.active)||(status==='LOW_STOCK'&&product.active&&product.minimumStock>0&&product.stockBase<=product.minimumStock);
+    return matches&&statusMatch;
+  });
+  const active=all.filter((product)=>product.active).length,inactive=all.length-active,low=all.filter((product)=>product.active&&product.minimumStock>0&&product.stockBase<=product.minimumStock).length;
+  el('product-metrics').innerHTML=[['Total SKU',all.length],['Aktif dijual',active],['Nonaktif',inactive],['Stok menipis',low]].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
+  const categories=[...new Set(all.map((product)=>product.category).filter(Boolean))].sort();
+  const brands=[...new Set(all.map((product)=>product.brand).filter(Boolean))].sort();
+  el('product-category-options').innerHTML=categories.map((value)=>`<option value="${escapeHtml(value)}">`).join('');
+  el('product-brand-options').innerHTML=brands.map((value)=>`<option value="${escapeHtml(value)}">`).join('');
+  el('product-table').innerHTML=list.length?`<table class="product-admin-table"><thead><tr><th>SKU & status</th><th>Produk</th><th>Satuan & barcode</th><th>Harga</th><th>Stok</th><th>Aksi</th></tr></thead><tbody>${list.map((product)=>{
+    const prices=productPrices(product);
+    const variant=[product.variantGroup,product.variantName].filter(Boolean).join(' · ');
+    return `<tr data-product-id="${product.id}"><td><strong>${escapeHtml(product.sku)}</strong><br><span class="badge ${product.active?'ok':'danger'}">${product.active?'Aktif':'Nonaktif'}</span></td><td><strong>${escapeHtml(product.name)}</strong>${variant?`<br><small>Varian: ${escapeHtml(variant)}</small>`:''}<br><small>${escapeHtml(product.brand??'Tanpa merek')} · ${escapeHtml(product.category)}</small></td><td>${product.units.map((unit)=>`<span class="product-unit-pill">${escapeHtml(unit.name)} · isi ${unit.factor}${unit.barcode?` · ${escapeHtml(unit.barcode)}`:''}</span>`).join('')}</td><td><strong>${money.format(prices.retail)}</strong><br><small>Grosir ${money.format(prices.wholesale||prices.retail)}</small></td><td><strong>${product.stockBase} pcs</strong><br><small>Minimum ${product.minimumStock||0}</small></td><td><div class="product-actions"><button class="button secondary edit-product" type="button">Edit</button><button class="button ${product.active?'danger-button':'secondary'} toggle-product" type="button" data-active="${!product.active}">${product.active?'Nonaktifkan':'Aktifkan'}</button></div></td></tr>`;
+  }).join('')}</tbody></table>`:'<div class="empty-state compact">Tidak ada produk yang cocok dengan filter.</div>';
+}
+
+function renderRelations() {
+  const selectedId=el('customer-select').value;
+  el('customer-select').innerHTML = '<option value="" data-group="retail">Pelanggan umum / Non-member</option>' + state.customers.map((customer) => `<option value="${customer.id}" data-group="${customer.group_id}">${customer.name} · ${customer.group_id === 'wholesale' ? 'Grosir' : 'Eceran'}${customer.account_balance>0?` · piutang ${money.format(customer.account_balance)}`:''}</option>`).join('');
+  if(state.customers.some((customer)=>customer.id===selectedId))el('customer-select').value=selectedId;
+  else el('customer-select').value='';
+  const query=(el('customer-account-search')?.value??'').trim().toLowerCase();
+  const customers=state.customers.filter((customer)=>!query||`${customer.name} ${customer.code} ${customer.phone??''}`.toLowerCase().includes(query));
+  const totalBalance=state.customers.reduce((sum,customer)=>sum+Number(customer.account_balance??0),0);
+  const overdue=state.customers.reduce((sum,customer)=>sum+Number(customer.overdue_balance??0),0);
+  el('customer-account-metrics').innerHTML=[['Pelanggan aktif',state.customers.length],['Total piutang',money.format(totalBalance)],['Sudah jatuh tempo',money.format(overdue)],['Fasilitas kredit',state.customers.filter((customer)=>customer.credit_enabled).length]].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
+  el('customer-list').innerHTML=customers.length?customers.map((customer)=>{
+    const balance=Number(customer.account_balance??0),overdueBalance=Number(customer.overdue_balance??0);
+    return `<article class="customer-account-card" data-customer-id="${escapeHtml(customer.id)}"><div><div class="customer-account-name"><strong>${escapeHtml(customer.name)}</strong><span class="badge ${customer.group_id==='wholesale'?'warning':'ok'}">${customer.group_id==='wholesale'?'Grosir':'Eceran'}</span>${customer.credit_enabled?'<span class="badge info">Kredit aktif</span>':''}</div><small>${escapeHtml(customer.code)} · ${escapeHtml(customer.phone??'tanpa telepon')}</small></div><div class="customer-account-balance ${overdueBalance>0?'overdue':''}"><span>Saldo piutang</span><strong>${money.format(balance)}</strong><small>${overdueBalance>0?`${money.format(overdueBalance)} jatuh tempo`:`Sisa plafon ${money.format(customer.available_credit??0)}`}</small></div><div class="customer-account-actions"><button class="button secondary customer-statement" type="button">Lihat rekening</button>${['OWNER','ADMIN'].includes(state.session.user.role)?'<button class="button secondary edit-customer" type="button">Edit</button>':''}</div></article>`;
+  }).join(''):'<div class="empty-state compact">Pelanggan tidak ditemukan.</div>';
+  const canSeeSuppliers = state.session.permissions.includes('purchasing.receive');
+  el('supplier-panel').classList.toggle('hidden', !canSeeSuppliers);
+  if (canSeeSuppliers) el('supplier-list').innerHTML = state.suppliers.map((supplier) => `<div class="relation-item supplier-account-row" data-supplier-id="${escapeHtml(supplier.id)}"><span><strong>${escapeHtml(supplier.name)}</strong><br><small>${escapeHtml(supplier.code)} · ${escapeHtml(supplier.phone??'tanpa telepon')}</small></span><span><strong>${money.format(supplier.payable_balance??0)}</strong><br><small class="${supplier.overdue_balance>0?'negative':''}">${supplier.overdue_balance>0?`${money.format(supplier.overdue_balance)} jatuh tempo`:`${supplier.open_bill_count??0} faktur terbuka`}</small></span><button class="button secondary supplier-statement" type="button">Lihat hutang</button></div>`).join('');
+  const selected = el('customer-select').selectedOptions[0];
+  el('customer-group').value = selected?.dataset.group ?? 'retail';
+  syncCustomerSearchLabel();
+}
+
+function selectedPosCustomer() {
+  return state.customers.find((customer) => customer.id === el('customer-select').value) ?? null;
+}
+
+function syncCustomerSearchLabel() {
+  const customer = selectedPosCustomer();
+  if (el('customer-search') && document.activeElement !== el('customer-search')) {
+    el('customer-search').value = customer?.name ?? '';
+  }
+  el('clear-pos-customer')?.classList.toggle('hidden', !customer);
+}
+
+function matchingCustomers(query = '') {
+  const normalized = String(query).trim().toLowerCase();
+  const digits = normalized.replace(/\D/g, '');
+  return state.customers.filter((customer) => {
+    if (!normalized) return true;
+    const haystack = `${customer.name} ${customer.code ?? ''} ${customer.phone ?? ''}`.toLowerCase();
+    const phoneDigits = String(customer.phone ?? '').replace(/\D/g, '');
+    return haystack.includes(normalized) || (digits.length >= 3 && phoneDigits.includes(digits));
+  }).slice(0, 12);
+}
+
+function renderCustomerSearchResults(query = '') {
+  const panel = el('customer-search-results');
+  const customers = matchingCustomers(query);
+  panel.innerHTML = `<button type="button" class="customer-search-option general-customer-option" data-customer-id=""><span><strong>Pelanggan umum</strong><small>Transaksi tanpa member</small></span><span class="badge neutral">UMUM</span></button>` + (customers.map((customer) => `<button type="button" class="customer-search-option" data-customer-id="${escapeHtml(customer.id)}"><span><strong>${escapeHtml(customer.name)}</strong><small>${escapeHtml(customer.code ?? '')} · ${escapeHtml(customer.phone ?? 'tanpa telepon')}</small></span><span class="badge ${customer.group_id === 'wholesale' ? 'warning' : 'ok'}">${customer.group_id === 'wholesale' ? 'Grosir' : 'Eceran'}</span></button>`).join('')
+    || '<div class="empty-state compact">Member tidak ditemukan. Gunakan tombol + Member untuk mendaftarkan pelanggan.</div>');
+  panel.classList.remove('hidden');
+}
+
+async function selectPosCustomer(customerId) {
+  if (!customerId) {
+    invalidateSaleAuthorization();
+    el('customer-select').value = '';
+    el('customer-group').value = 'retail';
+    el('customer-search').value = '';
+    el('customer-search-results').classList.add('hidden');
+    syncCustomerSearchLabel();
+    await updateQuote();
+    return;
+  }
+  const customer = state.customers.find((item) => item.id === customerId);
+  if (!customer) return;
+  invalidateSaleAuthorization();
+  el('customer-select').value = customer.id;
+  el('customer-group').value = customer.group_id ?? 'retail';
+  el('customer-search').value = customer.name;
+  el('customer-search-results').classList.add('hidden');
+  await updateQuote();
+}
+
+function resetPosCustomer() {
+  el('customer-select').value = '';
+  el('customer-group').value = 'retail';
+  el('customer-search').value = '';
+  el('customer-search-results').classList.add('hidden');
+  syncCustomerSearchLabel();
+}
+
+async function loadCustomerAging(){
+  try{
+    state.customerAging=await request('/api/customer-credit/aging');
+    const buckets=state.customerAging.buckets??{};
+    el('customer-aging-buckets').innerHTML=[['Belum jatuh tempo',buckets.current??0,'safe'],['Terlambat 1–30 hari',buckets.days1To30??0,'notice'],['Terlambat 31–60 hari',buckets.days31To60??0,'warning'],['Lebih dari 60 hari',buckets.daysOver60??0,'danger']].map(([label,value,level])=>`<div class="${level}"><span>${label}</span><strong>${money.format(value)}</strong></div>`).join('');
+  }catch(error){el('customer-aging-buckets').innerHTML=`<small class="muted">${escapeHtml(error.message)}</small>`;}
+}
+
+function renderProductUnitEditor(){
+  el('product-units-editor').innerHTML=state.productUnitsDraft.map((unit,index)=>`<div class="product-unit-row" data-index="${index}"><label>Nama satuan<input class="unit-name" value="${escapeHtml(unit.name)}" placeholder="pcs / lusin / karton" required></label><label>Isi dalam pcs<input class="unit-factor" type="number" min="1" step="any" value="${unit.factor}" required></label><label>Barcode<input class="unit-barcode" value="${escapeHtml(unit.barcode??'')}" placeholder="Scan atau ketik"></label><button class="icon-button remove-product-unit" type="button" aria-label="Hapus satuan" ${state.productUnitsDraft.length===1?'disabled':''}>×</button></div>`).join('');
+}
+
+function openProductEditor(productId=null){
+  const product=productId?state.managedProducts.find((item)=>item.id===productId):null;
+  const prices=product?productPrices(product):{retail:'',wholesale:'',tierQty:'',tierPrice:''};
+  el('product-form').reset();el('product-error').textContent='';
+  el('edit-product-id').value=product?.id??'';
+  el('product-dialog-eyebrow').textContent=product?'EDIT PRODUK':'PRODUK BARU';
+  el('product-dialog-title').textContent=product?'Ubah produk':'Tambah produk';
+  el('new-sku').value=product?.sku??'';el('new-name').value=product?.name??'';
+  el('new-category').value=product?.category??'';el('new-brand').value=product?.brand??'';
+  el('new-variant-group').value=product?.variantGroup??'';el('new-variant-name').value=product?.variantName??'';
+  el('new-min-stock').value=product?.minimumStock??0;el('new-track-expiry').checked=Boolean(product?.trackExpiry);
+  el('new-retail-price').value=prices.retail;el('new-wholesale-price').value=prices.wholesale;
+  el('new-tier-qty').value=prices.tierQty;el('new-tier-price').value=prices.tierPrice;
+  state.productUnitsDraft=product?product.units.map((unit)=>({...unit})):[{id:null,name:'pcs',factor:1,barcode:''}];
+  renderProductUnitEditor();el('product-dialog').showModal();
+}
+
+function productPayload(){
+  return {
+    id:el('edit-product-id').value||null,sku:el('new-sku').value,name:el('new-name').value,category:el('new-category').value,
+    brand:el('new-brand').value,variantGroup:el('new-variant-group').value,variantName:el('new-variant-name').value,
+    minimumStock:Number(el('new-min-stock').value),trackExpiry:el('new-track-expiry').checked,
+    retailPrice:Number(el('new-retail-price').value),wholesalePrice:Number(el('new-wholesale-price').value),
+    tierQty:Number(el('new-tier-qty').value),tierPrice:Number(el('new-tier-price').value),units:state.productUnitsDraft
+  };
+}
+
+async function saveProduct(event) {
+  event.preventDefault();el('product-error').textContent='';
+  const payload=productPayload(),button=el('save-product-button');button.disabled=true;
+  try{
+    const path=payload.id?`/api/products/${payload.id}`:'/api/products';
+    const product=await request(path,{method:payload.id?'PUT':'POST',body:JSON.stringify(payload)});
+    toast(`${product.name} berhasil ${payload.id?'diperbarui':'ditambahkan'}`);el('product-dialog').close();
+    await refreshCatalog();await renderRestock();if(state.session.permissions.includes('inventory.manage'))await loadInventory();
+  }catch(error){el('product-error').textContent=error.message;}finally{button.disabled=false;}
+}
+
+async function toggleProductStatus(productId,active){
+  const product=state.managedProducts.find((item)=>item.id===productId);if(!product)return;
+  if(!active&&!confirm(`Nonaktifkan ${product.name}? Produk tidak akan muncul di kasir, tetapi histori tetap tersimpan.`))return;
+  try{
+    await request(`/api/products/${productId}/status`,{method:'POST',body:JSON.stringify({active})});
+    toast(active?'Produk kembali diaktifkan':'Produk dinonaktifkan');await refreshCatalog();
+  }catch(error){toast(error.message);}
+}
+
+function openCustomerEditor(customerId=null,source='relations'){
+  const customer=customerId?state.customers.find((item)=>item.id===customerId):null;
+  state.customerEditorSource=source;
+  el('customer-form').reset();el('customer-form-error').textContent='';el('edit-customer-id').value=customer?.id??'';
+  el('customer-dialog-title').textContent=customer?'Ubah pelanggan':source==='pos'?'Tambah member dari kasir':'Tambah pelanggan';
+  el('customer-name').value=customer?.name??'';el('customer-phone').value=customer?.phone??'';
+  el('customer-phone').required=source==='pos';
+  el('customer-email').value=customer?.email??'';el('customer-address').value=customer?.address??'';
+  el('customer-notes').value=customer?.notes??'';el('customer-new-group').value=customer?.group_id??'retail';
+  el('customer-credit-enabled').checked=Boolean(customer?.credit_enabled);
+  el('customer-credit-limit').value=customer?.credit_limit??0;el('customer-credit-days').value=customer?.credit_days??30;
+  el('customer-credit-enabled').disabled=!['OWNER','ADMIN'].includes(state.session.user.role);
+  el('customer-credit-fields').classList.toggle('hidden',!el('customer-credit-enabled').checked);
+  el('customer-dialog').showModal();
+}
+
+async function saveCustomer(event) {
+  event.preventDefault();const id=el('edit-customer-id').value,button=event.currentTarget.querySelector('[type="submit"]');button.disabled=true;
+  const payload={name:el('customer-name').value,phone:el('customer-phone').value,email:el('customer-email').value,address:el('customer-address').value,notes:el('customer-notes').value,groupId:el('customer-new-group').value,creditEnabled:el('customer-credit-enabled').checked,creditLimit:Number(el('customer-credit-limit').value||0),creditDays:Number(el('customer-credit-days').value||0),active:true};
+  try{
+    const customer=await request(id?`/api/customers/${id}`:'/api/customers',{method:id?'PUT':'POST',body:JSON.stringify(payload)});
+    const selectForSale=!id&&state.customerEditorSource==='pos';
+    toast(`${customer.name} berhasil disimpan`);el('customer-dialog').close();await refreshCatalog();
+    if(selectForSale)await selectPosCustomer(customer.id);
+  }catch(error){el('customer-form-error').textContent=error.message;}finally{button.disabled=false;}
+}
+
+async function openCustomerStatement(customerId){
+  try{
+    const data=await request(`/api/customers/${customerId}/statement`);state.activeCustomerStatement=data;
+    const customer=data.customer;el('statement-customer-name').textContent=customer.name;
+    el('statement-summary').innerHTML=`<div><span>Saldo piutang</span><strong>${money.format(customer.account_balance)}</strong></div><div><span>Sisa plafon</span><strong>${money.format(customer.available_credit)}</strong></div><div class="${customer.overdue_balance>0?'overdue':''}"><span>Jatuh tempo</span><strong>${money.format(customer.overdue_balance)}</strong></div>`;
+    el('customer-payment-amount').value=customer.account_balance||'';el('customer-payment-amount').max=customer.account_balance;
+    el('customer-payment-form').classList.toggle('hidden',!(customer.account_balance>0));
+    el('statement-invoices').innerHTML=reportTable(['Faktur','Tanggal','Jatuh tempo','Kredit','Terbayar','Sisa'],data.invoices.filter((invoice)=>invoice.outstanding>0).map((invoice)=>`<tr class="${invoice.overdue?'overdue-row':''}"><td><strong>${escapeHtml(invoice.receipt_no)}</strong></td><td>${new Date(invoice.occurred_at).toLocaleDateString('id-ID')}</td><td>${invoice.due_on?new Date(`${invoice.due_on}T00:00:00`).toLocaleDateString('id-ID'):'-'}</td><td>${money.format(invoice.creditAmount)}</td><td>${money.format(invoice.paidAmount)}</td><td><strong>${money.format(invoice.outstanding)}</strong></td></tr>`));
+    const typeLabels={SALE_CREDIT:'Penjualan kredit',PAYMENT:'Pembayaran',RETURN_CREDIT:'Retur mengurangi piutang',OPENING_BALANCE:'Saldo awal',ADJUSTMENT:'Penyesuaian'};
+    el('statement-entries').innerHTML=reportTable(['Waktu','Dokumen','Keterangan','Mutasi','Saldo'],data.entries.map((entry)=>`<tr><td>${new Date(entry.occurred_at).toLocaleString('id-ID')}</td><td>${escapeHtml(entry.document_no??'-')}</td><td>${escapeHtml(typeLabels[entry.entry_type]??entry.entry_type)}</td><td class="${entry.amount>0?'negative':'positive'}">${entry.amount>0?'+':'−'}${money.format(Math.abs(entry.amount))}</td><td><strong>${money.format(entry.balanceAfter)}</strong></td></tr>`));
+    el('customer-payment-error').textContent='';el('customer-statement-dialog').showModal();
+  }catch(error){toast(error.message);}
+}
+
+async function recordCustomerPayment(event){
+  event.preventDefault();const customer=state.activeCustomerStatement?.customer;if(!customer)return;
+  try{
+    const result=await request('/api/customer-payments',{method:'POST',headers:{'idempotency-key':crypto.randomUUID()},body:JSON.stringify({customerId:customer.id,shiftId:state.currentShift?.id,amount:Number(el('customer-payment-amount').value),method:el('customer-payment-method').value,reference:el('customer-payment-reference').value,note:el('customer-payment-note').value})});
+    toast(`Pembayaran ${result.receiptNo} berhasil`);el('customer-statement-dialog').close();await refreshCatalog();await loadCustomerAging();await openCustomerStatement(customer.id);
+  }catch(error){el('customer-payment-error').textContent=error.message;}
+}
+
+async function saveSupplier() {
+  try {
+    const supplier = await request('/api/suppliers', { method: 'POST', body: JSON.stringify({ name: el('supplier-name').value, phone: el('supplier-phone').value, address: el('supplier-address').value }) });
+    toast(`${supplier.name} berhasil disimpan`); el('supplier-name').value = ''; el('supplier-phone').value = ''; el('supplier-address').value = ''; await refreshCatalog(); await renderRestock();
+  } catch (error) { toast(error.message); }
+}
+
+async function openSupplierStatement(supplierId){
+  try{
+    const data=await request(`/api/suppliers/${supplierId}/statement`);state.activeSupplierStatement=data;const supplier=data.supplier;
+    el('statement-supplier-name').textContent=supplier.name;
+    el('supplier-statement-summary').innerHTML=`<div><span>Total hutang</span><strong>${money.format(supplier.payable_balance)}</strong></div><div class="${supplier.overdue_balance>0?'overdue':''}"><span>Jatuh tempo</span><strong>${money.format(supplier.overdue_balance)}</strong></div><div><span>Faktur terbuka</span><strong>${supplier.open_bill_count}</strong></div>`;
+    el('supplier-payment-amount').value=supplier.payable_balance||'';el('supplier-payment-amount').max=supplier.payable_balance;
+    el('supplier-payment-form').classList.toggle('hidden',!(supplier.payable_balance>0));
+    el('supplier-statement-bills').innerHTML=reportTable(['Faktur','Tanggal','Jatuh tempo','Nilai','Retur kredit','Terbayar','Sisa'],data.bills.filter((bill)=>bill.outstanding>0).map((bill)=>`<tr><td><strong>${escapeHtml(bill.document_no)}</strong></td><td>${new Date(bill.occurred_at).toLocaleDateString('id-ID')}</td><td>${bill.due_on?new Date(`${bill.due_on}T00:00:00`).toLocaleDateString('id-ID'):'-'}</td><td>${money.format(bill.originalAmount)}</td><td>${money.format(bill.returnCredit)}</td><td>${money.format(bill.paidAmount)}</td><td><strong>${money.format(bill.outstanding)}</strong></td></tr>`));
+    el('supplier-statement-entries').innerHTML=reportTable(['Waktu','Dokumen','Jenis','Mutasi'],data.entries.map((entry)=>`<tr><td>${new Date(entry.occurred_at).toLocaleString('id-ID')}</td><td>${escapeHtml(entry.document_no??'-')}</td><td>${escapeHtml(entry.entry_type)}</td><td class="${entry.amount>0?'negative':'positive'}">${entry.amount>0?'+':'−'}${money.format(Math.abs(entry.amount))}</td></tr>`));
+    el('supplier-payment-error').textContent='';el('supplier-statement-dialog').showModal();
+  }catch(error){toast(error.message);}
+}
+
+async function recordSupplierPayment(event){
+  event.preventDefault();const supplier=state.activeSupplierStatement?.supplier;if(!supplier)return;
+  try{
+    const result=await request('/api/supplier-payments',{method:'POST',headers:{'idempotency-key':crypto.randomUUID()},body:JSON.stringify({supplierId:supplier.id,shiftId:state.currentShift?.id,amount:Number(el('supplier-payment-amount').value),method:el('supplier-payment-method').value,reference:el('supplier-payment-reference').value,note:el('supplier-payment-note').value})});
+    toast(`Pembayaran ${result.paymentNo} berhasil`);el('supplier-statement-dialog').close();await refreshCatalog();await openSupplierStatement(supplier.id);
+  }catch(error){el('supplier-payment-error').textContent=error.message;}
+}
+
+const importTemplates = {
+  PRODUCTS: {
+    file: 'contoh-impor-produk.csv',
+    headers: ['sku','nama','kategori','merek','satuan_dasar','barcode_dasar','harga_ecer','harga_grosir','min_qty_grosir','harga_per_pcs_grosir','satuan_besar','isi_satuan_besar','barcode_satuan_besar','stok_awal','modal_awal','nomor_batch','tanggal_exp'],
+    example: ['KOS-001','Lip Tint Rose','Lip Tint','Nusa Beauty','pcs','899000000001','25000','23000','12','21000','lusin','12','899000000012','24','15000','BATCH-A1','2027-12-31']
+  },
+  CUSTOMERS: {
+    file: 'contoh-impor-pelanggan.csv',
+    headers: ['kode','nama','telepon','kelompok'],
+    example: ['PLG-0002','Toko Cantik','081234567890','grosir']
+  },
+  SUPPLIERS: {
+    file: 'contoh-impor-supplier.csv',
+    headers: ['kode','nama','telepon','alamat'],
+    example: ['SUP-001','Distributor Kosmetik Nusantara','081234567890','Makassar']
+  }
+};
+
+const importAliases = {
+  PRODUCTS: { sku:'sku',nama:'name',kategori:'category',merek:'brand',satuan_dasar:'baseUnit',barcode_dasar:'baseBarcode',harga_ecer:'retailPrice',harga_grosir:'wholesalePrice',min_qty_grosir:'tierQty',harga_per_pcs_grosir:'tierPrice',satuan_besar:'bulkUnit',isi_satuan_besar:'bulkFactor',barcode_satuan_besar:'bulkBarcode',stok_awal:'openingQty',modal_awal:'openingCost',nomor_batch:'batchNo',tanggal_exp:'expiresOn' },
+  CUSTOMERS: { kode:'code',nama:'name',telepon:'phone',kelompok:'groupId' },
+  SUPPLIERS: { kode:'code',nama:'name',telepon:'phone',alamat:'address' }
+};
+
+function importCsvCell(value) {
+  const text = String(value ?? '');
+  return /[",\n;]/.test(text) ? `"${text.replaceAll('"','""')}"` : text;
+}
+
+function parseCsv(text) {
+  const source = text.replace(/^\uFEFF/,'');
+  const firstLine = source.split(/\r?\n/,1)[0] ?? '';
+  const delimiter = (firstLine.match(/;/g)?.length ?? 0) > (firstLine.match(/,/g)?.length ?? 0) ? ';' : ',';
+  const rows = []; let row = [], cell = '', quoted = false;
+  for (let index=0; index<source.length; index+=1) {
+    const character = source[index];
+    if (character === '"') {
+      if (quoted && source[index+1] === '"') { cell += '"'; index += 1; }
+      else quoted = !quoted;
+    } else if (character === delimiter && !quoted) { row.push(cell.trim()); cell = ''; }
+    else if ((character === '\n' || character === '\r') && !quoted) {
+      if (character === '\r' && source[index+1] === '\n') index += 1;
+      row.push(cell.trim()); cell = '';
+      if (row.some((value) => value !== '')) rows.push(row);
+      row = [];
+    } else cell += character;
+  }
+  row.push(cell.trim());
+  if (row.some((value) => value !== '')) rows.push(row);
+  return rows;
+}
+
+function renderImportLocations() {
+  if (!el('import-location')) return;
+  el('import-location').innerHTML = state.locations.map((location) => `<option value="${location.id}">${escapeHtml(location.name)} · ${location.kind === 'WAREHOUSE' ? 'Gudang' : 'Toko'}</option>`).join('');
+  const store = state.locations.find((location) => location.kind === 'STORE');
+  if (store) el('import-location').value = store.id;
+  el('import-location-label').classList.toggle('hidden', el('import-kind').value !== 'PRODUCTS');
+}
+
+function downloadImportTemplate() {
+  const template = importTemplates[el('import-kind').value];
+  const csv = `\uFEFF${template.headers.map(importCsvCell).join(',')}\r\n${template.example.map(importCsvCell).join(',')}\r\n`;
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  link.download = template.file; link.click(); URL.revokeObjectURL(link.href);
+}
+
+function resetImportPreview(message = 'Pilih file untuk melihat data sebelum disimpan.') {
+  state.importDraft = null;
+  el('commit-import').disabled = true;
+  el('import-validity').className = 'pill';
+  el('import-validity').textContent = 'Belum diperiksa';
+  el('import-metrics').innerHTML = '';
+  el('import-errors').innerHTML = '';
+  el('import-preview').innerHTML = `<div class="empty-state compact">${escapeHtml(message)}</div>`;
+}
+
+function mapCsvRows(kind, matrix) {
+  if (matrix.length < 2) throw new Error('File hanya berisi judul kolom tanpa data');
+  const aliases = importAliases[kind];
+  const headers = matrix[0].map((header) => String(header).trim().toLowerCase().replaceAll(' ','_'));
+  const mappedHeaders = headers.map((header) => aliases[header] ?? null);
+  const required = kind === 'PRODUCTS' ? ['sku','name','retailPrice'] : ['code','name'];
+  const missing = required.filter((field) => !mappedHeaders.includes(field));
+  if (missing.length) throw new Error('Susunan kolom tidak cocok. Gunakan file contoh yang disediakan.');
+  return matrix.slice(1).map((cells) => Object.fromEntries(mappedHeaders.map((field,index) => [field,cells[index] ?? '']).filter(([field]) => field)));
+}
+
+function renderImportPreview(preview) {
+  const summary = preview.summary ?? { total: preview.rows.length, create: 0, update: 0, error: preview.errors.length };
+  el('import-metrics').innerHTML = [
+    ['Total baris',summary.total],['Data baru',summary.create],['Diperbarui',summary.update],['Kesalahan',summary.error]
+  ].map(([label,value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
+  el('import-validity').className = `pill ${preview.valid ? 'success' : ''}`;
+  el('import-validity').textContent = preview.valid ? 'Siap disimpan' : 'Perlu diperbaiki';
+  el('import-errors').innerHTML = preview.errors.length ? `<div class="import-error-list"><strong>${preview.errors.length} hal perlu diperbaiki</strong>${preview.errors.slice(0,20).map((error) => `<p>Baris ${error.row || '—'} · ${escapeHtml(error.message)}</p>`).join('')}</div>` : '';
+  const keys = preview.kind === 'PRODUCTS' ? ['sku','name','retailPrice','wholesalePrice','bulkUnit','openingQty','expiresOn'] : preview.kind === 'CUSTOMERS' ? ['code','name','phone','groupId'] : ['code','name','phone','address'];
+  const labels = { sku:'SKU',name:'Nama',retailPrice:'Harga ecer',wholesalePrice:'Harga grosir',bulkUnit:'Satuan besar',openingQty:'Stok awal',expiresOn:'EXP',code:'Kode',phone:'Telepon',groupId:'Kelompok',address:'Alamat' };
+  el('import-preview').innerHTML = `<table><thead><tr><th>Baris</th>${keys.map((key) => `<th>${labels[key]}</th>`).join('')}</tr></thead><tbody>${preview.rows.slice(0,50).map((row,index) => `<tr><td>${index+2}</td>${keys.map((key) => `<td>${escapeHtml(row[key] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table>${preview.rows.length>50?'<p class="muted import-more">Menampilkan 50 baris pertama.</p>':''}`;
+  el('commit-import').disabled = !preview.valid;
+  el('import-message').textContent = preview.valid ? `${summary.total} baris sudah lolos pemeriksaan dan belum disimpan.` : 'Perbaiki file sesuai pesan, lalu pilih kembali file tersebut.';
+}
+
+async function inspectImportFile() {
+  const file = el('import-file').files[0];
+  if (!file) return resetImportPreview();
+  el('import-file-name').textContent = file.name;
+  el('import-message').textContent = 'Memeriksa isi file…';
+  el('commit-import').disabled = true;
+  try {
+    const kind = el('import-kind').value;
+    const rows = mapCsvRows(kind, parseCsv(await file.text()));
+    const input = { kind, locationId: kind === 'PRODUCTS' ? el('import-location').value : null, rows };
+    const preview = await request('/api/imports/preview', { method:'POST', body:JSON.stringify(input) });
+    state.importDraft = { ...input, rows: preview.rows, fileName: file.name, idempotencyKey: crypto.randomUUID(), valid: preview.valid };
+    renderImportPreview(preview);
+  } catch (error) {
+    resetImportPreview(error.message);
+    el('import-message').textContent = error.message;
+  }
+}
+
+async function commitImport() {
+  if (!state.importDraft?.valid) return;
+  const button = el('commit-import'); button.disabled = true; button.textContent = 'Menyimpan data…';
+  try {
+    const result = await request('/api/imports/commit', {
+      method:'POST', headers:{ 'idempotency-key':state.importDraft.idempotencyKey },
+      body:JSON.stringify(state.importDraft)
+    });
+    toast(`Impor selesai: ${result.created} baru, ${result.updated} diperbarui`);
+    el('import-file').value = ''; el('import-file-name').textContent = 'Belum ada file dipilih';
+    resetImportPreview('Impor berhasil. Anda dapat memilih file berikutnya.');
+    await refreshCatalog();
+    if (state.session.permissions.includes('inventory.manage')) await loadInventory();
+    await loadImportHistory();
+  } catch (error) {
+    el('import-message').textContent = error.message; button.disabled = false;
+  } finally { button.textContent = 'Simpan data yang sudah valid'; }
+}
+
+async function loadImportHistory() {
+  try {
+    const data = await request('/api/imports');
+    state.importJobs = data.jobs ?? [];
+    const labels = { PRODUCTS:'Produk',CUSTOMERS:'Pelanggan',SUPPLIERS:'Supplier' };
+    el('import-history-list').innerHTML = state.importJobs.length ? state.importJobs.map((job) => `<div class="import-history-row"><div><strong>${labels[job.import_kind] ?? job.import_kind}</strong><small>${escapeHtml(job.file_name ?? 'Tanpa nama file')} · ${new Intl.DateTimeFormat('id-ID',{dateStyle:'medium',timeStyle:'short'}).format(new Date(job.created_at))}</small></div><div><strong>${job.total_rows} baris</strong><small>${job.created_rows} baru · ${job.updated_rows} diperbarui</small></div><span class="badge ok">Selesai</span></div>`).join('') : '<div class="empty-state compact">Belum ada riwayat impor.</div>';
+  } catch (error) { el('import-history-list').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`; }
+}
+
+async function createBackup() {
+  const button = el('create-backup');
+  button.disabled = true; button.textContent = 'Menyiapkan backup…';
+  el('backup-status').innerHTML = '<span class="session-loader"></span><div><strong>Mengumpulkan data usaha…</strong><p class="muted">Jangan tutup halaman sampai file terunduh.</p></div>';
+  try {
+    const result = await request('/api/backups/export', { method:'POST', body:'{}' });
+    const content = JSON.stringify(result.snapshot,null,2);
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([content],{type:'application/json'}));
+    link.download = result.fileName; link.click(); URL.revokeObjectURL(link.href);
+    el('backup-status').innerHTML = `<div class="backup-shield">✓</div><div><strong>Backup berhasil diunduh</strong><p class="muted">${result.totalRows} baris data · ${escapeHtml(result.fileName)}</p></div>`;
+    toast('Backup selesai. Simpan file di tempat aman.');
+    await loadBackupHistory();
+  } catch (error) {
+    el('backup-status').innerHTML = `<div class="backup-shield danger">!</div><div><strong>Backup belum berhasil</strong><p class="error">${escapeHtml(error.message)}</p></div>`;
+  } finally { button.disabled = false; button.textContent = 'Unduh backup sekarang'; }
+}
+
+async function verifyBackupFile() {
+  const file = el('verify-backup-file').files[0];
+  if (!file) return;
+  el('verify-backup-file-name').textContent = file.name;
+  el('backup-verification').innerHTML = '<p class="muted">Memeriksa struktur dan checksum…</p>';
+  try {
+    const snapshot = JSON.parse(await file.text());
+    const result = await request('/api/backups/verify',{method:'POST',body:JSON.stringify({snapshot})});
+    el('backup-verification').innerHTML = result.valid
+      ? `<div class="backup-verify-result valid"><strong>✓ ${escapeHtml(result.message)}</strong><p>${result.totalRows} baris data · dibuat ${new Intl.DateTimeFormat('id-ID',{dateStyle:'medium',timeStyle:'short'}).format(new Date(result.createdAt))}</p></div>`
+      : `<div class="backup-verify-result invalid"><strong>! File tidak dapat digunakan</strong><p>${escapeHtml(result.message)}</p></div>`;
+  } catch (error) {
+    el('backup-verification').innerHTML = `<div class="backup-verify-result invalid"><strong>! File tidak dapat dibaca</strong><p>${escapeHtml(error.message)}</p></div>`;
+  }
+}
+
+async function loadBackupHistory() {
+  try {
+    const data = await request('/api/backups');
+    state.backupExports = data.exports ?? [];
+    el('backup-history-list').innerHTML = state.backupExports.length ? state.backupExports.map((backup) => `<div class="backup-history-row"><div><strong>${escapeHtml(backup.file_name)}</strong><small>${new Intl.DateTimeFormat('id-ID',{dateStyle:'medium',timeStyle:'short'}).format(new Date(backup.created_at))}</small></div><div><strong>${Number(backup.total_rows).toLocaleString('id-ID')} baris</strong><small>Format v${backup.schema_version}</small></div><code>${escapeHtml(backup.checksum_sha256.slice(0,12))}…</code><span class="badge ok">Selesai</span></div>`).join('') : '<div class="empty-state compact">Belum ada backup.</div>';
+  } catch (error) { el('backup-history-list').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`; }
+}
+
+function promoPayload() {
+  const type=el('promo-type').value,targetType=el('promo-target-type').value;
+  const condition={
+    minBaseQty:Number(el('promo-min-qty').value||0),minBasketSubtotal:Number(el('promo-min-basket').value||0),
+    customerGroupIds:el('promo-customer-group').value==='ANY'?[]:[el('promo-customer-group').value],
+    schedule:{daysOfWeek:[...el('promo-days').querySelectorAll('input:checked')].map((input)=>Number(input.value)),timeStart:el('promo-time-start').value||null,timeEnd:el('promo-time-end').value||null,timeZone:state.outlets.find((outlet)=>outlet.id===state.activeOutletId)?.timezone??'Asia/Makassar'}
+  };
+  if(targetType==='PRODUCT')condition.productIds=[el('promo-target-product').value];
+  if(targetType==='CATEGORY')condition.categories=[el('promo-category').value.trim()];
+  if(targetType==='BRAND')condition.brands=[el('promo-brand').value.trim()];
+  if(type==='BUNDLE_FIXED')condition.bundle=[
+    {productId:el('promo-bundle-product-a').value,qty:Number(el('promo-bundle-qty-a').value)},
+    {productId:el('promo-bundle-product-b').value,qty:Number(el('promo-bundle-qty-b').value)}
+  ];
+  const reward={type};
+  if(['PERCENT_ITEM','FIXED_ITEM','FIXED_ORDER','SPECIAL_PRICE','PERCENT_ORDER','BUNDLE_FIXED'].includes(type))reward.value=Number(el('promo-value').value);
+  if(['PERCENT_ITEM','PERCENT_ORDER'].includes(type))reward.maxDiscount=Number(el('promo-max').value)||Number.MAX_SAFE_INTEGER;
+  if(type==='FIXED_ORDER'){
+    reward.repeatMode=el('promo-repeat-mode').value;
+    reward.repeatCap=el('promo-repeat-cap').value?Number(el('promo-repeat-cap').value):null;
+  }
+  if(type==='BUY_X_GET_Y'){
+    reward.buyQty=Number(el('promo-buy-qty').value);reward.freeQty=Number(el('promo-free-qty').value);
+    if(el('promo-reward-product').value)reward.productIds=[el('promo-reward-product').value];
+  }
+  return {
+    code:el('promo-code').value.trim().toUpperCase(),name:el('promo-name').value.trim(),condition,reward,
+    startsAt:new Date(el('promo-starts').value).toISOString(),endsAt:new Date(el('promo-ends').value).toISOString(),
+    priority:Number(el('promo-priority').value),stackable:el('promo-stackable').checked,
+    usageLimitTotal:el('promo-limit-total').value?Number(el('promo-limit-total').value):null,
+    usageLimitPerCustomer:el('promo-limit-customer').value?Number(el('promo-limit-customer').value):null
+  };
+}
+
+function updatePromoSummary() {
+  let promo;
+  try{promo=promoPayload();}catch{return el('promo-summary').textContent='Lengkapi jadwal dan aturan untuk melihat ringkasan.';}
+  const repeatLabel=promo.reward.repeatMode==='MULTIPLE'?`berlaku kelipatan${promo.reward.repeatCap?` maksimal ${promo.reward.repeatCap} kali`:''}`:'berlaku sekali';
+  const typeLabels={PERCENT_ITEM:`Diskon ${promo.reward.value}% per barang`,FIXED_ITEM:`Potongan ${money.format(promo.reward.value)} per pcs`,FIXED_ORDER:`Potongan ${money.format(promo.reward.value)} total belanja, ${repeatLabel}`,SPECIAL_PRICE:`Harga khusus ${money.format(promo.reward.value)} per pcs`,PERCENT_ORDER:`Diskon ${promo.reward.value}% total belanja`,BUY_X_GET_Y:`Beli ${promo.reward.buyQty} gratis ${promo.reward.freeQty}`,BUNDLE_FIXED:`Paket seharga ${money.format(promo.reward.value)}`};
+  const target=promo.condition.productIds?.length?'produk tertentu':promo.condition.categories?.[0]?`kategori ${promo.condition.categories[0]}`:promo.condition.brands?.[0]?`merek ${promo.condition.brands[0]}`:'semua barang';
+  const group=promo.condition.customerGroupIds?.[0]?(promo.condition.customerGroupIds[0]==='wholesale'?'pelanggan grosir/member':'pelanggan eceran'):'semua pelanggan';
+  el('promo-summary').textContent=`${typeLabels[promo.reward.type]} untuk ${target}, minimal ${promo.condition.minBaseQty||0} pcs dan ${group}. Prioritas ${promo.priority}${promo.stackable?', boleh digabung':', tidak digabung'}.`;
+}
+
+function renderPromotionList() {
+  const source=state.promotionVersions.length?state.promotionVersions:state.promotions;
+  const filter=el('promo-status-filter')?.value??'ACTIVE',now=Date.now();
+  const rows=source.filter((promo)=>filter==='ALL'||(filter==='RETIRED'?promo.status==='RETIRED':promo.status==='PUBLISHED'&&new Date(promo.endsAt).getTime()>=now));
+  const typeLabels={PERCENT_ITEM:'Diskon barang',FIXED_ITEM:'Potongan per pcs',FIXED_ORDER:'Potongan total',SPECIAL_PRICE:'Harga khusus',PERCENT_ORDER:'Diskon belanja',BUY_X_GET_Y:'Beli gratis',BUNDLE_FIXED:'Bundling'};
+  el('promotion-list').innerHTML=rows.map((promo)=>{
+    const active=promo.status==='PUBLISHED'&&new Date(promo.startsAt).getTime()<=now&&new Date(promo.endsAt).getTime()>=now;
+    const usage=promo.usageLimitTotal?`${promo.usageCount??0}/${promo.usageLimitTotal} kali`:`${promo.usageCount??0} kali`;
+    return `<article class="promo-rule-card" data-promo-id="${escapeHtml(promo.id)}"><div class="promo-rule-head"><div><strong>${escapeHtml(promo.code)} · ${escapeHtml(promo.name)}</strong><small>v${promo.version} · ${escapeHtml(typeLabels[promo.reward?.type]??promo.reward?.type??'Promo')}</small></div><span class="status-badge ${active?'approved':promo.status==='RETIRED'?'inactive':'submitted'}">${active?'AKTIF':promo.status==='RETIRED'?'DIHENTIKAN':'TERJADWAL'}</span></div><div class="promo-rule-meta"><span>${new Date(promo.startsAt).toLocaleString('id-ID')}<br>hingga ${new Date(promo.endsAt).toLocaleString('id-ID')}</span><span>Prioritas ${promo.priority}<br>${promo.stackable?'Boleh digabung':'Tidak digabung'}</span><span>Dipakai ${usage}<br>Diskon ${money.format(promo.discountGiven??0)}</span></div>${promo.status==='PUBLISHED'?'<button class="button danger retire-promotion" type="button">Hentikan promo</button>':''}</article>`;
+  }).join('')||'<div class="empty-state compact">Belum ada versi promo pada filter ini.</div>';
+  const activeCount=source.filter((promo)=>promo.status==='PUBLISHED'&&new Date(promo.startsAt).getTime()<=now&&new Date(promo.endsAt).getTime()>=now).length;
+  el('promo-version').textContent=activeCount?`${activeCount} aturan aktif`:'Belum ada aturan aktif';
+}
+
+function localDateTimeValue(date){
+  const shifted=new Date(date.getTime()-date.getTimezoneOffset()*60000);return shifted.toISOString().slice(0,16);
+}
+
+function renderPromotionEditorOptions(){
+  const options=state.products.map((product)=>`<option value="${escapeHtml(product.id)}">${escapeHtml(product.name)} · ${escapeHtml(product.sku)}</option>`).join('');
+  ['promo-target-product','promo-bundle-product-a','promo-bundle-product-b','promo-simulation-product'].forEach((id)=>{const selected=el(id)?.value;if(el(id)){el(id).innerHTML=options;if(state.products.some((product)=>product.id===selected))el(id).value=selected;}});
+  const rewardSelected=el('promo-reward-product')?.value;
+  if(el('promo-reward-product')){el('promo-reward-product').innerHTML='<option value="">Produk yang sama</option>'+options;if(state.products.some((product)=>product.id===rewardSelected))el('promo-reward-product').value=rewardSelected;}
+  if(!el('promo-starts').value){const start=new Date(),end=new Date(Date.now()+30*86400000);el('promo-starts').value=localDateTimeValue(start);el('promo-ends').value=localDateTimeValue(end);}
+  syncPromotionForm();
+}
+
+function syncPromotionForm(){
+  const type=el('promo-type').value,target=el('promo-target-type').value;
+  el('promo-target-product-wrap').classList.toggle('hidden',target!=='PRODUCT');
+  el('promo-target-category-wrap').classList.toggle('hidden',target!=='CATEGORY');
+  el('promo-target-brand-wrap').classList.toggle('hidden',target!=='BRAND');
+  el('promo-value-wrap').classList.toggle('hidden',type==='BUY_X_GET_Y');
+  el('promo-max-wrap').classList.toggle('hidden',!['PERCENT_ITEM','PERCENT_ORDER'].includes(type));
+  el('promo-buy-wrap').classList.toggle('hidden',type!=='BUY_X_GET_Y');el('promo-free-wrap').classList.toggle('hidden',type!=='BUY_X_GET_Y');el('promo-reward-product-wrap').classList.toggle('hidden',type!=='BUY_X_GET_Y');
+  el('promo-bundle-fields').classList.toggle('hidden',type!=='BUNDLE_FIXED');
+  el('promo-repeat-wrap').classList.toggle('hidden',type!=='FIXED_ORDER');
+  el('promo-repeat-cap-wrap').classList.toggle('hidden',type!=='FIXED_ORDER'||el('promo-repeat-mode').value!=='MULTIPLE');
+  const valueLabels={PERCENT_ITEM:'Diskon persen',FIXED_ITEM:'Potongan / pcs',FIXED_ORDER:'Potongan total belanja',SPECIAL_PRICE:'Harga khusus / pcs',PERCENT_ORDER:'Diskon persen',BUNDLE_FIXED:'Harga paket'};
+  el('promo-value-wrap').firstChild.textContent=valueLabels[type]??'Nilai promo';
+  updatePromoSummary();
+}
+
+async function loadPromotionManagement(){
+  try{const data=await request('/api/promotions/manage');state.promotionVersions=data.promotions??[];renderPromotionList();}
+  catch(error){toast(error.message);}
+}
+
+async function publishPromotion(event) {
+  event?.preventDefault();
+  const button=el('publish-promo');el('promotion-error').textContent='';button.disabled=true;
+  try {
+    const promo = await request('/api/promotions/publish', { method: 'POST', body: JSON.stringify(promoPayload()) });
+    toast(`${promo.code} versi ${promo.version} diterbitkan`); await refreshCatalog();await loadPromotionManagement();
+  } catch (error) { el('promotion-error').textContent=error.message; }
+  finally{button.disabled=false;}
+}
+
+async function simulatePromotion() {
+  const promo=promoPayload(),type=promo.reward.type;
+  const productId=promo.condition.productIds?.[0]??el('promo-simulation-product').value;
+  const product=state.products.find((item)=>item.id===productId);if(!product)return toast('Pilih produk untuk simulasi.');
+  let lines=[{productId:product.id,unitId:product.units.find((unit)=>unit.factor===1)?.id??product.units[0].id,qty:Number(el('promo-simulation-qty').value)}];
+  if(type==='BUNDLE_FIXED')lines=promo.condition.bundle.map((item)=>{const member=state.products.find((product)=>product.id===item.productId);return{productId:item.productId,unitId:member.units.find((unit)=>unit.factor===1)?.id??member.units[0].id,qty:item.qty};});
+  if(type==='BUY_X_GET_Y'&&promo.reward.productIds?.[0]!==product.id){const rewardProduct=state.products.find((item)=>item.id===promo.reward.productIds?.[0]);if(rewardProduct)lines.push({productId:rewardProduct.id,unitId:rewardProduct.units.find((unit)=>unit.factor===1)?.id??rewardProduct.units[0].id,qty:promo.reward.freeQty});}
+  try {
+    const quote=await request('/api/promotions/simulate',{method:'POST',body:JSON.stringify({promo,lines,customerGroupId:el('promo-customer-group').value==='ANY'?'retail':el('promo-customer-group').value})});
+    el('promo-result').innerHTML=`<strong>Hasil simulasi ${escapeHtml(promo.code||'PROMO')}</strong><div class="promo-simulation-result"><span>Harga normal<strong>${money.format(quote.subtotal)}</strong></span><span>Potongan<strong>−${money.format(quote.discountTotal)}</strong></span><span>Total akhir<strong>${money.format(quote.grandTotal)}</strong></span></div>${quote.discountTotal?'<small>Aturan berhasil terbaca oleh mesin harga.</small>':'<small>Promo belum terpicu. Periksa sasaran, jumlah, kelompok pelanggan, atau jadwal.</small>'}`;
+  } catch(error){el('promotion-error').textContent=error.message;}
+}
+
+async function retirePromotion(versionId){
+  if(!confirm('Hentikan promo ini? Transaksi berikutnya tidak akan menerima promo tersebut.'))return;
+  try{await request(`/api/promotions/${versionId}/retire`,{method:'POST'});toast('Promo berhasil dihentikan');await refreshCatalog();await loadPromotionManagement();}
+  catch(error){toast(error.message);}
+}
+
+async function refreshShift() {
+  const data = await request('/api/shifts/current');
+  state.currentShift = data.shift;
+  cacheCurrentShift();
+  renderShift(); renderCart();
+}
+
+function renderShift() {
+  const shift = state.currentShift;
+  el('top-shift').textContent = shift ? `SHIFT ${shift.id.slice(0, 8).toUpperCase()} · AKTIF` : 'SHIFT BELUM DIBUKA';
+  el('shift-status').textContent = shift ? 'Sedang berjalan' : 'Belum dibuka';
+  el('shift-status').className = `pill ${shift ? 'open' : 'closed'}`;
+  el('open-shift-form').classList.toggle('hidden', Boolean(shift));
+  el('close-shift-form').classList.toggle('hidden', !shift);
+  el('cash-movement').disabled = !shift;
+  if (!shift) {
+    el('shift-detail').innerHTML = '<p class="muted">Buka shift sebelum menerima transaksi.</p>';
+    el('cash-history').innerHTML = '';
+    return;
+  }
+  el('shift-detail').innerHTML = `<div class="shift-fact"><span>Dibuka</span><strong>${new Date(shift.opened_at).toLocaleString('id-ID')}</strong></div><div class="shift-fact"><span>Modal awal</span><strong>${money.format(shift.opening_cash)}</strong></div><div class="shift-fact"><span>Kas seharusnya</span><strong>${money.format(shift.expectedNow ?? shift.opening_cash)}</strong></div><div class="shift-fact"><span>Kasir</span><strong>${shift.cashier_name}</strong></div>`;
+  el('closing-cash').value = Math.round(shift.expectedNow ?? shift.opening_cash);
+  el('cash-history').innerHTML = (shift.movements ?? []).map((item) => `<div class="relation-item"><span>${item.note}<br><small>${item.movement_type === 'CASH_IN' ? 'Kas masuk' : 'Kas keluar'}</small></span><strong>${item.movement_type === 'CASH_IN' ? '+' : '−'}${money.format(item.amount)}</strong></div>`).join('');
+}
+
+async function openShift() {
+  try {
+    state.currentShift = await request('/api/shifts/open', { method: 'POST', body: JSON.stringify({ outletId: 'outlet-utama', openingCash: Number(el('opening-cash').value) }) });
+    toast('Shift berhasil dibuka'); await refreshShift();
+  } catch (error) { toast(error.message); }
+}
+
+async function addCashMovement() {
+  if (!state.currentShift) return toast('Buka shift terlebih dahulu.');
+  try {
+    await request('/api/shifts/cash-movement', { method: 'POST', body: JSON.stringify({ shiftId: state.currentShift.id, movementType: el('cash-type').value, amount: Number(el('cash-amount').value), note: el('cash-note').value }) });
+    toast('Pergerakan kas dicatat'); el('cash-amount').value = ''; el('cash-note').value = ''; await refreshShift();
+  } catch (error) { toast(error.message); }
+}
+
+async function closeShift() {
+  if (!state.currentShift) return;
+  const pending = (await listCommands()).filter((command) => command.actorId === state.session.user.id);
+  if (pending.length) return toast(`Sinkronkan ${pending.length} transaksi offline sebelum menutup shift.`);
+  try {
+    const closed = await request('/api/shifts/close', { method: 'POST', body: JSON.stringify({ shiftId: state.currentShift.id, closingCash: Number(el('closing-cash').value) }) });
+    toast(`Shift ditutup. Selisih ${money.format(closed.difference)}`); state.currentShift = null; cacheCurrentShift(); renderShift(); renderCart(); if (state.session.permissions.includes('report.view')) await loadReport();
+  } catch (error) { toast(error.message); }
+}
+
+async function addToCart(productId, unitId) {
+  invalidateSaleAuthorization();
+  const product=state.products.find((item)=>item.id===productId);
+  const unit=product?.units.find((item)=>item.id===unitId);
+  if(!product||!unit)return toast('Produk atau satuan tidak ditemukan.');
+  const existing = state.cart.find((line) => line.productId === productId && line.unitId === unitId);
+  const currentBase=state.cart.filter((line)=>line.productId===productId).reduce((sum,line)=>{
+    const selectedUnit=product.units.find((item)=>item.id===line.unitId);
+    return sum+Number(line.qty)*Number(selectedUnit?.factor??0);
+  },0);
+  if(currentBase+Number(unit.factor)>Number(product.stockBase??0))return toast(`${product.name}: stok tidak cukup. Tersedia ${product.stockBase} pcs.`);
+  if (existing) existing.qty += 1;
+  else state.cart.push({ productId, unitId, qty: 1 });
+  el('product-search').value = '';
+  renderProducts();
+  await updateQuote();
+}
+
+async function changeQty(index, delta) {
+  invalidateSaleAuthorization();
+  const line=state.cart[index];
+  if(delta>0){
+    const product=state.products.find((item)=>item.id===line.productId);
+    const unit=product?.units.find((item)=>item.id===line.unitId);
+    const currentBase=state.cart.filter((item)=>item.productId===line.productId).reduce((sum,item)=>sum+Number(item.qty)*Number(product?.units.find((candidate)=>candidate.id===item.unitId)?.factor??0),0);
+    if(!product||!unit||currentBase+Number(unit.factor)>Number(product.stockBase??0))return toast(`${product?.name??'Produk'}: jumlah melebihi stok tersedia.`);
+  }
+  state.cart[index].qty += delta;
+  if (state.cart[index].qty <= 0) state.cart.splice(index, 1);
+  await updateQuote();
+}
+
+async function updateQuote() {
+  const revision = ++quoteRevision;
+  if (quoteVerificationTimer) clearTimeout(quoteVerificationTimer);
+  if (!state.cart.length) {
+    state.quote = null;
+    renderCart();
+    return;
+  }
+  const input = {
+    lines: state.cart,
+    customerGroupId: el('customer-group').value,
+    at: new Date().toISOString(),
+    ...(state.saleAuthorization ? { authorization: state.saleAuthorization } : {})
+  };
+  try {
+    if (!state.saleAuthorization) {
+      state.quote = quoteOffline({ ...input, products: state.products, promotions: state.promotions, at: new Date(input.at) });
+      renderCart();
+    }
+    if (!navigator.onLine || state.saleAuthorization) return;
+    quoteVerificationTimer = setTimeout(async () => {
+      try {
+        const verified = await request('/api/quote', { method: 'POST', body: JSON.stringify(input) });
+        if (revision !== quoteRevision) return;
+        state.quote = verified;
+        renderCart();
+      } catch (error) {
+        if (revision === quoteRevision && error.status) toast(`Harga belum terverifikasi: ${error.message}`);
+      }
+    }, 220);
+  } catch (error) {
+    toast(error.message);
+  }
+}
+
+function renderCart() {
+  if (!state.quote) {
+    el('cart-lines').innerHTML = '<div class="empty-state">Belum ada barang.<br><small>Scan barcode atau pilih produk.</small></div>';
+    el('subtotal').textContent = money.format(0); el('discount').textContent = `−${money.format(0)}`; el('grand-total').textContent = money.format(0); el('pay-button').disabled = true; el('hold-cart').disabled = true;
+    renderSaleAuthorizationStatus();
+    return;
+  }
+  el('cart-lines').innerHTML = state.quote.lines.map((line, index) => {
+    const cartLine=state.cart[index],product=state.products.find((item)=>item.id===cartLine.productId),unit=product?.units.find((item)=>item.id===cartLine.unitId);
+    const usedBase=state.cart.filter((item)=>item.productId===cartLine.productId).reduce((sum,item)=>sum+Number(item.qty)*Number(product?.units.find((candidate)=>candidate.id===item.unitId)?.factor??0),0);
+    const atLimit=!product||!unit||usedBase+Number(unit.factor)>Number(product.stockBase??0);
+    return `<div class="cart-line"><div class="cart-line-main"><div><strong>${line.productName}</strong><br><small>${line.qty} ${line.unitName} · ${money.format(line.gross / line.qty)} · stok ${product?.stockBase??0} pcs</small></div><strong>${money.format(line.total)}</strong></div><div class="cart-controls"><button data-index="${index}" data-delta="-1">−</button><span>${line.qty}</span><button data-index="${index}" data-delta="1" ${atLimit?'disabled title="Stok tidak mencukupi"':''}>+</button><button class="manual-line-adjustment" data-index="${index}" type="button" ${state.saleAuthorization?'disabled':''}>Ubah harga</button></div>${line.promotions.map((promo) => { const raised=Number(promo.discount)<0; return `<div class="promo-note ${promo.manual?'manual':''}">${promo.manual?'Harga manual ':''}${escapeHtml(promo.code)} v${promo.version}: ${raised?'+':'−'}${money.format(Math.abs(promo.discount))}${promo.approvedBy?` · ${escapeHtml(promo.approvedBy)}`:''}</div>`; }).join('')}</div>`;
+  }).join('');
+  document.querySelectorAll('.cart-controls button:not(.manual-line-adjustment)').forEach((button) => button.addEventListener('click', () => changeQty(Number(button.dataset.index), Number(button.dataset.delta))));
+  document.querySelectorAll('.manual-line-adjustment').forEach((button) => button.addEventListener('click', () => openSaleAdjustmentDialog(Number(button.dataset.index))));
+  el('subtotal').textContent = money.format(state.quote.subtotal); el('discount').textContent = `${Number(state.quote.discountTotal) < 0 ? '+' : '−'}${money.format(Math.abs(state.quote.discountTotal))}`; el('grand-total').textContent = money.format(state.quote.grandTotal); el('pay-button').disabled = !state.currentShift; el('hold-cart').disabled = false;
+  renderSaleAuthorizationStatus();
+}
+
+function invalidateSaleAuthorization() {
+  state.saleAuthorization = null;
+  state.adjustmentTargetIndex = null;
+}
+
+function renderSaleAuthorizationStatus() {
+  const panel = el('sale-authorization-status');
+  if (!panel) return;
+  panel.classList.toggle('hidden', !state.saleAuthorization);
+  el('open-order-adjustment').disabled = !state.quote || Boolean(state.saleAuthorization);
+  if (!state.saleAuthorization) {
+    panel.innerHTML = '';
+    return;
+  }
+  const authorization = state.saleAuthorization;
+  const remaining = Math.max(0, Math.ceil((new Date(authorization.expiresAt).getTime() - Date.now()) / 60000));
+  const direction = Number(authorization.discountAmount) < 0 ? 'kenaikan' : 'potongan';
+  panel.innerHTML = `<div><strong>Harga manual disetujui</strong><small>${escapeHtml(authorization.approvedBy)} · ${direction} ${money.format(Math.abs(authorization.discountAmount))} · berlaku sekitar ${remaining} menit</small></div><button id="remove-sale-authorization" class="link-button" type="button">Batalkan</button>`;
+  el('remove-sale-authorization').addEventListener('click', async () => {
+    invalidateSaleAuthorization();
+    await updateQuote();
+    toast('Perubahan harga manual dibatalkan dari transaksi.');
+  });
+}
+
+function openSaleAdjustmentDialog(lineIndex = null) {
+  if (!state.quote || state.saleAuthorization) return;
+  if (!navigator.onLine) return toast('Persetujuan supervisor memerlukan koneksi internet.');
+  state.adjustmentTargetIndex = lineIndex;
+  const isLine = Number.isInteger(lineIndex);
+  const line = isLine ? state.quote.lines[lineIndex] : null;
+  el('adjustment-title').textContent = isLine ? 'Ubah harga jual barang' : 'Diskon transaksi';
+  el('adjustment-target').innerHTML = isLine
+    ? `<strong>${escapeHtml(line.productName)}</strong><small>${line.qty} ${escapeHtml(line.unitName)} · harga aktif ${money.format(line.total / line.qty)} per satuan</small>`
+    : `<strong>Seluruh transaksi</strong><small>Total aktif ${money.format(state.quote.grandTotal)}</small>`;
+  el('adjustment-mode').innerHTML = isLine
+    ? '<option value="FIXED_PRICE">Tetapkan harga jual per satuan</option><option value="FIXED_DISCOUNT">Potongan Rupiah per satuan</option><option value="PERCENT">Diskon persen</option>'
+    : '<option value="PERCENT">Diskon persen</option><option value="FIXED_DISCOUNT">Potongan nominal</option>';
+  el('adjustment-value').value = '';
+  el('adjustment-reason').value = '';
+  el('approver-email').value = '';
+  el('approver-password').value = '';
+  const selfApproved = ['OWNER','ADMIN'].includes(state.session.user.role);
+  el('supervisor-approval-fields').classList.toggle('hidden', selfApproved);
+  el('self-approval-note').classList.toggle('hidden', !selfApproved);
+  el('approver-email').disabled = selfApproved;
+  el('approver-password').disabled = selfApproved;
+  el('adjustment-error').textContent = '';
+  el('sale-adjustment-dialog').showModal();
+  el('adjustment-value').focus();
+}
+
+async function approveSaleAdjustment(event) {
+  event.preventDefault();
+  if (!navigator.onLine) return el('adjustment-error').textContent = 'Persetujuan supervisor memerlukan koneksi internet.';
+  const button = el('approve-adjustment');
+  const line = Number.isInteger(state.adjustmentTargetIndex) ? state.cart[state.adjustmentTargetIndex] : null;
+  const adjustment = {
+    scope: line ? 'LINE' : 'ORDER',
+    mode: el('adjustment-mode').value,
+    value: Number(el('adjustment-value').value),
+    reason: el('adjustment-reason').value,
+    productId: line?.productId,
+    unitId: line?.unitId
+  };
+  button.disabled = true;
+  button.textContent = 'Memeriksa harga…';
+  el('adjustment-error').textContent = '';
+  try {
+    const result = await request('/api/sale-authorizations', {
+      method: 'POST',
+      body: JSON.stringify({
+        lines: state.cart,
+        customerGroupId: el('customer-group').value,
+        adjustment,
+        approverEmail: el('approver-email').value,
+        approverPassword: el('approver-password').value
+      })
+    });
+    state.saleAuthorization = result.authorization;
+    state.quote = result.quote;
+    el('approver-password').value = '';
+    el('sale-adjustment-dialog').close();
+    renderCart();
+    toast(`Harga manual disetujui oleh ${result.authorization.approvedBy}.`);
+  } catch (error) {
+    el('adjustment-error').textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Terapkan harga';
+  }
+}
+
+function sortedPurchaseProducts(query = '') {
+  const normalized = String(query).trim().toLowerCase();
+  return [...state.products]
+    .filter((product) => !normalized || `${product.name} ${product.sku ?? ''} ${product.brand ?? ''} ${product.units.map((unit) => unit.barcode ?? '').join(' ')}`.toLowerCase().includes(normalized))
+    .sort((a, b) => {
+      const aZero = Number(Number(a.stockBase ?? 0) !== 0);
+      const bZero = Number(Number(b.stockBase ?? 0) !== 0);
+      return aZero - bZero || Number(a.stockBase ?? 0) - Number(b.stockBase ?? 0) || a.name.localeCompare(b.name, 'id');
+    })
+    .slice(0, 60);
+}
+
+function renderPurchaseProductResults(kind, query = '') {
+  const container = el(`${kind}-product-results`);
+  const products = sortedPurchaseProducts(query);
+  container.innerHTML = products.map((product) => {
+    const stock = Number(product.stockBase ?? 0);
+    const baseUnit = product.units.find((unit) => Number(unit.factor) === 1) ?? product.units[0];
+    return `<article class="purchase-product-option ${stock === 0 ? 'zero-stock' : ''}">
+      <div><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku ?? '')} · ${escapeHtml(product.brand ?? 'tanpa merek')}</small></div>
+      <div class="purchase-product-stock"><span>Stok</span><strong>${stock} pcs</strong></div>
+      <button class="button secondary choose-purchase-product" type="button" data-kind="${kind}" data-product-id="${escapeHtml(product.id)}" data-unit-id="${escapeHtml(baseUnit?.id ?? '')}">Tambah</button>
+    </article>`;
+  }).join('') || '<div class="empty-state compact">Barang tidak ditemukan. Periksa nama, SKU, atau barcode.</div>';
+  container.querySelectorAll('.choose-purchase-product').forEach((button) => button.addEventListener('click', () => choosePurchaseProduct(button.dataset.kind, button.dataset.productId, button.dataset.unitId)));
+}
+
+async function choosePurchaseProduct(kind, productId, unitId = null) {
+  const product = state.products.find((item) => item.id === productId);
+  if (!product) return;
+  const unit = product.units.find((item) => item.id === unitId) ?? product.units.find((item) => Number(item.factor) === 1) ?? product.units[0];
+  if (kind === 'po') await appendPoLine(product.id, unit?.id ?? null);
+  else await appendRestockLine(product.id, 1, 0, unit?.name ?? 'pcs');
+  const input = el(`${kind}-product-search`);
+  input.value = '';
+  renderPurchaseProductResults(kind);
+  input.focus();
+}
+
+async function handlePurchaseProductEnter(kind, event) {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  const value = event.currentTarget.value.trim();
+  const exact = state.products.flatMap((product) => product.units.map((unit) => ({ product, unit }))).find(({ unit }) => unit.barcode === value);
+  if (exact) return choosePurchaseProduct(kind, exact.product.id, exact.unit.id);
+  const first = sortedPurchaseProducts(value)[0];
+  if (first) return choosePurchaseProduct(kind, first.id);
+  toast('Barang tidak ditemukan.');
+}
+
+function activatePurchaseScanner(kind) {
+  const input = el(`${kind}-product-search`);
+  input.value = '';
+  input.placeholder = 'Scanner siap · scan barcode sekarang';
+  input.focus();
+  toast('Scanner siap. Scan barcode lalu barang akan ditambahkan.');
+}
+
+function barcodeMatch(value) {
+  return state.products.flatMap((product) => product.units.map((unit) => ({ product, unit })))
+    .find(({ unit }) => String(unit.barcode ?? '') === String(value ?? '').trim());
+}
+
+async function handleCameraBarcode(value) {
+  const exact = barcodeMatch(value);
+  if (!exact) return toast(`Barcode ${value} belum terdaftar pada produk.`);
+  if (barcodeCameraTarget === 'pos') {
+    await addToCart(exact.product.id, exact.unit.id);
+    el('product-search').value = '';
+    return;
+  }
+  if (['po', 'restock'].includes(barcodeCameraTarget)) {
+    await choosePurchaseProduct(barcodeCameraTarget, exact.product.id, exact.unit.id);
+  }
+}
+
+function stopBarcodeCamera() {
+  if (barcodeCameraTimer) clearTimeout(barcodeCameraTimer);
+  barcodeCameraTimer = null;
+  try { barcodeCameraControls?.stop(); } catch {}
+  barcodeCameraControls = null;
+  barcodeCameraStream?.getTracks().forEach((track) => track.stop());
+  barcodeCameraStream = null;
+  const video = el('barcode-camera-video');
+  if (video) video.srcObject = null;
+  barcodeCameraTarget = null;
+  barcodeCameraCompleting = false;
+  if (el('barcode-camera-dialog')?.open) el('barcode-camera-dialog').close();
+}
+
+function cameraErrorMessage(error) {
+  if (error?.name === 'NotAllowedError' || error?.name === 'SecurityError') return 'Izin kamera ditolak. Buka pengaturan aplikasi/situs, izinkan Kamera, lalu coba lagi.';
+  if (error?.name === 'NotFoundError') return 'Kamera belakang tidak ditemukan pada perangkat ini.';
+  if (error?.name === 'NotReadableError') return 'Kamera sedang dipakai aplikasi lain. Tutup aplikasi kamera lalu coba lagi.';
+  if (error?.name === 'OverconstrainedError') return 'Kamera perangkat tidak cocok dengan pengaturan pemindaian.';
+  return 'Kamera tidak dapat dibuka. Periksa izin kamera lalu coba kembali.';
+}
+
+async function completeCameraBarcode(value, controls = null) {
+  if (!value || barcodeCameraCompleting || !barcodeCameraTarget) return;
+  barcodeCameraCompleting = true;
+  const targetAtScan = barcodeCameraTarget;
+  try { controls?.stop(); } catch {}
+  stopBarcodeCamera();
+  barcodeCameraTarget = targetAtScan;
+  await handleCameraBarcode(value);
+  barcodeCameraTarget = null;
+}
+
+async function startNativeBarcodeDetection(video) {
+  try {
+    const preferred = ['ean_13','ean_8','code_128','code_39','upc_a','upc_e','qr_code'];
+    const supported = typeof BarcodeDetector.getSupportedFormats === 'function' ? await BarcodeDetector.getSupportedFormats() : preferred;
+    const formats = preferred.filter((format) => supported.includes(format));
+    const detector = new BarcodeDetector(formats.length ? { formats } : undefined);
+    const scan = async () => {
+      if (!barcodeCameraStream || barcodeCameraCompleting) return;
+      try {
+        const results = await detector.detect(video);
+        if (results[0]?.rawValue) return completeCameraBarcode(results[0].rawValue);
+      } catch {}
+      barcodeCameraTimer = setTimeout(scan, 180);
+    };
+    el('barcode-camera-status').textContent = 'Kamera aktif. Posisikan satu barcode di dalam kotak.';
+    scan();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function startZxingBarcodeDetection(video) {
+  const Reader = window.ZXingBrowser?.BrowserMultiFormatReader;
+  if (!Reader) throw new Error('ZXing fallback unavailable');
+  const reader = new Reader(undefined, { delayBetweenScanAttempts: 180, delayBetweenScanSuccess: 500 });
+  el('barcode-camera-status').textContent = 'Kamera aktif dalam mode kompatibel. Posisikan satu barcode di dalam kotak.';
+  barcodeCameraControls = await reader.decodeFromStream(barcodeCameraStream, video, (result, _error, controls) => {
+    if (result) completeCameraBarcode(result.getText(), controls);
+  });
+}
+
+async function openBarcodeCamera(target) {
+  if (!window.isSecureContext) return toast('Kamera hanya dapat digunakan melalui koneksi HTTPS yang aman.');
+  if (!navigator.mediaDevices?.getUserMedia) return toast('Perangkat ini tidak menyediakan akses kamera.');
+  barcodeCameraTarget = target;
+  barcodeCameraCompleting = false;
+  el('barcode-camera-status').textContent = 'Meminta izin kamera...';
+  el('barcode-camera-dialog').showModal();
+  try {
+    barcodeCameraStream = await navigator.mediaDevices.getUserMedia({ audio:false, video:{ facingMode:{ ideal:'environment' }, width:{ ideal:1280 }, height:{ ideal:720 } } });
+    const video = el('barcode-camera-video');
+    video.srcObject = barcodeCameraStream;
+    await video.play();
+    const nativeStarted = 'BarcodeDetector' in window && await startNativeBarcodeDetection(video);
+    if (!nativeStarted) await startZxingBarcodeDetection(video);
+  } catch (error) {
+    const message = cameraErrorMessage(error);
+    stopBarcodeCamera();
+    toast(message);
+  }
+}
+
+async function renderRestock() {
+  el('restock-body').innerHTML = '';
+  el('restock-supplier').innerHTML = state.suppliers.length
+    ? state.suppliers.map((supplier) => `<option value="${supplier.id}">${supplier.name}</option>`).join('')
+    : '<option value="">Tambahkan supplier terlebih dahulu</option>';
+  const receivingLocations = state.locations.filter((location) => ['STORE', 'WAREHOUSE'].includes(location.kind));
+  el('restock-location').innerHTML = receivingLocations.length
+    ? receivingLocations.map((location) => `<option value="${location.id}">${location.name} · ${location.kind === 'WAREHOUSE' ? 'Gudang' : 'Toko'}</option>`).join('')
+    : '<option value="">Lokasi belum tersedia</option>';
+  el('po-supplier').innerHTML = el('restock-supplier').innerHTML;
+  el('supplier-return-supplier').innerHTML=el('restock-supplier').innerHTML;
+  el('po-location').innerHTML = el('restock-location').innerHTML;
+  renderPurchaseProductResults('restock');
+  renderPurchaseProductResults('po');
+  el('restock-document').value = '';
+  el('restock-history').innerHTML = '<p class="eyebrow">HISTORI MODAL</p><p class="muted">Klik “Riwayat” pada barang untuk melihat modal per supplier dan batch.</p>';
+  el('receive-button').disabled = !state.suppliers.length || !receivingLocations.length || !state.products.length;
+  syncRestockVisibility();
+}
+
+const purchaseStatus = {
+  DRAFT: ['Draft', 'draft'], SUBMITTED: ['Menunggu persetujuan', 'submitted'], APPROVED: ['Disetujui', 'approved'],
+  PARTIALLY_RECEIVED: ['Diterima sebagian', 'partial'], RECEIVED: ['Selesai', 'received'], CANCELLED: ['Dibatalkan', 'cancelled']
+};
+
+function showPurchaseView(name) {
+  document.querySelectorAll('.purchase-view').forEach((view) => view.classList.toggle('hidden', view.id !== `purchase-view-${name}`));
+  document.querySelectorAll('.purchase-tab').forEach((button) => button.classList.toggle('active', button.dataset.purchaseView === name));
+}
+
+async function loadPurchaseOrders() {
+  try {
+    const data = await request('/api/purchase-orders');
+    state.purchaseOrders = data.orders;
+    renderPurchaseOrders();
+  } catch (error) {
+    el('purchase-order-list').innerHTML = `<div class="empty-state compact"><strong>Dokumen pembelian belum dapat dimuat.</strong><br><small>${error.message}</small></div>`;
+  }
+}
+
+function renderPurchaseOrders() {
+  const filter = el('purchase-status-filter').value;
+  const orders = state.purchaseOrders.filter((order) => !filter || order.status === filter);
+  const count = (status) => state.purchaseOrders.filter((order) => status.includes(order.status)).length;
+  el('purchase-metrics').innerHTML = [
+    ['Semua PO', state.purchaseOrders.length], ['Perlu persetujuan', count(['SUBMITTED'])],
+    ['Siap diterima', count(['APPROVED','PARTIALLY_RECEIVED'])], ['Selesai', count(['RECEIVED'])]
+  ].map(([label,value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
+  el('purchase-order-list').innerHTML = orders.map((order) => {
+    const [label, statusClass] = purchaseStatus[order.status] ?? [order.status, 'draft'];
+    const ordered = order.items.reduce((sum,item)=>sum+item.ordered_qty,0);
+    const received = order.items.reduce((sum,item)=>sum+item.received_qty,0);
+    const progress = ordered ? Math.round((received/ordered)*100) : 0;
+    const canApprove = ['OWNER','ADMIN'].includes(state.session.user.role);
+    const actions = [
+      order.status === 'DRAFT' ? `<button class="button secondary po-open" data-id="${order.id}">Ubah</button><button class="button primary po-action" data-id="${order.id}" data-action="submit">Ajukan</button>` : '',
+      order.status === 'SUBMITTED' && canApprove ? `<button class="button primary po-action" data-id="${order.id}" data-action="approve">Setujui</button>` : '',
+      ['APPROVED','PARTIALLY_RECEIVED'].includes(order.status) ? `<button class="button primary po-receive" data-id="${order.id}">Terima barang</button>` : '',
+      !['RECEIVED','CANCELLED','PARTIALLY_RECEIVED'].includes(order.status) && canApprove ? `<button class="button secondary po-action" data-id="${order.id}" data-action="cancel">Batalkan</button>` : ''
+    ].join('');
+    return `<article class="purchase-document"><div class="purchase-document-main"><div><div class="document-number"><strong>${order.po_no}</strong><span class="status-badge ${statusClass}">${label}</span></div><p>${order.supplier_name}</p><small>Dibuat ${new Date(order.created_at).toLocaleDateString('id-ID')}${order.expected_on ? ` · estimasi ${new Date(`${order.expected_on}T00:00:00`).toLocaleDateString('id-ID')}` : ''}</small></div><div class="document-amount"><strong>${money.format(order.grand_total)}</strong><small>${order.items.length} jenis barang</small></div></div><div class="receipt-progress"><span style="width:${progress}%"></span></div><div class="purchase-document-footer"><small>Diterima ${received} dari ${ordered} pcs · ${progress}%</small><div>${actions}</div></div></article>`;
+  }).join('') || '<div class="empty-state compact">Belum ada Purchase Order dengan status ini.</div>';
+  document.querySelectorAll('.po-open').forEach((button) => button.addEventListener('click', () => editPurchaseOrder(button.dataset.id)));
+  document.querySelectorAll('.po-action').forEach((button) => button.addEventListener('click', () => transitionPurchaseOrder(button.dataset.id, button.dataset.action)));
+  document.querySelectorAll('.po-receive').forEach((button) => button.addEventListener('click', () => prepareOrderReceipt(button.dataset.id)));
+}
+
+function newPurchaseOrder() {
+  state.editingOrderId = null;
+  state.poLines = [];
+  el('po-editor-title').textContent = 'PO baru';
+  el('po-editor-status').textContent = 'DRAFT';
+  el('po-expected').value = '';
+  el('po-notes').value = '';
+  el('po-discount').value = 0; el('po-tax').value = 0; el('po-other-cost').value = 0;
+  renderPoLines();
+  showPurchaseView('order');
+}
+
+async function editPurchaseOrder(orderId) {
+  const order = state.purchaseOrders.find((item) => item.id === orderId);
+  if (!order || order.status !== 'DRAFT') return;
+  state.editingOrderId = order.id;
+  state.poLines = await Promise.all(order.items.map(async (item) => {
+    const snapshot = await purchaseCostSnapshot(item.product_id, item.unit_cost, order.supplier_id);
+    return { productId:item.product_id, qty:item.ordered_qty, factor:1, unitId:null, unitCost:item.unit_cost, lineDiscount:item.line_discount, ...snapshot };
+  }));
+  el('po-editor-title').textContent = order.po_no;
+  el('po-supplier').value = order.supplier_id;
+  el('po-location').value = order.location_id;
+  el('po-expected').value = order.expected_on ?? '';
+  el('po-notes').value = order.notes ?? '';
+  el('po-discount').value = order.discount_amount; el('po-tax').value = order.tax_amount; el('po-other-cost').value = order.other_cost;
+  renderPoLines();
+  showPurchaseView('order');
+}
+
+async function purchaseCostSnapshot(productId, newCost, supplierId = el('po-supplier').value) {
+  try {
+    const comparison = await request('/api/cost-comparison', { method:'POST', body:JSON.stringify({ productId, supplierId:supplierId || null, newCost }) });
+    return { previousCost:comparison.lastCost, previousSupplier:comparison.lastSupplier, previousDate:comparison.lastDate };
+  } catch { return { previousCost:null, previousSupplier:null, previousDate:null }; }
+}
+
+async function appendPoLine(productId, preferredUnitId = null) {
+  if (state.poLines.some((line) => line.productId === productId)) return toast('Produk sudah ada dalam Purchase Order.');
+  const product = state.products.find((item) => item.id === productId);
+  if (!product) return;
+  const unit = product.units.find((item) => item.id === preferredUnitId) ?? product.units.find((item) => Number(item.factor) === 1) ?? product.units[0];
+  const line = {
+    productId,
+    qty: 1,
+    factor: unit?.factor ?? 1,
+    unitId: unit?.id ?? null,
+    unitCost: 0,
+    lineDiscount: 0,
+    previousCost: null,
+    previousSupplier: 'Memuat histori modal...'
+  };
+  state.poLines.push(line);
+  renderPoLines();
+  try {
+    const snapshot = await purchaseCostSnapshot(productId, 0);
+    const activeLine = state.poLines.find((item) => item === line);
+    if (!activeLine) return;
+    Object.assign(activeLine, snapshot);
+    if (activeLine.unitCost === 0 && snapshot.previousCost !== null) activeLine.unitCost = snapshot.previousCost;
+    renderPoLines();
+  } catch (error) {
+    if (state.poLines.includes(line)) {
+      line.previousSupplier = 'Histori belum dapat dimuat';
+      renderPoLines();
+    }
+    toast(error.message);
+  }
+}
+
+function retailPriceOf(product) {
+  return product.priceRules.filter((rule)=>rule.customerGroupId==='retail' && Number(rule.minBaseQty)===1)
+    .sort((a,b)=>Number(b.priority)-Number(a.priority))[0]?.unitPriceBase ?? null;
+}
+
+function markupPreservingRecommendation(newCost, previousCost, retailPrice) {
+  if (!(newCost>=0) || !(previousCost>=0) || !(retailPrice>0)) return null;
+  const previousProfit=retailPrice-previousCost;
+  return { previousProfit, costChange:newCost-previousCost, recommended:Math.max(1,newCost+previousProfit) };
+}
+
+function applySuggestedRetailPrice(productId, recommended) {
+  if (!state.session?.permissions?.includes('catalog.manage')) return toast('Hanya Owner/Admin yang dapat mengubah harga produk.');
+  if (!state.managedProducts.some((product)=>product.id===productId)) return toast('Data produk belum siap. Buka menu Produk lalu coba lagi.');
+  openProductEditor(productId);
+  el('new-retail-price').value=recommended;
+  toast('Harga saran sudah diisikan. Periksa lalu tekan Simpan produk.');
+}
+
+function poIntelligence(line, product) {
+  const previous=line.previousCost;
+  const change=previous>0?Math.round(((line.unitCost-previous)/previous)*10000)/100:null;
+  const retail=retailPriceOf(product);
+  const margin=retail>0?Math.round(((retail-line.unitCost)/retail)*10000)/100:null;
+  const suggestion=markupPreservingRecommendation(line.unitCost,previous,retail);
+  const level=change===null?'new':change<=0?'ok':change<=5?'warning':'danger';
+  const applyButton=suggestion&&state.session?.permissions?.includes('catalog.manage')?`<button type="button" class="button secondary po-apply-suggested" data-product="${escapeHtml(product.id)}" data-price="${suggestion.recommended}">Gunakan saran</button>`:'';
+  return `<div class="po-intelligence"><div><span>Modal terakhir supplier</span><strong>${previous===null?'Belum ada':money.format(previous)}</strong><small>${line.previousSupplier??'Data pembelian pertama'}</small></div><div><span>Perubahan modal</span>${costBadge({percentage:change,level})}</div><div><span>Harga ecer saat ini</span><strong>${retail===null?'Belum diatur':money.format(retail)}</strong><small>${margin===null?'Margin belum tersedia':`Margin ${margin}%`}</small></div><div><span>Saran harga jual</span><strong>${suggestion===null?'-':money.format(suggestion.recommended)}</strong><small>${suggestion===null?'Perlu histori modal dan harga ecer':`Pertahankan laba ${money.format(suggestion.previousProfit)} / pcs`}</small></div>${applyButton}<button type="button" class="button secondary po-compare-supplier">Bandingkan supplier</button></div>`;
+}
+
+function renderPoLines() {
+  el('po-empty').classList.toggle('hidden', state.poLines.length>0);
+  el('po-lines').innerHTML = state.poLines.map((line,index) => {
+    const product = state.products.find((item) => item.id === line.productId);
+    if (!product) return '';
+    const units = product.units.map((unit) => `<option value="${unit.id}" data-factor="${unit.factor}" ${unit.id===line.unitId?'selected':''}>${unit.name}${unit.factor>1?` (${unit.factor} pcs)`:''}</option>`).join('');
+    const lineTotal = Math.max(0,(line.qty*line.factor*line.unitCost)-line.lineDiscount);
+    return `<article class="po-line" data-index="${index}"><div class="po-line-title"><div><strong>${product.name}</strong><small>${product.sku}</small></div><button class="icon-button po-remove" type="button">×</button></div><div class="po-line-grid"><label>Jumlah<input class="po-field" data-field="qty" type="number" min="0.000001" step="any" value="${line.qty}"></label><label>Satuan<select class="po-unit">${units}</select></label><label>Perkiraan modal / pcs<input class="po-field" data-field="unitCost" type="number" min="0" step="any" value="${line.unitCost}"></label><label>Diskon baris<input class="po-field" data-field="lineDiscount" type="number" min="0" step="any" value="${line.lineDiscount}"></label><div class="po-line-total"><span>Total baris</span><strong>${money.format(lineTotal)}</strong></div></div>${poIntelligence(line,product)}</article>`;
+  }).join('');
+  document.querySelectorAll('.po-field').forEach((input) => { input.addEventListener('input', () => { const line=state.poLines[Number(input.closest('.po-line').dataset.index)]; line[input.dataset.field]=Number(input.value); renderPoTotal(); input.closest('.po-line').querySelector('.po-line-total strong').textContent=money.format(Math.max(0,(line.qty*line.factor*line.unitCost)-line.lineDiscount)); }); input.addEventListener('change',renderPoLines); });
+  document.querySelectorAll('.po-unit').forEach((select) => select.addEventListener('change', () => { const line=state.poLines[Number(select.closest('.po-line').dataset.index)]; line.unitId=select.value; line.factor=Number(select.selectedOptions[0]?.dataset.factor ?? 1); renderPoLines(); }));
+  document.querySelectorAll('.po-remove').forEach((button) => button.addEventListener('click', () => { state.poLines.splice(Number(button.closest('.po-line').dataset.index),1); renderPoLines(); }));
+  document.querySelectorAll('.po-compare-supplier').forEach((button) => button.addEventListener('click', () => { const line=state.poLines[Number(button.closest('.po-line').dataset.index)]; showSupplierComparison(line.productId); }));
+  document.querySelectorAll('.po-apply-suggested').forEach((button) => button.addEventListener('click', () => applySuggestedRetailPrice(button.dataset.product,Number(button.dataset.price))));
+  renderPoTotal();
+}
+
+function poAmounts() {
+  const subtotal=state.poLines.reduce((sum,line)=>sum+Math.max(0,(line.qty*line.factor*line.unitCost)-line.lineDiscount),0);
+  const discount=Number(el('po-discount').value||0), tax=Number(el('po-tax').value||0), other=Number(el('po-other-cost').value||0);
+  return { subtotal,discount,tax,other,total:Math.max(0,subtotal-discount+tax+other) };
+}
+
+function renderPoTotal() { el('po-total').textContent=money.format(poAmounts().total); }
+
+async function savePurchaseOrder() {
+  if (!state.poLines.length) return toast('Tambahkan minimal satu barang ke PO.');
+  if (state.poLines.some((line)=>!(line.qty>0)||!(line.unitCost>=0))) return toast('Periksa jumlah dan modal PO.');
+  const amounts=poAmounts();
+  const payload={ orderId:state.editingOrderId, supplierId:el('po-supplier').value, locationId:el('po-location').value, expectedOn:el('po-expected').value||null, notes:el('po-notes').value, discountAmount:amounts.discount, taxAmount:amounts.tax, otherCost:amounts.other, items:state.poLines.map((line)=>({productId:line.productId,baseQty:line.qty*line.factor,unitCost:line.unitCost,lineDiscount:line.lineDiscount})) };
+  const button=el('save-po-draft'); button.disabled=true; button.textContent='Menyimpan...';
+  try { const result=await request('/api/purchase-orders',{method:'POST',body:JSON.stringify(payload)}); toast(`${result.po_no} tersimpan sebagai draft`); await loadPurchaseOrders(); showPurchaseView('documents'); }
+  catch(error){ toast(error.message); }
+  finally{ button.disabled=false; button.textContent='Simpan draft PO'; }
+}
+
+async function transitionPurchaseOrder(orderId,action) {
+  try { const result=await request(`/api/purchase-orders/${orderId}/${action}`,{method:'POST',body:'{}'}); toast(`${result.po_no}: ${purchaseStatus[result.status]?.[0] ?? result.status}`); await loadPurchaseOrders(); }
+  catch(error){ toast(error.message); }
+}
+
+async function prepareOrderReceipt(orderId) {
+  const order=state.purchaseOrders.find((item)=>item.id===orderId);
+  if (!order) return;
+  state.activePurchaseOrder=order;
+  await renderRestock();
+  el('restock-supplier').value=order.supplier_id; el('restock-supplier').disabled=true;
+  el('restock-location').value=order.location_id; el('restock-location').disabled=true;
+  el('active-po-banner').classList.remove('hidden');
+  el('active-po-banner').innerHTML=`<div><span>PENERIMAAN BERDASARKAN PO</span><strong>${order.po_no} · ${order.supplier_name}</strong><small>Isi jumlah yang benar-benar datang. Sisa pesanan tetap terbuka.</small></div><button id="clear-active-po" class="button secondary">Lepas PO</button>`;
+  el('clear-active-po').addEventListener('click', clearActivePurchaseOrder);
+  for (const item of order.items.filter((line)=>line.remaining_qty>0)) await appendRestockLine(item.product_id,item.remaining_qty,item.unit_cost,'pcs');
+  showPurchaseView('receipt');
+}
+
+async function clearActivePurchaseOrder() {
+  state.activePurchaseOrder=null;
+  el('active-po-banner').classList.add('hidden');
+  el('restock-supplier').disabled=false; el('restock-location').disabled=false;
+  await renderRestock();
+}
+
+async function refreshPoSupplierSnapshots() {
+  state.poLines = await Promise.all(state.poLines.map(async (line) => ({ ...line, ...(await purchaseCostSnapshot(line.productId,line.unitCost)) })));
+  renderPoLines();
+}
+
+async function showSupplierComparison(productId) {
+  const product=state.products.find((item)=>item.id===productId);
+  el('comparison-product-name').textContent=product?.name ?? 'Histori harga';
+  el('supplier-comparison-content').innerHTML='<div class="empty-state compact">Memuat perbandingan...</div>';
+  el('supplier-comparison-dialog').showModal();
+  try {
+    const data=await request(`/api/supplier-comparison/${encodeURIComponent(productId)}`);
+    const selectedSupplier=el('po-supplier').value;
+    const rows=data.suppliers.map((supplier,index)=>`<tr class="${supplier.supplierId===selectedSupplier?'selected-supplier':''}"><td><strong>${supplier.supplier}</strong>${index===0?'<span class="best-supplier">TERENDAH</span>':''}</td><td>${money.format(supplier.lastCost)}</td><td>${supplier.percentageFromBest===0?'-':`+${supplier.percentageFromBest}%`}</td><td>${supplier.documentNo??'-'}</td><td>${supplier.batch??'-'}</td><td>${supplier.lastDate?new Date(supplier.lastDate).toLocaleDateString('id-ID'):'-'}</td></tr>`).join('');
+    const recommended=null;
+    el('supplier-comparison-content').innerHTML=`<div class="comparison-metrics"><div><span>Harga supplier terendah</span><strong>${data.bestCost===null?'-':money.format(data.bestCost)}</strong></div><div><span>Harga ecer sekarang</span><strong>${data.currentRetailPrice===null?'-':money.format(data.currentRetailPrice)}</strong></div><div><span>Saran harga jual</span><strong>${recommended===null?'-':money.format(recommended)}</strong></div></div><div class="table-wrap"><table><thead><tr><th>Supplier</th><th>Modal terakhir</th><th>Selisih</th><th>Dokumen</th><th>Batch</th><th>Tanggal</th></tr></thead><tbody>${rows||'<tr><td colspan="6">Belum ada histori pembelian dari supplier mana pun.</td></tr>'}</tbody></table></div><p class="comparison-note">Baris berwarna menunjukkan supplier yang sedang dipilih pada PO. Harga terendah didasarkan pada penerimaan terakhir masing-masing supplier.</p>`;
+  } catch(error) { el('supplier-comparison-content').innerHTML=`<p class="error">${error.message}</p>`; }
+}
+
+async function appendRestockLine(productId, qty = 1, newCost = 0, unit = 'pcs') {
+  if (document.querySelector(`.restock-line[data-product="${productId}"]`)) return toast('Produk sudah ada pada daftar restok.');
+  const product = state.products.find((item) => item.id === productId);
+  if (!product) return;
+  const row = document.createElement('article');
+  const factor = product.units.find((item) => item.name === unit)?.factor ?? 1;
+  row.className = 'restock-line'; row.dataset.product = productId; row.dataset.factor = factor;
+  const unitOptions = product.units.map((item) => `<option value="${item.id}" data-factor="${item.factor}" ${item.name === unit ? 'selected' : ''}>${item.name}${item.factor > 1 ? ` (${item.factor} pcs)` : ''}</option>`).join('');
+  row.innerHTML = `
+    <div class="restock-card-header">
+      <div><p class="eyebrow">BARANG RESTOK</p><strong>${product.name}</strong><small>${product.sku ?? ''}</small></div>
+      <div class="restock-card-tools"><button type="button" class="button secondary history-button">Lihat riwayat</button><button type="button" class="icon-button remove-restock" aria-label="Hapus barang">×</button></div>
+    </div>
+    <div class="restock-card-grid">
+      <label>Jumlah<input class="restock-qty" type="number" min="0.000001" step="any" value="${qty}"></label>
+      <label>Satuan<select class="restock-unit">${unitOptions}</select></label>
+      <label>Modal per pcs<input class="restock-cost" type="number" min="0" step="any" value="${newCost}"></label>
+      <label>Nomor batch <span class="optional">Opsional</span><input class="restock-batch" placeholder="Contoh: BATCH-001"></label>
+      <label>Tanggal kedaluwarsa <span class="optional">Opsional</span><input class="restock-expiry" type="text" inputmode="numeric" maxlength="10" placeholder="DD/MM/YYYY" aria-label="Tanggal kedaluwarsa format DD/MM/YYYY"></label>
+      <div class="cost-insight"><span>Modal sebelumnya</span><strong class="last-cost">Memuat...</strong><small class="last-meta">Mengecek histori supplier</small><div class="cost-delta"><span class="badge neutral">CEK</span></div><div class="retail-suggestion hidden"><span>Saran harga ecer</span><strong class="suggested-retail">-</strong><small class="suggested-retail-note"></small><button type="button" class="button secondary apply-suggested-retail">Gunakan saran</button></div></div>
+    </div>`;
+  row.querySelector('.restock-cost').addEventListener('change', () => updateRestockComparison(row));
+  row.querySelector('.restock-cost').addEventListener('input', updateRestockTotal);
+  row.querySelector('.restock-qty').addEventListener('input', updateRestockTotal);
+  row.querySelector('.restock-unit').addEventListener('change', (event) => {
+    row.dataset.factor = event.target.selectedOptions[0]?.dataset.factor ?? 1;
+    updateRestockTotal();
+  });
+  row.querySelector('.restock-expiry').addEventListener('input', formatExpiryInput);
+  row.querySelector('.restock-expiry').addEventListener('blur', (event) => {
+    if (!event.target.value) return;
+    try { parseExpiryDate(event.target.value); event.target.setCustomValidity(''); }
+    catch (error) { event.target.setCustomValidity(error.message); toast(error.message); }
+  });
+  row.querySelector('.history-button').addEventListener('click', () => showCostHistory(productId));
+  row.querySelector('.apply-suggested-retail').addEventListener('click', () => applySuggestedRetailPrice(productId,Number(row.querySelector('.apply-suggested-retail').dataset.price)));
+  row.querySelector('.remove-restock').addEventListener('click', () => { row.remove(); syncRestockVisibility(); });
+  el('restock-body').append(row);
+  syncRestockVisibility();
+  updateRestockComparison(row);
+}
+
+function costMeta(comparison) {
+  if (comparison.lastCost === null) return 'Belum ada histori supplier ini';
+  return [comparison.lastSupplier, comparison.lastBatch ? `batch ${comparison.lastBatch}` : null, comparison.lastDocument].filter(Boolean).join(' · ');
+}
+
+function costBadge(comparison) {
+  const label = comparison.percentage === null ? 'BARU' : `${comparison.percentage > 0 ? '▲' : comparison.percentage < 0 ? '▼' : '•'} ${comparison.percentage}%`;
+  return `<span class="badge ${comparison.level.toLowerCase()}">${label}</span>`;
+}
+
+function formatExpiryInput(event) {
+  event.target.value = formatExpiryValue(event.target.value);
+  event.target.setCustomValidity('');
+}
+
+async function updateRestockComparison(row) {
+  try {
+    const comparison = await request('/api/cost-comparison', { method: 'POST', body: JSON.stringify({ productId: row.dataset.product, supplierId: el('restock-supplier').value || null, newCost: Number(row.querySelector('.restock-cost').value) }) });
+    row.querySelector('.last-cost').textContent = comparison.lastCost === null ? 'Baru' : money.format(comparison.lastCost);
+    row.querySelector('.last-meta').textContent = costMeta(comparison);
+    row.querySelector('.cost-delta').innerHTML = costBadge(comparison);
+    const product=state.products.find((item)=>item.id===row.dataset.product);
+    const retail=product?retailPriceOf(product):null;
+    const suggestion=markupPreservingRecommendation(Number(row.querySelector('.restock-cost').value),comparison.lastCost,retail);
+    const suggestionBox=row.querySelector('.retail-suggestion');
+    suggestionBox.classList.toggle('hidden',!suggestion);
+    if(suggestion){
+      row.querySelector('.suggested-retail').textContent=money.format(suggestion.recommended);
+      row.querySelector('.suggested-retail-note').textContent=`Laba lama ${money.format(suggestion.previousProfit)} / pcs tetap dipertahankan`;
+      row.querySelector('.apply-suggested-retail').dataset.price=suggestion.recommended;
+    }
+  } catch (error) { toast(error.message); }
+}
+
+function updateRestockTotal() {
+  const total = [...document.querySelectorAll('.restock-line')].reduce((sum, row) => {
+    const qty = Number(row.querySelector('.restock-qty').value);
+    const factor = Number(row.dataset.factor ?? 1);
+    const cost = Number(row.querySelector('.restock-cost').value);
+    return sum + (qty * factor * cost);
+  }, 0);
+  el('restock-total').textContent = `Total modal ${money.format(total)}`;
+}
+
+function syncRestockVisibility() {
+  const hasLines = Boolean(document.querySelector('.restock-line'));
+  el('restock-empty').classList.toggle('hidden', hasLines);
+  el('restock-table').classList.toggle('hidden', !hasLines);
+  updateRestockTotal();
+}
+
+async function showCostHistory(productId) {
+  const product = state.products.find((item) => item.id === productId);
+  const supplierId = el('restock-supplier').value;
+  el('restock-history').innerHTML = '<p class="eyebrow">HISTORI MODAL</p><p class="muted">Memuat histori...</p>';
+  try {
+    const data = await request(`/api/cost-history/${encodeURIComponent(productId)}${supplierId ? `?supplierId=${encodeURIComponent(supplierId)}` : ''}`);
+    const rows = data.history.map((item) => `<tr><td>${item.occurredAt ? new Date(item.occurredAt).toLocaleDateString('id-ID') : '-'}</td><td>${item.supplier ?? '-'}</td><td>${item.documentNo ?? '-'}</td><td>${item.batch ?? '-'}</td><td>${item.expiresOn ? new Date(`${item.expiresOn}T00:00:00`).toLocaleDateString('id-ID') : '-'}</td><td>${item.baseQty ?? '-'}</td><td>${money.format(item.costPerBase ?? 0)}</td></tr>`).join('');
+    el('restock-history').innerHTML = `<p class="eyebrow">HISTORI MODAL · ${product?.name ?? ''}</p><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Supplier</th><th>Dokumen</th><th>Batch</th><th>Kedaluwarsa</th><th>Qty pcs</th><th>Modal / pcs</th></tr></thead><tbody>${rows || '<tr><td colspan="7">Belum ada histori untuk supplier ini.</td></tr>'}</tbody></table></div>`;
+  } catch (error) {
+    el('restock-history').innerHTML = `<p class="eyebrow">HISTORI MODAL</p><p class="error">${error.message}</p>`;
+  }
+}
+
+function productName(productId) {
+  return state.products.find((item) => item.id === productId)?.name ?? productId;
+}
+
+function locationName(locationId) {
+  return state.locations.find((location) => location.id === locationId)?.name ?? locationId;
+}
+
+const expiryLabels = {
+  EXPIRED: ['Kedaluwarsa', 'danger'], CRITICAL: ['0–30 hari', 'danger'], WARNING: ['31–60 hari', 'warning'],
+  NOTICE: ['61–90 hari', 'notice'], NO_EXPIRY: ['Tanpa EXP', 'neutral'], SAFE: ['Aman', 'ok']
+};
+
+function displayExpiryDate(value) {
+  return value ? new Date(`${value}T00:00:00Z`).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) : 'Belum dicatat';
+}
+
+function expiryCountdown(batch) {
+  if (batch.status === 'NO_EXPIRY') return 'Lengkapi tanggal kedaluwarsa';
+  if (batch.daysToExpiry < 0) return `Lewat ${Math.abs(batch.daysToExpiry)} hari`;
+  if (batch.daysToExpiry === 0) return 'Kedaluwarsa hari ini';
+  return `Sisa ${batch.daysToExpiry} hari`;
+}
+
+function renderExpiryDashboard() {
+  const metrics = state.expiryMetrics ?? {};
+  el('expiry-metrics').innerHTML = [
+    ['EXPIRED', 'Sudah lewat EXP', metrics.expiredBatches, metrics.expiredQty],
+    ['CRITICAL', '0–30 hari', metrics.due30Batches, metrics.due30Qty],
+    ['WARNING', '31–60 hari', metrics.due60Batches, metrics.due60Qty],
+    ['NOTICE', '61–90 hari', metrics.due90Batches, metrics.due90Qty],
+    ['NO_EXPIRY', 'Tanpa tanggal EXP', metrics.noExpiryBatches, metrics.noExpiryQty]
+  ].map(([filter, label, batches, qty]) => `<button type="button" class="expiry-metric ${expiryLabels[filter][1]}" data-expiry-filter="${filter}"><span>${label}</span><strong>${batches ?? 0} batch</strong><small>${qty ?? 0} pcs</small></button>`).join('');
+  if (state.expiryError) {
+    el('expiry-batch-list').innerHTML = `<div class="expiry-empty"><strong>Kontrol batch belum aktif</strong><span>${escapeHtml(state.expiryError)}</span></div>`;
+    return;
+  }
+  const search = el('expiry-search').value.trim().toLowerCase();
+  const filter = el('expiry-filter').value;
+  const rows = state.expiryBatches.filter((batch) => {
+    const matchesSearch = !search || `${batch.productName} ${batch.sku} ${batch.batchNo} ${batch.supplierName}`.toLowerCase().includes(search);
+    const matchesFilter = filter === 'ALL' || (filter === 'PRIORITY' ? batch.status !== 'SAFE' : batch.status === filter);
+    return matchesSearch && matchesFilter;
+  });
+  el('expiry-batch-list').innerHTML = rows.map((batch, index) => {
+    const [label, tone] = expiryLabels[batch.status];
+    return `<article class="expiry-batch ${tone}"><div class="expiry-order">${index + 1}</div><div class="expiry-product"><div><span class="badge ${tone}">${label}</span><strong>${escapeHtml(batch.productName)}</strong><small>${escapeHtml(batch.sku)} · Batch ${escapeHtml(batch.batchNo)}</small></div><div class="expiry-date"><span>EXP ${displayExpiryDate(batch.expiresOn)}</span><strong>${expiryCountdown(batch)}</strong></div></div><div class="expiry-details"><div><span>Stok batch</span><strong>${batch.availableQty} pcs</strong></div><div><span>Lokasi</span><strong>${escapeHtml(batch.locationName)}</strong></div><div><span>Supplier</span><strong>${escapeHtml(batch.supplierName)}</strong></div><div><span>Nilai stok</span><strong>${money.format(batch.stockValue)}</strong></div></div></article>`;
+  }).join('') || '<div class="expiry-empty"><strong>Tidak ada batch pada filter ini</strong><span>Ubah filter atau kata pencarian untuk melihat batch lainnya.</span></div>';
+  document.querySelectorAll('[data-expiry-filter]').forEach((button) => button.addEventListener('click', () => { el('expiry-filter').value = button.dataset.expiryFilter; renderExpiryDashboard(); }));
+}
+
+async function loadInventory() {
+  const [data, expiry] = await Promise.all([
+    request('/api/inventory'),
+    request('/api/expiry-dashboard').catch((error) => ({ batches: [], metrics: null, error: error.message }))
+  ]);
+  state.inventory = data.balances;
+  state.ledger = data.ledger;
+  state.expiryBatches = expiry.batches ?? [];
+  state.expiryMetrics = expiry.metrics ?? null;
+  state.expiryError = expiry.error ?? null;
+  const storeLocation = state.locations.find((location) => location.kind === 'STORE');
+  const warehouseLocation = state.locations.find((location) => location.kind === 'WAREHOUSE');
+  const locationOptions = state.locations.map((location) => `<option value="${location.id}">${location.name}</option>`).join('');
+  el('transfer-from').innerHTML = locationOptions;
+  el('transfer-to').innerHTML = locationOptions;
+  if (warehouseLocation) el('transfer-from').value = warehouseLocation.id;
+  if (storeLocation) el('transfer-to').value = storeLocation.id;
+  el('transfer-product').innerHTML = state.products.map((product) => `<option value="${product.id}">${product.name}</option>`).join('');
+  const rows = state.products.map((product) => {
+    const outlet = state.inventory.find((item) => item.location_id === storeLocation?.id && item.product_id === product.id);
+    const warehouse = state.inventory.find((item) => item.location_id === warehouseLocation?.id && item.product_id === product.id);
+    return `<tr><td><strong>${product.name}</strong><br><small>${product.sku}</small></td><td>${outlet?.quantity ?? 0} pcs</td><td>${warehouse?.quantity ?? 0} pcs</td><td>${(outlet?.quantity ?? 0) + (warehouse?.quantity ?? 0)} pcs</td><td>${money.format(outlet?.avg_cost ?? 0)}</td></tr>`;
+  }).join('');
+  el('inventory-table').innerHTML = `<table><thead><tr><th>Produk</th><th>Toko Utama</th><th>Gudang Utama</th><th>Total</th><th>Modal rata-rata toko</th></tr></thead><tbody>${rows}</tbody></table>`;
+  el('count-fields').innerHTML = state.products.map((product) => {
+    const balance = state.inventory.find((item) => item.location_id === storeLocation?.id && item.product_id === product.id);
+    return `<label class="count-field"><span>${product.name}</span><input data-count-product="${product.id}" type="number" min="0" value="${balance?.quantity ?? 0}"></label>`;
+  }).join('');
+  el('ledger-table').innerHTML = `<table><thead><tr><th>Waktu</th><th>Lokasi</th><th>Produk</th><th>Jenis</th><th>Perubahan</th><th>Saldo</th></tr></thead><tbody>${state.ledger.map((item) => `<tr><td>${new Date(item.occurred_at).toLocaleString('id-ID')}</td><td>${locationName(item.location_id)}</td><td>${productName(item.product_id)}</td><td>${item.event_type.replaceAll('_', ' ')}</td><td>${item.delta > 0 ? '+' : ''}${item.delta}</td><td>${item.balance_after}</td></tr>`).join('') || '<tr><td colspan="6">Belum ada pergerakan stok.</td></tr>'}</tbody></table>`;
+  renderExpiryDashboard();
+}
+
+async function transferStock() {
+  const payload = { fromLocationId: el('transfer-from').value, toLocationId: el('transfer-to').value, items: [{ productId: el('transfer-product').value, baseQty: Number(el('transfer-qty').value) }] };
+  try {
+    const transfer = await request('/api/transfers', { method: 'POST', headers: { 'idempotency-key': crypto.randomUUID() }, body: JSON.stringify(payload) });
+    toast(`Transfer ${transfer.transfer_no} berhasil`);
+    await loadInventory(); await refreshCatalog();
+  } catch (error) { toast(error.message); }
+}
+
+async function postStockCount() {
+  const items = [...document.querySelectorAll('[data-count-product]')].map((input) => ({ productId: input.dataset.countProduct, countedQty: Number(input.value) }));
+  const storeLocation = state.locations.find((location) => location.kind === 'STORE');
+  if (!storeLocation) return toast('Lokasi toko belum dikonfigurasi.');
+  try {
+    const result = await request('/api/stock-counts', { method: 'POST', headers: { 'idempotency-key': crypto.randomUUID() }, body: JSON.stringify({ locationId: storeLocation.id, items }) });
+    toast(`Opname ${result.countNo} berhasil diposting`);
+    await loadInventory(); await refreshCatalog();
+  } catch (error) { toast(error.message); }
+}
+
+async function receivePurchase() {
+  const selectedSupplier = state.suppliers.find((supplier) => supplier.id === el('restock-supplier').value);
+  let lines;
+  try {
+    lines = [...document.querySelectorAll('.restock-line')].map((row) => {
+      const productId = row.dataset.product;
+      const qty = Number(row.querySelector('.restock-qty').value);
+      const expiry = row.querySelector('.restock-expiry').value.trim();
+      return {
+        productId,
+        baseQty: qty * Number(row.dataset.factor ?? 1),
+        unitCost: Number(row.querySelector('.restock-cost').value),
+        batchNo: row.querySelector('.restock-batch').value.trim() || null,
+        expiresOn: expiry ? parseExpiryDate(expiry) : null
+      };
+    });
+  } catch (error) {
+    return toast(error.message);
+  }
+  if (!selectedSupplier) return toast('Pilih atau tambahkan supplier terlebih dahulu.');
+  if (!el('restock-location').value) return toast('Pilih lokasi penerimaan.');
+  if (!el('restock-document').value.trim()) return toast('Nomor dokumen pembelian wajib diisi.');
+  if (!lines.length) return toast('Tambahkan minimal satu barang restok.');
+  if (lines.some((line) => !(line.baseQty > 0) || !(line.unitCost >= 0))) return toast('Periksa jumlah dan modal setiap barang.');
+  const payload = {
+    documentNo: el('restock-document').value.trim(),
+    supplierId: selectedSupplier.id,
+    supplierName: selectedSupplier.name,
+    locationId: el('restock-location').value,
+    items: lines
+  };
+  const button = el('receive-button');
+  button.disabled = true;
+  button.textContent = 'Menyimpan restok...';
+  try {
+    const endpoint = state.activePurchaseOrder ? `/api/purchase-orders/${state.activePurchaseOrder.id}/receipts` : '/api/purchase-receipts';
+    const receipt = await request(endpoint, { method: 'POST', headers: { 'idempotency-key': crypto.randomUUID() }, body: JSON.stringify(payload) });
+    toast(`Penerimaan ${receipt.document_no ?? receipt.documentNo} berhasil · stok sudah bertambah`);
+    if (state.session.permissions.includes('inventory.manage')) await loadInventory();
+    await refreshCatalog();
+    if (state.activePurchaseOrder) {
+      state.activePurchaseOrder = null;
+      el('active-po-banner').classList.add('hidden');
+      el('restock-supplier').disabled = false; el('restock-location').disabled = false;
+      await loadPurchaseOrders();
+      showPurchaseView('documents');
+    }
+    await renderRestock();
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Terima dan tambah stok';
+  }
+}
+
+function renderSupplierReturnReceipt(){
+  const receipt=state.supplierReturnReceipt;if(!receipt)return;
+  const statusLabel=receipt.status==='RETURNABLE'?'BELUM DIRETUR':receipt.status==='PARTIALLY_RETURNED'?'RETUR SEBAGIAN':'TIDAK ADA STOK TERSEDIA';
+  el('supplier-return-summary').innerHTML=`<div><p class="eyebrow">PENERIMAAN DITEMUKAN</p><h2>${escapeHtml(receipt.documentNo)}</h2><small>${escapeHtml(receipt.supplierName)} · ${escapeHtml(receipt.locationName)} · ${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small></div><div><span class="status-badge ${receipt.status==='NOT_RETURNABLE'?'inactive':'approved'}">${statusLabel}</span><strong>${money.format(receipt.returnableCredit)}</strong><small>Maksimum nilai yang masih dapat diretur</small></div>`;
+  el('supplier-return-item-list').innerHTML=receipt.lines.map((line)=>`<article class="supplier-return-line ${line.maxReturnQty<=0?'completed':''}" data-receipt-item-id="${escapeHtml(line.receiptItemId)}"><label class="return-line-select"><input class="supplier-return-select" type="checkbox" ${line.maxReturnQty<=0?'disabled':''}><span><strong>${escapeHtml(line.productName)}</strong><small>${escapeHtml(line.sku)} · batch ${escapeHtml(line.batchNo??'-')} · EXP ${formatExpiryValue(line.expiresOn)}</small></span></label><div class="supplier-return-line-data"><span>Diterima<strong>${line.receivedQty.toLocaleString('id-ID')} pcs</strong></span><span>Sudah retur<strong>${line.returnedQty.toLocaleString('id-ID')} pcs</strong></span><span>Stok batch tersedia<strong>${line.batchAvailable.toLocaleString('id-ID')} pcs</strong></span><span>Modal asli<strong>${money.format(line.unitCost)}</strong></span><label>Jumlah retur<input class="supplier-return-qty" type="number" min="0.000001" max="${line.maxReturnQty}" step="any" value="${line.maxReturnQty||0}" ${line.maxReturnQty<=0?'disabled':''}></label><span class="supplier-return-line-credit">Nilai kredit<strong>${money.format(line.maxReturnQty*line.unitCost)}</strong></span></div></article>`).join('')||'<div class="empty-state compact">Faktur tidak memiliki barang.</div>';
+  el('supplier-return-workspace').classList.remove('hidden');updateSupplierReturnTotal();
+}
+
+function updateSupplierReturnTotal(){
+  const receipt=state.supplierReturnReceipt;if(!receipt)return;
+  let total=0,selected=0;
+  el('supplier-return-item-list').querySelectorAll('.supplier-return-line').forEach((row)=>{
+    const line=receipt.lines.find((item)=>item.receiptItemId===row.dataset.receiptItemId),checked=row.querySelector('.supplier-return-select').checked;
+    const qty=Math.max(0,Math.min(Number(row.querySelector('.supplier-return-qty').value||0),line.maxReturnQty));
+    row.querySelector('.supplier-return-line-credit strong').textContent=money.format(qty*line.unitCost);
+    if(checked){total+=qty*line.unitCost;selected++;}
+  });
+  el('supplier-return-total').textContent=money.format(total);
+  el('post-supplier-return').disabled=!selected||!(total>=0);
+}
+
+async function findSupplierReturnReceipt(){
+  const documentNo=el('supplier-return-document').value.trim();if(!documentNo)return toast('Masukkan nomor faktur penerimaan.');
+  const supplierId=el('supplier-return-supplier').value;if(!supplierId)return toast('Pilih supplier.');
+  el('supplier-return-search-status').textContent='Mencari penerimaan dan stok batch...';el('supplier-return-workspace').classList.add('hidden');
+  try{const data=await request(`/api/purchase-returns/lookup?documentNo=${encodeURIComponent(documentNo)}&supplierId=${encodeURIComponent(supplierId)}`);state.supplierReturnReceipt=data.receipt;el('supplier-return-search-status').textContent=`Faktur ${data.receipt.documentNo} ditemukan.`;renderSupplierReturnReceipt();}
+  catch(error){state.supplierReturnReceipt=null;el('supplier-return-search-status').textContent=error.message;}
+}
+
+async function loadRecentSupplierReturns(){
+  try{
+    const data=await request('/api/purchase-returns/recent');state.recentSupplierReturns=data.returns??[];
+    const settlement={CREDIT_NOTE:'Nota kredit',REFUND:'Uang kembali',REPLACEMENT:'Penggantian barang'};
+    el('supplier-return-history-list').innerHTML=state.recentSupplierReturns.map((item)=>`<div class="supplier-return-history-row"><div><strong>${escapeHtml(item.returnNo)}</strong><small>Faktur ${escapeHtml(item.documentNo)} · ${new Date(item.occurredAt).toLocaleString('id-ID')}</small></div><div><strong>${escapeHtml(item.supplierName)}</strong><small>${escapeHtml(item.reason)} · ${item.totalQty.toLocaleString('id-ID')} pcs</small></div><div><strong>${money.format(item.totalCredit)}</strong><small>${settlement[item.settlementType]??item.settlementType}${item.supplierReference?` · ${escapeHtml(item.supplierReference)}`:''}</small></div></div>`).join('')||'<div class="empty-state compact">Belum ada retur supplier.</div>';
+  }catch(error){el('supplier-return-history-list').innerHTML=`<p class="error">${escapeHtml(error.message)}</p>`;}
+}
+
+async function postSupplierReturn(event){
+  event.preventDefault();const receipt=state.supplierReturnReceipt;if(!receipt)return;
+  const items=[...el('supplier-return-item-list').querySelectorAll('.supplier-return-line')].filter((row)=>row.querySelector('.supplier-return-select').checked).map((row)=>({receiptItemId:row.dataset.receiptItemId,baseQty:Number(row.querySelector('.supplier-return-qty').value)}));
+  if(!items.length)return el('supplier-return-error').textContent='Pilih minimal satu barang.';
+  if(items.some((item)=>!(item.baseQty>0)))return el('supplier-return-error').textContent='Jumlah retur harus lebih dari nol.';
+  const button=el('post-supplier-return');button.disabled=true;button.textContent='Memposting retur...';el('supplier-return-error').textContent='';
+  try{
+    const result=await request('/api/purchase-returns',{method:'POST',headers:{'idempotency-key':crypto.randomUUID()},body:JSON.stringify({receiptId:receipt.id,reason:el('supplier-return-reason').value.trim(),settlementType:el('supplier-return-settlement').value,supplierReference:el('supplier-return-reference').value.trim(),items})});
+    toast(`Retur ${result.returnNo} berhasil · kredit ${money.format(result.totalCredit)}`);state.supplierReturnReceipt=null;el('supplier-return-workspace').classList.add('hidden');el('supplier-return-form').reset();await Promise.all([loadRecentSupplierReturns(),refreshCatalog()]);if(state.session.permissions.includes('inventory.manage'))await loadInventory();
+  }catch(error){el('supplier-return-error').textContent=error.message;}
+  finally{button.disabled=false;button.textContent='Posting retur supplier';}
+}
+
+function renderOutletOptions(containerId, selectedIds = [], role = 'CASHIER') {
+  const selected = new Set(role === 'OWNER' ? state.outlets.map((outlet) => outlet.id) : selectedIds);
+  const disabled = role === 'OWNER' ? 'disabled' : '';
+  el(containerId).innerHTML = state.outlets.map((outlet) => `<label class="outlet-option"><input type="checkbox" value="${escapeHtml(outlet.id)}" ${selected.has(outlet.id) ? 'checked' : ''} ${disabled}><span>${escapeHtml(outlet.name)}</span></label>`).join('') || '<p class="muted">Belum ada outlet aktif.</p>';
+}
+
+function selectedOutletIds(containerId, role) {
+  if (role === 'OWNER') return state.outlets.map((outlet) => outlet.id);
+  return [...el(containerId).querySelectorAll('input:checked')].map((input) => input.value);
+}
+
+function renderUserMetrics() {
+  const active = state.users.filter((user) => user.active);
+  const metrics = [
+    ['Pengguna aktif', active.length],
+    ['Kasir', active.filter((user) => user.role === 'CASHIER').length],
+    ['Pembelian & gudang', active.filter((user) => ['PURCHASING', 'WAREHOUSE'].includes(user.role)).length],
+    ['Owner & admin', active.filter((user) => ['OWNER', 'ADMIN'].includes(user.role)).length]
+  ];
+  el('user-metrics').innerHTML = metrics.map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
+}
+
+function renderUsers() {
+  const query = el('user-search').value.trim().toLowerCase();
+  const status = el('user-status-filter').value;
+  const outletsById = new Map(state.outlets.map((outlet) => [outlet.id, outlet.name]));
+  const users = state.users.filter((user) => {
+    const matchesQuery = !query || `${user.displayName} ${user.email ?? ''} ${roleLabels[user.role] ?? user.role}`.toLowerCase().includes(query);
+    const matchesStatus = status === 'ALL' || (status === 'ACTIVE' ? user.active : !user.active);
+    return matchesQuery && matchesStatus;
+  });
+  el('user-list').innerHTML = users.map((user) => {
+    const outletNames = user.role === 'OWNER' ? ['Semua outlet'] : user.outletIds.map((id) => outletsById.get(id)).filter(Boolean);
+    return `<div class="user-row" data-user-id="${escapeHtml(user.id)}"><div class="user-person"><strong>${escapeHtml(user.displayName)}</strong><small>${escapeHtml(user.email ?? 'Email tidak tersedia')}</small></div><span class="role-badge ${user.active ? '' : 'inactive'}">${user.active ? escapeHtml(roleLabels[user.role] ?? user.role) : 'NONAKTIF'}</span><div class="user-outlet-list">${escapeHtml(outletNames.join(', ') || 'Belum ditempatkan')}</div><button class="button secondary edit-user" type="button">Atur akses</button></div>`;
+  }).join('') || '<div class="empty-state compact">Tidak ada pengguna yang sesuai filter.</div>';
+}
+
+async function loadUsers() {
+  el('user-list').innerHTML = '<div class="empty-state compact">Memuat pengguna...</div>';
+  try {
+    const data = await request('/api/users');
+    state.users = data.users ?? [];
+    state.outlets = data.outlets ?? state.outlets;
+    renderOutletOptions('new-user-outlets', [], el('new-user-role').value);
+    renderUserMetrics();
+    renderUsers();
+  } catch (error) {
+    el('user-list').innerHTML = `<div class="empty-state compact"><strong>Data pengguna belum dapat dimuat</strong><small>${escapeHtml(error.message)}</small></div>`;
+    toast(error.message);
+  }
+}
+
+async function createUser(event) {
+  event.preventDefault();
+  const role = el('new-user-role').value;
+  const outletIds = selectedOutletIds('new-user-outlets', role);
+  if (role !== 'OWNER' && !outletIds.length) { el('create-user-error').textContent = 'Pilih minimal satu outlet untuk pengguna ini.'; return; }
+  const button = el('create-user');
+  el('create-user-error').textContent = '';
+  button.disabled = true; button.textContent = 'Membuat akun...';
+  try {
+    await request('/api/users', { method: 'POST', body: JSON.stringify({
+      displayName: el('new-user-name').value.trim(), email: el('new-user-email').value.trim(),
+      password: el('new-user-password').value, role, outletIds
+    }) });
+    el('create-user-form').reset();
+    el('new-user-role').value = 'CASHIER';
+    toast('Akun pengguna berhasil dibuat');
+    await loadUsers();
+  } catch (error) { el('create-user-error').textContent = error.message; }
+  finally { button.disabled = false; button.textContent = 'Buat akun pengguna'; }
+}
+
+function openUserEditor(userId) {
+  const user = state.users.find((item) => item.id === userId);
+  if (!user) return;
+  el('edit-user-id').value = user.id;
+  el('edit-user-title').textContent = user.displayName;
+  el('edit-user-email').textContent = user.email ?? 'Email tidak tersedia';
+  el('edit-user-name').value = user.displayName;
+  el('edit-user-role').value = user.role;
+  el('edit-user-active').checked = user.active;
+  el('edit-user-active').disabled = user.id === state.session.user.id;
+  el('edit-user-error').textContent = '';
+  renderOutletOptions('edit-user-outlets', user.outletIds, user.role);
+  el('edit-user-dialog').showModal();
+}
+
+async function saveUser(event) {
+  event.preventDefault();
+  const role = el('edit-user-role').value;
+  const outletIds = selectedOutletIds('edit-user-outlets', role);
+  if (role !== 'OWNER' && !outletIds.length) { el('edit-user-error').textContent = 'Pilih minimal satu outlet untuk pengguna ini.'; return; }
+  const button = el('save-user');
+  button.disabled = true; button.textContent = 'Menyimpan...'; el('edit-user-error').textContent = '';
+  try {
+    await request(`/api/users/${encodeURIComponent(el('edit-user-id').value)}`, { method: 'PATCH', body: JSON.stringify({
+      displayName: el('edit-user-name').value.trim(), role, active: el('edit-user-active').checked, outletIds
+    }) });
+    el('edit-user-dialog').close();
+    toast('Hak akses pengguna berhasil diperbarui');
+    await loadUsers();
+  } catch (error) { el('edit-user-error').textContent = error.message; }
+  finally { button.disabled = false; button.textContent = 'Simpan perubahan'; }
+}
+
+function renderOutletSwitcher() {
+  const select = el('current-outlet-select');
+  if (!select) return;
+  select.innerHTML = state.outlets.map((outlet) => `<option value="${escapeHtml(outlet.id)}">${escapeHtml(outlet.name)}</option>`).join('');
+  if (state.outlets.some((outlet) => outlet.id === state.activeOutletId)) select.value = state.activeOutletId;
+  select.disabled = state.outlets.length < 2;
+}
+
+async function switchActiveOutlet(event) {
+  const nextOutletId = event.target.value;
+  if (!nextOutletId || nextOutletId === state.activeOutletId) return;
+  if (state.cart.length) {
+    event.target.value = state.activeOutletId;
+    return toast('Kosongkan atau tahan keranjang sebelum berpindah outlet.');
+  }
+  if (state.currentShift) {
+    event.target.value = state.activeOutletId;
+    return toast('Tutup shift aktif sebelum berpindah outlet.');
+  }
+  const previous = state.activeOutletId;
+  state.activeOutletId = nextOutletId;
+  event.target.disabled = true;
+  try {
+    await refreshCatalog();
+    await loadHeldSales();
+    toast(`Outlet aktif: ${state.outlets.find((outlet) => outlet.id === state.activeOutletId)?.name ?? 'Outlet'}`);
+  } catch (error) {
+    state.activeOutletId = previous;
+    renderOutletSwitcher();
+    toast(error.message);
+  } finally {
+    event.target.disabled = state.outlets.length < 2;
+  }
+}
+
+function settingOutletLabel(outletId) {
+  return state.settings.outlets.find((outlet) => outlet.id === outletId)?.name ?? 'Tanpa outlet';
+}
+
+function renderSettings() {
+  const business = state.business ?? {};
+  el('setting-business-name').value = business.name ?? '';
+  el('setting-business-legal').value = business.legalName ?? '';
+  el('setting-business-phone').value = business.phone ?? '';
+  el('setting-business-email').value = business.email ?? '';
+  el('setting-business-tax').value = business.taxId ?? '';
+  el('setting-business-address').value = business.address ?? '';
+  el('setting-business-footer').value = business.receiptFooter ?? '';
+  const outletOptions = state.settings.outlets.filter((outlet) => outlet.active).map((outlet) => `<option value="${escapeHtml(outlet.id)}">${escapeHtml(outlet.name)}</option>`).join('');
+  el('setting-location-outlet').innerHTML = outletOptions;
+  el('setting-device-outlet').innerHTML = outletOptions;
+  el('settings-outlet-list').innerHTML = state.settings.outlets.map((outlet) => `
+    <button class="settings-row edit-setting-outlet" type="button" data-outlet-id="${escapeHtml(outlet.id)}">
+      <span><strong>${escapeHtml(outlet.name)}</strong><small>${escapeHtml(outlet.code)} · struk ${escapeHtml(outlet.receipt_prefix)}-000001</small></span>
+      <span class="status-badge ${outlet.active ? 'approved' : 'inactive'}">${outlet.active ? 'AKTIF' : 'NONAKTIF'}</span>
+    </button>`).join('') || '<div class="empty-state compact">Belum ada outlet.</div>';
+  const kindLabels = { STORE: 'Toko', WAREHOUSE: 'Gudang', TRANSIT: 'Transit' };
+  el('settings-location-list').innerHTML = state.settings.locations.map((location) => `
+    <button class="settings-row edit-setting-location" type="button" data-location-id="${escapeHtml(location.id)}">
+      <span><strong>${escapeHtml(location.name)}</strong><small>${escapeHtml(settingOutletLabel(location.outlet_id))} · ${escapeHtml(kindLabels[location.kind] ?? location.kind)} · ${escapeHtml(location.code)}</small></span>
+      <span class="status-badge ${location.active ? 'approved' : 'inactive'}">${location.active ? 'AKTIF' : 'NONAKTIF'}</span>
+    </button>`).join('') || '<div class="empty-state compact">Belum ada lokasi stok.</div>';
+  const registered = state.settings.devices.find((device) => device.id === posDevice.id);
+  state.deviceSettings = { ...state.deviceSettings, ...(registered ?? {}) };
+  el('setting-device-id').textContent = `ID ${posDevice.id.slice(0, 8).toUpperCase()}`;
+  el('setting-device-name').value = registered?.name || posDevice.name;
+  el('setting-device-outlet').value = registered?.outletId ?? state.activeOutletId;
+  el('setting-device-paper').value = String(state.deviceSettings.paperWidth ?? 80);
+  el('setting-device-copies').value = String(state.deviceSettings.receiptCopies ?? 1);
+  el('setting-device-auto-print').checked = Boolean(state.deviceSettings.autoPrint);
+}
+
+async function loadSettings() {
+  try {
+    const data = await request('/api/settings');
+    state.business = data.business ?? state.business;
+    state.settings = { outlets: data.outlets ?? [], locations: data.locations ?? [], devices: data.devices ?? [] };
+    renderSettings();
+  } catch (error) {
+    if (el('settings-outlet-list')) el('settings-outlet-list').innerHTML = `<div class="empty-state compact"><strong>Pengaturan belum dapat dimuat</strong><small>${escapeHtml(error.message)}</small></div>`;
+  }
+}
+
+function renderSystemHealth() {
+  const health = state.systemHealth;
+  if (!health) return;
+  const status = String(health.status ?? 'WARNING').toUpperCase();
+  const statusCopy = {
+    HEALTHY: ['Sistem sehat', 'Semua pemeriksaan utama aman.'],
+    WARNING: ['Perlu perhatian', 'Ada pekerjaan operasional yang perlu ditinjau.'],
+    CRITICAL: ['Ditemukan ketidaksesuaian', 'Jangan abaikan temuan sebelum melanjutkan tutup buku.']
+  };
+  const [title, description] = statusCopy[status] ?? statusCopy.WARNING;
+  const checkedDate = new Date(health.checkedAt);
+  const checkedAt = Number.isFinite(checkedDate.getTime())
+    ? new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' }).format(checkedDate)
+    : 'baru saja';
+  el('system-health-summary').className = `health-summary ${status.toLowerCase()}`;
+  el('system-health-summary').innerHTML = `
+    <div><span class="health-indicator"></span><strong>${title}</strong><small>${description}</small></div>
+    <span>Terakhir diperiksa<br><strong>${escapeHtml(checkedAt)}</strong></span>`;
+  const explanations = {
+    NEGATIVE_STOCK: 'Saldo lokasi di bawah nol.',
+    STOCK_LEDGER_MISMATCH: 'Saldo saat ini berbeda dari jurnal stok terakhir.',
+    NEGATIVE_BATCH: 'Jumlah tersedia pada batch di bawah nol.',
+    PAYMENT_MISMATCH: 'Pembayaran langsung + piutang berbeda dari total struk.',
+    CUSTOMER_BALANCE_MISMATCH: 'Saldo rekening pelanggan berbeda dari faktur terbuka.',
+    SUPPLIER_BALANCE_MISMATCH: 'Saldo hutang supplier berbeda dari faktur terbuka.',
+    OLD_OPEN_SHIFT: 'Shift belum ditutup lebih dari 24 jam.',
+    SYNC_REVIEW: 'Transaksi offline menunggu keputusan Owner/Admin.',
+    SYNC_FAILED: 'Ada antrean offline yang gagal diproses.',
+    EXPIRED_APPROVAL: 'Izin diskon lama sudah kedaluwarsa.'
+  };
+  el('system-health-checks').innerHTML = (health.checks ?? []).map((check) => {
+    const count = Number(check.count ?? 0);
+    const severity = count > 0 ? String(check.severity ?? 'WARNING').toLowerCase() : 'clear';
+    return `<article class="health-check ${severity}">
+      <div><strong>${escapeHtml(check.label)}</strong><small>${escapeHtml(explanations[check.code] ?? '')}</small></div>
+      <span>${count > 0 ? `${count} temuan` : 'Aman'}</span>
+    </article>`;
+  }).join('') || '<div class="empty-state compact">Tidak ada hasil pemeriksaan.</div>';
+}
+
+async function loadSystemHealth() {
+  const button = el('refresh-system-health');
+  if (button) button.disabled = true;
+  try {
+    state.systemHealth = await request('/api/system/health');
+    renderSystemHealth();
+  } catch (error) {
+    el('system-health-summary').className = 'health-summary warning';
+    el('system-health-summary').innerHTML = `<div><span class="health-indicator"></span><strong>Pemeriksaan belum selesai</strong><small>${escapeHtml(error.message)}</small></div>`;
+    el('system-health-checks').innerHTML = '<div class="empty-state compact">Tekan “Periksa sekarang” setelah koneksi kembali stabil.</div>';
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function loadSettingsWorkspace() {
+  await Promise.all([loadSettings(), loadSystemHealth()]);
+}
+
+function isInstalledPwa() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function updateInstallAppControl() {
+  const button = el('install-app');
+  const status = el('install-app-status');
+  if (!button || !status) return;
+  if (isInstalledPwa()) {
+    button.disabled = true;
+    button.textContent = 'Sudah terpasang';
+    status.textContent = 'Kasir Nusa sedang berjalan sebagai aplikasi di perangkat ini.';
+    return;
+  }
+  button.textContent = 'Pasang aplikasi';
+  button.disabled = !deferredInstallPrompt;
+  status.textContent = deferredInstallPrompt
+    ? 'Siap dipasang tanpa mengunduh dari Play Store atau Microsoft Store.'
+    : 'Jika tombol belum aktif, buka menu browser lalu pilih “Instal aplikasi”.';
+}
+
+async function installPwa() {
+  if (!deferredInstallPrompt) return;
+  const prompt = deferredInstallPrompt;
+  deferredInstallPrompt = null;
+  await prompt.prompt();
+  await prompt.userChoice.catch(() => null);
+  updateInstallAppControl();
+}
+
+function newOutletEditor() {
+  el('outlet-settings-form').reset();
+  el('setting-outlet-id').value = '';
+  el('setting-outlet-mode').textContent = 'OUTLET BARU';
+  el('setting-outlet-title').textContent = 'Tambahkan outlet';
+  el('setting-outlet-timezone').value = 'Asia/Makassar';
+  el('setting-outlet-active').checked = true;
+  el('outlet-settings-error').textContent = '';
+}
+
+function editOutletSetting(outletId) {
+  const outlet = state.settings.outlets.find((item) => item.id === outletId);
+  if (!outlet) return;
+  el('setting-outlet-id').value = outlet.id;
+  el('setting-outlet-mode').textContent = 'UBAH OUTLET';
+  el('setting-outlet-title').textContent = outlet.name;
+  el('setting-outlet-code').value = outlet.code;
+  el('setting-outlet-prefix').value = outlet.receipt_prefix;
+  el('setting-outlet-name').value = outlet.name;
+  el('setting-outlet-phone').value = outlet.phone ?? '';
+  el('setting-outlet-timezone').value = outlet.timezone;
+  el('setting-outlet-address').value = outlet.address ?? '';
+  el('setting-outlet-footer').value = outlet.receipt_footer ?? '';
+  el('setting-outlet-active').checked = outlet.active;
+  el('outlet-settings-error').textContent = '';
+}
+
+function newLocationEditor() {
+  el('location-settings-form').reset();
+  el('setting-location-id').value = '';
+  el('setting-location-mode').textContent = 'LOKASI BARU';
+  el('setting-location-title').textContent = 'Tambahkan lokasi stok';
+  el('setting-location-outlet').value = state.activeOutletId;
+  el('setting-location-active').checked = true;
+  el('location-settings-error').textContent = '';
+}
+
+function editLocationSetting(locationId) {
+  const location = state.settings.locations.find((item) => item.id === locationId);
+  if (!location) return;
+  el('setting-location-id').value = location.id;
+  el('setting-location-mode').textContent = 'UBAH LOKASI';
+  el('setting-location-title').textContent = location.name;
+  el('setting-location-outlet').value = location.outlet_id;
+  el('setting-location-kind').value = location.kind;
+  el('setting-location-code').value = location.code;
+  el('setting-location-name').value = location.name;
+  el('setting-location-active').checked = location.active;
+  el('location-settings-error').textContent = '';
+}
+
+async function saveBusinessSettings(event) {
+  event.preventDefault();
+  const button = event.submitter;
+  button.disabled = true;
+  try {
+    const data = await request('/api/settings/business', { method: 'PUT', body: JSON.stringify({
+      name: el('setting-business-name').value.trim(), legalName: el('setting-business-legal').value.trim(),
+      phone: el('setting-business-phone').value.trim(), email: el('setting-business-email').value.trim(),
+      taxId: el('setting-business-tax').value.trim(), address: el('setting-business-address').value.trim(),
+      receiptFooter: el('setting-business-footer').value.trim()
+    }) });
+    state.business = data.business;
+    saveBootstrapCache({ ...JSON.parse(localStorage.getItem('pos_bootstrap_cache') ?? '{}'), business: state.business, session: state.session });
+    toast('Identitas usaha berhasil disimpan');
+  } catch (error) { toast(error.message); }
+  finally { button.disabled = false; }
+}
+
+async function saveOutletSettings(event) {
+  event.preventDefault();
+  const id = el('setting-outlet-id').value;
+  const button = event.submitter;
+  el('outlet-settings-error').textContent = ''; button.disabled = true;
+  try {
+    await request(id ? `/api/settings/outlets/${id}` : '/api/settings/outlets', { method: id ? 'PUT' : 'POST', body: JSON.stringify({
+      code: el('setting-outlet-code').value, receiptPrefix: el('setting-outlet-prefix').value,
+      name: el('setting-outlet-name').value, phone: el('setting-outlet-phone').value,
+      timezone: el('setting-outlet-timezone').value, address: el('setting-outlet-address').value,
+      receiptFooter: el('setting-outlet-footer').value, active: el('setting-outlet-active').checked
+    }) });
+    state.activeOutletId = null;
+    await refreshCatalog(); await loadSettings(); newOutletEditor();
+    toast(id ? 'Outlet berhasil diperbarui' : 'Outlet baru berhasil dibuat');
+  } catch (error) { el('outlet-settings-error').textContent = error.message; }
+  finally { button.disabled = false; }
+}
+
+async function saveLocationSettings(event) {
+  event.preventDefault();
+  const id = el('setting-location-id').value;
+  const button = event.submitter;
+  el('location-settings-error').textContent = ''; button.disabled = true;
+  try {
+    await request(id ? `/api/settings/locations/${id}` : '/api/settings/locations', { method: id ? 'PUT' : 'POST', body: JSON.stringify({
+      outletId: el('setting-location-outlet').value, kind: el('setting-location-kind').value,
+      code: el('setting-location-code').value, name: el('setting-location-name').value,
+      active: el('setting-location-active').checked
+    }) });
+    await refreshCatalog(); await loadSettings(); newLocationEditor();
+    toast(id ? 'Lokasi stok berhasil diperbarui' : 'Lokasi stok berhasil dibuat');
+  } catch (error) { el('location-settings-error').textContent = error.message; }
+  finally { button.disabled = false; }
+}
+
+async function saveDeviceSettings(event) {
+  event.preventDefault();
+  const button = event.submitter;
+  el('device-settings-error').textContent = ''; button.disabled = true;
+  try {
+    const data = await request('/api/settings/device', { method: 'PUT', body: JSON.stringify({
+      id: posDevice.id, outletId: el('setting-device-outlet').value, name: el('setting-device-name').value.trim(),
+      platform: posDevice.platform, paperWidth: Number(el('setting-device-paper').value),
+      receiptCopies: Number(el('setting-device-copies').value), autoPrint: el('setting-device-auto-print').checked
+    }) });
+    state.deviceSettings = data.device;
+    posDevice.name = data.device.name;
+    localStorage.setItem('pos_device_name', data.device.name);
+    await loadSettings();
+    toast('Pengaturan perangkat ini berhasil disimpan');
+  } catch (error) { el('device-settings-error').textContent = error.message; }
+  finally { button.disabled = false; }
+}
+
+function storeDateToday() {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Makassar', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function shiftReportDate(value, days) {
+  const date = new Date(`${value}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function applyReportPreset() {
+  const today = storeDateToday();
+  const preset = el('report-preset').value;
+  if (preset === 'CUSTOM') return;
+  el('report-to').value = today;
+  if (preset === 'TODAY') el('report-from').value = today;
+  if (preset === '7D') el('report-from').value = shiftReportDate(today, -6);
+  if (preset === '30D') el('report-from').value = shiftReportDate(today, -29);
+  if (preset === 'MONTH') el('report-from').value = `${today.slice(0, 8)}01`;
+}
+
+function renderReportOutletOptions() {
+  const selected = el('report-outlet').value;
+  el('report-outlet').innerHTML = '<option value="">Semua outlet yang dapat diakses</option>' + state.outlets.map((outlet) => `<option value="${escapeHtml(outlet.id)}">${escapeHtml(outlet.name)}</option>`).join('');
+  if (state.outlets.some((outlet) => outlet.id === selected)) el('report-outlet').value = selected;
+}
+
+function reportTable(headers, rows) {
+  if (!rows.length) return '<div class="empty-state compact">Belum ada data pada periode ini.</div>';
+  return `<table class="report-table"><thead><tr>${headers.map((header) => `<th>${header}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`;
+}
+
+function renderOperationalReport(audit) {
+  const report = state.report;
+  const metrics = report.metrics;
+  el('report-cards').innerHTML = [
+    ['Penjualan bersih', money.format(metrics.netSales), ''],
+    ['Laba kotor', money.format(metrics.grossProfit), 'profit-metric'],
+    ['Retur pelanggan', money.format(metrics.returnTotal), 'return-metric'],
+    ['Transaksi', Number(metrics.transactionCount).toLocaleString('id-ID'), ''],
+    ['Nilai persediaan', money.format(metrics.inventoryValue), ''],
+    ['Pembelian bersih', money.format(metrics.netPurchaseValue??metrics.purchaseValue), Number(metrics.purchaseReturnValue)?`Retur supplier ${money.format(metrics.purchaseReturnValue)}`:'']
+  ].map(([label, value, className]) => `<div class="metric ${className}"><span>${label}</span><strong>${value}</strong></div>`).join('');
+
+  const daily = [...report.daily].reverse();
+  el('daily-report').innerHTML = reportTable(['Tanggal', 'Bruto', 'Retur', 'Bersih', 'Laba'], daily.map((item) => `<tr><td>${new Date(`${item.date}T00:00:00`).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</td><td>${money.format(item.grossSales)}</td><td class="${Number(item.returns) ? 'negative' : ''}">${money.format(item.returns)}</td><td><strong>${money.format(item.netSales)}</strong></td><td class="${Number(item.grossProfit) >= 0 ? 'positive' : 'negative'}">${money.format(item.grossProfit)}</td></tr>`));
+
+  el('best-products').innerHTML = report.products.filter((item) => Number(item.netQty) || Number(item.netRevenue) || Number(item.grossProfit)).slice(0, 10).map((item, index) => `<div class="report-item"><div><strong>${index + 1}. ${escapeHtml(item.productName)}</strong><small>${Number(item.netQty).toLocaleString('id-ID')} pcs bersih</small></div><div class="report-item-value"><strong>${money.format(item.netRevenue)}</strong><small>Laba ${money.format(item.grossProfit)}</small></div></div>`).join('') || '<div class="empty-state compact">Belum ada penjualan produk.</div>';
+  el('outlet-performance').innerHTML = report.outlets.map((item) => `<div class="report-item"><div><strong>${escapeHtml(item.outletName)}</strong><small>${Number(item.transactionCount).toLocaleString('id-ID')} transaksi · retur ${money.format(item.returnTotal)}</small></div><div class="report-item-value"><strong>${money.format(item.netSales)}</strong><small>Laba ${money.format(item.grossProfit)}</small></div></div>`).join('') || '<div class="empty-state compact">Belum ada outlet.</div>';
+  el('supplier-purchases').innerHTML = report.suppliers.slice(0, 10).map((item) => `<div class="report-item"><div><strong>${escapeHtml(item.supplierName)}</strong><small>${Number(item.receiptCount).toLocaleString('id-ID')} penerimaan · ${Number(item.units).toLocaleString('id-ID')} pcs${Number(item.returnCount)?` · ${Number(item.returnCount)} retur`:''}</small></div><div class="report-item-value"><strong>${money.format(item.netPurchaseValue??item.purchaseValue)}</strong>${Number(item.returnCredit)?`<small>Retur −${money.format(item.returnCredit)}</small>`:''}</div></div>`).join('') || '<div class="empty-state compact">Belum ada penerimaan pembelian.</div>';
+  el('recent-sales').innerHTML = reportTable(['Waktu', 'Struk', 'Kasir', 'Pembayaran', 'Bruto', 'Retur', 'Bersih'], report.recentSales.map((sale) => `<tr><td>${new Date(sale.occurredAt).toLocaleString('id-ID')}</td><td><strong>${escapeHtml(sale.receiptNo)}</strong></td><td>${escapeHtml(sale.cashierName)}</td><td>${escapeHtml(sale.paymentMethod)}</td><td>${money.format(sale.grossTotal)}</td><td class="${Number(sale.returnTotal) ? 'negative' : ''}">${money.format(sale.returnTotal)}</td><td><strong>${money.format(sale.netTotal)}</strong></td></tr>`));
+  el('audit-logs').innerHTML = audit.logs.slice(0, 12).map((log) => `<div class="sale-row"><span><strong>${escapeHtml(log.action.replaceAll('_', ' '))}</strong><br><small>${escapeHtml(log.entity_type)} · ${new Date(log.occurred_at).toLocaleString('id-ID')}</small></span><small>${escapeHtml(log.actor_name ?? log.actor_id ?? 'Sistem')}</small></div>`).join('') || '<p class="muted">Belum ada aktivitas tercatat.</p>';
+  el('report-status').textContent = `Periode ${new Date(`${report.period.from}T00:00:00`).toLocaleDateString('id-ID')}–${new Date(`${report.period.to}T00:00:00`).toLocaleDateString('id-ID')} · Margin kotor ${Number(metrics.grossMarginPercent).toLocaleString('id-ID', { maximumFractionDigits: 2 })}% · Dibuat ${new Date(report.generatedAt).toLocaleTimeString('id-ID')}`;
+}
+
+async function loadReport() {
+  if (!el('report-from').value || !el('report-to').value) applyReportPreset();
+  renderReportOutletOptions();
+  const from = el('report-from').value;
+  const to = el('report-to').value;
+  if (!from || !to || from > to) return toast('Periode laporan tidak valid.');
+  const params = new URLSearchParams({ from, to });
+  if (el('report-outlet').value) params.set('outletId', el('report-outlet').value);
+  el('report-status').classList.add('loading'); el('report-status').textContent = 'Menghitung laporan...';
+  try {
+    const [report, audit] = await Promise.all([request(`/api/reports/summary?${params}`), request('/api/audit')]);
+    state.report = report;
+    renderOperationalReport(audit);
+  } catch (error) {
+    el('report-status').textContent = `Laporan belum dapat dimuat: ${error.message}`;
+    toast(error.message);
+  } finally { el('report-status').classList.remove('loading'); }
+}
+
+function csvCell(value) {
+  const text = String(value ?? '');
+  return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function exportReportCsv() {
+  if (!state.report) return toast('Muat laporan terlebih dahulu.');
+  const rows = [['Tanggal','Penjualan bruto','Retur','Penjualan bersih','Laba kotor','Transaksi','Jumlah retur']];
+  for (const item of state.report.daily) rows.push([item.date,item.grossSales,item.returns,item.netSales,item.grossProfit,item.transactionCount,item.returnCount]);
+  const blob = new Blob([`\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`], { type: 'text/csv;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob); link.download = `laporan-kasir-nusa-${state.report.period.from}-${state.report.period.to}.csv`;
+  link.click(); URL.revokeObjectURL(link.href);
+}
+
+function returnConditionLabel(condition) {
+  return ({ SALEABLE:'Layak dijual kembali',OPENED:'Sudah dibuka/dipakai',DAMAGED:'Rusak atau bocor',EXPIRED:'Kedaluwarsa' })[condition] ?? condition;
+}
+
+function effectiveRefundMethod() {
+  const selected=el('return-refund-method').value;
+  if(selected!=='ORIGINAL') return selected;
+  if(Number(state.returnSale?.creditAmount??0)>0) return 'ACCOUNT_CREDIT';
+  const original=state.returnSale?.paymentMethod ?? '';
+  if(/^tunai/i.test(original)) return 'CASH';
+  if(/^qris/i.test(original)) return 'QRIS';
+  if(/^edc/i.test(original)) return 'EDC';
+  return 'TRANSFER';
+}
+
+function selectedReturnItems() {
+  if(!state.returnSale) return [];
+  return [...el('return-item-list').querySelectorAll('.return-line')].filter((row)=>row.querySelector('.return-select').checked).map((row)=>{
+    const line=state.returnSale.lines.find((item)=>item.saleItemId===row.dataset.saleItemId);
+    const qty=Math.min(Number(row.querySelector('.return-qty').value),Number(line?.remainingQty??0));
+    return { saleItemId:row.dataset.saleItemId,baseQty:qty,condition:row.querySelector('.return-condition').value,unitRefund:Number(line?.unitRefund??0) };
+  }).filter((item)=>item.baseQty>0);
+}
+
+function syncReturnRefundFields() {
+  const method=effectiveRefundMethod(); const nonCash=!['CASH','ACCOUNT_CREDIT'].includes(method);
+  el('return-reference-field').classList.toggle('hidden',!nonCash);
+  el('return-refund-reference').required=nonCash;
+  const cashReady=method!=='CASH'||Boolean(state.currentShift&&state.currentShift.status==='OPEN'&&state.currentShift.outlet_id===state.returnSale?.outletId);
+  el('return-cash-warning').classList.toggle('hidden',method!=='CASH');
+  el('return-cash-warning').innerHTML=cashReady?`<strong>Refund tunai tercatat pada shift aktif.</strong><small>${escapeHtml(state.currentShift?.cashier_name??state.session?.user.displayName)} · kas akan berkurang otomatis.</small>`:'<strong>Belum ada shift aktif pada outlet transaksi.</strong><small>Buka shift milik Anda terlebih dahulu sebelum melakukan refund tunai.</small>';
+  const total=selectedReturnItems().reduce((sum,item)=>sum+item.baseQty*item.unitRefund,0);
+  el('return-refund-total').textContent=money.format(total);
+  el('submit-return').disabled=!selectedReturnItems().length||!cashReady;
+}
+
+function renderSaleReturnHistory() {
+  const history=state.returnSale?.returns??[];
+  el('sale-return-history').innerHTML=`<div class="return-section-heading"><div><p class="eyebrow">RIWAYAT STRUK INI</p><h2>${history.length} retur sebelumnya</h2></div></div>${history.map((item)=>`<div class="return-history-row"><div><strong>${escapeHtml(item.returnNo)}</strong><small>${new Date(item.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(item.reason)}</small></div><div><strong>${money.format(item.total)}</strong><small>${escapeHtml(item.refundMethod??'-')}</small></div></div>`).join('')||'<div class="empty-state compact">Belum pernah diretur.</div>'}`;
+}
+
+function renderReturnSale() {
+  const sale=state.returnSale;
+  if(!sale){el('return-workspace').classList.add('hidden');return;}
+  el('return-workspace').classList.remove('hidden');
+  const statusLabel=({RETURNABLE:'BELUM DIRETUR',PARTIALLY_RETURNED:'RETUR SEBAGIAN',FULLY_RETURNED:'SUDAH DIRETUR PENUH'})[sale.status]??sale.status;
+  el('return-sale-summary').innerHTML=`<div><p class="eyebrow">STRUK DITEMUKAN</p><h2>${escapeHtml(sale.receiptNo)}</h2><small>${new Date(sale.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(sale.outletName)} · ${escapeHtml(sale.cashierName)}</small></div><div><span class="status-badge ${sale.status==='FULLY_RETURNED'?'received':'approved'}">${statusLabel}</span><strong>${money.format(sale.grandTotal)}</strong><small>${escapeHtml(sale.paymentMethod)} · ${escapeHtml(sale.customer?.name??'Pelanggan umum')}</small></div>`;
+  el('return-item-list').innerHTML=sale.lines.map((line)=>`<article class="return-line ${line.remainingQty<=0?'completed':''}" data-sale-item-id="${escapeHtml(line.saleItemId)}"><label class="return-line-select"><input class="return-select" type="checkbox" ${line.remainingQty<=0?'disabled':''}><span><strong>${escapeHtml(line.productName)}</strong><small>Terjual ${Number(line.soldQty).toLocaleString('id-ID')} pcs · pernah diretur ${Number(line.returnedQty).toLocaleString('id-ID')} pcs</small></span></label><div class="return-line-fields"><label>Jumlah retur<input class="return-qty" type="number" min="0" max="${line.remainingQty}" step="any" value="${line.remainingQty>0?1:0}" ${line.remainingQty<=0?'disabled':''}></label><label>Kondisi barang<select class="return-condition" ${line.remainingQty<=0?'disabled':''}><option value="SALEABLE">Layak dijual kembali</option><option value="OPENED">Sudah dibuka/dipakai</option><option value="DAMAGED">Rusak atau bocor</option><option value="EXPIRED">Kedaluwarsa</option></select></label><div class="return-line-value"><span>Sisa dapat diretur</span><strong>${Number(line.remainingQty).toLocaleString('id-ID')} pcs</strong><small>${money.format(line.unitRefund)} / pcs</small></div></div><div class="return-stock-impact"><span class="badge ok">Kembali ke stok jual</span><strong class="return-line-refund">${money.format(0)}</strong></div></article>`).join('');
+  renderSaleReturnHistory(); syncReturnRefundFields();
+}
+
+function updateReturnLine(row) {
+  const line=state.returnSale?.lines.find((item)=>item.saleItemId===row.dataset.saleItemId); if(!line)return;
+  const qtyInput=row.querySelector('.return-qty'); let qty=Math.max(0,Number(qtyInput.value)||0); qty=Math.min(qty,Number(line.remainingQty)); qtyInput.value=qty;
+  const condition=row.querySelector('.return-condition').value; const restockable=condition==='SALEABLE';
+  row.querySelector('.return-stock-impact .badge').className=`badge ${restockable?'ok':'danger'}`;
+  row.querySelector('.return-stock-impact .badge').textContent=restockable?'Kembali ke stok jual':'Tidak masuk stok jual';
+  row.querySelector('.return-line-refund').textContent=money.format(row.querySelector('.return-select').checked?qty*Number(line.unitRefund):0);
+  syncReturnRefundFields();
+}
+
+async function findReturnSale() {
+  const receiptNo=el('return-receipt-search').value.trim(); if(!receiptNo)return toast('Masukkan nomor struk.');
+  el('return-search-status').textContent='Mencari transaksi...';
+  try{const data=await request(`/api/sales/lookup?receiptNo=${encodeURIComponent(receiptNo)}`);state.returnSale=data.sale;el('return-search-status').textContent=`Transaksi ${data.sale.receiptNo} ditemukan.`;renderReturnSale();}
+  catch(error){state.returnSale=null;renderReturnSale();el('return-search-status').textContent=error.message;}
+}
+
+async function loadRecentReturns() {
+  try{const data=await request('/api/returns/recent');state.recentReturns=data.returns??[];el('return-recent-list').innerHTML=state.recentReturns.map((item)=>`<div class="return-recent-row"><div><strong>${escapeHtml(item.returnNo)}</strong><small>Struk ${escapeHtml(item.receiptNo)} · ${new Date(item.occurredAt).toLocaleString('id-ID')}</small></div><div><span>${escapeHtml(item.reason)}</span><small>${Number(item.restockedQty).toLocaleString('id-ID')} pcs kembali stok · ${Number(item.damagedQty).toLocaleString('id-ID')} pcs tidak layak jual</small></div><div><strong>${money.format(item.total)}</strong><small>${escapeHtml(item.refundMethod??'-')} · ${escapeHtml(item.actorName)}</small></div></div>`).join('')||'<div class="empty-state compact">Belum ada retur penjualan.</div>';}
+  catch(error){el('return-recent-list').innerHTML=`<div class="empty-state compact">Riwayat gagal dimuat: ${escapeHtml(error.message)}</div>`;}
+}
+
+async function submitCustomerReturn(event) {
+  event.preventDefault(); const items=selectedReturnItems(); if(!items.length)return toast('Pilih minimal satu barang retur.');
+  const reason=el('return-reason').value; if(!reason)return toast('Pilih alasan retur.');
+  const note=el('return-note').value.trim(); const refundMethod=el('return-refund-method').value; const effective=effectiveRefundMethod();
+  const refundReference=el('return-refund-reference').value.trim(); if(!['CASH','ACCOUNT_CREDIT'].includes(effective)&&!refundReference)return toast('Isi nomor referensi refund.');
+  const total=items.reduce((sum,item)=>sum+item.baseQty*item.unitRefund,0);
+  if(!window.confirm(`Proses retur ${items.length} barang dengan refund ${money.format(total)}?`))return;
+  const button=el('submit-return');button.disabled=true;button.textContent='Memproses retur...';
+  try{
+    const result=await request('/api/returns',{method:'POST',headers:{'idempotency-key':crypto.randomUUID()},body:JSON.stringify({saleId:state.returnSale.id,reason:note?`${reason} — ${note}`:reason,refundMethod,refundReference:refundReference||null,refundShiftId:effective==='CASH'?state.currentShift?.id:null,items:items.map(({unitRefund,...item})=>item)})});
+    toast(`Retur ${result.returnNo} berhasil · ${money.format(result.total)}`);
+    const refreshed=await request(`/api/sales/${state.returnSale.id}`);state.returnSale=refreshed.sale;renderReturnSale();await loadRecentReturns();await refreshCatalog();await loadCustomerAging();
+    if(state.session.permissions.includes('inventory.manage'))await loadInventory(); if(state.session.permissions.includes('report.view'))await loadReport();
+  }catch(error){toast(error.message);}finally{button.textContent='Proses retur dan refund';syncReturnRefundFields();}
+}
+
+function syncAge(occurredAt) {
+  const minutes = Math.max(0, Math.floor((Date.now()-new Date(occurredAt).getTime())/60000));
+  if (minutes < 60) return `${minutes} menit`;
+  if (minutes < 1440) return `${Math.floor(minutes/60)} jam`;
+  return `${Math.floor(minutes/1440)} hari`;
+}
+
+function renderSyncReview() {
+  const commands = state.syncReview;
+  const expected = commands.reduce((sum, command) => sum+Number(command.expectedTotal), 0);
+  const difference = commands.reduce((sum, command) => sum+Number(command.difference), 0);
+  const oldest = commands[0]?.occurredAt ? syncAge(commands[0].occurredAt) : '-';
+  el('sync-review-metrics').innerHTML = [
+    ['Perlu keputusan', commands.length, 'transaksi'],
+    ['Total di kasir', money.format(expected), 'sudah ditagihkan'],
+    ['Selisih harga terbaru', money.format(difference), difference === 0 ? 'tidak berubah' : difference > 0 ? 'harga terbaru lebih tinggi' : 'harga terbaru lebih rendah'],
+    ['Antrean tertua', oldest, commands.length ? 'sejak transaksi' : 'antrean kosong']
+  ].map(([label,value,note]) => `<div class="metric"><span>${label}</span><strong>${value}</strong><small>${note}</small></div>`).join('');
+  el('sync-review-status').textContent = commands.length ? `${commands.length} transaksi menunggu Owner/Admin` : 'Semua transaksi sudah tertangani';
+  el('sync-review-nav-count').textContent = commands.length;
+  el('sync-review-nav-count').classList.toggle('hidden', !commands.length);
+  el('sync-review-list').innerHTML = commands.map((command) => {
+    const deltaClass = command.difference > 0 ? 'negative' : command.difference < 0 ? 'positive' : '';
+    const lines = command.lines.map((line) => `<tr><td><strong>${escapeHtml(line.productName ?? 'Produk')}</strong><br><small>${Number(line.qty).toLocaleString('id-ID')} ${escapeHtml(line.unitName ?? '')} · ${Number(line.baseQty).toLocaleString('id-ID')} pcs</small></td><td>${money.format(line.gross)}</td><td>${money.format(line.discount)}</td><td><strong>${money.format(line.total)}</strong></td></tr>`).join('');
+    return `<article class="sync-review-card" data-command-id="${escapeHtml(command.id)}"><div class="sync-review-card-head"><div><div class="sync-review-title"><span class="status-badge submitted">PERLU KEPUTUSAN</span><strong>${new Date(command.occurredAt).toLocaleString('id-ID')}</strong></div><p>${escapeHtml(command.outletName)} · ${escapeHtml(command.cashierName)} · ${escapeHtml(command.device?.name ?? 'Perangkat POS')}</p><small>${escapeHtml(command.paymentMethod)} · tersimpan offline ${syncAge(command.occurredAt)} lalu</small></div><div class="sync-review-delta ${deltaClass}"><span>Perubahan total</span><strong>${command.difference > 0 ? '+' : ''}${money.format(command.difference)}</strong></div></div><div class="sync-total-compare"><div><span>TOTAL PADA KASIR</span><strong>${money.format(command.expectedTotal)}</strong><small>Nominal yang kemungkinan sudah dibayar</small></div><div class="sync-arrow">→</div><div><span>HARGA TERBARU SERVER</span><strong>${money.format(command.serverTotal)}</strong><small>Hasil harga dan promo saat sinkron</small></div></div><div class="table-wrap"><table class="sync-lines"><thead><tr><th>Barang</th><th>Bruto</th><th>Promo</th><th>Total terbaru</th></tr></thead><tbody>${lines || '<tr><td colspan="4">Rincian barang tidak tersedia.</td></tr>'}</tbody></table></div>${command.error ? `<p class="sync-error">Percobaan terakhir: ${escapeHtml(command.error)}</p>` : ''}<div class="sync-review-actions"><button class="button primary sync-decision" data-action="honor-offline" ${command.canHonorOffline ? '' : 'disabled'}>Pertahankan total kasir</button><button class="button secondary sync-decision" data-action="apply-server">Gunakan harga terbaru</button><button class="button danger sync-decision" data-action="reject">Tolak transaksi</button>${command.canHonorOffline ? '' : '<small>Transaksi lama ini belum memiliki snapshot harga kasir.</small>'}</div></article>`;
+  }).join('') || '<div class="empty-state compact"><strong>Tidak ada konflik harga.</strong><br><small>Transaksi offline yang aman akan masuk otomatis tanpa keputusan manual.</small></div>';
+}
+
+async function loadSyncReview() {
+  el('sync-review-status').textContent = 'Memuat antrean...';
+  try {
+    const data = await request('/api/sync/review');
+    state.syncReview = data.commands ?? [];
+    renderSyncReview();
+  } catch (error) {
+    el('sync-review-status').textContent = `Antrean gagal dimuat: ${error.message}`;
+  }
+}
+
+async function decideSyncCommand(commandId, action) {
+  const command = state.syncReview.find((item) => item.id === commandId);
+  if (!command) return;
+  const messages = {
+    'honor-offline': `Catat transaksi sebesar ${money.format(command.expectedTotal)} sesuai total di kasir?`,
+    'apply-server': `Gunakan harga terbaru ${money.format(command.serverTotal)}? Pastikan selisih kas sudah dipahami.`,
+    reject: 'Tolak transaksi ini? Stok dan penjualan tidak akan dicatat.'
+  };
+  if (!window.confirm(messages[action])) return;
+  const buttons = [...document.querySelectorAll(`[data-command-id="${commandId}"] .sync-decision`)];
+  buttons.forEach((button) => { button.disabled = true; });
+  try {
+    const result = await request(`/api/sync/commands/${commandId}/${action}`, { method: 'POST', body: '{}' });
+    if (result.status === 'NEEDS_REVIEW') toast(`Belum dapat diproses: ${result.error}`);
+    else toast(action === 'reject' ? 'Transaksi ditolak dan dicatat di audit' : 'Transaksi disetujui dan stok diperbarui');
+    await loadSyncReview();
+    if (state.session.permissions.includes('report.view')) await loadReport();
+  } catch (error) {
+    toast(error.message);
+    buttons.forEach((button) => { button.disabled = false; });
+  }
+}
+
+async function queueSale(payload) {
+  await enqueueCommand(payload);
+  await updateQueueCount();
+}
+
+async function updateQueueCount() {
+  const queue = await listCommands();
+  el('queue-count').textContent = queue.length;
+  el('sync-button').title = `${queue.filter((item) => item.status === 'NEEDS_REVIEW').length} perlu ditinjau`;
+}
+
+async function syncQueue() {
+  if (!navigator.onLine) return toast('Masih offline. Transaksi tetap aman di perangkat.');
+  const queue = (await listCommands()).filter((command) => command.actorId === state.session.user.id && ['PENDING','FAILED','NEEDS_REVIEW'].includes(command.status)).slice(0, 20);
+  if (!queue.length) {
+    const review = (await listCommands()).filter((command) => command.status === 'NEEDS_REVIEW').length;
+    return toast(review ? `${review} transaksi menunggu tinjauan owner` : 'Tidak ada transaksi yang perlu disinkronkan');
+  }
+  try {
+    const data = await request('/api/sync/sales', { method: 'POST', body: JSON.stringify({
+      device: { ...posDevice, outletId: state.activeOutletId },
+      commands: queue.map(({ key, occurredAt, expectedTotal, payload }) => ({ key, occurredAt, expectedTotal, payload }))
+    }) });
+    for (const result of data.results) {
+      if (['APPLIED','REJECTED'].includes(result.status)) await removeCommand(result.key);
+      else await updateCommand(result.key, { status: result.status, attempts: (queue.find((item) => item.key === result.key)?.attempts ?? 0) + 1, error: result.error ?? null, result: result.result ?? null });
+    }
+    await updateQueueCount();
+    const remaining = await listCommands();
+    const review = remaining.filter((item) => item.status === 'NEEDS_REVIEW').length;
+    const failed = remaining.filter((item) => item.status === 'FAILED').length;
+    toast(review ? `${review} transaksi perlu ditinjau karena harga berubah` : failed ? `${failed} transaksi belum berhasil disinkronkan` : 'Semua transaksi sudah sinkron');
+    if (!remaining.length) await refreshCatalog();
+  } catch (error) { toast(`Sinkronisasi tertunda: ${error.message}`); }
+}
+
+function localHeldSales(){
+  try{return JSON.parse(localStorage.getItem('pos_held_sales')??'[]');}catch{return [];}
+}
+
+function saveLocalHeldSales(rows){localStorage.setItem('pos_held_sales',JSON.stringify(rows));}
+
+async function loadHeldSales(){
+  const local=localHeldSales().filter((hold)=>hold.userId===state.session.user.id&&hold.outletId===state.activeOutletId);
+  let cloud=[];
+  if(navigator.onLine)try{cloud=(await request('/api/held-sales')).holds??[];}catch{}
+  state.heldSales=[...local,...cloud].sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));
+  el('held-sales-count').textContent=state.heldSales.length;
+  el('held-sales-list').innerHTML=state.heldSales.length?state.heldSales.map((hold)=>`<div class="held-sale-row" data-hold-id="${hold.id}" data-local="${Boolean(hold.local)}"><div><strong>${escapeHtml(hold.label)}</strong><small>${new Date(hold.createdAt).toLocaleString('id-ID')} · ${(hold.cart??[]).length} jenis barang</small></div><strong>${money.format(hold.quote?.grandTotal??0)}</strong><div><button class="button primary resume-held-sale" type="button">Lanjutkan</button><button class="button secondary cancel-held-sale" type="button">Batalkan</button></div></div>`).join(''):'<div class="empty-state compact">Belum ada transaksi ditahan.</div>';
+}
+
+async function holdCurrentCart(){
+  if(!state.cart.length)return;
+  if(state.saleAuthorization)return toast('Batalkan diskon manual sebelum menahan transaksi.');
+  const label=window.prompt('Beri nama transaksi agar mudah ditemukan:',`Pelanggan ${new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`);
+  if(label===null)return;
+  const payload={label:label.trim()||'Tanpa nama',lines:structuredClone(state.cart),customerId:el('customer-select').value||null,customerGroupId:el('customer-group').value};
+  try{
+    if(navigator.onLine)await request('/api/held-sales',{method:'POST',body:JSON.stringify(payload)});
+    else{
+      const rows=localHeldSales();rows.push({id:crypto.randomUUID(),local:true,userId:state.session.user.id,outletId:state.activeOutletId,label:payload.label,cart:payload.lines,quote:structuredClone(state.quote),customerId:payload.customerId,customerGroupId:payload.customerGroupId,createdAt:new Date().toISOString()});saveLocalHeldSales(rows);
+    }
+    state.cart=[];resetPosCustomer();invalidateSaleAuthorization();await updateQuote();await loadHeldSales();toast('Transaksi ditahan. Stok belum berkurang.');
+  }catch(error){toast(error.message);}
+}
+
+async function actOnHeldSale(holdId,action,isLocal){
+  const hold=state.heldSales.find((item)=>item.id===holdId);if(!hold)return;
+  if(action==='cancel'&&!window.confirm(`Batalkan transaksi ditahan “${hold.label}”?`))return;
+  if(action==='resume'&&state.cart.length&&!window.confirm('Keranjang saat ini akan diganti dengan transaksi yang ditahan. Lanjutkan?'))return;
+  try{
+    let result;
+    if(isLocal){
+      const rows=localHeldSales();saveLocalHeldSales(rows.filter((item)=>item.id!==holdId));
+      result={cart:hold.cart,customerId:hold.customerId,customerGroupId:hold.customerGroupId};
+    }else result=await request(`/api/held-sales/${holdId}/${action}`,{method:'POST',body:'{}'});
+    if(action==='resume'){
+      resetPosCustomer();
+      if(result.customerId&&state.customers.some((customer)=>customer.id===result.customerId))el('customer-select').value=result.customerId;
+      invalidateSaleAuthorization();el('customer-group').value=result.customerGroupId??'retail';state.cart=structuredClone(result.cart??[]);await updateQuote();
+      syncCustomerSearchLabel();
+      el('held-sales-dialog').close();toast('Transaksi dilanjutkan.');
+    }else toast('Transaksi ditahan dibatalkan.');
+    await loadHeldSales();
+  }catch(error){toast(error.message);}
+}
+
+function paymentMethodOptions(selected){
+  const customer=state.customers.find((item)=>item.id===el('customer-select').value);
+  const methods=[['CASH','Tunai'],['QRIS','QRIS'],['TRANSFER','Transfer'],['EDC','Kartu / EDC']];
+  if(customer?.credit_enabled&&Number(customer.available_credit)>0)methods.push(['CREDIT',`Piutang · tersedia ${money.format(customer.available_credit)}`]);
+  return methods.map(([value,label])=>`<option value="${value}" ${selected===value?'selected':''}>${label}</option>`).join('');
+}
+
+function paymentTotals(){
+  const allocated=state.paymentDraft.reduce((sum,payment)=>sum+Number(payment.amount||0),0);
+  const remaining=Math.max(0,Number(state.quote?.grandTotal??0)-allocated);
+  const change=state.paymentDraft.filter((payment)=>payment.method==='CASH').reduce((sum,payment)=>sum+Math.max(0,Number(payment.tendered||0)-Number(payment.amount||0)),0);
+  return {allocated,remaining,change};
+}
+
+function updatePaymentSummary(){
+  const totals=paymentTotals();el('payment-allocated').textContent=money.format(totals.allocated);el('payment-remaining').textContent=money.format(totals.remaining);el('payment-change').textContent=money.format(totals.change);
+  el('confirm-payment').disabled=totals.remaining>0.01||Math.abs(totals.allocated-state.quote.grandTotal)>0.01||state.paymentDraft.some((payment)=>payment.method==='CASH'&&Number(payment.tendered)<Number(payment.amount));
+}
+
+function renderPaymentLines(){
+  el('payment-lines').innerHTML=state.paymentDraft.map((payment,index)=>`<div class="payment-line" data-index="${index}"><label>Metode<select class="payment-line-method">${paymentMethodOptions(payment.method)}</select></label><label>Jumlah<input class="payment-line-amount" type="number" min="1" value="${payment.amount||''}" required></label><label class="payment-tendered ${payment.method==='CASH'?'':'hidden'}">Uang diterima<input class="payment-line-tendered" type="number" min="0" value="${payment.tendered??payment.amount??''}"></label><label class="payment-reference ${payment.method==='CASH'?'hidden':''}">Referensi (opsional)<input class="payment-line-reference" value="${escapeHtml(payment.reference??'')}" placeholder="Nomor QRIS/transfer"></label><button class="icon-button remove-payment-line" type="button" ${state.paymentDraft.length===1?'disabled':''}>×</button></div>`).join('');
+  updatePaymentSummary();
+  el('add-payment-line').classList.toggle('hidden',el('payment-mode').value!=='SPLIT'||state.paymentDraft.length>=4);
+}
+
+function openPaymentDialog(){
+  state.paymentDraft=[{method:'CASH',amount:state.quote.grandTotal,tendered:state.quote.grandTotal,reference:''}];
+  el('payment-mode').value='SINGLE';el('payment-total').textContent=money.format(state.quote.grandTotal);el('payment-error').textContent='';
+  renderPaymentLines();el('payment-dialog').showModal();
+}
+
+function renderReceipt(receipt,payments){
+  const customer=state.customers.find((item)=>item.id===el('customer-select').value);
+  const lines=receipt.quote?.lines??[];
+  const change=Number(receipt.change??0);
+  const business=receipt.business??state.business;
+  const outlet=receipt.outlet??state.outlets.find((item)=>item.id===state.activeOutletId)??{};
+  const address=outlet.address||business.address;
+  const phone=outlet.phone||business.phone;
+  const footer=outlet.receipt_footer||business.receiptFooter||'Terima kasih telah berbelanja.';
+  const receiptDiscount=Number(receipt.quote.discountTotal??0);
+  const body=`<div class="receipt-head"><strong>${escapeHtml(business.name??'Kasir Nusa')}</strong><span>${escapeHtml(receipt.outletName??outlet.name??'Outlet')}</span>${address?`<small>${escapeHtml(address)}</small>`:''}${phone?`<small>Tel. ${escapeHtml(phone)}</small>`:''}<small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small><b>${escapeHtml(receipt.receiptNo)}</b></div><div class="receipt-meta"><span>Kasir</span><strong>${escapeHtml(receipt.cashier)}</strong><span>Pelanggan</span><strong>${escapeHtml(customer?.name??'Pelanggan umum')}</strong></div><div class="receipt-lines">${lines.map((line)=>`<div><span><strong>${escapeHtml(line.productName)}</strong><small>${line.qty} ${escapeHtml(line.unitName)} × ${money.format(line.gross/line.qty)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div><div class="receipt-totals"><div><span>Subtotal</span><strong>${money.format(receipt.quote.subtotal)}</strong></div><div><span>Promo & penyesuaian</span><strong>${receiptDiscount<0?'+':'−'}${money.format(Math.abs(receiptDiscount))}</strong></div><div class="receipt-grand"><span>Total</span><strong>${money.format(receipt.quote.grandTotal)}</strong></div>${payments.map((payment)=>`<div><span>${payment.method}${payment.method==='CASH'&&payment.tendered?` · diterima ${money.format(payment.tendered)}`:''}</span><strong>${money.format(payment.amount)}</strong></div>`).join('')}${change?`<div><span>Kembalian</span><strong>${money.format(change)}</strong></div>`:''}</div><p class="receipt-thanks">${escapeHtml(footer)}</p>`;
+  const copies=Math.max(1,Math.min(3,Number(state.deviceSettings.receiptCopies??1)));
+  el('receipt-content').innerHTML=Array.from({length:copies},(_,index)=>`<section class="receipt-copy">${body}${copies>1?`<small class="receipt-copy-label">Salinan ${index+1} dari ${copies}</small>`:''}</section>`).join('');
+  const width=Number(state.deviceSettings.paperWidth??80)===58?58:80;
+  el('receipt-dialog').classList.toggle('paper-58',width===58);
+  let printStyle=el('receipt-print-page-style');
+  if(!printStyle){printStyle=document.createElement('style');printStyle.id='receipt-print-page-style';document.head.append(printStyle);}
+  printStyle.textContent=`@media print{@page{size:${width}mm auto;margin:2mm}}`;
+  el('receipt-dialog').showModal();
+  if(state.deviceSettings.autoPrint)setTimeout(()=>window.print(),250);
+}
+
+async function completePayment(event) {
+  event.preventDefault();
+  if (!state.currentShift) return toast('Buka shift kasir terlebih dahulu.');
+  const totals=paymentTotals();
+  if(Math.abs(totals.allocated-state.quote.grandTotal)>0.01)return el('payment-error').textContent='Total pembayaran harus sama dengan total transaksi.';
+  if(!navigator.onLine&&state.saleAuthorization)return el('payment-error').textContent='Diskon berizin hanya dapat diselesaikan saat online. Sambungkan internet atau batalkan diskon manual.';
+  if(!navigator.onLine&&state.paymentDraft.some((payment)=>payment.method==='CREDIT'))return el('payment-error').textContent='Penjualan kredit memerlukan koneksi internet untuk memeriksa plafon pelanggan.';
+  if(!navigator.onLine&&state.paymentDraft.length>1)return el('payment-error').textContent='Pembayaran gabungan memerlukan koneksi internet.';
+  const sale = {
+    key: crypto.randomUUID(), actorId: state.session.user.id, occurredAt: new Date().toISOString(), expectedTotal: state.quote.grandTotal,
+    payload: { lines: structuredClone(state.cart), offlineQuote: structuredClone(state.quote), customerId: el('customer-select').value || null, customerGroupId: el('customer-group').value, payments:structuredClone(state.paymentDraft),paymentMethod:({CASH:'Tunai',QRIS:'QRIS',TRANSFER:'Transfer',EDC:'EDC',CREDIT:'Piutang'})[state.paymentDraft[0].method], shiftId: state.currentShift.id, ...(state.saleAuthorization?{authorization:structuredClone(state.saleAuthorization)}:{}) }
+  };
+  let refreshAfterPayment = false;
+  if (!navigator.onLine) {
+    await queueSale(sale); toast('Transaksi disimpan offline dan akan disinkronkan.');
+  } else {
+    try {
+      const receipt = await request('/api/sales', { method: 'POST', headers: { 'idempotency-key': sale.key }, body: JSON.stringify(sale.payload) });
+      toast(`Transaksi ${receipt.receiptNo} berhasil`);state.lastReceipt=receipt;
+      renderReceipt(receipt,state.paymentDraft);
+      refreshAfterPayment = true;
+    } catch (error) {
+      if (error.status) return toast(error.message);
+      if (state.saleAuthorization) return toast('Transaksi dengan diskon berizin harus diselesaikan saat online. Coba lagi tanpa mengubah keranjang.');
+      await queueSale(sale); toast('Jaringan bermasalah. Transaksi diamankan di antrean.');
+    }
+  }
+  state.cart = []; resetPosCustomer(); invalidateSaleAuthorization(); await updateQuote(); el('payment-dialog').close();
+  if (refreshAfterPayment) {
+    await refreshCatalog();
+    if (state.session.permissions.includes('inventory.manage')) await loadInventory();
+    if (state.session.permissions.includes('report.view')) await loadReport();
+  }
+}
+
+const mobileSidebarMedia = window.matchMedia('(max-width: 760px)');
+
+function setSidebarOpen(requestedOpen, { restoreFocus = false } = {}) {
+  const app = el('app-view');
+  const sidebar = el('app-sidebar');
+  const toggle = el('sidebar-toggle');
+  const mobile = mobileSidebarMedia.matches;
+  const open = mobile && requestedOpen;
+  app.classList.toggle('sidebar-open', open);
+  document.body.classList.toggle('sidebar-drawer-open', open);
+  toggle.setAttribute('aria-expanded', String(open));
+  toggle.setAttribute('aria-label', open ? 'Tutup menu' : 'Buka menu');
+  sidebar.setAttribute('aria-hidden', String(mobile && !open));
+  sidebar.inert = mobile && !open;
+  if (open) requestAnimationFrame(() => sidebar.querySelector('.nav-item.active:not(.hidden), .nav-item:not(.hidden)')?.focus());
+  else if (restoreFocus && mobile) toggle.focus();
+}
+
+function syncSidebarMode() {
+  setSidebarOpen(false);
+}
+
+function trapSidebarFocus(event) {
+  if (event.key !== 'Tab' || !el('app-view').classList.contains('sidebar-open')) return;
+  const focusable = [...el('app-sidebar').querySelectorAll('button:not([disabled]):not(.hidden),select:not([disabled]),input:not([disabled]),a[href]')]
+    .filter((item) => item.getClientRects().length);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+}
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach((page) => page.classList.toggle('active', page.id === `page-${name}`));
+  document.querySelectorAll('.nav-item').forEach((button) => button.classList.toggle('active', button.dataset.page === name));
+}
+
+el('login-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  el('login-error').textContent = '';
+  button.disabled = true;
+  button.textContent = 'Sedang masuk...';
+  try {
+    await login(el('email').value, el('password').value);
+  } catch (error) {
+    el('login-error').textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Masuk';
+  }
+});
+el('logout').addEventListener('click', async () => {
+  try { await fetch('/api/logout', { method: 'POST' }); } catch {}
+  clearAuth();
+  localStorage.removeItem('pos_bootstrap_cache');
+  location.reload();
+});
+el('nav').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-page]');
+  if (!button) return;
+  showPage(button.dataset.page);
+  setSidebarOpen(false);
+  if (button.dataset.page === 'users') loadUsers();
+  if (button.dataset.page === 'sync-review') loadSyncReview();
+  if (button.dataset.page === 'returns') loadRecentReturns();
+  if (button.dataset.page === 'settings') loadSettingsWorkspace();
+  if (button.dataset.page === 'promotions') loadPromotionManagement();
+});
+el('sidebar-toggle').addEventListener('click', () => setSidebarOpen(!el('app-view').classList.contains('sidebar-open'), { restoreFocus:true }));
+el('sidebar-backdrop').addEventListener('click', () => setSidebarOpen(false, { restoreFocus:true }));
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && el('app-view').classList.contains('sidebar-open')) {
+    event.preventDefault();
+    setSidebarOpen(false, { restoreFocus:true });
+    return;
+  }
+  trapSidebarFocus(event);
+});
+if (typeof mobileSidebarMedia.addEventListener === 'function') mobileSidebarMedia.addEventListener('change', syncSidebarMode);
+else mobileSidebarMedia.addListener(syncSidebarMode);
+syncSidebarMode();
+el('current-outlet-select').addEventListener('change', switchActiveOutlet);
+el('product-search').addEventListener('input', (event) => renderProducts(event.target.value));
+el('product-search').addEventListener('keydown', (event) => { if (event.key !== 'Enter') return; const value = event.target.value.trim(); const product = state.products.find((item) => item.units.some((unit) => unit.barcode === value)); if (product) { const unit = product.units.find((item) => item.barcode === value); addToCart(product.id, unit.id); } });
+el('scan-camera-pos').addEventListener('click', () => openBarcodeCamera('pos'));
+el('close-barcode-camera').addEventListener('click', stopBarcodeCamera);
+el('cancel-barcode-camera').addEventListener('click', stopBarcodeCamera);
+el('customer-group').addEventListener('change', async () => { invalidateSaleAuthorization(); await updateQuote(); });
+el('customer-search').addEventListener('focus', (event) => { event.currentTarget.select(); renderCustomerSearchResults(''); });
+el('customer-search').addEventListener('input', (event) => renderCustomerSearchResults(event.currentTarget.value));
+el('customer-search').addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') return el('customer-search-results').classList.add('hidden');
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  const customer = matchingCustomers(event.currentTarget.value)[0];
+  if (customer) selectPosCustomer(customer.id);
+});
+el('customer-search-results').addEventListener('click', (event) => {
+  const option = event.target.closest('[data-customer-id]');
+  if (option) selectPosCustomer(option.dataset.customerId ?? '');
+});
+el('clear-pos-customer').addEventListener('click',()=>selectPosCustomer(''));
+el('new-pos-customer').addEventListener('click',()=>openCustomerEditor(null,'pos'));
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('.customer-pos-picker')) el('customer-search-results').classList.add('hidden');
+});
+el('clear-cart').addEventListener('click', async () => { state.cart = []; resetPosCustomer(); invalidateSaleAuthorization(); await updateQuote(); });
+el('open-order-adjustment').addEventListener('click',()=>openSaleAdjustmentDialog(null));
+el('sale-adjustment-form').addEventListener('submit',approveSaleAdjustment);
+el('close-sale-adjustment').addEventListener('click',()=>el('sale-adjustment-dialog').close());
+el('cancel-sale-adjustment').addEventListener('click',()=>el('sale-adjustment-dialog').close());
+el('pay-button').addEventListener('click',openPaymentDialog);
+el('payment-form').addEventListener('submit',completePayment);
+el('cancel-payment').addEventListener('click',()=>el('payment-dialog').close());
+el('close-payment').addEventListener('click',()=>el('payment-dialog').close());
+el('payment-mode').addEventListener('change',()=>{
+  if(el('payment-mode').value==='SINGLE'){state.paymentDraft=state.paymentDraft.slice(0,1);state.paymentDraft[0].amount=state.quote.grandTotal;if(state.paymentDraft[0].method==='CASH')state.paymentDraft[0].tendered=state.quote.grandTotal;}
+  renderPaymentLines();
+});
+el('add-payment-line').addEventListener('click',()=>{if(state.paymentDraft.length<4){state.paymentDraft.push({method:'QRIS',amount:0,tendered:null,reference:''});renderPaymentLines();}});
+el('payment-lines').addEventListener('input',(event)=>{
+  const row=event.target.closest('.payment-line');if(!row)return;const payment=state.paymentDraft[Number(row.dataset.index)];
+  if(event.target.classList.contains('payment-line-amount'))payment.amount=Number(event.target.value);
+  if(event.target.classList.contains('payment-line-tendered'))payment.tendered=Number(event.target.value);
+  if(event.target.classList.contains('payment-line-reference'))payment.reference=event.target.value;
+  updatePaymentSummary();
+});
+el('payment-lines').addEventListener('change',(event)=>{
+  if(!event.target.classList.contains('payment-line-method'))return;const row=event.target.closest('.payment-line'),payment=state.paymentDraft[Number(row.dataset.index)];
+  payment.method=event.target.value;if(payment.method==='CASH')payment.tendered=payment.amount;renderPaymentLines();
+});
+el('payment-lines').addEventListener('click',(event)=>{const button=event.target.closest('.remove-payment-line');if(!button)return;state.paymentDraft.splice(Number(button.closest('.payment-line').dataset.index),1);renderPaymentLines();});
+el('hold-cart').addEventListener('click',holdCurrentCart);
+el('open-held-sales').addEventListener('click',async()=>{await loadHeldSales();el('held-sales-dialog').showModal();});
+el('close-held-sales').addEventListener('click',()=>el('held-sales-dialog').close());
+el('held-sales-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-hold-id]');if(!row)return;if(event.target.closest('.resume-held-sale'))actOnHeldSale(row.dataset.holdId,'resume',row.dataset.local==='true');if(event.target.closest('.cancel-held-sale'))actOnHeldSale(row.dataset.holdId,'cancel',row.dataset.local==='true');});
+el('close-receipt').addEventListener('click',()=>el('receipt-dialog').close());
+el('print-receipt').addEventListener('click',()=>window.print());
+el('sync-button').addEventListener('click', syncQueue);
+el('find-return-sale').addEventListener('click',findReturnSale);
+el('return-receipt-search').addEventListener('keydown',(event)=>{if(event.key==='Enter'){event.preventDefault();findReturnSale();}});
+el('return-item-list').addEventListener('input',(event)=>{const row=event.target.closest('.return-line');if(row)updateReturnLine(row);});
+el('return-item-list').addEventListener('change',(event)=>{const row=event.target.closest('.return-line');if(row)updateReturnLine(row);});
+el('select-all-returnable').addEventListener('click',()=>{el('return-item-list').querySelectorAll('.return-select:not(:disabled)').forEach((input)=>{input.checked=true;updateReturnLine(input.closest('.return-line'));});});
+el('return-refund-method').addEventListener('change',syncReturnRefundFields);
+el('return-form').addEventListener('submit',submitCustomerReturn);
+el('refresh-return-history').addEventListener('click',loadRecentReturns);
+el('refresh-sync-review').addEventListener('click', loadSyncReview);
+el('sync-review-list').addEventListener('click', (event) => {
+  const button = event.target.closest('.sync-decision');
+  if (button) decideSyncCommand(button.closest('[data-command-id]').dataset.commandId, button.dataset.action);
+});
+el('receive-button').addEventListener('click', receivePurchase);
+el('restock-product-search').addEventListener('input', (event) => renderPurchaseProductResults('restock', event.currentTarget.value));
+el('restock-product-search').addEventListener('keydown', (event) => handlePurchaseProductEnter('restock', event));
+el('search-restock-product').addEventListener('click', () => renderPurchaseProductResults('restock', el('restock-product-search').value));
+el('scan-restock-product').addEventListener('click', () => activatePurchaseScanner('restock'));
+el('camera-restock-product').addEventListener('click', () => openBarcodeCamera('restock'));
+document.querySelectorAll('.purchase-tab').forEach((button) => button.addEventListener('click', () => {showPurchaseView(button.dataset.purchaseView);if(button.dataset.purchaseView==='supplier-return')loadRecentSupplierReturns();}));
+el('find-supplier-return-receipt').addEventListener('click',findSupplierReturnReceipt);
+el('supplier-return-document').addEventListener('keydown',(event)=>{if(event.key==='Enter'){event.preventDefault();findSupplierReturnReceipt();}});
+el('supplier-return-item-list').addEventListener('input',updateSupplierReturnTotal);
+el('supplier-return-item-list').addEventListener('change',updateSupplierReturnTotal);
+el('select-all-supplier-return').addEventListener('click',()=>{el('supplier-return-item-list').querySelectorAll('.supplier-return-select:not(:disabled)').forEach((input)=>{input.checked=true;});updateSupplierReturnTotal();});
+el('supplier-return-form').addEventListener('submit',postSupplierReturn);
+el('refresh-supplier-returns').addEventListener('click',loadRecentSupplierReturns);
+el('new-purchase-order').addEventListener('click', newPurchaseOrder);
+el('cancel-po-edit').addEventListener('click', () => showPurchaseView('documents'));
+el('refresh-purchase-orders').addEventListener('click', loadPurchaseOrders);
+el('purchase-status-filter').addEventListener('change', renderPurchaseOrders);
+el('po-product-search').addEventListener('input', (event) => renderPurchaseProductResults('po', event.currentTarget.value));
+el('po-product-search').addEventListener('keydown', (event) => handlePurchaseProductEnter('po', event));
+el('search-po-product').addEventListener('click', () => renderPurchaseProductResults('po', el('po-product-search').value));
+el('scan-po-product').addEventListener('click', () => activatePurchaseScanner('po'));
+el('camera-po-product').addEventListener('click', () => openBarcodeCamera('po'));
+el('save-po-draft').addEventListener('click', savePurchaseOrder);
+el('po-supplier').addEventListener('change', refreshPoSupplierSnapshots);
+el('close-supplier-comparison').addEventListener('click', () => el('supplier-comparison-dialog').close());
+['po-discount','po-tax','po-other-cost'].forEach((id) => el(id).addEventListener('input', renderPoTotal));
+el('restock-supplier').addEventListener('change', async () => {
+  await Promise.all([...document.querySelectorAll('.restock-line')].map(updateRestockComparison));
+  el('restock-history').innerHTML = '<p class="eyebrow">HISTORI MODAL</p><p class="muted">Supplier berubah. Klik “Riwayat” untuk melihat histori supplier ini.</p>';
+});
+el('refresh-inventory').addEventListener('click', loadInventory);
+el('expiry-search').addEventListener('input', renderExpiryDashboard);
+el('expiry-filter').addEventListener('change', renderExpiryDashboard);
+el('transfer-button').addEventListener('click', transferStock);
+el('count-button').addEventListener('click', postStockCount);
+el('refresh-report').addEventListener('click', loadReport);
+el('apply-report-filter').addEventListener('click', loadReport);
+el('report-preset').addEventListener('change', applyReportPreset);
+el('export-report').addEventListener('click', exportReportCsv);
+el('refresh-users').addEventListener('click', loadUsers);
+el('create-user-form').addEventListener('submit', createUser);
+el('user-search').addEventListener('input', renderUsers);
+el('user-status-filter').addEventListener('change', renderUsers);
+el('new-user-role').addEventListener('change', () => renderOutletOptions('new-user-outlets', selectedOutletIds('new-user-outlets', 'CASHIER'), el('new-user-role').value));
+el('edit-user-role').addEventListener('change', () => renderOutletOptions('edit-user-outlets', selectedOutletIds('edit-user-outlets', 'CASHIER'), el('edit-user-role').value));
+el('user-list').addEventListener('click', (event) => { const button = event.target.closest('.edit-user'); if (button) openUserEditor(button.closest('[data-user-id]').dataset.userId); });
+el('edit-user-form').addEventListener('submit', saveUser);
+el('close-user-editor').addEventListener('click', () => el('edit-user-dialog').close());
+el('cancel-user-edit').addEventListener('click', () => el('edit-user-dialog').close());
+el('open-product-dialog').addEventListener('click', () => openProductEditor());
+el('cancel-product').addEventListener('click', () => el('product-dialog').close());
+el('close-product-dialog').addEventListener('click', () => el('product-dialog').close());
+el('add-product-unit').addEventListener('click',()=>{state.productUnitsDraft.push({id:null,name:'',factor:12,barcode:''});renderProductUnitEditor();});
+el('product-units-editor').addEventListener('input',(event)=>{
+  const row=event.target.closest('.product-unit-row');if(!row)return;const unit=state.productUnitsDraft[Number(row.dataset.index)];
+  if(event.target.classList.contains('unit-name'))unit.name=event.target.value;
+  if(event.target.classList.contains('unit-factor'))unit.factor=Number(event.target.value);
+  if(event.target.classList.contains('unit-barcode'))unit.barcode=event.target.value;
+});
+el('product-units-editor').addEventListener('click',(event)=>{
+  const button=event.target.closest('.remove-product-unit');if(!button)return;
+  state.productUnitsDraft.splice(Number(button.closest('.product-unit-row').dataset.index),1);renderProductUnitEditor();
+});
+el('product-admin-search').addEventListener('input',renderProductTable);
+el('product-admin-status').addEventListener('change',renderProductTable);
+el('product-table').addEventListener('click',(event)=>{
+  const row=event.target.closest('[data-product-id]');if(!row)return;
+  if(event.target.closest('.edit-product'))openProductEditor(row.dataset.productId);
+  const toggle=event.target.closest('.toggle-product');if(toggle)toggleProductStatus(row.dataset.productId,toggle.dataset.active==='true');
+});
+el('product-form').addEventListener('submit', saveProduct);
+el('download-import-template').addEventListener('click', downloadImportTemplate);
+el('import-file').addEventListener('change', inspectImportFile);
+el('import-kind').addEventListener('change', () => {
+  el('import-file').value = '';
+  el('import-file-name').textContent = 'Belum ada file dipilih';
+  renderImportLocations();
+  resetImportPreview('Unduh dan gunakan contoh CSV untuk jenis data yang dipilih.');
+});
+el('import-location').addEventListener('change', () => { if (el('import-file').files[0]) inspectImportFile(); });
+el('commit-import').addEventListener('click', commitImport);
+el('refresh-imports').addEventListener('click', loadImportHistory);
+el('create-backup').addEventListener('click', createBackup);
+el('verify-backup-file').addEventListener('change', verifyBackupFile);
+el('refresh-backups').addEventListener('click', loadBackupHistory);
+el('refresh-settings').addEventListener('click', loadSettingsWorkspace);
+el('refresh-system-health').addEventListener('click', loadSystemHealth);
+el('install-app').addEventListener('click', installPwa);
+el('business-settings-form').addEventListener('submit', saveBusinessSettings);
+el('new-outlet-setting').addEventListener('click', newOutletEditor);
+el('outlet-settings-form').addEventListener('submit', saveOutletSettings);
+el('settings-outlet-list').addEventListener('click',(event)=>{const row=event.target.closest('.edit-setting-outlet');if(row)editOutletSetting(row.dataset.outletId);});
+el('new-location-setting').addEventListener('click', newLocationEditor);
+el('location-settings-form').addEventListener('submit', saveLocationSettings);
+el('settings-location-list').addEventListener('click',(event)=>{const row=event.target.closest('.edit-setting-location');if(row)editLocationSetting(row.dataset.locationId);});
+el('device-settings-form').addEventListener('submit', saveDeviceSettings);
+el('new-customer').addEventListener('click',()=>openCustomerEditor());
+el('customer-form').addEventListener('submit',saveCustomer);
+el('close-customer-dialog').addEventListener('click',()=>el('customer-dialog').close());
+el('cancel-customer-dialog').addEventListener('click',()=>el('customer-dialog').close());
+el('customer-credit-enabled').addEventListener('change',()=>el('customer-credit-fields').classList.toggle('hidden',!el('customer-credit-enabled').checked));
+el('customer-account-search').addEventListener('input',renderRelations);
+el('customer-list').addEventListener('click',(event)=>{
+  const card=event.target.closest('[data-customer-id]');if(!card)return;
+  if(event.target.closest('.customer-statement'))openCustomerStatement(card.dataset.customerId);
+  if(event.target.closest('.edit-customer'))openCustomerEditor(card.dataset.customerId);
+});
+el('close-customer-statement').addEventListener('click',()=>el('customer-statement-dialog').close());
+el('customer-payment-form').addEventListener('submit',recordCustomerPayment);
+el('customer-payment-method').addEventListener('change',()=>el('customer-payment-reference-wrap').classList.toggle('hidden',el('customer-payment-method').value==='CASH'));
+el('save-supplier').addEventListener('click', saveSupplier);
+el('supplier-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-supplier-id]');if(row&&event.target.closest('.supplier-statement'))openSupplierStatement(row.dataset.supplierId);});
+el('close-supplier-statement').addEventListener('click',()=>el('supplier-statement-dialog').close());
+el('supplier-payment-form').addEventListener('submit',recordSupplierPayment);
+el('supplier-payment-method').addEventListener('change',()=>el('supplier-payment-reference-wrap').classList.toggle('hidden',el('supplier-payment-method').value==='CASH'));
+el('promotion-form').addEventListener('submit', publishPromotion);
+el('simulate-promo').addEventListener('click', simulatePromotion);
+el('promo-type').addEventListener('change',syncPromotionForm);
+el('promo-target-type').addEventListener('change',syncPromotionForm);
+el('promo-repeat-mode').addEventListener('change',syncPromotionForm);
+['promo-code','promo-name','promo-category','promo-brand','promo-min-qty','promo-min-basket','promo-value','promo-max','promo-buy-qty','promo-free-qty','promo-repeat-cap','promo-priority','promo-limit-total','promo-limit-customer','promo-starts','promo-ends','promo-time-start','promo-time-end'].forEach((id)=>el(id).addEventListener('input',updatePromoSummary));
+['promo-target-product','promo-customer-group','promo-reward-product','promo-bundle-product-a','promo-bundle-product-b','promo-stackable'].forEach((id)=>el(id).addEventListener('change',updatePromoSummary));
+el('promo-days').addEventListener('change',updatePromoSummary);
+el('promo-status-filter').addEventListener('change',renderPromotionList);
+el('promotion-list').addEventListener('click',(event)=>{const button=event.target.closest('.retire-promotion');if(button)retirePromotion(button.closest('[data-promo-id]').dataset.promoId);});
+el('open-shift').addEventListener('click', openShift);
+el('cash-movement').addEventListener('click', addCashMovement);
+el('close-shift').addEventListener('click', closeShift);
+window.addEventListener('online', () => { el('network-dot').classList.remove('offline'); el('network-status').textContent = 'Online'; syncQueue(); });
+window.addEventListener('offline', () => { el('network-dot').classList.add('offline'); el('network-status').textContent = 'Offline'; });
+window.addEventListener('storage', (event) => {
+  if (!isAuthStorageEvent(event)) return;
+  const auth = loadAuth();
+  state.token = auth.token;
+  state.refreshToken = auth.refreshToken;
+  state.expiresAt = auth.expiresAt;
+});
+setInterval(() => { el('clock').textContent = new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date()); }, 1000);
+updateQueueCount();
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  updateInstallAppControl();
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  updateInstallAppControl();
+  toast('Kasir Nusa berhasil dipasang di perangkat ini.');
+});
+updateInstallAppControl();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/service-worker.js');
+async function restoreAppSession() {
+  if (state.token || state.refreshToken) return bootstrap();
+  try {
+    await refreshSession();
+    await bootstrap();
+  } catch {
+    el('session-view').classList.add('hidden');
+    el('login-view').classList.remove('hidden');
+    el('app-view').classList.add('hidden');
+  }
+}
+
+restoreAppSession();

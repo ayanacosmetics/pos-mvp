@@ -1,0 +1,15 @@
+{
+  "name": "pos-retail-mvp",
+  "version": "1.20.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node apps/api/src/server.mjs",
+    "dev:cloud": "npx vercel dev",
+    "start": "node apps/api/src/server.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

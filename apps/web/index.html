@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#174c4f">
+  <title>Kasir Nusa POS</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <section id="session-view" class="session-view" aria-live="polite">
+    <div class="session-card">
+      <div class="brand-mark">KN</div>
+      <div>
+        <p class="eyebrow">KASIR NUSA</p>
+        <strong>Memulihkan sesi kerja…</strong>
+        <p class="muted">Menyiapkan outlet dan data kasir Anda.</p>
+      </div>
+      <span class="session-loader" aria-hidden="true"></span>
+    </div>
+  </section>
+
+  <section id="login-view" class="login-view hidden">
+    <form id="login-form" class="login-card">
+      <div class="brand-mark">KN</div>
+      <p class="eyebrow">KASIR NUSA</p>
+      <h1>Masuk ke ruang kerja</h1>
+      <p class="muted">POS grosir–ecer yang tetap tenang saat toko ramai.</p>
+      <label>Email<input id="email" type="email" value="owner@demo.local" autocomplete="username" required></label>
+      <label>Kata sandi<input id="password" type="password" value="owner123" autocomplete="current-password" required></label>
+      <p id="login-error" class="error" role="alert"></p>
+      <button class="button primary full" type="submit">Masuk</button>
+      <details><summary>Akun demo</summary><small>Owner: owner@demo.local / owner123<br>Kasir: kasir@demo.local / kasir123<br>Pembelian: beli@demo.local / beli123</small></details>
+    </form>
+  </section>
+
+  <div id="app-view" class="app hidden">
+    <aside id="app-sidebar" class="sidebar" aria-label="Menu utama">
+      <div class="brand"><span class="brand-mark small">KN</span><span>Kasir Nusa</span></div>
+      <nav id="nav">
+        <button data-page="pos" class="nav-item active"><span>▦</span>Kasir</button>
+        <button data-page="returns" class="nav-item" data-permission="sales.return"><span>↩</span>Retur</button>
+        <button data-page="restock" class="nav-item" data-permission="purchasing.view_cost"><span>↙</span>Restok</button>
+        <button data-page="stock" class="nav-item" data-permission="inventory.manage"><span>⇄</span>Stok</button>
+        <button data-page="shift" class="nav-item" data-permission="pos.sell"><span>◷</span>Shift</button>
+        <button data-page="relations" class="nav-item" data-permission="pos.sell"><span>◎</span>Relasi</button>
+        <button data-page="reports" class="nav-item" data-permission="report.view"><span>▥</span>Laporan</button>
+        <button data-page="sync-review" class="nav-item" data-permission="audit.view"><span>&#8635;</span>Sinkronisasi <b id="sync-review-nav-count" class="nav-count hidden">0</b></button>
+        <button data-page="imports" class="nav-item" data-permission="audit.view"><span>&#8679;</span>Impor Data</button>
+        <button data-page="backups" class="nav-item" data-permission="identity.manage"><span>&#9635;</span>Backup</button>
+        <button data-page="users" class="nav-item" data-permission="identity.manage"><span>♙</span>Pengguna</button>
+        <button data-page="settings" class="nav-item" data-permission="identity.manage"><span>⚙</span>Pengaturan</button>
+        <button data-page="products" class="nav-item" data-permission="catalog.manage"><span>◇</span>Produk</button>
+        <button data-page="promotions" class="nav-item" data-permission="promotion.manage"><span>％</span>Promo</button>
+      </nav>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Operasional · v1.20</small><button id="logout" class="link-button">Keluar</button></div>
+    </aside>
+    <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-leading"><button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Buka menu" aria-controls="app-sidebar" aria-expanded="false"><span></span><span></span><span></span></button><div><p class="eyebrow">OUTLET AKTIF</p><select id="current-outlet-select" aria-label="Pilih outlet aktif"></select></div></div>
+        <div class="status"><span id="network-dot" class="dot"></span><span id="network-status">Online</span><span id="clock"></span></div>
+      </header>
+
+      <section id="page-pos" class="page active">
+        <div class="pos-layout">
+          <div class="catalog-pane">
+            <div class="page-title"><div><p id="top-shift" class="eyebrow">SHIFT BELUM DIBUKA</p><h1>Kasir</h1></div><button id="sync-button" class="button secondary">Sinkronkan <span id="queue-count">0</span></button></div>
+            <div class="search-row">
+              <div class="product-search-control"><input id="product-search" placeholder="Scan barcode atau cari nama produk"><button id="scan-camera-pos" class="button secondary scan-icon-button camera-scan-button" type="button" aria-label="Scan barcode dengan kamera" title="Scan dengan kamera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5 10 3.5h4l1.5 2H19A2.5 2.5 0 0 1 21.5 8v9A2.5 2.5 0 0 1 19 19.5H5A2.5 2.5 0 0 1 2.5 17V8A2.5 2.5 0 0 1 5 5.5h3.5Z"/><circle cx="12" cy="12.5" r="4"/></svg></button></div>
+              <div class="customer-pos-picker"><div class="customer-search-control"><input id="customer-search" autocomplete="off" placeholder="Pelanggan umum / cari member"><button id="clear-pos-customer" class="icon-button hidden" type="button" aria-label="Gunakan pelanggan umum">×</button></div><select id="customer-select" class="hidden" aria-hidden="true"><option value="">Pelanggan umum</option></select><div id="customer-search-results" class="customer-search-results hidden"></div></div>
+              <button id="new-pos-customer" class="button secondary new-pos-customer" type="button">+ Member</button>
+              <select id="customer-group" class="hidden"><option value="retail">Eceran</option><option value="wholesale">Grosir</option></select>
+            </div>
+            <div id="product-grid" class="product-grid"></div>
+          </div>
+          <aside class="cart-pane">
+            <div class="cart-heading"><div><p class="eyebrow">TRANSAKSI BARU</p><h2>Keranjang</h2></div><button id="clear-cart" class="icon-button" aria-label="Kosongkan keranjang">×</button></div>
+            <div id="cart-lines" class="cart-lines"><div class="empty-state">Belum ada barang.<br><small>Scan barcode atau pilih produk.</small></div></div>
+            <div class="cart-summary">
+              <div><span>Subtotal</span><strong id="subtotal">Rp0</strong></div>
+              <div class="discount"><span>Promo & diskon</span><strong id="discount">−Rp0</strong></div>
+              <div class="grand-total"><span>Total</span><strong id="grand-total">Rp0</strong></div>
+              <button id="open-order-adjustment" class="button adjustment-button" type="button" disabled>Minta diskon transaksi</button>
+              <div id="sale-authorization-status" class="sale-authorization-status hidden"></div>
+              <div class="cart-checkout-actions"><button id="hold-cart" class="button secondary" disabled>Tahan</button><button id="open-held-sales" class="button secondary">Ditahan <span id="held-sales-count">0</span></button><button id="pay-button" class="button primary" disabled>Bayar</button></div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="page-returns" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">RETUR PENJUALAN & REFUND</p><h1>Pengembalian pelanggan</h1><p class="muted">Cari struk, pilih barang dan kondisinya, lalu catat pengembalian dana secara aman.</p></div><span class="pill success">Terhubung stok & kas</span></div>
+        <div class="surface return-search"><div><label>Nomor struk<input id="return-receipt-search" autocomplete="off" placeholder="Contoh: UTM-000123"></label><button id="find-return-sale" class="button primary">Cari transaksi</button></div><p id="return-search-status" class="muted">Masukkan nomor struk yang tercetak pada bukti pembayaran.</p></div>
+        <div id="return-workspace" class="hidden">
+          <div id="return-sale-summary" class="return-sale-summary"></div>
+          <div class="return-layout">
+            <div class="surface return-items-panel"><div class="return-section-heading"><div><p class="eyebrow">BARANG TRANSAKSI</p><h2>Pilih jumlah yang dikembalikan</h2></div><button id="select-all-returnable" class="button secondary">Pilih semua tersisa</button></div><div id="return-item-list"></div></div>
+            <form id="return-form" class="surface return-refund-panel">
+              <div><p class="eyebrow">PENGEMBALIAN DANA</p><h2 id="return-refund-total">Rp0</h2><p class="muted">Total dihitung dari harga bersih setelah promo pada struk asli.</p></div>
+              <label>Alasan retur<select id="return-reason"><option value="">Pilih alasan</option><option>Barang salah</option><option>Barang rusak</option><option>Reaksi/alergi pelanggan</option><option>Kedaluwarsa</option><option>Kesalahan transaksi kasir</option><option>Lainnya</option></select></label>
+              <label>Catatan tambahan<textarea id="return-note" rows="3" placeholder="Jelaskan kondisi atau kesepakatan dengan pelanggan"></textarea></label>
+              <label>Metode refund<select id="return-refund-method"><option value="ORIGINAL">Sesuai pembayaran asli</option><option value="ACCOUNT_CREDIT">Kurangi piutang pelanggan</option><option value="CASH">Tunai dari shift aktif</option><option value="TRANSFER">Transfer manual</option><option value="QRIS">QRIS manual</option><option value="EDC">EDC/manual kartu</option></select></label>
+              <label id="return-reference-field" class="hidden">Referensi refund<input id="return-refund-reference" placeholder="Nomor transfer/referensi"></label>
+              <div id="return-cash-warning" class="return-cash-warning hidden"></div>
+              <button id="submit-return" class="button primary full" type="submit">Proses retur dan refund</button>
+              <p class="return-safety-note">Barang terbuka, rusak, atau kedaluwarsa tidak akan masuk kembali ke stok jual.</p>
+            </form>
+          </div>
+          <div id="sale-return-history" class="surface return-history"></div>
+        </div>
+        <div class="surface return-recent"><div class="return-section-heading"><div><p class="eyebrow">RIWAYAT TERBARU</p><h2>Retur yang sudah diproses</h2></div><button id="refresh-return-history" class="button secondary">Muat ulang</button></div><div id="return-recent-list"><div class="empty-state compact">Memuat riwayat retur...</div></div></div>
+      </div></section>
+
+      <section id="page-restock" class="page">
+        <div class="content-width">
+          <div class="page-title"><div><p class="eyebrow">PURCHASE ORDER & PENERIMAAN</p><h1>Pembelian dan restok</h1><p class="muted">Rencanakan pesanan, minta persetujuan, lalu terima barang sebagian atau seluruhnya.</p></div><span class="pill success">Alur terkontrol</span></div>
+          <div class="purchase-tabs" role="tablist"><button class="purchase-tab active" data-purchase-view="documents">Dokumen pembelian</button><button class="purchase-tab" data-purchase-view="order">Buat PO</button><button class="purchase-tab" data-purchase-view="receipt">Terima barang</button><button class="purchase-tab" data-purchase-view="supplier-return">Retur supplier</button></div>
+
+          <div id="purchase-view-documents" class="purchase-view">
+            <div id="purchase-metrics" class="purchase-metrics"></div>
+            <div class="surface purchase-documents">
+              <div class="document-toolbar"><div><p class="eyebrow">DAFTAR PURCHASE ORDER</p><h2>Dokumen terbaru</h2></div><div><select id="purchase-status-filter"><option value="">Semua status</option><option value="DRAFT">Draft</option><option value="SUBMITTED">Menunggu persetujuan</option><option value="APPROVED">Disetujui</option><option value="PARTIALLY_RECEIVED">Diterima sebagian</option><option value="RECEIVED">Selesai</option><option value="CANCELLED">Dibatalkan</option></select><button id="refresh-purchase-orders" class="button secondary">Muat ulang</button><button id="new-purchase-order" class="button primary">Buat PO baru</button></div></div>
+              <div id="purchase-order-list"></div>
+            </div>
+          </div>
+
+          <div id="purchase-view-order" class="purchase-view hidden">
+            <div class="surface po-editor">
+              <div class="page-title mini"><div><p class="eyebrow">DRAFT PURCHASE ORDER</p><h2 id="po-editor-title">PO baru</h2></div><span id="po-editor-status" class="status-badge draft">DRAFT</span></div>
+              <div class="form-grid"><label>Supplier<select id="po-supplier"></select></label><label>Lokasi tujuan<select id="po-location"></select></label><label>Perkiraan tiba<input id="po-expected" type="date"></label></div>
+              <label>Catatan untuk supplier<input id="po-notes" placeholder="Contoh: kirim pagi, kemasan tidak boleh penyok"></label>
+              <div class="purchase-product-picker">
+                <div class="purchase-product-search"><input id="po-product-search" autocomplete="off" placeholder="Cari nama, SKU, atau scan barcode"><button id="search-po-product" class="button secondary" type="button">Cari</button><button id="scan-po-product" class="button secondary scan-icon-button hardware-scan-button" type="button" aria-label="Aktifkan scanner barcode" title="Scanner barcode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a2 2 0 0 1 2 2v8H4V5a2 2 0 0 1 2-2Z"/><path d="M7 6v4M10 6v4M13 6v4M17 6v4M8 13l-2 8h6l2-8"/></svg></button><button id="camera-po-product" class="button secondary scan-icon-button camera-scan-button" type="button" aria-label="Scan barcode dengan kamera" title="Scan dengan kamera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5 10 3.5h4l1.5 2H19A2.5 2.5 0 0 1 21.5 8v9A2.5 2.5 0 0 1 19 19.5H5A2.5 2.5 0 0 1 2.5 17V8A2.5 2.5 0 0 1 5 5.5h3.5Z"/><circle cx="12" cy="12.5" r="4"/></svg></button></div>
+                <div id="po-product-results" class="purchase-product-results"></div>
+              </div>
+              <div id="po-empty" class="empty-state compact">Belum ada barang dalam Purchase Order.</div><div id="po-lines" class="po-lines"></div>
+              <div class="po-costs"><label>Diskon dokumen<input id="po-discount" type="number" min="0" value="0"></label><label>Pajak<input id="po-tax" type="number" min="0" value="0"></label><label>Ongkir/biaya lain<input id="po-other-cost" type="number" min="0" value="0"></label><div class="po-grand-total"><span>Total PO</span><strong id="po-total">Rp0</strong></div></div>
+              <div class="button-row"><button id="cancel-po-edit" class="button secondary">Kembali</button><button id="save-po-draft" class="button primary">Simpan draft PO</button></div>
+            </div>
+          </div>
+
+          <div id="purchase-view-receipt" class="purchase-view hidden">
+            <div id="active-po-banner" class="active-po-banner hidden"></div>
+            <div class="form-grid"><label>Supplier<select id="restock-supplier"></select></label><label>Nomor faktur supplier<input id="restock-document" placeholder="Contoh: INV-2026-001"></label><label>Lokasi penerimaan<select id="restock-location"></select></label></div>
+            <div class="surface restock-surface">
+              <div class="purchase-product-picker">
+                <div class="purchase-product-search"><input id="restock-product-search" autocomplete="off" placeholder="Cari nama, SKU, atau scan barcode"><button id="search-restock-product" class="button secondary" type="button">Cari</button><button id="scan-restock-product" class="button secondary scan-icon-button hardware-scan-button" type="button" aria-label="Aktifkan scanner barcode" title="Scanner barcode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a2 2 0 0 1 2 2v8H4V5a2 2 0 0 1 2-2Z"/><path d="M7 6v4M10 6v4M13 6v4M17 6v4M8 13l-2 8h6l2-8"/></svg></button><button id="camera-restock-product" class="button secondary scan-icon-button camera-scan-button" type="button" aria-label="Scan barcode dengan kamera" title="Scan dengan kamera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5 10 3.5h4l1.5 2H19A2.5 2.5 0 0 1 21.5 8v9A2.5 2.5 0 0 1 19 19.5H5A2.5 2.5 0 0 1 2.5 17V8A2.5 2.5 0 0 1 5 5.5h3.5Z"/><circle cx="12" cy="12.5" r="4"/></svg></button></div>
+                <div id="restock-product-results" class="purchase-product-results"></div>
+              </div>
+              <div id="restock-empty" class="empty-state compact">Belum ada barang. Pilih produk lalu tekan “Tambah barang”.</div>
+              <div id="restock-table" class="hidden"><div id="restock-body" class="restock-list"></div></div>
+              <div class="restock-actions"><div><small class="muted">Penerimaan yang sama tidak akan tercatat dua kali.</small><strong id="restock-total">Total modal Rp0</strong></div><button id="receive-button" class="button primary">Terima dan tambah stok</button></div>
+            </div>
+            <div id="restock-history" class="surface restock-history"><p class="eyebrow">HISTORI MODAL</p><p class="muted">Klik “Riwayat” pada barang untuk melihat modal per supplier dan batch.</p></div>
+          </div>
+
+          <div id="purchase-view-supplier-return" class="purchase-view hidden">
+            <div class="surface supplier-return-search"><div><label>Supplier<select id="supplier-return-supplier"></select></label><label>Nomor faktur penerimaan<input id="supplier-return-document" placeholder="Contoh: INV-2026-001" autocomplete="off"></label><button id="find-supplier-return-receipt" class="button primary">Cari penerimaan</button></div><p id="supplier-return-search-status" class="muted">Pilih supplier dan cari faktur yang sebelumnya sudah diterima melalui restok.</p></div>
+            <div id="supplier-return-workspace" class="hidden">
+              <div id="supplier-return-summary" class="supplier-return-summary"></div>
+              <form id="supplier-return-form" class="supplier-return-layout">
+                <div class="surface supplier-return-items"><div class="return-section-heading"><div><p class="eyebrow">BARANG DARI PENERIMAAN</p><h2>Pilih batch yang dikembalikan</h2></div><button id="select-all-supplier-return" class="button secondary" type="button">Pilih semua tersedia</button></div><div id="supplier-return-item-list"></div></div>
+                <aside class="surface supplier-return-credit"><p class="eyebrow">NOTA RETUR SUPPLIER</p><h2 id="supplier-return-total">Rp0</h2><p class="muted">Nilai kredit memakai modal pada faktur penerimaan asli.</p><label>Penyelesaian<select id="supplier-return-settlement"><option value="CREDIT_NOTE">Potong hutang / nota kredit</option><option value="REFUND">Pengembalian uang</option><option value="REPLACEMENT">Penggantian barang</option></select></label><label>Referensi supplier<input id="supplier-return-reference" placeholder="Nomor nota kredit, opsional"></label><label>Alasan<textarea id="supplier-return-reason" rows="4" required placeholder="Contoh: kemasan rusak saat diterima"></textarea></label><div class="supplier-return-impact"><strong>Stok dan batch berkurang</strong><small>Transaksi dicatat permanen pada jurnal stok dan audit.</small></div><p id="supplier-return-error" class="error"></p><button id="post-supplier-return" class="button primary full" type="submit">Posting retur supplier</button></aside>
+              </form>
+            </div>
+            <div class="surface supplier-return-history"><div class="return-section-heading"><div><p class="eyebrow">RIWAYAT RETUR SUPPLIER</p><h2>Nota retur terbaru</h2></div><button id="refresh-supplier-returns" class="button secondary">Muat ulang</button></div><div id="supplier-return-history-list"><div class="empty-state compact">Memuat riwayat...</div></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="page-products" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">MASTER KATALOG</p><h1>Produk dan varian</h1><p class="muted">Kelola SKU, barcode, satuan, harga, batas stok, dan status jual.</p></div><button id="open-product-dialog" class="button primary">Tambah produk</button></div>
+        <div id="product-metrics" class="product-metrics"></div>
+        <div class="surface product-directory">
+          <div class="product-directory-head"><div><p class="eyebrow">DIREKTORI PRODUK</p><h2>Semua barang</h2></div><div class="product-filters"><input id="product-admin-search" type="search" placeholder="Cari SKU, produk, merek, atau barcode"><select id="product-admin-status"><option value="ACTIVE">Produk aktif</option><option value="ALL">Semua status</option><option value="INACTIVE">Produk nonaktif</option><option value="LOW_STOCK">Stok menipis</option></select></div></div>
+          <div id="product-table" class="table-wrap"><div class="empty-state compact">Memuat master produk…</div></div>
+        </div>
+      </div></section>
+
+      <section id="page-imports" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">PERSIAPAN DATA USAHA</p><h1>Impor data awal</h1><p class="muted">Masukkan data dari Excel melalui CSV. Sistem memeriksa seluruh baris sebelum menyimpan.</p></div><button id="download-import-template" class="button secondary">Unduh contoh CSV</button></div>
+        <div class="import-guide surface">
+          <div><span>1</span><strong>Unduh contoh</strong><small>Gunakan susunan kolom yang sudah disiapkan.</small></div>
+          <div><span>2</span><strong>Isi di Excel</strong><small>Simpan kembali dengan format CSV.</small></div>
+          <div><span>3</span><strong>Periksa & simpan</strong><small>Baris bermasalah ditandai sebelum impor.</small></div>
+        </div>
+        <div class="import-workspace">
+          <div class="surface import-control">
+            <p class="eyebrow">FILE YANG AKAN DIPERIKSA</p>
+            <label>Jenis data<select id="import-kind"><option value="PRODUCTS">Produk, harga, satuan & stok awal</option><option value="CUSTOMERS">Pelanggan</option><option value="SUPPLIERS">Supplier</option></select></label>
+            <label id="import-location-label">Lokasi stok awal<select id="import-location"></select><small class="muted">Stok awal hanya untuk produk yang belum pernah bertransaksi.</small></label>
+            <label class="import-dropzone" for="import-file"><strong>Pilih file CSV</strong><small id="import-file-name">Belum ada file dipilih</small><input id="import-file" type="file" accept=".csv,text/csv"></label>
+            <p id="import-message" class="muted">Unduh contoh CSV, isi datanya, lalu unggah di sini.</p>
+            <button id="commit-import" class="button primary full" disabled>Simpan data yang sudah valid</button>
+          </div>
+          <div class="surface import-preview-panel">
+            <div class="import-preview-heading"><div><p class="eyebrow">PRATINJAU</p><h2>Hasil pemeriksaan</h2></div><span id="import-validity" class="pill">Belum diperiksa</span></div>
+            <div id="import-metrics" class="import-metrics"></div>
+            <div id="import-errors"></div>
+            <div id="import-preview" class="table-wrap"><div class="empty-state compact">Pilih file untuk melihat data sebelum disimpan.</div></div>
+          </div>
+        </div>
+        <div class="surface import-history"><div class="import-preview-heading"><div><p class="eyebrow">RIWAYAT</p><h2>Impor terbaru</h2></div><button id="refresh-imports" class="button secondary">Muat ulang</button></div><div id="import-history-list"><div class="empty-state compact">Belum ada riwayat impor.</div></div></div>
+      </div></section>
+
+      <section id="page-backups" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">PERLINDUNGAN DATA</p><h1>Pusat Backup</h1><p class="muted">Simpan salinan data usaha di tempat aman dan periksa kembali file secara berkala.</p></div><button id="create-backup" class="button primary">Unduh backup sekarang</button></div>
+        <div id="backup-status" class="backup-status surface"><div class="backup-shield">✓</div><div><strong>Siap membuat backup</strong><p class="muted">File berisi data operasional, tanpa kata sandi dan kunci rahasia.</p></div></div>
+        <div class="backup-grid">
+          <div class="surface">
+            <p class="eyebrow">DATA YANG DILINDUNGI</p>
+            <div class="backup-coverage">
+              <div><strong>Katalog & harga</strong><small>Produk, barcode, satuan, harga dan promo</small></div>
+              <div><strong>Persediaan</strong><small>Stok lokasi, batch, EXP dan jurnal</small></div>
+              <div><strong>Operasional</strong><small>Penjualan, pembelian, retur dan shift</small></div>
+              <div><strong>Relasi & kontrol</strong><small>Pelanggan, supplier, pengguna dan audit</small></div>
+            </div>
+            <div class="backup-note"><strong>Simpan minimal di dua tempat.</strong><p>Contoh: laptop pemilik dan Google Drive/flashdisk khusus backup.</p></div>
+          </div>
+          <div class="surface">
+            <p class="eyebrow">PERIKSA FILE BACKUP</p>
+            <h2>Pastikan file masih utuh</h2>
+            <p class="muted">Pemeriksaan tidak mengubah data dan tidak melakukan pemulihan.</p>
+            <label class="import-dropzone" for="verify-backup-file"><strong>Pilih file backup JSON</strong><small id="verify-backup-file-name">Belum ada file dipilih</small><input id="verify-backup-file" type="file" accept=".json,application/json"></label>
+            <div id="backup-verification"></div>
+          </div>
+        </div>
+        <div class="surface backup-history"><div class="import-preview-heading"><div><p class="eyebrow">RIWAYAT BACKUP</p><h2>Salinan yang pernah dibuat</h2></div><button id="refresh-backups" class="button secondary">Muat ulang</button></div><div id="backup-history-list"><div class="empty-state compact">Belum ada backup.</div></div></div>
+      </div></section>
+
+      <section id="page-stock" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">PERSEDIAAN</p><h1>Stok per lokasi</h1></div><button id="refresh-inventory" class="button secondary">Muat ulang</button></div>
+        <section class="expiry-dashboard surface">
+          <div class="expiry-heading">
+            <div><p class="eyebrow">KONTROL BATCH & EXP</p><h2>Prioritas jual FEFO</h2><p class="muted">Batch dengan tanggal kedaluwarsa terdekat muncul paling awal.</p></div>
+            <div class="expiry-tools"><input id="expiry-search" type="search" placeholder="Cari produk atau batch"><select id="expiry-filter"><option value="PRIORITY">Perlu perhatian</option><option value="EXPIRED">Sudah kedaluwarsa</option><option value="CRITICAL">0–30 hari</option><option value="WARNING">31–60 hari</option><option value="NOTICE">61–90 hari</option><option value="NO_EXPIRY">Tanpa tanggal EXP</option><option value="ALL">Semua batch</option></select></div>
+          </div>
+          <div id="expiry-metrics" class="expiry-metrics"></div>
+          <div id="expiry-batch-list" class="expiry-batch-list"><div class="empty-state compact">Memuat kontrol kedaluwarsa...</div></div>
+        </section>
+        <div class="stock-workspace">
+          <div class="surface"><p class="eyebrow">TRANSFER STOK</p><div class="form-grid compact"><label>Dari<select id="transfer-from"><option value="gudang-utama">Gudang Utama</option><option value="outlet-utama">Toko Utama</option></select></label><label>Ke<select id="transfer-to"><option value="outlet-utama">Toko Utama</option><option value="gudang-utama">Gudang Utama</option></select></label><label>Produk<select id="transfer-product"></select></label><label>Jumlah pcs<input id="transfer-qty" type="number" min="1" value="12"></label></div><button id="transfer-button" class="button primary">Kirim dan terima</button></div>
+          <div class="surface"><p class="eyebrow">STOK OPNAME TOKO</p><p class="muted">Isi jumlah fisik. Selisih akan masuk jurnal dan audit log.</p><div id="count-fields" class="count-fields"></div><button id="count-button" class="button primary">Posting opname</button></div>
+        </div>
+        <div id="inventory-table" class="surface table-wrap"></div>
+        <div class="page-title ledger-title"><div><p class="eyebrow">JEJAK PERGERAKAN</p><h2>Jurnal stok terbaru</h2></div></div><div id="ledger-table" class="surface table-wrap"></div>
+      </div></section>
+
+      <section id="page-reports" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">LAPORAN OPERASIONAL</p><h1>Kinerja usaha</h1><p class="muted">Penjualan bersih dan laba sudah memperhitungkan retur pada periode terpilih.</p></div><div class="report-actions"><button id="export-report" class="button secondary">Ekspor CSV</button><button id="refresh-report" class="button secondary">Muat ulang</button></div></div>
+        <div class="surface report-filter-bar"><label>Periode<select id="report-preset"><option value="TODAY">Hari ini</option><option value="7D">7 hari terakhir</option><option value="30D" selected>30 hari terakhir</option><option value="MONTH">Bulan ini</option><option value="CUSTOM">Pilih tanggal</option></select></label><label>Dari tanggal<input id="report-from" type="date"></label><label>Sampai tanggal<input id="report-to" type="date"></label><label>Outlet<select id="report-outlet"><option value="">Semua outlet yang dapat diakses</option></select></label><button id="apply-report-filter" class="button primary">Tampilkan laporan</button></div>
+        <div id="report-status" class="report-status muted">Memuat laporan...</div>
+        <div id="report-cards" class="report-cards"></div>
+        <div class="report-grid report-primary"><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">TREN HARIAN</p><h2>Penjualan bersih dan laba</h2></div></div><div id="daily-report" class="table-wrap"></div></div><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">KINERJA PRODUK</p><h2>Produk berdasarkan omzet bersih</h2></div></div><div id="best-products"></div></div></div>
+        <div class="report-grid"><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">KINERJA OUTLET</p><h2>Kontribusi per lokasi usaha</h2></div></div><div id="outlet-performance"></div></div><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">PEMBELIAN</p><h2>Nilai penerimaan per supplier</h2></div></div><div id="supplier-purchases"></div></div></div>
+        <div class="surface report-wide-section"><div class="report-section-heading"><div><p class="eyebrow">TRANSAKSI TERBARU</p><h2>Penjualan dan dampak retur</h2></div></div><div id="recent-sales" class="table-wrap"></div></div>
+        <div class="surface report-wide-section"><div class="report-section-heading"><div><p class="eyebrow">AUDIT LOG</p><h2>Aktivitas sensitif terbaru</h2></div></div><div id="audit-logs"></div></div>
+      </div></section>
+
+      <section id="page-sync-review" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">KONTROL TRANSAKSI OFFLINE</p><h1>Peninjauan sinkronisasi</h1><p class="muted">Putuskan transaksi yang harganya berubah ketika perangkat kembali online.</p></div><button id="refresh-sync-review" class="button secondary">Muat ulang</button></div>
+        <div class="sync-guidance surface"><div class="sync-guidance-icon">!</div><div><strong>Pelanggan mungkin sudah membayar.</strong><p>Utamakan total yang tercatat di kasir jika sesuai struk pelanggan. Pilihan harga terbaru dapat menimbulkan selisih kas dan harus digunakan dengan sadar.</p></div></div>
+        <div id="sync-review-metrics" class="sync-review-metrics"></div>
+        <div class="surface sync-review-surface">
+          <div class="sync-review-heading"><div><p class="eyebrow">MENUNGGU KEPUTUSAN</p><h2>Konflik harga dan promo</h2></div><span id="sync-review-status" class="muted">Memuat antrean...</span></div>
+          <div id="sync-review-list"><div class="empty-state compact">Memuat antrean sinkronisasi...</div></div>
+        </div>
+      </div></section>
+
+      <section id="page-users" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">PENGGUNA & HAK AKSES</p><h1>Tim dan penempatan outlet</h1><p class="muted">Buat akun kerja terpisah agar aktivitas kasir, pembelian, dan gudang dapat ditelusuri.</p></div><button id="refresh-users" class="button secondary">Muat ulang</button></div>
+        <div id="user-metrics" class="user-metrics"></div>
+        <div class="identity-workspace">
+          <form id="create-user-form" class="surface identity-form">
+            <div><p class="eyebrow">AKUN BARU</p><h2>Tambahkan anggota tim</h2><p class="muted">Kata sandi sementara diberikan langsung kepada pengguna.</p></div>
+            <label>Nama lengkap<input id="new-user-name" autocomplete="name" required placeholder="Contoh: Sari Kasir"></label>
+            <label>Email login<input id="new-user-email" type="email" autocomplete="off" required placeholder="sari@tokosaya.com"></label>
+            <label>Kata sandi sementara<input id="new-user-password" type="password" minlength="8" autocomplete="new-password" required placeholder="Minimal 8 karakter"></label>
+            <label>Peran<select id="new-user-role"><option value="CASHIER">Kasir</option><option value="PURCHASING">Pembelian</option><option value="WAREHOUSE">Gudang</option><option value="ADMIN">Admin</option><option value="OWNER">Owner</option></select></label>
+            <fieldset><legend>Penempatan outlet</legend><div id="new-user-outlets" class="outlet-options"></div><small class="muted">Pilih minimal satu outlet. Owner otomatis dapat mengakses semua outlet.</small></fieldset>
+            <p id="create-user-error" class="error" role="alert"></p>
+            <button id="create-user" class="button primary full" type="submit">Buat akun pengguna</button>
+          </form>
+          <div class="surface user-directory"><div class="directory-heading"><div><p class="eyebrow">DIREKTORI TIM</p><h2>Pengguna terdaftar</h2></div><div class="user-filters"><input id="user-search" type="search" placeholder="Cari nama atau email"><select id="user-status-filter"><option value="ACTIVE">Aktif</option><option value="ALL">Semua status</option><option value="INACTIVE">Nonaktif</option></select></div></div><div id="user-list"><div class="empty-state compact">Memuat pengguna...</div></div></div>
+        </div>
+      </div></section>
+
+      <section id="page-settings" class="page"><div class="content-width settings-page">
+        <div class="page-title"><div><p class="eyebrow">PENGATURAN USAHA</p><h1>Identitas, outlet, dan perangkat</h1><p class="muted">Pengaturan ini dipakai bersama oleh POS web, Android PWA, Windows PWA, laporan, dan struk.</p></div><button id="refresh-settings" class="button secondary">Muat ulang</button></div>
+        <form id="business-settings-form" class="surface settings-section">
+          <div class="settings-section-head"><div><p class="eyebrow">IDENTITAS USAHA</p><h2>Informasi pada struk dan dokumen</h2></div><span class="status-badge approved">OWNER</span></div>
+          <div class="form-grid compact settings-business-grid">
+            <label>Nama usaha<input id="setting-business-name" required></label>
+            <label>Nama legal / badan usaha<input id="setting-business-legal"></label>
+            <label>Telepon<input id="setting-business-phone" inputmode="tel"></label>
+            <label>Email<input id="setting-business-email" type="email"></label>
+            <label>NPWP / identitas pajak<input id="setting-business-tax"></label>
+            <label>Alamat<textarea id="setting-business-address" rows="3"></textarea></label>
+            <label class="settings-wide">Pesan penutup struk<input id="setting-business-footer" maxlength="160" placeholder="Terima kasih telah berbelanja."></label>
+          </div>
+          <div class="button-row"><button class="button primary" type="submit">Simpan identitas usaha</button></div>
+        </form>
+
+        <div class="settings-split">
+          <div class="surface settings-section">
+            <div class="settings-section-head"><div><p class="eyebrow">OUTLET</p><h2>Cabang dan nomor struk</h2></div><button id="new-outlet-setting" class="button secondary" type="button">Outlet baru</button></div>
+            <div id="settings-outlet-list" class="settings-directory"></div>
+          </div>
+          <form id="outlet-settings-form" class="surface settings-section settings-editor">
+            <input id="setting-outlet-id" type="hidden">
+            <p id="setting-outlet-mode" class="eyebrow">OUTLET BARU</p><h2 id="setting-outlet-title">Tambahkan outlet</h2>
+            <div class="form-grid compact">
+              <label>Kode outlet<input id="setting-outlet-code" maxlength="10" required placeholder="UTM"></label>
+              <label>Awalan nomor struk<input id="setting-outlet-prefix" maxlength="10" required placeholder="UTM"></label>
+              <label>Nama outlet<input id="setting-outlet-name" required></label>
+              <label>Telepon<input id="setting-outlet-phone" inputmode="tel"></label>
+              <label>Zona waktu<select id="setting-outlet-timezone"><option value="Asia/Jakarta">WIB · Jakarta</option><option value="Asia/Makassar">WITA · Makassar</option><option value="Asia/Jayapura">WIT · Jayapura</option></select></label>
+              <label>Alamat<textarea id="setting-outlet-address" rows="3"></textarea></label>
+              <label class="settings-wide">Pesan struk khusus outlet<input id="setting-outlet-footer" maxlength="160" placeholder="Kosongkan untuk memakai pesan usaha"></label>
+            </div>
+            <label class="switch-row"><input id="setting-outlet-active" type="checkbox" checked><span><strong>Outlet aktif</strong><small>Dapat dipilih untuk transaksi dan operasional.</small></span></label>
+            <p id="outlet-settings-error" class="error"></p><button class="button primary full" type="submit">Simpan outlet</button>
+          </form>
+        </div>
+
+        <div class="settings-split">
+          <div class="surface settings-section">
+            <div class="settings-section-head"><div><p class="eyebrow">LOKASI STOK</p><h2>Toko, gudang, dan transit</h2></div><button id="new-location-setting" class="button secondary" type="button">Lokasi baru</button></div>
+            <div id="settings-location-list" class="settings-directory"></div>
+          </div>
+          <form id="location-settings-form" class="surface settings-section settings-editor">
+            <input id="setting-location-id" type="hidden">
+            <p id="setting-location-mode" class="eyebrow">LOKASI BARU</p><h2 id="setting-location-title">Tambahkan lokasi stok</h2>
+            <div class="form-grid compact">
+              <label>Outlet<select id="setting-location-outlet"></select></label>
+              <label>Jenis<select id="setting-location-kind"><option value="STORE">Toko / area jual</option><option value="WAREHOUSE">Gudang</option><option value="TRANSIT">Transit</option></select></label>
+              <label>Kode lokasi<input id="setting-location-code" maxlength="20" required></label>
+              <label>Nama lokasi<input id="setting-location-name" required></label>
+            </div>
+            <label class="switch-row"><input id="setting-location-active" type="checkbox" checked><span><strong>Lokasi aktif</strong><small>Dapat dipakai untuk penerimaan dan pergerakan stok.</small></span></label>
+            <p id="location-settings-error" class="error"></p><button class="button primary full" type="submit">Simpan lokasi</button>
+          </form>
+        </div>
+
+        <section class="surface settings-section system-health">
+          <div class="settings-section-head"><div><p class="eyebrow">KESEHATAN SISTEM</p><h2>Pemeriksaan data operasional</h2><p class="muted">Memeriksa konsistensi stok, pembayaran, piutang, hutang, shift, dan sinkronisasi.</p></div><button id="refresh-system-health" class="button secondary" type="button">Periksa sekarang</button></div>
+          <div id="system-health-summary" class="health-summary loading"><div><span class="health-indicator"></span><strong>Menunggu pemeriksaan</strong><small>Hasil hanya dapat dilihat oleh Owner.</small></div></div>
+          <div id="system-health-checks" class="health-checks"><div class="empty-state compact">Pemeriksaan belum dijalankan.</div></div>
+        </section>
+
+        <form id="device-settings-form" class="surface settings-section">
+          <div class="settings-section-head"><div><p class="eyebrow">PERANGKAT INI</p><h2>Kasir dan printer struk</h2><p class="muted">Berlaku hanya untuk browser atau PWA yang sedang digunakan.</p></div><span id="setting-device-id" class="device-code"></span></div>
+          <div class="form-grid compact settings-device-grid">
+            <label>Nama perangkat<input id="setting-device-name" required></label>
+            <label>Terpasang di outlet<select id="setting-device-outlet"></select></label>
+            <label>Lebar kertas<select id="setting-device-paper"><option value="80">80 mm</option><option value="58">58 mm</option></select></label>
+            <label>Jumlah salinan<select id="setting-device-copies"><option value="1">1 lembar</option><option value="2">2 lembar</option><option value="3">3 lembar</option></select></label>
+          </div>
+          <label class="switch-row"><input id="setting-device-auto-print" type="checkbox"><span><strong>Cetak otomatis setelah pembayaran</strong><small>Dialog printer akan dibuka setelah transaksi berhasil.</small></span></label>
+          <div class="pwa-install-row"><div><strong>Pasang sebagai aplikasi</strong><small id="install-app-status">Dapat dipasang di Android atau Windows dari browser yang mendukung.</small></div><button id="install-app" class="button secondary" type="button">Pasang aplikasi</button></div>
+          <p id="device-settings-error" class="error"></p><button class="button primary" type="submit">Simpan perangkat ini</button>
+        </form>
+      </div></section>
+
+      <section id="page-shift" class="page"><div class="content-width"><div class="page-title"><div><p class="eyebrow">KONTROL KAS</p><h1>Shift kasir</h1></div><span id="shift-status" class="pill">Belum dibuka</span></div><div class="shift-grid"><div class="surface"><p class="eyebrow">STATUS SHIFT</p><div id="shift-detail" class="shift-detail"></div><div id="open-shift-form"><label>Modal awal kas<input id="opening-cash" type="number" min="0" value="300000"></label><button id="open-shift" class="button primary">Buka shift</button></div><div id="close-shift-form" class="hidden"><label>Kas fisik saat tutup<input id="closing-cash" type="number" min="0"></label><button id="close-shift" class="button primary">Tutup dan hitung selisih</button></div></div><div class="surface"><p class="eyebrow">KAS MASUK / KELUAR</p><label>Jenis<select id="cash-type"><option value="CASH_OUT">Kas keluar</option><option value="CASH_IN">Kas masuk</option></select></label><label>Jumlah<input id="cash-amount" type="number" min="1"></label><label>Catatan<input id="cash-note" placeholder="Contoh: beli plastik"></label><button id="cash-movement" class="button secondary">Catat pergerakan</button><div id="cash-history"></div></div></div></div></section>
+
+      <section id="page-relations" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">PELANGGAN & PIUTANG</p><h1>Relasi bisnis</h1><p class="muted">Kelola profil pelanggan, plafon kredit, tagihan berjalan, dan pembayaran dengan jejak yang lengkap.</p></div><button id="new-customer" class="button primary">Tambah pelanggan</button></div>
+        <div id="customer-account-metrics" class="metrics"></div>
+        <div id="customer-aging-buckets" class="customer-aging-buckets"></div>
+        <div class="customer-account-layout">
+          <div class="surface customer-directory">
+            <div class="settings-section-head"><div><p class="eyebrow">DIREKTORI PELANGGAN</p><h2>Saldo dan fasilitas kredit</h2></div><input id="customer-account-search" type="search" placeholder="Cari nama, kode, atau telepon"></div>
+            <div id="customer-list" class="customer-account-list"></div>
+          </div>
+          <div id="supplier-panel" class="surface"><p class="eyebrow">SUPPLIER BARU</p><div class="form-grid compact"><label>Nama<input id="supplier-name"></label><label>Telepon<input id="supplier-phone"></label><label>Alamat<input id="supplier-address"></label></div><button id="save-supplier" class="button primary">Simpan supplier</button><div id="supplier-list" class="relation-list"></div></div>
+        </div>
+      </div></section>
+
+      <section id="page-promotions" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">MESIN PROMO 2.0</p><h1>Promo terjadwal dan konsisten</h1><p class="muted">Satu aturan yang sama dipakai POS online, offline, Android PWA, dan Windows PWA.</p></div><span id="promo-version" class="pill success">Aturan aktif</span></div>
+        <div class="promo-advanced-layout">
+          <form id="promotion-form" class="surface promo-advanced-editor">
+            <section class="promo-editor-section"><p class="eyebrow">IDENTITAS PROMO</p><div class="form-grid compact"><label>Kode promo<input id="promo-code" maxlength="30" required placeholder="GROSIR5"></label><label>Nama promo<input id="promo-name" required placeholder="Diskon grosir Lip Tint"></label><label>Jenis promo<select id="promo-type"><option value="PERCENT_ITEM">Diskon % barang</option><option value="FIXED_ITEM">Potongan rupiah / pcs</option><option value="FIXED_ORDER">Potongan rupiah total belanja</option><option value="SPECIAL_PRICE">Harga khusus / pcs</option><option value="PERCENT_ORDER">Diskon % total belanja</option><option value="BUY_X_GET_Y">Beli X gratis Y</option><option value="BUNDLE_FIXED">Paket bundling</option></select></label></div></section>
+            <section class="promo-editor-section"><p class="eyebrow">SASARAN & SYARAT</p><div class="form-grid compact">
+              <label>Sasaran<select id="promo-target-type"><option value="ALL">Semua barang</option><option value="PRODUCT">Produk tertentu</option><option value="CATEGORY">Kategori</option><option value="BRAND">Merek</option></select></label>
+              <label id="promo-target-product-wrap" class="hidden">Produk<select id="promo-target-product"></select></label>
+              <label id="promo-target-category-wrap" class="hidden">Kategori<input id="promo-category" list="product-category-options"></label>
+              <label id="promo-target-brand-wrap" class="hidden">Merek<input id="promo-brand" list="product-brand-options"></label>
+              <label>Kelompok pelanggan<select id="promo-customer-group"><option value="ANY">Semua pelanggan</option><option value="retail">Eceran</option><option value="wholesale">Grosir / member</option></select></label>
+              <label>Minimal jumlah dasar<input id="promo-min-qty" type="number" min="0" value="1"></label>
+              <label>Minimal total belanja<input id="promo-min-basket" type="number" min="0" value="0"></label>
+            </div></section>
+            <section id="promo-value-section" class="promo-editor-section"><p class="eyebrow">MANFAAT PROMO</p><div class="form-grid compact">
+              <label id="promo-value-wrap">Nilai promo<input id="promo-value" type="number" min="0" value="5"></label>
+              <label id="promo-max-wrap">Maksimum diskon<input id="promo-max" type="number" min="0" value="100000"></label>
+              <label id="promo-buy-wrap" class="hidden">Jumlah beli<input id="promo-buy-qty" type="number" min="1" value="2"></label>
+              <label id="promo-free-wrap" class="hidden">Jumlah gratis<input id="promo-free-qty" type="number" min="1" value="1"></label>
+              <label id="promo-reward-product-wrap" class="hidden">Produk gratis<select id="promo-reward-product"><option value="">Produk yang sama</option></select></label>
+              <label id="promo-repeat-wrap" class="hidden">Perulangan<select id="promo-repeat-mode"><option value="ONCE">Berlaku sekali</option><option value="MULTIPLE">Berlaku kelipatan syarat</option></select></label>
+              <label id="promo-repeat-cap-wrap" class="hidden">Maksimal kelipatan<input id="promo-repeat-cap" type="number" min="1" placeholder="Tanpa batas"></label>
+            </div>
+            <div id="promo-bundle-fields" class="promo-bundle-fields hidden"><label>Produk paket 1<select id="promo-bundle-product-a"></select></label><label>Qty<input id="promo-bundle-qty-a" type="number" min="1" value="1"></label><label>Produk paket 2<select id="promo-bundle-product-b"></select></label><label>Qty<input id="promo-bundle-qty-b" type="number" min="1" value="1"></label></div></section>
+            <section class="promo-editor-section"><p class="eyebrow">JADWAL</p><div class="form-grid compact"><label>Mulai<input id="promo-starts" type="datetime-local" required></label><label>Berakhir<input id="promo-ends" type="datetime-local" required></label><label>Jam mulai<input id="promo-time-start" type="time"></label><label>Jam selesai<input id="promo-time-end" type="time"></label></div><div id="promo-days" class="promo-day-options"><label><input type="checkbox" value="1" checked>Sen</label><label><input type="checkbox" value="2" checked>Sel</label><label><input type="checkbox" value="3" checked>Rab</label><label><input type="checkbox" value="4" checked>Kam</label><label><input type="checkbox" value="5" checked>Jum</label><label><input type="checkbox" value="6" checked>Sab</label><label><input type="checkbox" value="0" checked>Min</label></div></section>
+            <section class="promo-editor-section"><p class="eyebrow">KONTROL</p><div class="form-grid compact"><label>Prioritas<input id="promo-priority" type="number" min="1" max="999" value="50"></label><label>Batas pemakaian total<input id="promo-limit-total" type="number" min="1" placeholder="Tanpa batas"></label><label>Batas per pelanggan<input id="promo-limit-customer" type="number" min="1" placeholder="Tanpa batas"></label></div><label class="switch-row"><input id="promo-stackable" type="checkbox"><span><strong>Boleh digabung dengan promo lain</strong><small>Jika mati, promo prioritas tertinggi mengunci barang terkait.</small></span></label></section>
+            <div class="rule-block"><span>RINGKASAN ATURAN</span><p id="promo-summary">Lengkapi aturan promo.</p></div>
+            <div class="promo-simulation-bar"><label>Uji pada produk<select id="promo-simulation-product"></select></label><label>Jumlah pcs<input id="promo-simulation-qty" type="number" min="1" value="3"></label><button id="simulate-promo" class="button secondary" type="button">Simulasikan</button></div>
+            <div id="promo-result" class="promo-result"></div><p id="promotion-error" class="error"></p>
+            <button id="publish-promo" class="button primary full" type="submit">Publikasikan aturan baru</button>
+          </form>
+          <div class="surface promo-rule-directory"><div class="settings-section-head"><div><p class="eyebrow">VERSI PROMO</p><h2>Aturan diterbitkan</h2></div><select id="promo-status-filter"><option value="ACTIVE">Aktif & terjadwal</option><option value="ALL">Semua versi</option><option value="RETIRED">Dihentikan</option></select></div><div id="promotion-list"></div></div>
+        </div>
+      </div></section>
+    </main>
+  </div>
+
+  <dialog id="customer-dialog"><form id="customer-form" class="dialog-card customer-dialog"><div class="comparison-heading"><div><p class="eyebrow">PROFIL PELANGGAN</p><h2 id="customer-dialog-title">Tambah pelanggan</h2></div><button id="close-customer-dialog" class="icon-button" type="button">×</button></div><input id="edit-customer-id" type="hidden"><div class="form-grid compact"><label>Nama<input id="customer-name" required></label><label>Telepon<input id="customer-phone"></label><label>Email<input id="customer-email" type="email"></label><label>Kelompok harga<select id="customer-new-group"><option value="retail">Eceran</option><option value="wholesale">Grosir</option></select></label></div><label>Alamat<textarea id="customer-address" rows="2"></textarea></label><label>Catatan<textarea id="customer-notes" rows="2"></textarea></label><label class="switch-row"><input id="customer-credit-enabled" type="checkbox"><span><strong>Aktifkan fasilitas kredit</strong><small>Pelanggan dapat membayar sebagian atau mencatat piutang saat checkout.</small></span></label><div id="customer-credit-fields" class="form-grid compact hidden"><label>Batas kredit<input id="customer-credit-limit" type="number" min="0" value="0"></label><label>Jatuh tempo<input id="customer-credit-days" type="number" min="0" max="365" value="30"><small>Hari setelah transaksi</small></label></div><p id="customer-form-error" class="error"></p><div class="button-row"><button id="cancel-customer-dialog" class="button secondary" type="button">Batal</button><button class="button primary" type="submit">Simpan pelanggan</button></div></form></dialog>
+
+  <dialog id="customer-statement-dialog"><div class="dialog-card customer-statement-dialog"><div class="comparison-heading"><div><p class="eyebrow">REKENING PELANGGAN</p><h2 id="statement-customer-name">Pelanggan</h2></div><button id="close-customer-statement" class="icon-button" type="button">×</button></div><div id="statement-summary" class="statement-summary"></div><form id="customer-payment-form" class="customer-payment-form"><p class="eyebrow">CATAT PEMBAYARAN</p><div class="form-grid compact"><label>Nominal<input id="customer-payment-amount" type="number" min="1" required></label><label>Metode<select id="customer-payment-method"><option value="CASH">Tunai</option><option value="QRIS">QRIS</option><option value="TRANSFER">Transfer</option><option value="EDC">Kartu / EDC</option></select></label><label id="customer-payment-reference-wrap" class="hidden">Referensi<input id="customer-payment-reference"></label><label>Catatan<input id="customer-payment-note"></label></div><p id="customer-payment-error" class="error"></p><button class="button primary" type="submit">Terima pembayaran</button></form><div><p class="eyebrow">FAKTUR BELUM LUNAS</p><div id="statement-invoices" class="table-wrap"></div></div><div><p class="eyebrow">MUTASI REKENING</p><div id="statement-entries" class="table-wrap"></div></div></div></dialog>
+
+  <dialog id="supplier-statement-dialog"><div class="dialog-card customer-statement-dialog"><div class="comparison-heading"><div><p class="eyebrow">HUTANG SUPPLIER</p><h2 id="statement-supplier-name">Supplier</h2></div><button id="close-supplier-statement" class="icon-button" type="button">×</button></div><div id="supplier-statement-summary" class="statement-summary"></div><form id="supplier-payment-form" class="customer-payment-form"><p class="eyebrow">CATAT PEMBAYARAN</p><div class="form-grid compact"><label>Nominal<input id="supplier-payment-amount" type="number" min="1" required></label><label>Metode<select id="supplier-payment-method"><option value="TRANSFER">Transfer</option><option value="CASH">Tunai</option><option value="QRIS">QRIS</option><option value="EDC">Kartu / EDC</option></select></label><label id="supplier-payment-reference-wrap">Referensi<input id="supplier-payment-reference"></label><label>Catatan<input id="supplier-payment-note"></label></div><p id="supplier-payment-error" class="error"></p><button class="button primary" type="submit">Catat pembayaran supplier</button></form><div><p class="eyebrow">FAKTUR PEMBELIAN</p><div id="supplier-statement-bills" class="table-wrap"></div></div><div><p class="eyebrow">MUTASI HUTANG</p><div id="supplier-statement-entries" class="table-wrap"></div></div></div></dialog>
+
+  <dialog id="sale-adjustment-dialog"><form id="sale-adjustment-form" class="dialog-card adjustment-dialog"><div class="comparison-heading"><div><p class="eyebrow">UBAH HARGA & DISKON</p><h2 id="adjustment-title">Harga jual manual</h2><p class="muted">Harga dapat disesuaikan untuk transaksi ini dan selalu tercatat pada audit.</p></div><button id="close-sale-adjustment" class="icon-button" type="button">×</button></div><div id="adjustment-target" class="adjustment-target"></div><div class="adjustment-fields"><label>Jenis penyesuaian<select id="adjustment-mode"></select></label><label>Nilai<input id="adjustment-value" type="number" min="0.01" step="any" required placeholder="Contoh: 25000"></label></div><label>Alasan<textarea id="adjustment-reason" rows="3" minlength="5" required placeholder="Contoh: harga rak belum diperbarui"></textarea></label><div id="supervisor-approval-fields" class="supervisor-approval"><div><strong>Persetujuan Owner/Admin</strong><small>Kata sandi tidak disimpan. Izin hanya berlaku untuk keranjang ini selama 5 menit.</small></div><label>Email Owner/Admin<input id="approver-email" type="email" autocomplete="username"></label><label>Kata sandi<input id="approver-password" type="password" autocomplete="current-password"></label></div><div id="self-approval-note" class="self-approval-note hidden"><strong>Disetujui dengan akun Anda</strong><small>Karena Anda masuk sebagai Owner/Admin, tidak perlu memasukkan kata sandi lagi.</small></div><p id="adjustment-error" class="error"></p><div class="button-row"><button id="cancel-sale-adjustment" class="button secondary" type="button">Batal</button><button id="approve-adjustment" class="button primary" type="submit">Terapkan harga</button></div></form></dialog>
+
+  <dialog id="barcode-camera-dialog"><div class="dialog-card barcode-camera-dialog"><div class="comparison-heading"><div><p class="eyebrow">SCAN BARCODE DENGAN KAMERA</p><h2>Arahkan kamera ke barcode</h2></div><button id="close-barcode-camera" class="icon-button" type="button">×</button></div><div class="barcode-camera-stage"><video id="barcode-camera-video" autoplay muted playsinline></video><div class="barcode-camera-guide"></div></div><p id="barcode-camera-status" class="muted">Menyiapkan kamera...</p><button id="cancel-barcode-camera" class="button secondary full" type="button">Batal</button></div></dialog>
+
+  <dialog id="payment-dialog"><form id="payment-form" class="dialog-card checkout-dialog"><div class="comparison-heading"><div><p class="eyebrow">PEMBAYARAN</p><h2 id="payment-total">Rp0</h2></div><button id="close-payment" class="icon-button" type="button">×</button></div><label>Cara bayar<select id="payment-mode"><option value="SINGLE">Satu metode</option><option value="SPLIT">Gabungkan beberapa metode</option></select></label><div id="payment-lines"></div><button id="add-payment-line" class="button secondary full hidden" type="button">Tambah metode pembayaran</button><div class="checkout-balance"><div><span>Total dialokasikan</span><strong id="payment-allocated">Rp0</strong></div><div><span>Sisa pembayaran</span><strong id="payment-remaining">Rp0</strong></div><div class="checkout-change"><span>Kembalian</span><strong id="payment-change">Rp0</strong></div></div><p id="payment-error" class="error"></p><div class="button-row"><button id="cancel-payment" class="button secondary" type="button">Batal</button><button id="confirm-payment" class="button primary" type="submit">Selesaikan transaksi</button></div></form></dialog>
+  <dialog id="held-sales-dialog"><div class="dialog-card held-sales-dialog"><div class="comparison-heading"><div><p class="eyebrow">TRANSAKSI DITAHAN</p><h2>Lanjutkan keranjang</h2></div><button id="close-held-sales" class="icon-button" type="button">×</button></div><div id="held-sales-list"><div class="empty-state compact">Belum ada transaksi ditahan.</div></div></div></dialog>
+  <dialog id="receipt-dialog"><div class="dialog-card receipt-dialog"><div id="receipt-content"></div><div class="button-row no-print"><button id="close-receipt" class="button secondary" type="button">Transaksi baru</button><button id="print-receipt" class="button primary" type="button">Cetak struk</button></div></div></dialog>
+  <dialog id="product-dialog"><form id="product-form" class="dialog-card product-editor">
+    <div class="comparison-heading"><div><p id="product-dialog-eyebrow" class="eyebrow">PRODUK BARU</p><h2 id="product-dialog-title">Tambah produk</h2><p class="muted">Setiap varian mempunyai SKU, barcode, harga, dan stok sendiri.</p></div><button id="close-product-dialog" class="icon-button" type="button">×</button></div>
+    <input id="edit-product-id" type="hidden">
+    <section class="product-editor-section"><p class="eyebrow">IDENTITAS BARANG</p><div class="form-grid compact"><label>SKU<input id="new-sku" required></label><label>Nama produk<input id="new-name" required></label><label>Kategori<input id="new-category" list="product-category-options" required></label><label>Merek<input id="new-brand" list="product-brand-options"></label><label>Kelompok varian<input id="new-variant-group" placeholder="Contoh: Lip Tint Velvet"></label><label>Nama varian<input id="new-variant-name" placeholder="Contoh: Rose 01"></label><label>Batas stok minimum<input id="new-min-stock" type="number" min="0" value="0"></label><label class="switch-row editor-switch"><input id="new-track-expiry" type="checkbox"><span><strong>Pantau batch & EXP</strong><small>Aktifkan untuk kosmetik atau barang kedaluwarsa.</small></span></label></div><datalist id="product-category-options"></datalist><datalist id="product-brand-options"></datalist></section>
+    <section class="product-editor-section"><div class="product-editor-section-head"><div><p class="eyebrow">SATUAN & BARCODE</p><strong>Pcs, lusin, karton, atau satuan lainnya</strong></div><button id="add-product-unit" type="button" class="button secondary">Tambah satuan</button></div><div id="product-units-editor"></div><small class="muted">Harus ada tepat satu satuan dasar dengan isi 1.</small></section>
+    <section class="product-editor-section"><p class="eyebrow">HARGA JUAL</p><div class="form-grid compact"><label>Harga ecer / pcs<input id="new-retail-price" type="number" min="1" required></label><label>Harga pelanggan grosir / pcs<input id="new-wholesale-price" type="number" min="0"></label><label>Minimal harga bertingkat (pcs)<input id="new-tier-qty" type="number" min="0"></label><label>Harga bertingkat / pcs<input id="new-tier-price" type="number" min="0"></label></div></section>
+    <p id="product-error" class="error"></p><div class="button-row"><button id="cancel-product" type="button" class="button secondary">Batal</button><button id="save-product-button" type="submit" class="button primary">Simpan produk</button></div>
+  </form></dialog>
+  <dialog id="supplier-comparison-dialog"><div class="dialog-card comparison-dialog"><div class="comparison-heading"><div><p class="eyebrow">PERBANDINGAN SUPPLIER</p><h2 id="comparison-product-name">Histori harga</h2></div><button id="close-supplier-comparison" class="icon-button" type="button">×</button></div><div id="supplier-comparison-content"></div></div></dialog>
+  <dialog id="edit-user-dialog"><form id="edit-user-form" class="dialog-card wide user-editor"><div class="comparison-heading"><div><p class="eyebrow">HAK AKSES PENGGUNA</p><h2 id="edit-user-title">Ubah pengguna</h2><p id="edit-user-email" class="muted"></p></div><button id="close-user-editor" class="icon-button" type="button">×</button></div><input id="edit-user-id" type="hidden"><div class="form-grid compact"><label>Nama lengkap<input id="edit-user-name" required></label><label>Peran<select id="edit-user-role"><option value="CASHIER">Kasir</option><option value="PURCHASING">Pembelian</option><option value="WAREHOUSE">Gudang</option><option value="ADMIN">Admin</option><option value="OWNER">Owner</option></select></label></div><fieldset><legend>Penempatan outlet</legend><div id="edit-user-outlets" class="outlet-options"></div><small class="muted">Owner otomatis memiliki akses ke semua outlet.</small></fieldset><label class="switch-row"><input id="edit-user-active" type="checkbox"><span><strong>Akun aktif</strong><small>Pengguna dapat masuk dan bekerja sesuai perannya.</small></span></label><p id="edit-user-error" class="error" role="alert"></p><div class="button-row"><button id="cancel-user-edit" class="button secondary" type="button">Batal</button><button id="save-user" class="button primary" type="submit">Simpan perubahan</button></div></form></dialog>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="/vendor/zxing-browser.min.js" defer></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

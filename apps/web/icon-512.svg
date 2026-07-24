@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Kasir Nusa">
+  <rect width="512" height="512" rx="112" fill="#174c4f"/>
+  <path d="M112 125h77v94l83-94h96L264 241l112 146h-99l-72-99-16 18v81h-77z" fill="#fffdf8"/>
+  <circle cx="381" cy="131" r="35" fill="#de7b45"/>
+</svg>
