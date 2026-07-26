@@ -46,7 +46,15 @@ kode frontend, dokumentasi publik, atau chat.
 
 ### Terakhir dikonfirmasi live
 
-- **Paket Operasional v1.22.0**
+- **Paket Operasional v1.23.0**
+- SQL `202607260028_loyalty_crm_vouchers.sql` terkonfirmasi tersedia di
+  Supabase melalui pemeriksaan tabel produksi.
+- Commit rilis diperbaiki memakai identitas GitHub
+  `ayanacosmetics <budiwirayu0412@gmail.com>` agar diterima integrasi Vercel.
+- Deployment Vercel `dpl_6D2intxTbmuHHgbDpQQikXfiDf7s` berstatus Ready dan
+  alias `kasir-nusa-pos.vercel.app` aktif pada 26 Juli 2026.
+- Verifikasi produksi mengembalikan API `1.23.0-cloud`, UI `v1.23.0`, aset
+  `app.js?v=45`, dan cache `nusa-pos-shell-v45`.
 - SQL `202607260025_pos_speed_customer_service.sql` berhasil diterapkan pada
   Supabase sebelum deployment.
 - Hotfix nomor struk memperbaiki `document_sequences` produksi dari tidak ada
@@ -86,10 +94,10 @@ kode frontend, dokumentasi publik, atau chat.
 Penguatan `202607260026_receipt_sequence_collision_fix.sql` sudah tercakup dan
 diterapkan melalui migrasi `027`; tidak ada SQL v1.21 yang masih tertunda.
 
-### Kandidat v1.23 siap diterapkan
+### Rilis v1.23 dikonfirmasi live
 
-- Source **Paket Operasional v1.23.0** selesai dan 125 pengujian otomatis lulus.
-- Satu migrasi tertunda: `202607260028_loyalty_crm_vouchers.sql`.
+- **Paket Operasional v1.23.0** selesai, live, dan 125 pengujian otomatis lulus.
+- Migrasi `202607260028_loyalty_crm_vouchers.sql` sudah diterapkan.
 - Migrasi menambahkan pengaturan loyalitas, tier Member/Silver/Gold, mutasi
   poin, voucher berkode, kuota total/per pelanggan, satu kali pakai, masa
   berlaku, outlet, segmen aktif/tidak aktif/nilai tinggi/ulang tahun, serta
@@ -97,8 +105,9 @@ diterapkan melalui migrasi `027`; tidak ada SQL v1.21 yang masih tertunda.
 - Checkout memakai `complete_sale_v7`; void memakai `void_sale_v2`.
 - Profil pelanggan menyimpan tanggal lahir dan persetujuan WhatsApp. Tombol
   WhatsApp hanya tersedia setelah persetujuan dan selalu memerlukan klik kasir.
-- UI kandidat `v1.23.0`, API `1.23.0-cloud`, cache `nusa-pos-shell-v45`.
-- Jangan deploy kandidat ini sebelum migrasi `028` berhasil.
+- UI `v1.23.0`, API `1.23.0-cloud`, cache `nusa-pos-shell-v45`.
+- Deployment produksi `dpl_6D2intxTbmuHHgbDpQQikXfiDf7s` berstatus Ready dan
+  alias utama sudah diverifikasi.
 
 ### Rilis v1.22 dikonfirmasi live
 
@@ -286,8 +295,7 @@ migrasi `027`, 119 pengujian otomatis, dan deployment produksi selesai pada
 - dashboard pelanggan aktif, tidak aktif, dan nilai belanja.
 
 Status: implementasi domain, database, API, UI, privasi WhatsApp, backup, void,
-dan 125 pengujian otomatis selesai. Menunggu penerapan migrasi `028` dan
-deployment produksi.
+125 pengujian otomatis, migrasi `028`, dan deployment produksi selesai.
 
 ### v1.24 — Operasional karyawan
 
