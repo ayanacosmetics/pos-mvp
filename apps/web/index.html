@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#174c4f">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=47">
+  <link rel="stylesheet" href="/styles.css?v=48">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -94,7 +94,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Operasional · v1.23.2</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Operasional · v1.23.3</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -425,7 +425,11 @@
             <label>Lebar kertas<select id="setting-device-paper"><option value="80">80 mm</option><option value="58">58 mm</option></select></label>
             <label>Jumlah salinan<select id="setting-device-copies"><option value="1">1 lembar</option><option value="2">2 lembar</option><option value="3">3 lembar</option></select></label>
           </div>
-          <label class="switch-row"><input id="setting-device-auto-print" type="checkbox"><span><strong>Cetak otomatis setelah pembayaran</strong><small>Dialog printer akan dibuka setelah transaksi berhasil.</small></span></label>
+          <label class="switch-row"><input id="setting-device-auto-print" type="checkbox"><span><strong>Cetak langsung setelah pembayaran</strong><small>Mengirim struk ESC/POS ke printer Bluetooth yang sudah dihubungkan.</small></span></label>
+          <section class="printer-connection-card">
+            <div><span id="printer-status-dot" class="printer-status-dot"></span><strong id="printer-status">Memeriksa dukungan printer...</strong><small id="printer-status-help">Bluetooth Classic memakai Web Serial tanpa aplikasi berbayar.</small></div>
+            <div class="printer-actions"><button id="connect-printer" class="button secondary" type="button">Hubungkan printer</button><button id="test-printer" class="button primary" type="button" disabled>Tes cetak</button><button id="disconnect-printer" class="link-button hidden" type="button">Putuskan</button></div>
+          </section>
           <div class="pwa-install-row"><div><strong>Pasang sebagai aplikasi</strong><small id="install-app-status">Dapat dipasang di Android atau Windows dari browser yang mendukung.</small></div><button id="install-app" class="button secondary" type="button">Pasang aplikasi</button></div>
           <p id="device-settings-error" class="error"></p><button class="button primary" type="submit">Simpan perangkat ini</button>
         </form>
@@ -531,6 +535,6 @@
   <dialog id="edit-user-dialog"><form id="edit-user-form" class="dialog-card wide user-editor"><div class="comparison-heading"><div><p class="eyebrow">HAK AKSES PENGGUNA</p><h2 id="edit-user-title">Ubah pengguna</h2><p id="edit-user-email" class="muted"></p></div><button id="close-user-editor" class="icon-button" type="button">×</button></div><input id="edit-user-id" type="hidden"><div class="form-grid compact"><label>Nama lengkap<input id="edit-user-name" required></label><label>Peran<select id="edit-user-role"><option value="CASHIER">Kasir</option><option value="PURCHASING">Pembelian</option><option value="WAREHOUSE">Gudang</option><option value="ADMIN">Admin</option><option value="OWNER">Owner</option></select></label></div><fieldset><legend>Penempatan outlet</legend><div id="edit-user-outlets" class="outlet-options"></div><small class="muted">Owner otomatis memiliki akses ke semua outlet.</small></fieldset><label class="switch-row"><input id="edit-user-active" type="checkbox"><span><strong>Akun aktif</strong><small>Pengguna dapat masuk dan bekerja sesuai perannya.</small></span></label><p id="edit-user-error" class="error" role="alert"></p><div class="button-row"><button id="cancel-user-edit" class="button secondary" type="button">Batal</button><button id="save-user" class="button primary" type="submit">Simpan perubahan</button></div></form></dialog>
   <div id="toast" class="toast" role="status"></div>
   <script src="/vendor/zxing-browser.min.js" defer></script>
-  <script type="module" src="/app.js?v=47"></script>
+  <script type="module" src="/app.js?v=48"></script>
 </body>
 </html>

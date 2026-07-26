@@ -46,6 +46,18 @@ kode frontend, dokumentasi publik, atau chat.
 
 ### Terakhir dikonfirmasi live
 
+- **Paket uji printer v1.23.3** memprioritaskan validasi printer fisik sebelum
+  roadmap fitur dilanjutkan.
+- Chrome/PWA Android dapat memilih printer Bluetooth Classic SPP melalui Web
+  Serial dan mengirim struk ESC/POS langsung tanpa aplikasi bridge berbayar.
+- Pengaturan perangkat menyediakan status, hubungkan/sambungkan ulang, tes
+  cetak, putuskan, lebar 58/80 mm, 1–3 salinan, dan cetak otomatis.
+- Izin printer yang pernah diberikan dipulihkan melalui `getPorts()`. Kegagalan
+  cetak tidak membatalkan transaksi; struk tetap dapat dicetak ulang.
+- Format ESC/POS memakai tampilan harga pelanggan sehingga alasan dan nominal
+  penyesuaian harga internal tetap tidak tercetak.
+- Tidak memerlukan SQL baru. Validasi otomatis berjumlah 129 pengujian; printer
+  fisik masih harus dikonfirmasi pengguna.
 - **Paket Operasional v1.23.2** mengganti panel navigasi kedua dengan accordion
   langsung di sidebar.
 - Menekan Penjualan, Barang & Stok, Relasi, Pertumbuhan, Analitik, atau Sistem
@@ -131,6 +143,15 @@ diterapkan melalui migrasi `027`; tidak ada SQL v1.21 yang masih tertunda.
 - Tidak memerlukan migrasi Supabase.
 - Validasi lokal: 127/127 pengujian otomatis dan inspeksi browser desktop/mobile
   lulus.
+
+### Paket uji printer v1.23.3
+
+- Driver ESC/POS Bluetooth Classic SPP memakai Web Serial Android.
+- UI koneksi dan tes printer tersedia pada Sistem → Perangkat.
+- Cetak manual, cetak ulang, shortcut P, dan cetak otomatis memakai jalur
+  printer langsung; browser tanpa Web Serial tetap memakai dialog sistem.
+- Versi UI `v1.23.3`, API `1.23.3-cloud`, cache `nusa-pos-shell-v48`.
+- Tidak memerlukan migrasi Supabase.
 
 ### Rilis v1.23 dikonfirmasi live
 

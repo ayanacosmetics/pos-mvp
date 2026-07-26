@@ -3,6 +3,7 @@ import { quoteBasket as quoteOffline } from './pricing.mjs';
 import { deviceIdentity, enqueueCommand, listCommands, migrateLegacyQueue, removeCommand, updateCommand } from './offline-store.mjs';
 import { clearStoredAuth, isAuthStorageEvent, loadAuth, saveAuth } from './auth-store.mjs';
 import { customerReceiptView } from './receipt.mjs';
+import { disconnectBluetoothPrinter, printEscPosReceipt, printEscPosTest, printerConnected, printerSelected, restoreGrantedPrinter, selectBluetoothPrinter, supportsBluetoothClassicPrinting } from './escpos-printer.mjs';
 
 const storedAuth = loadAuth();
 const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [] };
@@ -2169,6 +2170,103 @@ function settingOutletLabel(outletId) {
   return state.settings.outlets.find((outlet) => outlet.id === outletId)?.name ?? 'Tanpa outlet';
 }
 
+function printerContext() {
+  return {
+    business: state.business,
+    outlet: state.outlets.find((item) => item.id === state.activeOutletId) ?? {},
+    customer: state.lastReceipt?.customer,
+    cashier: state.session?.user?.displayName ?? state.session?.user?.name ?? 'Kasir Nusa'
+  };
+}
+
+function renderPrinterStatus(message = '') {
+  if (!el('printer-status')) return;
+  const supported = supportsBluetoothClassicPrinting();
+  const connected = printerConnected();
+  const selected = printerSelected();
+  const dot = el('printer-status-dot');
+  dot.className = `printer-status-dot ${connected ? 'ready' : supported ? 'warning' : 'error'}`;
+  el('printer-status').textContent = message || (connected
+    ? 'Printer Bluetooth terhubung'
+    : selected
+      ? 'Printer sudah diizinkan, belum tersambung'
+      : supported
+        ? 'Belum ada printer yang dipilih'
+        : 'Web Serial tidak tersedia');
+  el('printer-status-help').textContent = supported
+    ? 'Bluetooth Classic SPP · ESC/POS · tanpa aplikasi tambahan.'
+    : 'Gunakan Chrome Android versi 138 atau lebih baru.';
+  el('connect-printer').disabled = !supported;
+  el('connect-printer').textContent = selected ? 'Sambungkan ulang' : 'Hubungkan printer';
+  el('test-printer').disabled = !supported || !selected;
+  el('disconnect-printer').classList.toggle('hidden', !connected);
+}
+
+async function connectReceiptPrinter() {
+  const button = el('connect-printer');
+  button.disabled = true;
+  try {
+    await selectBluetoothPrinter();
+    renderPrinterStatus('Printer Bluetooth siap digunakan');
+    toast('Printer terhubung. Jalankan tes cetak.');
+  } catch (error) {
+    renderPrinterStatus(error.name === 'NotFoundError' ? 'Pemilihan printer dibatalkan' : 'Printer gagal dihubungkan');
+    if (error.name !== 'NotFoundError') toast(error.message);
+  } finally {
+    button.disabled = !supportsBluetoothClassicPrinting();
+  }
+}
+
+async function testReceiptPrinter() {
+  const button = el('test-printer');
+  button.disabled = true;
+  button.textContent = 'Mencetak...';
+  try {
+    await printEscPosTest(state.deviceSettings, printerContext());
+    renderPrinterStatus('Tes cetak berhasil dikirim');
+    toast('Tes cetak berhasil dikirim ke printer.');
+  } catch (error) {
+    renderPrinterStatus('Tes cetak gagal');
+    toast(error.message);
+  } finally {
+    button.textContent = 'Tes cetak';
+    button.disabled = !printerSelected();
+  }
+}
+
+async function disconnectReceiptPrinter() {
+  try {
+    await disconnectBluetoothPrinter();
+    renderPrinterStatus('Printer diputuskan');
+  } catch (error) {
+    toast(error.message);
+  }
+}
+
+async function printReceiptDirect(receipt, payments, { automatic = false } = {}) {
+  if (!receipt) return toast('Belum ada struk untuk dicetak.');
+  if (!supportsBluetoothClassicPrinting()) {
+    if (!automatic) window.print();
+    else toast('Cetak langsung memerlukan Chrome Android versi 138 atau lebih baru.');
+    return;
+  }
+  try {
+    if (!printerSelected()) {
+      if (automatic) return toast('Hubungkan printer Bluetooth sebelum mengaktifkan cetak langsung.');
+      await selectBluetoothPrinter();
+    }
+    el('receipt-dialog').classList.add('receipt-printing');
+    await printEscPosReceipt(receipt, payments ?? receipt.payments ?? [], state.deviceSettings, printerContext());
+    renderPrinterStatus('Struk berhasil dikirim');
+    toast('Struk berhasil dikirim ke printer.');
+  } catch (error) {
+    renderPrinterStatus('Cetak struk gagal');
+    toast(`${error.message} Struk tetap tersimpan dan dapat dicetak ulang.`);
+  } finally {
+    el('receipt-dialog').classList.remove('receipt-printing');
+  }
+}
+
 function renderSettings() {
   const business = state.business ?? {};
   el('setting-business-name').value = business.name ?? '';
@@ -2200,6 +2298,7 @@ function renderSettings() {
   el('setting-device-paper').value = String(state.deviceSettings.paperWidth ?? 80);
   el('setting-device-copies').value = String(state.deviceSettings.receiptCopies ?? 1);
   el('setting-device-auto-print').checked = Boolean(state.deviceSettings.autoPrint);
+  renderPrinterStatus();
 }
 
 async function loadSettings() {
@@ -2808,7 +2907,7 @@ function renderReceipt(receipt,payments){
   printStyle.textContent=`@media print{@page{size:${width}mm auto;margin:2mm}}`;
   el('whatsapp-receipt').classList.toggle('hidden',!(customer?.phone&&customer?.whatsapp_consent));
   el('receipt-dialog').showModal();
-  if(state.deviceSettings.autoPrint)setTimeout(()=>window.print(),250);
+  if(state.deviceSettings.autoPrint)setTimeout(()=>printReceiptDirect(receipt,payments,{automatic:true}),250);
 }
 
 function shareReceiptWhatsApp(){
@@ -2919,7 +3018,7 @@ function handlePosShortcut(event){
   if((event.key==='+'||event.key==='=')&&state.cart.length){event.preventDefault();changeQty(state.cart.length-1,1);return;}
   if(event.key==='-'&&state.cart.length){event.preventDefault();changeQty(state.cart.length-1,-1);return;}
   if(event.key.toLowerCase()==='h'&&state.cart.length){event.preventDefault();holdCurrentCart();return;}
-  if(event.key.toLowerCase()==='p'&&state.lastReceipt){event.preventDefault();renderReceipt(state.lastReceipt,state.lastReceipt.payments??state.paymentDraft);setTimeout(()=>window.print(),250);return;}
+  if(event.key.toLowerCase()==='p'&&state.lastReceipt){event.preventDefault();renderReceipt(state.lastReceipt,state.lastReceipt.payments??state.paymentDraft);setTimeout(()=>printReceiptDirect(state.lastReceipt,state.lastReceipt.payments??state.paymentDraft),250);return;}
   if(event.key.toLowerCase()==='r'){event.preventDefault();openPosHistory();}
 }
 
@@ -3222,7 +3321,7 @@ el('close-held-sales').addEventListener('click',()=>el('held-sales-dialog').clos
 el('held-sales-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-hold-id]');if(!row)return;if(event.target.closest('.resume-held-sale'))actOnHeldSale(row.dataset.holdId,'resume',row.dataset.local==='true');if(event.target.closest('.cancel-held-sale'))actOnHeldSale(row.dataset.holdId,'cancel',row.dataset.local==='true');});
 el('close-receipt').addEventListener('click',()=>el('receipt-dialog').close());
 el('whatsapp-receipt').addEventListener('click',shareReceiptWhatsApp);
-el('print-receipt').addEventListener('click',()=>window.print());
+el('print-receipt').addEventListener('click',()=>printReceiptDirect(state.lastReceipt,state.lastReceipt?.payments??state.paymentDraft));
 el('sync-button').addEventListener('click', syncQueue);
 el('find-return-sale').addEventListener('click',findReturnSale);
 el('return-receipt-search').addEventListener('keydown',(event)=>{if(event.key==='Enter'){event.preventDefault();findReturnSale();}});
@@ -3353,6 +3452,9 @@ el('new-location-setting').addEventListener('click', newLocationEditor);
 el('location-settings-form').addEventListener('submit', saveLocationSettings);
 el('settings-location-list').addEventListener('click',(event)=>{const row=event.target.closest('.edit-setting-location');if(row)editLocationSetting(row.dataset.locationId);});
 el('device-settings-form').addEventListener('submit', saveDeviceSettings);
+el('connect-printer').addEventListener('click', connectReceiptPrinter);
+el('test-printer').addEventListener('click', testReceiptPrinter);
+el('disconnect-printer').addEventListener('click', disconnectReceiptPrinter);
 el('new-customer').addEventListener('click',()=>openCustomerEditor());
 el('customer-form').addEventListener('submit',saveCustomer);
 el('close-customer-dialog').addEventListener('click',()=>el('customer-dialog').close());
@@ -3421,6 +3523,11 @@ window.addEventListener('appinstalled', () => {
   toast('Kasir Nusa berhasil dipasang di perangkat ini.');
 });
 updateInstallAppControl();
+restoreGrantedPrinter().then(()=>renderPrinterStatus()).catch(()=>renderPrinterStatus('Izin printer perlu dipilih ulang'));
+if (supportsBluetoothClassicPrinting()) {
+  navigator.serial.addEventListener('connect', async () => { await restoreGrantedPrinter(); renderPrinterStatus(); });
+  navigator.serial.addEventListener('disconnect', () => renderPrinterStatus('Koneksi printer terputus'));
+}
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/service-worker.js');
 async function restoreAppSession() {
   if (state.token || state.refreshToken) return bootstrap();
