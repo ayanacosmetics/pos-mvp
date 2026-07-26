@@ -46,7 +46,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ### Terakhir dikonfirmasi live
 
-- **Paket Operasional v1.21.4**
+- **Paket Operasional v1.22.0**
 - SQL `202607260025_pos_speed_customer_service.sql` berhasil diterapkan pada
   Supabase sebelum deployment.
 - Hotfix nomor struk memperbaiki `document_sequences` produksi dari tidak ada
@@ -54,10 +54,12 @@ kode frontend, dokumentasi publik, atau chat.
 - API kini mendeteksi benturan `sales_tenant_id_receipt_no_key`, menyelaraskan
   penghitung secara aman, lalu mencoba ulang RPC dengan idempotency key yang
   sama sehingga transaksi tidak tercatat ganda.
-- Deployment Vercel `dpl_Hc9pMMr8F5y3STrg97axv53DJXzY` berstatus Ready pada
+- SQL `202607260027_restock_purchase_planning.sql` berhasil diterapkan. Migrasi
+  tersebut sekaligus memasang penguatan nomor struk `026` secara idempotent.
+- Deployment Vercel `dpl_6ja9QtwaA8ouaHS3CADauJUMXTF6` berstatus Ready pada
   26 Juli 2026 dan alias `kasir-nusa-pos.vercel.app` sudah aktif.
-- Verifikasi langsung produksi mengembalikan API `1.21.4-cloud`, aplikasi
-  `v1.21.4`, cache `nusa-pos-shell-v43`, ZXing lokal, kebijakan `camera=(self)`,
+- Verifikasi langsung produksi mengembalikan API `1.22.0-cloud`, aplikasi
+  `v1.22.0`, cache `nusa-pos-shell-v44`, ZXing lokal, kebijakan `camera=(self)`,
   proteksi autentikasi riwayat POS, dan logout yang menghapus cookie refresh.
 - Skema Supabase mengonfirmasi RPC `complete_sale_v6` dan `void_sale_v1`
   tersedia; verifikasi produksi tidak membuat transaksi nyata.
@@ -78,17 +80,15 @@ kode frontend, dokumentasi publik, atau chat.
   membersihkan token, cache bootstrap, dan konteks Owner dari browser.
 - Aset login memakai penanda versi agar CDN/PWA tidak mempertahankan tampilan
   lama, dan kartu login dibatasi aman pada viewport mobile.
-- Validasi rilis mencakup 112 pengujian otomatis dan 5 pengujian browser
+- Validasi rilis mencakup 119 pengujian otomatis dan 5 pengujian browser
   tambahan; seluruhnya lulus.
 
-SQL penguatan `202607260026_receipt_sequence_collision_fix.sql` sudah tersedia
-untuk menyelaraskan semua outlet dan memasang trigger benturan di database.
-Pembayaran produksi sudah pulih melalui perbaikan penghitung dan fallback API;
-terapkan SQL tersebut sebelum melanjutkan paket database berikutnya.
+Penguatan `202607260026_receipt_sequence_collision_fix.sql` sudah tercakup dan
+diterapkan melalui migrasi `027`; tidak ada SQL v1.21 yang masih tertunda.
 
-### Kandidat lokal siap SQL
+### Rilis v1.22 dikonfirmasi live
 
-- **Paket Operasional v1.22.0** sudah selesai di source dan belum dideploy.
+- **Paket Operasional v1.22.0** sudah selesai dan live.
 - Migrasi tunggal `202607260027_restock_purchase_planning.sql` bersifat
   idempotent dan menyertakan penguatan nomor struk dari migrasi `026`, sehingga
   pengguna hanya perlu menjalankan satu SQL.
@@ -103,8 +103,8 @@ terapkan SQL tersebut sebelum melanjutkan paket database berikutnya.
   draft rekomendasi, dan transisi PO dicatat dalam audit.
 - Admin kini memiliki hak pembelian yang konsisten dengan validasi database.
 - API kandidat `1.22.0-cloud`, UI `v1.22.0`, dan cache `nusa-pos-shell-v44`.
-- Seluruh 119 pengujian otomatis lulus. Deployment menunggu konfirmasi bahwa
-  SQL `027` berhasil.
+- Seluruh 119 pengujian otomatis lulus. Deployment produksi dan alias utama
+  sudah diverifikasi tanpa membuat transaksi atau PO nyata.
 
 ### Isi rilis v1.21
 
@@ -247,7 +247,7 @@ produksi, hotfix benturan nomor struk, dan privasi harga internal pada struk
 selesai pada 26 Juli 2026. SQL penguatan
 `202607260026_receipt_sequence_collision_fix.sql` menunggu diterapkan.
 
-### v1.22 — Perencanaan restok dan pembelian (source selesai, menunggu SQL/deploy)
+### v1.22 — Perencanaan restok dan pembelian (selesai)
 
 - minimum, maksimum, safety stock, dan lead time per produk/supplier;
 - saran jumlah restok berdasarkan penjualan rata-rata dan stok tersedia;
@@ -257,9 +257,9 @@ selesai pada 26 Juli 2026. SQL penguatan
 - draft PO dari rekomendasi restok;
 - approval pembelian berdasarkan nilai.
 
-Status: implementasi domain, database, API, UI responsif, audit, hak akses, dan
-119 pengujian otomatis selesai. Jalankan satu migrasi `027`, lalu deploy kandidat
-yang sama tanpa perubahan source tambahan bila SQL berhasil.
+Status: implementasi domain, database, API, UI responsif, audit, hak akses,
+migrasi `027`, 119 pengujian otomatis, dan deployment produksi selesai pada
+26 Juli 2026.
 
 ### v1.23 — Loyalitas, CRM, dan promosi lanjutan
 
