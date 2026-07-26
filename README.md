@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Paket Operasional v1.20
+# Kasir Nusa POS — Paket Operasional v1.20.1
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -9,6 +9,10 @@ Produksi menggunakan:
 - PWA untuk penggunaan sebagai aplikasi Android dan Windows.
 
 Alamat produksi: <https://kasir-nusa-pos.vercel.app/>
+
+Konteks lintas-task, keputusan produk, status rilis, dan roadmap menuju
+kapabilitas retail yang lebih lengkap tersedia di
+[`PROJECT-HANDOFF.md`](PROJECT-HANDOFF.md).
 
 ## Cakupan kandidat final
 
@@ -63,7 +67,7 @@ Jalankan:
 npm test
 ```
 
-Paket operasional v1.20 memiliki 95 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
+Paket operasional v1.20.1 memiliki 97 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
 
 ## Struktur
 

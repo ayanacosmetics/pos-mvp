@@ -8,7 +8,8 @@ function memoryStorage(entries = {}) {
   return {
     getItem: (key) => values.get(key) ?? null,
     setItem: (key, value) => values.set(key, String(value)),
-    removeItem: (key) => values.delete(key)
+    removeItem: (key) => values.delete(key),
+    keys: () => [...values.keys()]
   };
 }
 
@@ -16,6 +17,7 @@ test('sesi disimpan utuh dan dapat dipulihkan setelah reload', () => {
   const storage = memoryStorage();
   saveAuth({ token: 'access', refreshToken: 'refresh', expiresAt: 12345 }, {}, storage);
   assert.deepEqual(loadAuth(storage), { token: 'access', refreshToken: 'refresh', expiresAt: 12345 });
+  assert.deepEqual(storage.keys(), ['pos_auth_v2']);
 });
 
 test('penyimpanan sesi lama dimigrasikan tanpa meminta login ulang', () => {
@@ -24,6 +26,8 @@ test('penyimpanan sesi lama dimigrasikan tanpa meminta login ulang', () => {
   assert.equal(auth.token, 'legacy-access');
   assert.equal(auth.refreshToken, 'legacy-refresh');
   assert.ok(storage.getItem('pos_auth_v2'));
+  assert.equal(storage.getItem('pos_token'), null);
+  assert.equal(storage.getItem('pos_refresh_token'), null);
 });
 
 test('keluar menghapus sesi baru dan lama', () => {
@@ -38,4 +42,13 @@ test('form login disembunyikan selama aplikasi memulihkan sesi', async () => {
   assert.match(html, /id="session-view"/);
   assert.match(html, /id="login-view" class="login-view hidden"/);
   assert.match(script, /el\('session-view'\)\.classList\.add\('hidden'\)/);
+});
+
+test('logout mencabut sesi server, membersihkan cache pengguna, dan diteruskan ke tab lain', async () => {
+  const script = await readFile(new URL('../apps/web/app.js', import.meta.url), 'utf8');
+  assert.match(script, /request\('\/api\/logout'/);
+  assert.match(script, /JSON\.stringify\(\{ refreshToken: state\.refreshToken \}\)/);
+  assert.match(script, /state\.session = null/);
+  assert.match(script, /localStorage\.removeItem\('pos_bootstrap_cache'\)/);
+  assert.match(script, /window\.addEventListener\('storage'[\s\S]*location\.reload\(\)/);
 });

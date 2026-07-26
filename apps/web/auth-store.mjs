@@ -17,7 +17,11 @@ function tokenExpiry(token) {
 export function loadAuth(storage = localStorage) {
   try {
     const stored = JSON.parse(storage.getItem(AUTH_KEY) ?? 'null');
-    if (stored?.token || stored?.refreshToken) return stored;
+    if (stored?.token || stored?.refreshToken) {
+      storage.removeItem(LEGACY_TOKEN_KEY);
+      storage.removeItem(LEGACY_REFRESH_KEY);
+      return stored;
+    }
   } catch {
     storage.removeItem(AUTH_KEY);
   }
@@ -28,6 +32,8 @@ export function loadAuth(storage = localStorage) {
 
   const migrated = { token, refreshToken, expiresAt: tokenExpiry(token) };
   storage.setItem(AUTH_KEY, JSON.stringify(migrated));
+  storage.removeItem(LEGACY_TOKEN_KEY);
+  storage.removeItem(LEGACY_REFRESH_KEY);
   return migrated;
 }
 
@@ -41,15 +47,17 @@ export function saveAuth(data, previous = {}, storage = localStorage) {
       || null
   };
   storage.setItem(AUTH_KEY, JSON.stringify(auth));
-  if (auth.token) storage.setItem(LEGACY_TOKEN_KEY, auth.token);
-  if (auth.refreshToken) storage.setItem(LEGACY_REFRESH_KEY, auth.refreshToken);
+  storage.removeItem(LEGACY_TOKEN_KEY);
+  storage.removeItem(LEGACY_REFRESH_KEY);
   return auth;
 }
 
 export function clearStoredAuth(storage = localStorage) {
-  storage.removeItem(AUTH_KEY);
+  // Hapus kunci lama lebih dahulu agar tab lain tidak sempat memigrasikannya
+  // kembali ketika menerima storage event untuk kunci utama.
   storage.removeItem(LEGACY_TOKEN_KEY);
   storage.removeItem(LEGACY_REFRESH_KEY);
+  storage.removeItem(AUTH_KEY);
 }
 
 export function isAuthStorageEvent(event) {

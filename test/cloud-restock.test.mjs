@@ -147,7 +147,42 @@ test('sesi Supabase dapat diperpanjang tanpa login ulang', async () => {
     assert.equal(authCall.options.headers.apikey, 'anon-test-key');
     assert.equal(authCall.body.refresh_token, 'old-refresh-token');
     assert.match(responseHeaders['set-cookie'], /rotated-refresh-token/);
+    assert.match(responseHeaders['set-cookie'], /Max-Age=315360000/);
     assert.match(responseHeaders['set-cookie'], /HttpOnly; Secure; SameSite=Lax/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousEnv.url === undefined) delete process.env.SUPABASE_URL; else process.env.SUPABASE_URL = previousEnv.url;
+    if (previousEnv.anon === undefined) delete process.env.SUPABASE_ANON_KEY; else process.env.SUPABASE_ANON_KEY = previousEnv.anon;
+    if (previousEnv.service === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY; else process.env.SUPABASE_SERVICE_ROLE_KEY = previousEnv.service;
+  }
+});
+
+test('logout mencabut refresh session Supabase dan menghapus cookie permanen', async () => {
+  const originalFetch = globalThis.fetch;
+  const previousEnv = { url: process.env.SUPABASE_URL, anon: process.env.SUPABASE_ANON_KEY, service: process.env.SUPABASE_SERVICE_ROLE_KEY };
+  process.env.SUPABASE_URL = 'https://project.supabase.test';
+  process.env.SUPABASE_ANON_KEY = 'anon-test-key';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-test-key';
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return new Response(null, { status: 204 });
+  };
+  try {
+    let payload = '';
+    const responseHeaders = {};
+    const request = {
+      method: 'POST', url: '/api/index?route=logout', query: { route: 'logout' },
+      headers: { authorization: 'Bearer access-token', cookie: '__Host-kasir_nusa_refresh=refresh-token' },
+      body: { refreshToken: 'refresh-token' }
+    };
+    const response = { statusCode: 0, setHeader(name, value) { responseHeaders[name] = value; }, end(value) { payload = value; } };
+    await handler(request, response);
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(JSON.parse(payload), { success: true, revoked: true });
+    const logoutCall = calls.find((call) => call.url.includes('/auth/v1/logout?scope=local'));
+    assert.equal(logoutCall.options.headers.authorization, 'Bearer access-token');
+    assert.match(responseHeaders['set-cookie'], /Max-Age=0/);
   } finally {
     globalThis.fetch = originalFetch;
     if (previousEnv.url === undefined) delete process.env.SUPABASE_URL; else process.env.SUPABASE_URL = previousEnv.url;

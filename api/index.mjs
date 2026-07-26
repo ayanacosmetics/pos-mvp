@@ -45,7 +45,10 @@ function cookieValue(request, name) {
 
 function setRefreshCookie(response, token) {
   const value = token ? encodeURIComponent(token) : '';
-  const maxAge = token ? 60 * 60 * 24 * 30 : 0;
+  // Browser boleh membatasi umur cookie, sehingga refresh token juga disimpan
+  // permanen di penyimpanan aplikasi. Cookie ini tetap dibuat selama mungkin
+  // sebagai jalur pemulihan HttpOnly.
+  const maxAge = token ? 60 * 60 * 24 * 365 * 10 : 0;
   response.setHeader('set-cookie', `${REFRESH_COOKIE}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`);
 }
 
@@ -650,7 +653,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '1.20.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '1.20.1-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'login') {
@@ -682,8 +685,29 @@ async function routeRequest(request, response, route) {
   }
 
   if (request.method === 'POST' && route === 'logout') {
-    setRefreshCookie(response, null);
-    return send(response, 200, { success: true });
+    const input = bodyOf(request);
+    const refreshToken = input.refreshToken ?? cookieValue(request, REFRESH_COOKIE);
+    let token = request.headers.authorization?.replace(/^Bearer\s+/i, '');
+    let revoked = false;
+    try {
+      if (!token && refreshToken) {
+        const config = env();
+        const refreshed = await supabase('/auth/v1/token?grant_type=refresh_token', {
+          method: 'POST', body: { refresh_token: refreshToken }, token: config.anon
+        });
+        token = refreshed.access_token;
+      }
+      if (token) {
+        await supabase('/auth/v1/logout?scope=local', { method: 'POST', token });
+        revoked = true;
+      }
+    } catch {
+      // Logout lokal harus tetap selesai walau token sudah dicabut/kedaluwarsa
+      // atau penyedia autentikasi sedang tidak dapat dijangkau.
+    } finally {
+      setRefreshCookie(response, null);
+    }
+    return send(response, 200, { success: true, revoked });
   }
 
   const session = await sessionOf(request);

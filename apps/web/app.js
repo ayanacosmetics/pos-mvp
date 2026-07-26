@@ -27,8 +27,9 @@ function storeAuth(data) {
 }
 
 function clearAuth() {
-  state.token = null; state.refreshToken = null; state.expiresAt = null;
+  state.token = null; state.refreshToken = null; state.expiresAt = null; state.session = null;
   clearStoredAuth();
+  localStorage.removeItem('pos_bootstrap_cache');
 }
 
 async function refreshSession(allowStorageRecovery = true) {
@@ -2621,9 +2622,13 @@ el('login-form').addEventListener('submit', async (event) => {
   }
 });
 el('logout').addEventListener('click', async () => {
-  try { await fetch('/api/logout', { method: 'POST' }); } catch {}
+  try {
+    await request('/api/logout', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken: state.refreshToken })
+    }, false);
+  } catch {}
   clearAuth();
-  localStorage.removeItem('pos_bootstrap_cache');
   location.reload();
 });
 el('nav').addEventListener('click', (event) => {
@@ -2656,6 +2661,8 @@ el('product-search').addEventListener('keydown', (event) => { if (event.key !== 
 el('scan-camera-pos').addEventListener('click', () => openBarcodeCamera('pos'));
 el('close-barcode-camera').addEventListener('click', stopBarcodeCamera);
 el('cancel-barcode-camera').addEventListener('click', stopBarcodeCamera);
+el('barcode-camera-dialog').addEventListener('close', stopBarcodeCamera);
+window.addEventListener('pagehide', stopBarcodeCamera);
 el('customer-group').addEventListener('change', async () => { invalidateSaleAuthorization(); await updateQuote(); });
 el('customer-search').addEventListener('focus', (event) => { event.currentTarget.select(); renderCustomerSearchResults(''); });
 el('customer-search').addEventListener('input', (event) => renderCustomerSearchResults(event.currentTarget.value));
@@ -2858,6 +2865,11 @@ window.addEventListener('storage', (event) => {
   state.token = auth.token;
   state.refreshToken = auth.refreshToken;
   state.expiresAt = auth.expiresAt;
+  if (!auth.token && !auth.refreshToken) {
+    state.session = null;
+    localStorage.removeItem('pos_bootstrap_cache');
+    location.reload();
+  }
 });
 setInterval(() => { el('clock').textContent = new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date()); }, 1000);
 updateQueueCount();

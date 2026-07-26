@@ -32,6 +32,8 @@ test('navigasi PWA mobile memakai drawer kiri dengan hamburger dan tidak menimpa
   assert.match(html, /id="sidebar-backdrop"/);
   assert.match(css, /\.sidebar\{position:fixed;[^}]*inset:0 auto 0 0;[^}]*transform:translateX\(-105%\)/);
   assert.match(css, /\.app\.sidebar-open \.sidebar\{transform:translateX\(0\)\}/);
+  assert.match(css, /\.brand>span:last-child,\.nav-item\{font-size:0\}/);
+  assert.match(css, /\.nav-item,\.nav-item:not\(\.active\)\{[^}]*font-size:inherit/);
   assert.match(script, /function setSidebarOpen/);
   assert.match(script, /sidebar\.inert = mobile && !open/);
   assert.match(script, /event\.key === 'Escape'/);
@@ -53,7 +55,9 @@ test('kamera PWA memakai BarcodeDetector dengan fallback ZXing lokal dan kebijak
   assert.match(script, /decodeFromStream\(barcodeCameraStream/);
   assert.match(script, /window\.isSecureContext/);
   assert.match(script, /NotAllowedError/);
-  assert.match(worker, /nusa-pos-shell-v36/);
+  assert.match(script, /barcode-camera-dialog'\)\.addEventListener\('close', stopBarcodeCamera\)/);
+  assert.match(script, /window\.addEventListener\('pagehide', stopBarcodeCamera\)/);
+  assert.match(worker, /nusa-pos-shell-v38/);
   assert.match(worker, /\/vendor\/zxing-browser\.min\.js/);
   const vercel = JSON.parse(vercelText);
   assert.ok(vercel.headers.some((entry) => entry.headers?.some((header) => header.key === 'Permissions-Policy' && header.value === 'camera=(self)')));

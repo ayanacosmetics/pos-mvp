@@ -61,7 +61,7 @@ function requirePermission(request, response, permission) {
 }
 
 async function api(request, response, url) {
-  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '1.20.0-local', storage: 'sqlite' });
+  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '1.20.1-local', storage: 'sqlite' });
 
   if (request.method === 'POST' && url.pathname === '/api/login') {
     const input = await bodyOf(request);
