@@ -46,6 +46,17 @@ kode frontend, dokumentasi publik, atau chat.
 
 ### Terakhir dikonfirmasi live
 
+- **Paket Operasional v1.23.1** menambahkan navigasi dua tingkat responsif.
+- Sidebar utama berisi enam kelompok: Penjualan, Barang & Stok, Relasi,
+  Pertumbuhan, Analitik, dan Sistem. Memilih kelompok membuka daftar fitur
+  pada panel kedua setelah sidebar; memilih fitur membuka halaman kerjanya.
+- Promo dan Loyalitas, serta Pelanggan dan Supplier, tidak lagi ditumpuk dalam
+  satu halaman. Tampilan Stok, Pembelian, Laporan, dan Pengaturan juga memiliki
+  tujuan navigasi masing-masing tanpa menghilangkan hak akses yang ada.
+- Drawer mobile, tombol Escape, fokus keyboard, status aktif, dan pemulihan
+  tampilan tetap bekerja pada navigasi baru.
+- Perubahan v1.23.1 hanya UI/PWA dan tidak memerlukan SQL baru.
+- Seluruh **127 pengujian otomatis** lulus.
 - **Paket Operasional v1.23.0**
 - SQL `202607260028_loyalty_crm_vouchers.sql` terkonfirmasi tersedia di
   Supabase melalui pemeriksaan tabel produksi.
@@ -93,6 +104,15 @@ kode frontend, dokumentasi publik, atau chat.
 
 Penguatan `202607260026_receipt_sequence_collision_fix.sql` sudah tercakup dan
 diterapkan melalui migrasi `027`; tidak ada SQL v1.21 yang masih tertunda.
+
+### Rilis v1.23.1
+
+- Navigasi semua fitur dipisahkan menjadi kelompok sidebar, daftar fitur
+  tingkat kedua, dan halaman kerja tersendiri.
+- Promo/Loyalitas serta Pelanggan/Supplier memiliki halaman terpisah.
+- Versi UI `v1.23.1`, API `1.23.1-cloud`, dan cache `nusa-pos-shell-v46`.
+- Tidak memerlukan migrasi Supabase.
+- Validasi lokal: 127/127 pengujian otomatis lulus.
 
 ### Rilis v1.23 dikonfirmasi live
 

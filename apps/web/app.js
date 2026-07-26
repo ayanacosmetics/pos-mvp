@@ -171,6 +171,7 @@ async function applyBootstrap(data, { offline = false } = {}) {
   el('user-role').textContent = roleLabels[state.session.user.role] ?? state.session.user.role;
   el('switch-account').classList.toggle('hidden', !state.session.canSwitchOwners);
   document.querySelectorAll('[data-permission]').forEach((node) => node.classList.toggle('hidden', !state.session.permissions.includes(node.dataset.permission)));
+  syncNavigationPermissions();
   el('session-view').classList.add('hidden');
   el('login-view').classList.add('hidden');
   el('app-view').classList.remove('hidden');
@@ -1360,6 +1361,7 @@ const purchaseStatus = {
 function showPurchaseView(name) {
   document.querySelectorAll('.purchase-view').forEach((view) => view.classList.toggle('hidden', view.id !== `purchase-view-${name}`));
   document.querySelectorAll('.purchase-tab').forEach((button) => button.classList.toggle('active', button.dataset.purchaseView === name));
+  document.querySelectorAll('[data-purchase-view-target]').forEach((button)=>button.classList.toggle('active',button.dataset.purchaseViewTarget===name));
 }
 
 const planningUrgency = {
@@ -2930,6 +2932,7 @@ function setSidebarOpen(requestedOpen, { restoreFocus = false } = {}) {
   const mobile = mobileSidebarMedia.matches;
   const open = mobile && requestedOpen;
   app.classList.toggle('sidebar-open', open);
+  if(open)app.classList.remove('feature-nav-open');
   document.body.classList.toggle('sidebar-drawer-open', open);
   toggle.setAttribute('aria-expanded', String(open));
   toggle.setAttribute('aria-label', open ? 'Tutup menu' : 'Buka menu');
@@ -2941,11 +2944,14 @@ function setSidebarOpen(requestedOpen, { restoreFocus = false } = {}) {
 
 function syncSidebarMode() {
   setSidebarOpen(false);
+  closeFeatureNav();
+  if(!mobileSidebarMedia.matches)openNavGroup(state.activeNavGroup??'sales');
 }
 
 function trapSidebarFocus(event) {
   if (event.key !== 'Tab' || !el('app-view').classList.contains('sidebar-open')) return;
-  const focusable = [...el('app-sidebar').querySelectorAll('button:not([disabled]):not(.hidden),select:not([disabled]),input:not([disabled]),a[href]')]
+  const focusRoot=el('app-view').classList.contains('feature-nav-open')?el('feature-nav'):el('app-sidebar');
+  const focusable = [...focusRoot.querySelectorAll('button:not([disabled]):not(.hidden),select:not([disabled]),input:not([disabled]),a[href]')]
     .filter((item) => item.getClientRects().length);
   if (!focusable.length) return;
   const first = focusable[0];
@@ -2954,9 +2960,87 @@ function trapSidebarFocus(event) {
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
 
+function showStockView(name='list'){
+  const page=el('page-stock'),workspace=page.querySelector('.stock-workspace'),parts=[...workspace.children];
+  page.querySelector('.expiry-dashboard').classList.toggle('hidden',name!=='expiry');
+  workspace.classList.toggle('hidden',!['transfer','count'].includes(name));
+  parts[0]?.classList.toggle('hidden',name!=='transfer');
+  parts[1]?.classList.toggle('hidden',name!=='count');
+  el('inventory-table').classList.toggle('hidden',name!=='list');
+  page.querySelector('.ledger-title').classList.toggle('hidden',name!=='ledger');
+  el('ledger-table').classList.toggle('hidden',name!=='ledger');
+}
+
+function showReportView(name='summary'){
+  const page=el('page-reports'),primary=page.querySelector('.report-grid.report-primary'),grids=[...page.querySelectorAll('.report-grid')],secondary=grids.find((grid)=>grid!==primary);
+  const cards=el('report-cards'),daily=primary?.children[0],products=primary?.children[1],outlets=secondary?.children[0],purchases=secondary?.children[1];
+  const sales=el('recent-sales').closest('.surface'),audit=el('audit-logs').closest('.surface');
+  cards.classList.toggle('hidden',name!=='summary');
+  daily?.classList.toggle('hidden',name!=='summary');
+  products?.classList.toggle('hidden',name!=='performance');
+  outlets?.classList.toggle('hidden',name!=='performance');
+  purchases?.classList.toggle('hidden',name!=='purchases');
+  sales.classList.toggle('hidden',name!=='sales');
+  audit.classList.toggle('hidden',name!=='audit');
+  primary?.classList.toggle('hidden',!['summary','performance'].includes(name));
+  secondary?.classList.toggle('hidden',!['performance','purchases'].includes(name));
+  if(primary)primary.style.gridTemplateColumns='1fr';
+  if(secondary)secondary.style.gridTemplateColumns='1fr';
+}
+
+function showSettingsView(name='business'){
+  const page=el('page-settings'),splits=[...page.querySelectorAll('.settings-split')];
+  const views={business:el('business-settings-form'),outlets:splits[0],locations:splits[1],health:page.querySelector('.system-health'),device:el('device-settings-form')};
+  Object.entries(views).forEach(([key,node])=>node?.classList.toggle('hidden',key!==name));
+}
+
 function showPage(name) {
-  document.querySelectorAll('.page').forEach((page) => page.classList.toggle('active', page.id === `page-${name}`));
-  document.querySelectorAll('.nav-item').forEach((button) => button.classList.toggle('active', button.dataset.page === name));
+  const item=document.querySelector(`.feature-nav-item[data-page="${name}"]`);
+  const target=item?.dataset.targetPage??name;
+  document.querySelectorAll('.page').forEach((page) => page.classList.toggle('active', page.id === `page-${target}`));
+  document.querySelectorAll('.feature-nav-item').forEach((button) => button.classList.toggle('active', button.dataset.page === name));
+  if(item?.dataset.purchaseViewTarget)showPurchaseView(item.dataset.purchaseViewTarget);
+  if(item?.dataset.stockView)showStockView(item.dataset.stockView);
+  if(item?.dataset.reportView)showReportView(item.dataset.reportView);
+  if(item?.dataset.settingsView)showSettingsView(item.dataset.settingsView);
+  const group=item?.closest('[data-nav-panel]')?.dataset.navPanel;
+  if(group)openNavGroup(group);
+  localStorage.setItem('pos_active_page',name);
+}
+
+const navGroupTitles={sales:'Penjualan',inventory:'Barang & Stok',relations:'Relasi',growth:'Pertumbuhan',insights:'Analitik',system:'Sistem'};
+
+function openNavGroup(group){
+  const panel=document.querySelector(`[data-nav-panel="${group}"]`);
+  if(!panel||panel.classList.contains('hidden'))return;
+  state.activeNavGroup=group;
+  el('feature-nav-title').textContent=navGroupTitles[group]??'Fitur';
+  document.querySelectorAll('[data-nav-panel]').forEach((node)=>node.classList.toggle('active',node.dataset.navPanel===group));
+  document.querySelectorAll('[data-nav-group]').forEach((button)=>button.classList.toggle('active',button.dataset.navGroup===group));
+  el('app-view').classList.add('feature-nav-open');
+  el('feature-nav').setAttribute('aria-hidden','false');
+}
+
+function closeFeatureNav(){
+  el('app-view').classList.remove('feature-nav-open');
+  el('feature-nav').setAttribute('aria-hidden','true');
+  if(mobileSidebarMedia.matches)el('app-sidebar').querySelector(`[data-nav-group="${state.activeNavGroup??'sales'}"]`)?.focus();
+}
+
+function syncNavigationPermissions(){
+  document.querySelectorAll('[data-nav-panel]').forEach((panel)=>{
+    const available=[...panel.querySelectorAll('.feature-nav-item')].some((item)=>!item.classList.contains('hidden'));
+    panel.classList.toggle('hidden',!available);
+    document.querySelector(`[data-nav-group="${panel.dataset.navPanel}"]`)?.classList.toggle('hidden',!available);
+  });
+  const active=document.querySelector('.feature-nav-item.active:not(.hidden)');
+  if(!active){
+    const first=document.querySelector('.feature-nav-item:not(.hidden)');
+    if(first)showPage(first.dataset.page);
+  }else{
+    openNavGroup(active.closest('[data-nav-panel]').dataset.navPanel);
+    if(mobileSidebarMedia.matches)closeFeatureNav();
+  }
 }
 
 document.querySelectorAll('[data-login-portal]').forEach((button) => button.addEventListener('click', () => {
@@ -3038,19 +3122,29 @@ el('logout').addEventListener('click', async () => {
   await endCurrentSession(portal);
 });
 el('nav').addEventListener('click', (event) => {
-  const button = event.target.closest('[data-page]');
+  const button = event.target.closest('[data-nav-group]');
   if (!button) return;
-  showPage(button.dataset.page);
-  setSidebarOpen(false);
-  if (button.dataset.page === 'users') loadUsers();
-  if (button.dataset.page === 'sync-review') loadSyncReview();
-  if (button.dataset.page === 'returns') loadRecentReturns();
-  if (button.dataset.page === 'settings') loadSettingsWorkspace();
-  if (button.dataset.page === 'promotions') loadPromotionManagement();
+  openNavGroup(button.dataset.navGroup);
+  if(!mobileSidebarMedia.matches)setSidebarOpen(false);
 });
+el('subnav').addEventListener('click',(event)=>{
+  const button=event.target.closest('[data-page]');if(!button)return;
+  showPage(button.dataset.page);
+  const target=button.dataset.targetPage??button.dataset.page;
+  if(mobileSidebarMedia.matches){closeFeatureNav();setSidebarOpen(false);}
+  if(target==='users')loadUsers();
+  if(target==='sync-review')loadSyncReview();
+  if(target==='returns')loadRecentReturns();
+  if(target==='settings')loadSettingsWorkspace();
+  if(['promotions','loyalty'].includes(target))loadPromotionManagement();
+});
+el('close-feature-nav').addEventListener('click',closeFeatureNav);
 el('sidebar-toggle').addEventListener('click', () => setSidebarOpen(!el('app-view').classList.contains('sidebar-open'), { restoreFocus:true }));
 el('sidebar-backdrop').addEventListener('click', () => setSidebarOpen(false, { restoreFocus:true }));
 document.addEventListener('keydown', (event) => {
+  if(event.key==='Escape'&&el('app-view').classList.contains('feature-nav-open')&&mobileSidebarMedia.matches){
+    event.preventDefault();closeFeatureNav();return;
+  }
   if (event.key === 'Escape' && el('app-view').classList.contains('sidebar-open')) {
     event.preventDefault();
     setSidebarOpen(false, { restoreFocus:true });

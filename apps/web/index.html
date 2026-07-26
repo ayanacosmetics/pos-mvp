@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#174c4f">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=45">
+  <link rel="stylesheet" href="/styles.css?v=46">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -43,22 +43,63 @@
     <aside id="app-sidebar" class="sidebar" aria-label="Menu utama">
       <div class="brand"><span class="brand-mark small">KN</span><span>Kasir Nusa</span></div>
       <nav id="nav">
-        <button data-page="pos" class="nav-item active"><span>▦</span>Kasir</button>
-        <button data-page="returns" class="nav-item" data-permission="sales.return"><span>↩</span>Retur</button>
-        <button data-page="restock" class="nav-item" data-permission="purchasing.view_cost"><span>↙</span>Restok</button>
-        <button data-page="stock" class="nav-item" data-permission="inventory.manage"><span>⇄</span>Stok</button>
-        <button data-page="shift" class="nav-item" data-permission="pos.sell"><span>◷</span>Shift</button>
-        <button data-page="relations" class="nav-item" data-permission="pos.sell"><span>◎</span>Relasi</button>
-        <button data-page="reports" class="nav-item" data-permission="report.view"><span>▥</span>Laporan</button>
-        <button data-page="sync-review" class="nav-item" data-permission="audit.view"><span>&#8635;</span>Sinkronisasi <b id="sync-review-nav-count" class="nav-count hidden">0</b></button>
-        <button data-page="imports" class="nav-item" data-permission="audit.view"><span>&#8679;</span>Impor Data</button>
-        <button data-page="backups" class="nav-item" data-permission="identity.manage"><span>&#9635;</span>Backup</button>
-        <button data-page="users" class="nav-item" data-permission="identity.manage"><span>♙</span>Pengguna</button>
-        <button data-page="settings" class="nav-item" data-permission="identity.manage"><span>⚙</span>Pengaturan</button>
-        <button data-page="products" class="nav-item" data-permission="catalog.manage"><span>◇</span>Produk</button>
-        <button data-page="promotions" class="nav-item" data-permission="promotion.manage"><span>％</span>Promo & Loyalitas</button>
+        <button data-nav-group="sales" class="nav-item active"><span>▦</span><span>Penjualan<small>Kasir, retur, shift</small></span><b>›</b></button>
+        <button data-nav-group="inventory" class="nav-item"><span>◇</span><span>Barang & Stok<small>Produk dan pembelian</small></span><b>›</b></button>
+        <button data-nav-group="relations" class="nav-item"><span>◎</span><span>Relasi<small>Pelanggan dan supplier</small></span><b>›</b></button>
+        <button data-nav-group="growth" class="nav-item"><span>％</span><span>Pertumbuhan<small>Promo dan loyalitas</small></span><b>›</b></button>
+        <button data-nav-group="insights" class="nav-item"><span>▥</span><span>Analitik<small>Laporan dan audit</small></span><b>›</b></button>
+        <button data-nav-group="system" class="nav-item"><span>⚙</span><span>Sistem<small>Data dan pengaturan</small></span><b>›</b></button>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Operasional · v1.23.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Operasional · v1.23.1</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+    </aside>
+    <aside id="feature-nav" class="feature-nav" aria-label="Daftar fitur">
+      <div class="feature-nav-head"><div><p class="eyebrow">MODUL</p><h2 id="feature-nav-title">Penjualan</h2></div><button id="close-feature-nav" class="icon-button" type="button" aria-label="Tutup daftar fitur">×</button></div>
+      <nav id="subnav">
+        <div data-nav-panel="sales" class="feature-nav-panel active">
+          <button data-page="pos" class="feature-nav-item active" data-permission="pos.sell"><span>Kasir</span><small>Transaksi penjualan baru</small></button>
+          <button data-page="returns" class="feature-nav-item" data-permission="sales.return"><span>Retur penjualan</span><small>Pengembalian dan refund</small></button>
+          <button data-page="shift" class="feature-nav-item" data-permission="pos.sell"><span>Shift kasir</span><small>Kas masuk, keluar, buka dan tutup</small></button>
+        </div>
+        <div data-nav-panel="inventory" class="feature-nav-panel">
+          <button data-page="products" class="feature-nav-item" data-permission="catalog.manage"><span>Produk</span><small>Master, satuan, barcode, harga</small></button>
+          <button data-page="stock-list" data-target-page="stock" data-stock-view="list" class="feature-nav-item" data-permission="inventory.manage"><span>Daftar stok</span><small>Saldo per lokasi</small></button>
+          <button data-page="stock-expiry" data-target-page="stock" data-stock-view="expiry" class="feature-nav-item" data-permission="inventory.manage"><span>Batch & EXP</span><small>FEFO dan kedaluwarsa</small></button>
+          <button data-page="stock-transfer" data-target-page="stock" data-stock-view="transfer" class="feature-nav-item" data-permission="inventory.manage"><span>Transfer stok</span><small>Pergerakan antar lokasi</small></button>
+          <button data-page="stock-count" data-target-page="stock" data-stock-view="count" class="feature-nav-item" data-permission="inventory.manage"><span>Stok opname</span><small>Jumlah fisik dan selisih</small></button>
+          <button data-page="stock-ledger" data-target-page="stock" data-stock-view="ledger" class="feature-nav-item" data-permission="inventory.manage"><span>Jurnal stok</span><small>Jejak pergerakan terbaru</small></button>
+          <button data-page="restock-planning" data-target-page="restock" data-purchase-view-target="planning" class="feature-nav-item" data-permission="purchasing.view_cost"><span>Rencana restok</span><small>Rekomendasi kebutuhan</small></button>
+          <button data-page="purchase-documents" data-target-page="restock" data-purchase-view-target="documents" class="feature-nav-item" data-permission="purchasing.view_cost"><span>Purchase Order</span><small>Daftar dokumen pembelian</small></button>
+          <button data-page="purchase-order" data-target-page="restock" data-purchase-view-target="order" class="feature-nav-item" data-permission="purchasing.view_cost"><span>Buat PO</span><small>Editor pesanan supplier</small></button>
+          <button data-page="purchase-receipt" data-target-page="restock" data-purchase-view-target="receipt" class="feature-nav-item" data-permission="purchasing.receive"><span>Terima barang</span><small>Faktur dan penambahan stok</small></button>
+          <button data-page="supplier-return" data-target-page="restock" data-purchase-view-target="supplier-return" class="feature-nav-item" data-permission="purchasing.receive"><span>Retur supplier</span><small>Nota retur dan kredit</small></button>
+        </div>
+        <div data-nav-panel="relations" class="feature-nav-panel">
+          <button data-page="customers" class="feature-nav-item" data-permission="pos.sell"><span>Pelanggan</span><small>Member, piutang, CRM</small></button>
+          <button data-page="suppliers" class="feature-nav-item" data-permission="purchasing.receive"><span>Supplier</span><small>Profil, hutang, pembayaran</small></button>
+        </div>
+        <div data-nav-panel="growth" class="feature-nav-panel">
+          <button data-page="promotions" class="feature-nav-item" data-permission="promotion.manage"><span>Promo</span><small>Aturan dan simulasi promo</small></button>
+          <button data-page="loyalty" class="feature-nav-item" data-permission="promotion.manage"><span>Loyalitas</span><small>Poin, tier, voucher, segmentasi</small></button>
+        </div>
+        <div data-nav-panel="insights" class="feature-nav-panel">
+          <button data-page="reports-summary" data-target-page="reports" data-report-view="summary" class="feature-nav-item" data-permission="report.view"><span>Ringkasan</span><small>Omzet, laba, tren harian</small></button>
+          <button data-page="reports-performance" data-target-page="reports" data-report-view="performance" class="feature-nav-item" data-permission="report.view"><span>Produk & outlet</span><small>Kinerja produk dan cabang</small></button>
+          <button data-page="reports-purchases" data-target-page="reports" data-report-view="purchases" class="feature-nav-item" data-permission="report.view"><span>Pembelian</span><small>Penerimaan per supplier</small></button>
+          <button data-page="reports-sales" data-target-page="reports" data-report-view="sales" class="feature-nav-item" data-permission="report.view"><span>Transaksi</span><small>Penjualan dan retur terbaru</small></button>
+          <button data-page="reports-audit" data-target-page="reports" data-report-view="audit" class="feature-nav-item" data-permission="audit.view"><span>Audit log</span><small>Aktivitas sensitif</small></button>
+          <button data-page="sync-review" class="feature-nav-item" data-permission="audit.view"><span>Sinkronisasi</span><small>Konflik transaksi offline <b id="sync-review-nav-count" class="nav-count hidden">0</b></small></button>
+        </div>
+        <div data-nav-panel="system" class="feature-nav-panel">
+          <button data-page="imports" class="feature-nav-item" data-permission="audit.view"><span>Impor data</span><small>Masukkan data awal</small></button>
+          <button data-page="backups" class="feature-nav-item" data-permission="identity.manage"><span>Backup</span><small>Snapshot dan verifikasi</small></button>
+          <button data-page="users" class="feature-nav-item" data-permission="identity.manage"><span>Pengguna</span><small>Akun, peran, outlet</small></button>
+          <button data-page="settings-business" data-target-page="settings" data-settings-view="business" class="feature-nav-item" data-permission="identity.manage"><span>Identitas usaha</span><small>Informasi struk dan dokumen</small></button>
+          <button data-page="settings-outlets" data-target-page="settings" data-settings-view="outlets" class="feature-nav-item" data-permission="identity.manage"><span>Outlet</span><small>Cabang dan nomor struk</small></button>
+          <button data-page="settings-locations" data-target-page="settings" data-settings-view="locations" class="feature-nav-item" data-permission="identity.manage"><span>Lokasi stok</span><small>Toko, gudang, transit</small></button>
+          <button data-page="settings-device" data-target-page="settings" data-settings-view="device" class="feature-nav-item" data-permission="identity.manage"><span>Perangkat</span><small>Kasir, printer, instalasi PWA</small></button>
+          <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
+        </div>
+      </nav>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -397,18 +438,22 @@
 
       <section id="page-shift" class="page"><div class="content-width"><div class="page-title"><div><p class="eyebrow">KONTROL KAS</p><h1>Shift kasir</h1></div><span id="shift-status" class="pill">Belum dibuka</span></div><div class="shift-grid"><div class="surface"><p class="eyebrow">STATUS SHIFT</p><div id="shift-detail" class="shift-detail"></div><div id="open-shift-form"><label>Modal awal kas<input id="opening-cash" type="number" min="0" value="300000"></label><button id="open-shift" class="button primary">Buka shift</button></div><div id="close-shift-form" class="hidden"><label>Kas fisik saat tutup<input id="closing-cash" type="number" min="0"></label><button id="close-shift" class="button primary">Tutup dan hitung selisih</button></div></div><div class="surface"><p class="eyebrow">KAS MASUK / KELUAR</p><label>Jenis<select id="cash-type"><option value="CASH_OUT">Kas keluar</option><option value="CASH_IN">Kas masuk</option></select></label><label>Jumlah<input id="cash-amount" type="number" min="1"></label><label>Catatan<input id="cash-note" placeholder="Contoh: beli plastik"></label><button id="cash-movement" class="button secondary">Catat pergerakan</button><div id="cash-history"></div></div></div></div></section>
 
-      <section id="page-relations" class="page"><div class="content-width">
-        <div class="page-title"><div><p class="eyebrow">PELANGGAN & PIUTANG</p><h1>Relasi bisnis</h1><p class="muted">Kelola profil pelanggan, plafon kredit, tagihan berjalan, dan pembayaran dengan jejak yang lengkap.</p></div><button id="new-customer" class="button primary">Tambah pelanggan</button></div>
+      <section id="page-customers" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">PELANGGAN & PIUTANG</p><h1>Pelanggan</h1><p class="muted">Kelola profil member, loyalitas, plafon kredit, tagihan, dan pembayaran pelanggan.</p></div><button id="new-customer" class="button primary">Tambah pelanggan</button></div>
         <div id="customer-account-metrics" class="metrics"></div>
         <div id="crm-metrics" class="metrics"></div>
         <div id="customer-aging-buckets" class="customer-aging-buckets"></div>
-        <div class="customer-account-layout">
+        <div class="customer-page-layout">
           <div class="surface customer-directory">
             <div class="settings-section-head"><div><p class="eyebrow">DIREKTORI PELANGGAN</p><h2>Saldo dan fasilitas kredit</h2></div><input id="customer-account-search" type="search" placeholder="Cari nama, kode, atau telepon"></div>
             <div id="customer-list" class="customer-account-list"></div>
           </div>
-          <div id="supplier-panel" class="surface"><p class="eyebrow">SUPPLIER BARU</p><div class="form-grid compact"><label>Nama<input id="supplier-name"></label><label>Telepon<input id="supplier-phone"></label><label>Alamat<input id="supplier-address"></label></div><button id="save-supplier" class="button primary">Simpan supplier</button><div id="supplier-list" class="relation-list"></div></div>
         </div>
+      </div></section>
+
+      <section id="page-suppliers" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">SUPPLIER & HUTANG</p><h1>Supplier</h1><p class="muted">Kelola profil supplier, rekening hutang, histori pembayaran, dan hubungan pembelian.</p></div></div>
+        <div id="supplier-panel" class="surface supplier-page"><div class="settings-section-head"><div><p class="eyebrow">SUPPLIER BARU</p><h2>Tambah dan kelola supplier</h2></div></div><div class="form-grid compact"><label>Nama<input id="supplier-name"></label><label>Telepon<input id="supplier-phone"></label><label>Alamat<input id="supplier-address"></label></div><button id="save-supplier" class="button primary">Simpan supplier</button><div id="supplier-list" class="relation-list"></div></div>
       </div></section>
 
       <section id="page-promotions" class="page"><div class="content-width">
@@ -444,8 +489,12 @@
           </form>
           <div class="surface promo-rule-directory"><div class="settings-section-head"><div><p class="eyebrow">VERSI PROMO</p><h2>Aturan diterbitkan</h2></div><select id="promo-status-filter"><option value="ACTIVE">Aktif & terjadwal</option><option value="ALL">Semua versi</option><option value="RETIRED">Dihentikan</option></select></div><div id="promotion-list"></div></div>
         </div>
+      </div></section>
+
+      <section id="page-loyalty" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">LOYALITAS & CRM</p><h1>Loyalitas pelanggan</h1><p class="muted">Kelola poin, tier member, voucher berkode, dan segmentasi tanpa bercampur dengan aturan promo katalog.</p></div><div id="loyalty-summary" class="pill success">Memuat...</div></div>
         <section class="surface loyalty-workspace">
-          <div class="settings-section-head"><div><p class="eyebrow">LOYALITAS & CRM</p><h2>Tier member dan voucher rahasia</h2><p class="muted">Voucher hanya tampil saat dimasukkan kasir dan tidak dipublikasikan ke katalog.</p></div><div id="loyalty-summary" class="pill success">Memuat...</div></div>
+          <div class="settings-section-head"><div><p class="eyebrow">ATURAN MEMBER</p><h2>Tier dan voucher rahasia</h2><p class="muted">Voucher hanya tampil saat dimasukkan kasir dan tidak dipublikasikan ke katalog.</p></div></div>
           <div class="loyalty-grid">
             <form id="loyalty-settings-form"><h3>Perolehan poin</h3><label>Belanja untuk 1 poin<input id="loyalty-earn-amount" type="number" min="1" value="10000"></label><label>Dianggap tidak aktif setelah<input id="loyalty-inactivity-days" type="number" min="1" value="90"><small>hari tanpa transaksi</small></label><button class="button secondary" type="submit">Simpan aturan</button></form>
             <form id="voucher-form"><h3>Voucher berkode</h3><div class="form-grid compact"><label>Kode<input id="voucher-new-code" maxlength="30" required placeholder="ULTAH25"></label><label>Nama<input id="voucher-new-name" required placeholder="Voucher ulang tahun"></label><label>Jenis<select id="voucher-new-type"><option value="FIXED">Potongan rupiah</option><option value="PERCENT">Persentase</option></select></label><label>Nilai<input id="voucher-new-value" type="number" min="1" required></label><label>Maksimum diskon<input id="voucher-new-max" type="number" min="1"></label><label>Minimal belanja<input id="voucher-new-min" type="number" min="0" value="0"></label><label>Mulai<input id="voucher-new-start" type="datetime-local" required></label><label>Berakhir<input id="voucher-new-end" type="datetime-local" required></label><label>Segmen<select id="voucher-new-segment"><option value="ALL">Semua member</option><option value="ACTIVE">Member aktif</option><option value="INACTIVE">Member tidak aktif</option><option value="HIGH_VALUE">Nilai tinggi</option><option value="BIRTHDAY">Ulang tahun</option></select></label><label>Batas total<input id="voucher-new-limit-total" type="number" min="1"></label><label>Batas per member<input id="voucher-new-limit-customer" type="number" min="1"></label><label class="switch-row"><input id="voucher-new-once" type="checkbox"><span><strong>Satu kali/member</strong></span></label></div><p id="voucher-form-error" class="error"></p><button class="button primary" type="submit">Terbitkan voucher</button></form>
@@ -487,6 +536,6 @@
   <dialog id="edit-user-dialog"><form id="edit-user-form" class="dialog-card wide user-editor"><div class="comparison-heading"><div><p class="eyebrow">HAK AKSES PENGGUNA</p><h2 id="edit-user-title">Ubah pengguna</h2><p id="edit-user-email" class="muted"></p></div><button id="close-user-editor" class="icon-button" type="button">×</button></div><input id="edit-user-id" type="hidden"><div class="form-grid compact"><label>Nama lengkap<input id="edit-user-name" required></label><label>Peran<select id="edit-user-role"><option value="CASHIER">Kasir</option><option value="PURCHASING">Pembelian</option><option value="WAREHOUSE">Gudang</option><option value="ADMIN">Admin</option><option value="OWNER">Owner</option></select></label></div><fieldset><legend>Penempatan outlet</legend><div id="edit-user-outlets" class="outlet-options"></div><small class="muted">Owner otomatis memiliki akses ke semua outlet.</small></fieldset><label class="switch-row"><input id="edit-user-active" type="checkbox"><span><strong>Akun aktif</strong><small>Pengguna dapat masuk dan bekerja sesuai perannya.</small></span></label><p id="edit-user-error" class="error" role="alert"></p><div class="button-row"><button id="cancel-user-edit" class="button secondary" type="button">Batal</button><button id="save-user" class="button primary" type="submit">Simpan perubahan</button></div></form></dialog>
   <div id="toast" class="toast" role="status"></div>
   <script src="/vendor/zxing-browser.min.js" defer></script>
-  <script type="module" src="/app.js?v=45"></script>
+  <script type="module" src="/app.js?v=46"></script>
 </body>
 </html>
