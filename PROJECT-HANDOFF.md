@@ -45,21 +45,21 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat berikutnya — belum live
-
-- **Paket Operasional Karyawan v1.25.0** menambahkan halaman terpisah untuk
-  jadwal/absensi, target/komisi, antrean approval bertingkat, aktivitas
-  pengguna/perangkat, dan rekonsiliasi shift per metode pembayaran.
-- Kandidat memakai migrasi tunggal
-  `supabase/migrations/202607270029_employee_operations.sql`.
-- Versi kandidat: UI `v1.25.0`, API `1.25.0-cloud`, cache
-  `nusa-pos-shell-v51`.
-- Source tidak boleh didorong atau dideploy sebelum pengguna mengonfirmasi
-  migrasi `029` berhasil di Supabase. Setelah itu jalankan seluruh tes,
-  push/deploy satu kali, lalu verifikasi API dan UI produksi.
-
 ### Terakhir dikonfirmasi live
 
+- **Paket Operasional Karyawan v1.25.0** live pada 27 Juli 2026.
+- Migrasi `supabase/migrations/202607270029_employee_operations.sql`
+  dikonfirmasi berhasil sebelum deployment.
+- Rilis menambahkan halaman terpisah untuk jadwal/absensi, target/komisi,
+  antrean approval bertingkat, aktivitas pengguna/perangkat, dan rekonsiliasi
+  shift per metode pembayaran.
+- Sebanyak 136/136 pengujian otomatis lulus. Commit source `fe4ccae` sudah
+  didorong ke `origin/main`.
+- Deployment Vercel `dpl_CywxzdQz7ZtRTxSmakzUPTADWv4V` berstatus Ready dan
+  alias `kasir-nusa-pos.vercel.app` aktif.
+- Verifikasi langsung mengembalikan API `1.25.0-cloud`, UI `v1.25.0`, cache
+  `nusa-pos-shell-v51`, route operasional terlindungi sesi, dan APK kasir tetap
+  dapat diunduh.
 - **Hotfix v1.24.1** memperbaiki startup aplikasi Android yang tertahan pada
   “Memulihkan sesi kerja”. WebView native tidak lagi mengakses Web Serial yang
   tidak tersedia, dan watchdog 12 detik menjamin login tetap dapat ditampilkan.
@@ -398,7 +398,7 @@ migrasi `027`, 119 pengujian otomatis, dan deployment produksi selesai pada
 Status: implementasi domain, database, API, UI, privasi WhatsApp, backup, void,
 125 pengujian otomatis, migrasi `028`, dan deployment produksi selesai.
 
-### v1.25 — Operasional karyawan (kandidat, menunggu SQL/deployment)
+### v1.25 — Operasional karyawan (selesai)
 
 - jadwal kerja dan absensi sederhana;
 - target serta komisi sales/kasir;
@@ -406,10 +406,9 @@ Status: implementasi domain, database, API, UI, privasi WhatsApp, backup, void,
 - log aktivitas per pengguna dan perangkat;
 - rekonsiliasi shift antar-metode pembayaran.
 
-Status: source kandidat dan migrasi `029` sudah disiapkan. Nomor v1.24 telah
-dipakai aplikasi kasir Android, sehingga paket roadmap ini dirilis sebagai
-v1.25.0. Belum boleh ditandai live sampai SQL, seluruh tes, deployment, dan
-verifikasi produksi selesai.
+Status: migrasi `029`, source, 136 pengujian otomatis, push, deployment, dan
+verifikasi produksi selesai pada 27 Juli 2026. Nomor v1.24 telah dipakai
+aplikasi kasir Android, sehingga paket roadmap ini dirilis sebagai v1.25.0.
 
 ### v1.26 — Akuntansi dan analitik owner
 

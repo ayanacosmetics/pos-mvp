@@ -93,7 +93,7 @@ Untuk kandidat v1.23, jalankan satu file
 Migrasi ini menambahkan tier member, poin, voucher, segmentasi CRM, posting
 loyalitas atomik saat checkout, dan pembalikan saat void.
 
-Untuk kandidat v1.25, jalankan satu file
+Untuk rilis v1.25, jalankan satu file
 `supabase/migrations/202607270029_employee_operations.sql` sebelum deployment.
 Migrasi ini menambahkan jadwal dan absensi, target serta komisi, approval
 bertingkat, log aktivitas perangkat, dan rekonsiliasi shift per metode
@@ -111,7 +111,7 @@ Jalankan:
 npm test
 ```
 
-Kandidat v1.25.0 memiliki 136 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
+Rilis v1.25.0 memiliki 136 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
 
 ## Aplikasi kasir Android
 
