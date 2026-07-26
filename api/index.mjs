@@ -436,6 +436,14 @@ async function loadPosSales(context, query = '') {
     customerIds.length ? rest('customers', `tenant_id=eq.${context.tenantId}&id=${inFilter(customerIds)}&select=id,name,phone,notes`) : [],
     cashierIds.length ? rest('profiles', `tenant_id=eq.${context.tenantId}&user_id=${inFilter(cashierIds)}&select=user_id,display_name`) : []
   ]);
+  const adjustmentIds=[...new Set(items.flatMap((item)=>
+    (item.promotion_snapshot??[])
+      .filter((promotion)=>promotion.manual&&promotion.id)
+      .map((promotion)=>promotion.id)
+  ))];
+  const adjustments=adjustmentIds.length
+    ? await rest('sale_adjustment_authorizations',`tenant_id=eq.${context.tenantId}&id=${inFilter(adjustmentIds)}&select=id,adjustment_json,discount_amount`)
+    : [];
   const normalized = String(query ?? '').trim().toLowerCase();
   return sales.map((sale) => {
     const customer = customers.find((item) => item.id === sale.customer_id) ?? null;
@@ -447,11 +455,24 @@ async function loadPosSales(context, query = '') {
       gross:Number(item.gross),discount:Number(item.discount),total:Number(item.total),
       promotions:item.promotion_snapshot ?? []
     }));
+    const adjustmentId=lines.flatMap((line)=>line.promotions)
+      .find((promotion)=>promotion.manual&&promotion.id)?.id;
+    const savedAdjustment=adjustments.find((adjustment)=>adjustment.id===adjustmentId);
+    const manualAdjustment=savedAdjustment
+      ? {
+          ...savedAdjustment.adjustment_json,
+          authorizationId:savedAdjustment.id,
+          discountAmount:Number(savedAdjustment.discount_amount)
+        }
+      : null;
     return {
       id:sale.id,receiptNo:sale.receipt_no,status:sale.status,occurredAt:sale.occurred_at,
       cashier,outletName:context.outlet.name,customer,notes:sale.notes ?? '',
       voidReason:sale.void_reason ?? '',voidedAt:sale.voided_at ?? null,
-      quote:{lines,subtotal:Number(sale.subtotal),discountTotal:Number(sale.discount_total),grandTotal:Number(sale.grand_total)},
+      quote:{
+        lines,subtotal:Number(sale.subtotal),discountTotal:Number(sale.discount_total),
+        grandTotal:Number(sale.grand_total),...(manualAdjustment?{manualAdjustment}:{})
+      },
       payments:payments.filter((item) => item.sale_id === sale.id).map((item) => ({
         method:item.method,amount:Number(item.amount),tendered:item.tendered_amount == null ? null : Number(item.tendered_amount),
         reference:item.reference ?? ''

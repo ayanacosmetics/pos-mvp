@@ -128,9 +128,12 @@ test('fondasi v1.13 mengikat persetujuan ke kasir, outlet, keranjang, masa berla
 test('UI memisahkan harga internal dari diskon pelanggan dan struk', async () => {
   const html = await readFile(new URL('../apps/web/index.html',import.meta.url),'utf8');
   const script = await readFile(new URL('../apps/web/app.js',import.meta.url),'utf8');
+  const api = await readFile(new URL('../api/index.mjs',import.meta.url),'utf8');
   assert.match(html,/PENYESUAIAN HARGA INTERNAL/);
   assert.match(html,/id="price-adjustment-summary"/);
   assert.match(script,/isLine\s*\?\s*'<option value="FIXED_PRICE">Harga jual akhir per satuan<\/option>'/);
   assert.doesNotMatch(script,/Promo & penyesuaian/);
   assert.match(script,/customerView\.discountTotal/);
+  assert.match(api,/sale_adjustment_authorizations/);
+  assert.match(api,/savedAdjustment\.adjustment_json/);
 });

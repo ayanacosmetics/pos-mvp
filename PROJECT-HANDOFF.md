@@ -54,7 +54,7 @@ kode frontend, dokumentasi publik, atau chat.
 - API kini mendeteksi benturan `sales_tenant_id_receipt_no_key`, menyelaraskan
   penghitung secara aman, lalu mencoba ulang RPC dengan idempotency key yang
   sama sehingga transaksi tidak tercatat ganda.
-- Deployment Vercel `dpl_7tzqbzxjdyN3aL6rVp9m14QJ9Usy` berstatus Ready pada
+- Deployment Vercel `dpl_FXwvbqdST4Bw36FUUnNE3js2APNe` berstatus Ready pada
   26 Juli 2026 dan alias `kasir-nusa-pos.vercel.app` sudah aktif.
 - Verifikasi langsung produksi mengembalikan API `1.21.2-cloud`, aplikasi
   `v1.21.2`, cache `nusa-pos-shell-v41`, ZXing lokal, kebijakan `camera=(self)`,
@@ -66,6 +66,8 @@ kode frontend, dokumentasi publik, atau chat.
   normal tanpa nominal, alasan, approver, atau label penyesuaian internal.
 - Promo dan diskon pelanggan tetap dicantumkan tersendiri pada struk serta
   tidak digabung dengan penyesuaian harga internal.
+- Cetak ulang dari riwayat mengambil kembali metadata otorisasi internal agar
+  aturan privasi yang sama juga berlaku pada transaksi lama.
 - Validasi rilis mencakup 107 pengujian otomatis dan 5 pengujian browser
   tambahan; seluruhnya lulus.
 
