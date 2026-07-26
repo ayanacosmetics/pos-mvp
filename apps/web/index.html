@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#174c4f">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=50">
+  <link rel="stylesheet" href="/styles.css?v=51">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -82,6 +82,14 @@
           <button data-page="reports-audit" data-target-page="reports" data-report-view="audit" class="feature-nav-item" data-permission="audit.view"><span>Audit log</span><small>Aktivitas sensitif</small></button>
           <button data-page="sync-review" class="feature-nav-item" data-permission="audit.view"><span>Sinkronisasi</span><small>Konflik transaksi offline <b id="sync-review-nav-count" class="nav-count hidden">0</b></small></button>
         </div>
+        <button data-nav-group="workforce" class="nav-item" aria-expanded="false"><span>♙</span><span>Karyawan<small>Jadwal, target, approval</small></span><b>›</b></button>
+        <div data-nav-panel="workforce" class="feature-nav-panel">
+          <button data-page="workforce-schedule" class="feature-nav-item" data-permission="workforce.self"><span>Jadwal & absensi</span><small>Jam kerja dan kehadiran</small></button>
+          <button data-page="workforce-targets" class="feature-nav-item" data-permission="workforce.self"><span>Target & komisi</span><small>Kinerja penjualan karyawan</small></button>
+          <button data-page="workforce-approvals" class="feature-nav-item" data-permission="workforce.self"><span>Persetujuan</span><small>Diskon, void, pembelian, opname</small></button>
+          <button data-page="workforce-activity" class="feature-nav-item" data-permission="workforce.manage"><span>Aktivitas</span><small>Jejak pengguna dan perangkat</small></button>
+          <button data-page="workforce-reconciliation" class="feature-nav-item" data-permission="workforce.manage"><span>Rekonsiliasi shift</span><small>Selisih per pembayaran</small></button>
+        </div>
         <button data-nav-group="system" class="nav-item" aria-expanded="false"><span>⚙</span><span>Sistem<small>Data dan pengaturan</small></span><b>›</b></button>
         <div data-nav-panel="system" class="feature-nav-panel">
           <button data-page="imports" class="feature-nav-item" data-permission="audit.view"><span>Impor data</span><small>Masukkan data awal</small></button>
@@ -94,7 +102,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Operasional · v1.24.1</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Operasional · v1.25.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -435,7 +443,41 @@
         </form>
       </div></section>
 
-      <section id="page-shift" class="page"><div class="content-width"><div class="page-title"><div><p class="eyebrow">KONTROL KAS</p><h1>Shift kasir</h1></div><span id="shift-status" class="pill">Belum dibuka</span></div><div class="shift-grid"><div class="surface"><p class="eyebrow">STATUS SHIFT</p><div id="shift-detail" class="shift-detail"></div><div id="open-shift-form"><label>Modal awal kas<input id="opening-cash" type="number" min="0" value="300000"></label><button id="open-shift" class="button primary">Buka shift</button></div><div id="close-shift-form" class="hidden"><label>Kas fisik saat tutup<input id="closing-cash" type="number" min="0"></label><button id="close-shift" class="button primary">Tutup dan hitung selisih</button></div></div><div class="surface"><p class="eyebrow">KAS MASUK / KELUAR</p><label>Jenis<select id="cash-type"><option value="CASH_OUT">Kas keluar</option><option value="CASH_IN">Kas masuk</option></select></label><label>Jumlah<input id="cash-amount" type="number" min="1"></label><label>Catatan<input id="cash-note" placeholder="Contoh: beli plastik"></label><button id="cash-movement" class="button secondary">Catat pergerakan</button><div id="cash-history"></div></div></div></div></section>
+      <section id="page-shift" class="page"><div class="content-width"><div class="page-title"><div><p class="eyebrow">KONTROL KAS</p><h1>Shift kasir</h1></div><span id="shift-status" class="pill">Belum dibuka</span></div><div class="shift-grid"><div class="surface"><p class="eyebrow">STATUS SHIFT</p><div id="shift-detail" class="shift-detail"></div><div id="open-shift-form"><label>Modal awal kas<input id="opening-cash" type="number" min="0" value="300000"></label><button id="open-shift" class="button primary">Buka shift</button></div><div id="close-shift-form" class="hidden"><div id="shift-payment-reconciliation"></div><button id="close-shift" class="button primary">Tutup dan hitung selisih</button></div></div><div class="surface"><p class="eyebrow">KAS MASUK / KELUAR</p><label>Jenis<select id="cash-type"><option value="CASH_OUT">Kas keluar</option><option value="CASH_IN">Kas masuk</option></select></label><label>Jumlah<input id="cash-amount" type="number" min="1"></label><label>Catatan<input id="cash-note" placeholder="Contoh: beli plastik"></label><button id="cash-movement" class="button secondary">Catat pergerakan</button><div id="cash-history"></div></div></div></div></section>
+
+      <section id="page-workforce-schedule" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">OPERASIONAL KARYAWAN</p><h1>Jadwal dan absensi</h1><p class="muted">Catat kehadiran dari perangkat aktif dan lihat jadwal kerja bulanan.</p></div><button id="refresh-workforce" class="button secondary" type="button">Muat ulang</button></div>
+        <div class="workforce-grid">
+          <section class="surface attendance-card"><p class="eyebrow">ABSENSI SAYA</p><div id="attendance-current"></div><label>Catatan opsional<input id="attendance-note" maxlength="240" placeholder="Contoh: menggantikan shift sore"></label><button id="attendance-action" class="button primary" type="button">Absen masuk</button></section>
+          <form id="schedule-form" class="surface" data-permission="workforce.manage"><p class="eyebrow">BUAT JADWAL</p><label>Karyawan<select id="schedule-user" required></select></label><label>Outlet<select id="schedule-outlet" required></select></label><div class="form-grid compact"><label>Tanggal<input id="schedule-date" type="date" required></label><label>Mulai<input id="schedule-start" type="time" value="08:00" required></label><label>Selesai<input id="schedule-end" type="time" value="17:00" required></label></div><label>Catatan<input id="schedule-note" maxlength="240"></label><button class="button primary" type="submit">Simpan jadwal</button></form>
+        </div>
+        <section class="surface workforce-list-section"><div class="settings-section-head"><div><p class="eyebrow">JADWAL BULAN INI</p><h2>Kehadiran dan jam kerja</h2></div></div><div id="workforce-schedule-list"></div></section>
+      </div></section>
+
+      <section id="page-workforce-targets" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">KINERJA KARYAWAN</p><h1>Target dan komisi</h1><p class="muted">Komisi dihitung dari transaksi selesai pada periode target.</p></div></div>
+        <div id="workforce-performance" class="workforce-performance"></div>
+        <form id="target-form" class="surface workforce-editor" data-permission="workforce.manage"><div class="settings-section-head"><div><p class="eyebrow">ATUR TARGET</p><h2>Target periode karyawan</h2></div></div><div class="form-grid compact"><label>Karyawan<select id="target-user" required></select></label><label>Outlet<select id="target-outlet"><option value="">Semua outlet</option></select></label><label>Mulai<input id="target-start" type="date" required></label><label>Selesai<input id="target-end" type="date" required></label><label>Target penjualan<input id="target-sales" type="number" min="0" value="0"></label><label>Target transaksi<input id="target-transactions" type="number" min="0" value="0"></label><label>Jenis komisi<select id="target-commission-type"><option value="SALES_PERCENT">Persen penjualan</option><option value="FIXED_PER_TRANSACTION">Nominal per transaksi</option></select></label><label>Nilai komisi<input id="target-commission-value" type="number" min="0" step="0.01" value="0"></label></div><button class="button primary" type="submit">Simpan target</button></form>
+      </div></section>
+
+      <section id="page-workforce-approvals" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">KONTROL PERSETUJUAN</p><h1>Persetujuan bertingkat</h1><p class="muted">Pemohon dan approver selalu berbeda; dua tingkat memerlukan dua orang berbeda.</p></div><button id="refresh-approvals" class="button secondary" type="button">Muat ulang</button></div>
+        <div class="workforce-grid">
+          <form id="approval-request-form" class="surface"><p class="eyebrow">AJUKAN PERSETUJUAN</p><label>Jenis<select id="approval-action"><option value="DISCOUNT">Diskon</option><option value="VOID">Void</option><option value="PURCHASE">Pembelian</option><option value="STOCK_COUNT">Stok opname</option></select></label><label>Nilai<input id="approval-amount" type="number" min="0" value="0"></label><label>Alasan<textarea id="approval-reason" minlength="5" maxlength="240" required></textarea></label><button class="button primary" type="submit">Ajukan</button></form>
+          <form id="approval-policy-form" class="surface" data-permission="approval.manage"><p class="eyebrow">KEBIJAKAN APPROVAL</p><label>Jenis<select id="policy-action"><option value="DISCOUNT">Diskon</option><option value="VOID">Void</option><option value="PURCHASE">Pembelian</option><option value="STOCK_COUNT">Stok opname</option></select></label><label>Berlaku mulai nilai<input id="policy-minimum" type="number" min="0" value="0"></label><label>Jumlah tingkat<select id="policy-levels"><option value="1">1 tingkat</option><option value="2">2 tingkat</option></select></label><button class="button primary" type="submit">Simpan kebijakan</button></form>
+        </div>
+        <section class="surface workforce-list-section"><div id="approval-request-list"></div></section>
+      </div></section>
+
+      <section id="page-workforce-activity" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">JEJAK OPERASIONAL</p><h1>Aktivitas pengguna dan perangkat</h1><p class="muted">Aktivitas sensitif terbaru beserta pelaku, waktu, dan konteks perangkat.</p></div><button id="refresh-workforce-activity" class="button secondary" type="button">Muat ulang</button></div>
+        <section class="surface"><div id="workforce-activity-list"></div></section>
+      </div></section>
+
+      <section id="page-workforce-reconciliation" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">TUTUP SHIFT</p><h1>Rekonsiliasi pembayaran</h1><p class="muted">Bandingkan jumlah sistem dan jumlah fisik/settlement untuk setiap metode pembayaran.</p></div><button id="refresh-reconciliations" class="button secondary" type="button">Muat ulang</button></div>
+        <div id="workforce-reconciliation-list"></div>
+      </div></section>
 
       <section id="page-customers" class="page"><div class="content-width">
         <div class="page-title"><div><p class="eyebrow">PELANGGAN & PIUTANG</p><h1>Pelanggan</h1><p class="muted">Kelola profil member, loyalitas, plafon kredit, tagihan, dan pembayaran pelanggan.</p></div><button id="new-customer" class="button primary">Tambah pelanggan</button></div>
@@ -548,6 +590,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=50"></script>
+  <script type="module" src="/app.js?v=51"></script>
 </body>
 </html>

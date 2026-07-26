@@ -6,7 +6,7 @@ import { customerReceiptView } from './receipt.mjs';
 import { disconnectBluetoothPrinter, printEscPosReceipt, printEscPosTest, printerConnected, printerSelected, restoreGrantedPrinter, selectBluetoothPrinter, supportsBluetoothClassicPrinting } from './escpos-printer.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [] };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] } };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -201,6 +201,8 @@ async function applyBootstrap(data, { offline = false } = {}) {
   if (!offline && state.session.permissions.includes('pos.sell')) await loadPosSales();
   if (!offline && state.session.permissions.includes('pos.sell')) await loadCustomerAging();
   if (!offline && state.session.permissions.includes('sales.return')) await loadRecentReturns();
+  if (!offline && state.session.permissions.includes('workforce.self')) { await loadWorkforceOverview(); await loadApprovals(); }
+  if (!offline && state.session.permissions.includes('workforce.manage')) { await loadWorkforceActivity(); await loadWorkforceReconciliations(); }
 }
 
 async function bootstrap({ reportError = false } = {}) {
@@ -904,6 +906,121 @@ async function retirePromotion(versionId){
   catch(error){toast(error.message);}
 }
 
+function employeeName(userId){
+  return state.workforce.overview?.profiles?.find((item)=>item.user_id===userId)?.display_name??'Karyawan';
+}
+
+function outletName(outletId){
+  return state.outlets.find((item)=>item.id===outletId)?.name??'Outlet';
+}
+
+function localDate(value){
+  if(!value)return '-';
+  return new Date(`${value}T00:00:00`).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
+}
+
+function renderWorkforceOverview(){
+  const data=state.workforce.overview;
+  if(!data)return;
+  const active=data.activeAttendance;
+  el('attendance-current').innerHTML=active
+    ? `<span class="status-badge submitted">SEDANG BEKERJA</span><h2>${new Date(active.clock_in_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</h2><p class="muted">${localDate(active.work_date)} · ${outletName(active.outlet_id)}</p>`
+    : '<span class="status-badge approved">BELUM ABSEN MASUK</span><p class="muted">Absensi dicatat menggunakan outlet dan perangkat aktif.</p>';
+  el('attendance-action').textContent=active?'Absen keluar':'Absen masuk';
+  el('attendance-action').dataset.action=active?'CLOCK_OUT':'CLOCK_IN';
+  const profileOptions=data.profiles.map((item)=>`<option value="${escapeHtml(item.user_id)}">${escapeHtml(item.display_name)} · ${escapeHtml(roleLabels[item.role]??item.role)}</option>`).join('');
+  el('schedule-user').innerHTML=profileOptions;
+  el('target-user').innerHTML=profileOptions;
+  const outletOptions=data.outlets.map((item)=>`<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('');
+  el('schedule-outlet').innerHTML=outletOptions;
+  el('target-outlet').innerHTML=`<option value="">Semua outlet</option>${outletOptions}`;
+  const today=new Date().toISOString().slice(0,10);
+  if(!el('schedule-date').value)el('schedule-date').value=today;
+  if(!el('target-start').value)el('target-start').value=`${today.slice(0,7)}-01`;
+  if(!el('target-end').value)el('target-end').value=new Date(Date.UTC(Number(today.slice(0,4)),Number(today.slice(5,7)),0)).toISOString().slice(0,10);
+  el('workforce-schedule-list').innerHTML=data.schedules.length?data.schedules.map((schedule)=>{
+    const attendance=data.attendance.find((item)=>item.schedule_id===schedule.id)
+      ??data.attendance.find((item)=>item.user_id===schedule.user_id&&item.work_date===schedule.work_date);
+    return `<article class="workforce-row"><div><strong>${escapeHtml(employeeName(schedule.user_id))}</strong><small>${localDate(schedule.work_date)} · ${escapeHtml(String(schedule.starts_at).slice(0,5))}–${escapeHtml(String(schedule.ends_at).slice(0,5))} · ${escapeHtml(outletName(schedule.outlet_id))}</small></div><div>${attendance?`<span class="status-badge ${attendance.clock_out_at?'approved':'submitted'}">${escapeHtml(attendance.status)}</span><small>${new Date(attendance.clock_in_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}${attendance.clock_out_at?`–${new Date(attendance.clock_out_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`:''}</small>`:'<span class="status-badge">BELUM HADIR</span>'}</div></article>`;
+  }).join(''):'<div class="empty-state compact">Belum ada jadwal bulan ini.</div>';
+  el('workforce-performance').innerHTML=data.performance.map((item)=>{
+    const salesTarget=Number(item.target?.sales_target??0),transactionTarget=Number(item.target?.transaction_target??0);
+    const salesProgress=salesTarget?Math.min(100,Number(item.salesTotal)/salesTarget*100):0;
+    return `<article class="surface performance-card"><div><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(roleLabels[item.role]??item.role)}</small></div><h2>${money.format(item.salesTotal)}</h2><div class="target-progress"><span style="width:${salesProgress}%"></span></div><small>Target ${money.format(salesTarget)} · ${item.transactions}/${transactionTarget} transaksi</small><div class="commission-value"><span>Komisi berjalan</span><strong>${money.format(item.commission)}</strong></div></article>`;
+  }).join('')||'<div class="empty-state compact">Belum ada data kinerja.</div>';
+}
+
+async function loadWorkforceOverview(){
+  try{state.workforce.overview=await request('/api/workforce/overview');renderWorkforceOverview();}
+  catch(error){toast(error.message);}
+}
+
+async function clockAttendance(){
+  const button=el('attendance-action');button.disabled=true;
+  try{await request('/api/workforce/attendance',{method:'POST',body:JSON.stringify({action:button.dataset.action,note:el('attendance-note').value})});el('attendance-note').value='';toast(button.dataset.action==='CLOCK_IN'?'Absensi masuk tercatat':'Absensi keluar tercatat');await loadWorkforceOverview();}
+  catch(error){toast(error.message);}finally{button.disabled=false;}
+}
+
+async function saveEmployeeSchedule(event){
+  event.preventDefault();
+  try{await request('/api/workforce/schedules',{method:'POST',body:JSON.stringify({userId:el('schedule-user').value,outletId:el('schedule-outlet').value,workDate:el('schedule-date').value,startsAt:el('schedule-start').value,endsAt:el('schedule-end').value,note:el('schedule-note').value})});toast('Jadwal karyawan tersimpan');el('schedule-note').value='';await loadWorkforceOverview();}
+  catch(error){toast(error.message);}
+}
+
+async function saveEmployeeTarget(event){
+  event.preventDefault();
+  try{await request('/api/workforce/targets',{method:'POST',body:JSON.stringify({userId:el('target-user').value,outletId:el('target-outlet').value||null,periodStart:el('target-start').value,periodEnd:el('target-end').value,salesTarget:Number(el('target-sales').value),transactionTarget:Number(el('target-transactions').value),commissionType:el('target-commission-type').value,commissionValue:Number(el('target-commission-value').value)})});toast('Target dan komisi tersimpan');await loadWorkforceOverview();}
+  catch(error){toast(error.message);}
+}
+
+function renderApprovals(){
+  const data=state.workforce.approvals;if(!data)return;
+  const actorName=(id)=>data.actors.find((item)=>item.user_id===id)?.display_name??'Pengguna';
+  el('approval-request-list').innerHTML=data.requests.length?data.requests.map((item)=>{
+    const actions=data.canManage&&item.status==='PENDING'&&item.requester_id!==state.session.user.id
+      ? `<div class="approval-actions"><button class="button primary approval-decision" data-id="${item.id}" data-decision="APPROVE">Setujui tingkat ${Number(item.current_level)+1}</button><button class="button danger approval-decision" data-id="${item.id}" data-decision="REJECT">Tolak</button></div>`:'';
+    return `<article class="approval-row"><div><span class="status-badge ${item.status==='APPROVED'?'approved':item.status==='PENDING'?'submitted':'danger'}">${escapeHtml(item.status)}</span><strong>${escapeHtml(item.action_type)} · ${money.format(item.amount)}</strong><small>${escapeHtml(actorName(item.requester_id))} · ${new Date(item.requested_at).toLocaleString('id-ID')}</small><p>${escapeHtml(item.reason)}</p><small>Tingkat ${item.current_level}/${item.required_levels}</small></div>${actions}</article>`;
+  }).join(''):'<div class="empty-state compact">Belum ada permintaan persetujuan.</div>';
+}
+
+async function loadApprovals(){
+  try{state.workforce.approvals=await request('/api/approvals');renderApprovals();}
+  catch(error){toast(error.message);}
+}
+
+async function submitApprovalRequest(event){
+  event.preventDefault();
+  try{await request('/api/approvals/requests',{method:'POST',body:JSON.stringify({actionType:el('approval-action').value,amount:Number(el('approval-amount').value),reason:el('approval-reason').value})});el('approval-reason').value='';toast('Permintaan persetujuan diajukan');await loadApprovals();}
+  catch(error){toast(error.message);}
+}
+
+async function saveApprovalPolicy(event){
+  event.preventDefault();
+  try{await request('/api/approvals/policies',{method:'POST',body:JSON.stringify({actionType:el('policy-action').value,minimumAmount:Number(el('policy-minimum').value),requiredLevels:Number(el('policy-levels').value)})});toast('Kebijakan persetujuan tersimpan');await loadApprovals();}
+  catch(error){toast(error.message);}
+}
+
+async function decideApproval(event){
+  const button=event.target.closest('.approval-decision');if(!button)return;
+  const note=prompt(button.dataset.decision==='APPROVE'?'Catatan persetujuan (opsional)':'Alasan penolakan')??'';
+  try{await request(`/api/approvals/${button.dataset.id}/decision`,{method:'POST',body:JSON.stringify({decision:button.dataset.decision,note})});toast('Keputusan persetujuan tersimpan');await loadApprovals();}
+  catch(error){toast(error.message);}
+}
+
+async function loadWorkforceActivity(){
+  try{
+    const data=await request('/api/workforce/activity');state.workforce.activity=data.logs;
+    el('workforce-activity-list').innerHTML=data.logs.map((item)=>`<article class="workforce-row"><div><strong>${escapeHtml(item.action.replaceAll('_',' '))}</strong><small>${escapeHtml(item.actor?.display_name??'Sistem')} · ${new Date(item.occurred_at).toLocaleString('id-ID')}</small></div><small>${escapeHtml(item.entity_type)}${item.details_json?.deviceId?` · Perangkat ${escapeHtml(String(item.details_json.deviceId).slice(0,8).toUpperCase())}`:''}</small></article>`).join('')||'<div class="empty-state compact">Belum ada aktivitas.</div>';
+  }catch(error){toast(error.message);}
+}
+
+async function loadWorkforceReconciliations(){
+  try{
+    const data=await request('/api/workforce/reconciliations');state.workforce.reconciliations=data.shifts;
+    el('workforce-reconciliation-list').innerHTML=data.shifts.map((shift)=>`<article class="surface reconciliation-card"><div class="settings-section-head"><div><strong>${escapeHtml(shift.cashierName)}</strong><small>${new Date(shift.closed_at).toLocaleString('id-ID')} · ${escapeHtml(outletName(shift.outlet_id))}</small></div><span class="status-badge ${Math.abs(Number(shift.difference))<0.01?'approved':'danger'}">${money.format(shift.difference)}</span></div><div class="reconciliation-methods">${shift.methods.map((method)=>`<div><span>${escapeHtml(method.payment_method)}</span><small>Sistem ${money.format(method.expected_amount)}</small><strong>${money.format(method.declared_amount)}</strong><em>${Number(method.difference)>=0?'+':''}${money.format(method.difference)}</em></div>`).join('')}</div></article>`).join('')||'<div class="empty-state">Belum ada shift yang direkonsiliasi.</div>';
+  }catch(error){toast(error.message);}
+}
+
 async function refreshShift() {
   const data = await request('/api/shifts/current');
   state.currentShift = data.shift;
@@ -921,11 +1038,12 @@ function renderShift() {
   el('cash-movement').disabled = !shift;
   if (!shift) {
     el('shift-detail').innerHTML = '<p class="muted">Buka shift sebelum menerima transaksi.</p>';
+    el('shift-payment-reconciliation').innerHTML = '';
     el('cash-history').innerHTML = '';
     return;
   }
   el('shift-detail').innerHTML = `<div class="shift-fact"><span>Dibuka</span><strong>${new Date(shift.opened_at).toLocaleString('id-ID')}</strong></div><div class="shift-fact"><span>Modal awal</span><strong>${money.format(shift.opening_cash)}</strong></div><div class="shift-fact"><span>Kas seharusnya</span><strong>${money.format(shift.expectedNow ?? shift.opening_cash)}</strong></div><div class="shift-fact"><span>Kasir</span><strong>${shift.cashier_name}</strong></div>`;
-  el('closing-cash').value = Math.round(shift.expectedNow ?? shift.opening_cash);
+  el('shift-payment-reconciliation').innerHTML=(shift.paymentTotals??[{method:'CASH',expectedAmount:shift.expectedNow??shift.opening_cash}]).map((item)=>`<label>${escapeHtml(item.method)} fisik/settlement <small>Sistem ${money.format(item.expectedAmount)}</small><input class="shift-declared-payment" data-method="${escapeHtml(item.method)}" type="number" min="0" step="1" value="${Math.round(Number(item.expectedAmount))}" required></label>`).join('');
   el('cash-history').innerHTML = (shift.movements ?? []).map((item) => `<div class="relation-item"><span>${item.note}<br><small>${item.movement_type === 'CASH_IN' ? 'Kas masuk' : 'Kas keluar'}</small></span><strong>${item.movement_type === 'CASH_IN' ? '+' : '−'}${money.format(item.amount)}</strong></div>`).join('');
 }
 
@@ -949,7 +1067,8 @@ async function closeShift() {
   const pending = (await listCommands()).filter((command) => command.actorId === state.session.user.id);
   if (pending.length) return toast(`Sinkronkan ${pending.length} transaksi offline sebelum menutup shift.`);
   try {
-    const closed = await request('/api/shifts/close', { method: 'POST', body: JSON.stringify({ shiftId: state.currentShift.id, closingCash: Number(el('closing-cash').value) }) });
+    const declarations=[...document.querySelectorAll('.shift-declared-payment')].map((input)=>({method:input.dataset.method,declaredAmount:Number(input.value)}));
+    const closed = await request('/api/shifts/close', { method: 'POST', body: JSON.stringify({ shiftId: state.currentShift.id, declarations }) });
     toast(`Shift ditutup. Selisih ${money.format(closed.difference)}`); state.currentShift = null; cacheCurrentShift(); renderShift(); renderCart(); if (state.session.permissions.includes('report.view')) await loadReport();
   } catch (error) { toast(error.message); }
 }
@@ -3500,6 +3619,16 @@ el('promotion-list').addEventListener('click',(event)=>{const button=event.targe
 el('open-shift').addEventListener('click', openShift);
 el('cash-movement').addEventListener('click', addCashMovement);
 el('close-shift').addEventListener('click', closeShift);
+el('refresh-workforce').addEventListener('click',loadWorkforceOverview);
+el('attendance-action').addEventListener('click',clockAttendance);
+el('schedule-form').addEventListener('submit',saveEmployeeSchedule);
+el('target-form').addEventListener('submit',saveEmployeeTarget);
+el('refresh-approvals').addEventListener('click',loadApprovals);
+el('approval-request-form').addEventListener('submit',submitApprovalRequest);
+el('approval-policy-form').addEventListener('submit',saveApprovalPolicy);
+el('approval-request-list').addEventListener('click',decideApproval);
+el('refresh-workforce-activity').addEventListener('click',loadWorkforceActivity);
+el('refresh-reconciliations').addEventListener('click',loadWorkforceReconciliations);
 window.addEventListener('online', () => { el('network-dot').classList.remove('offline'); el('network-status').textContent = 'Online'; syncQueue(); });
 window.addEventListener('offline', () => { el('network-dot').classList.add('offline'); el('network-status').textContent = 'Offline'; });
 window.addEventListener('storage', (event) => {

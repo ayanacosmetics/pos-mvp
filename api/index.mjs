@@ -3,19 +3,21 @@ import { compareCost, quoteBasket } from '../packages/domain/src/pricing.mjs';
 import { summarizeExpiryBatches, todayInTimeZone } from '../packages/domain/src/expiry.mjs';
 import { applySaleAdjustment, normalizeSaleAdjustment, saleAdjustmentFingerprintPayload } from '../packages/domain/src/sale-adjustment.mjs';
 import { applyVoucher } from '../packages/domain/src/loyalty.mjs';
+import { calculateEmployeeCommission } from '../packages/domain/src/employee-operations.mjs';
 
 const PERMISSIONS = {
-  OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage'],
-  ADMIN: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view'],
-  CASHIER: ['pos.sell'],
-  PURCHASING: ['purchasing.view_cost','purchasing.receive'],
-  WAREHOUSE: ['inventory.manage']
+  OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage','workforce.self','workforce.manage','approval.manage'],
+  ADMIN: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','workforce.self','workforce.manage','approval.manage'],
+  CASHIER: ['pos.sell','workforce.self'],
+  PURCHASING: ['purchasing.view_cost','purchasing.receive','workforce.self'],
+  WAREHOUSE: ['inventory.manage','workforce.self']
 };
 
 const BACKUP_TABLES = [
   'tenants','profiles','outlets','stock_locations','user_outlets',
   'customers','loyalty_settings','customer_tiers','customer_point_entries','vouchers','voucher_redemptions','customer_account_entries','customer_payment_receipts','customer_payment_allocations','suppliers','supplier_bills','supplier_payable_entries','supplier_payment_receipts','supplier_payment_allocations','products','product_units','price_rules','promotions','promotion_versions','promotion_redemptions',
-  'shifts','cash_movements','sales','sale_items','payments','parked_sales','sale_adjustment_authorizations',
+  'shifts','cash_movements','shift_reconciliations','sales','sale_items','payments','parked_sales','sale_adjustment_authorizations',
+  'employee_schedules','attendance_records','employee_targets','approval_policies','approval_requests',
   'purchase_planning_settings','restock_policies','purchase_orders','purchase_order_items','purchase_receipts','purchase_receipt_items','supplier_returns','supplier_return_items',
   'stock_balances','stock_ledger','inventory_batches','inventory_batch_movements',
   'stock_transfers','stock_transfer_items','stock_counts','stock_count_items',
@@ -388,9 +390,20 @@ async function shiftDetail(tenantId, shift) {
     rest('cash_movements', `tenant_id=eq.${tenantId}&shift_id=eq.${shift.id}&select=*&order=occurred_at.desc`),
     profileFor(shift.cashier_id)
   ]);
-  const payments=sales.length?await rest('payments',`tenant_id=eq.${tenantId}&sale_id=${inFilter(sales.map((sale)=>sale.id))}&method=in.(CASH,Tunai)&select=amount`):[];
-  const expectedNow = Number(shift.opening_cash) + payments.reduce((sum, payment) => sum + Number(payment.amount), 0) + movements.reduce((sum, item) => sum + (item.movement_type === 'CASH_IN' ? Number(item.amount) : -Number(item.amount)), 0);
-  return { ...shift, cashier_name: cashier?.display_name, expectedNow, movements };
+  const payments=sales.length?await rest('payments',`tenant_id=eq.${tenantId}&sale_id=${inFilter(sales.map((sale)=>sale.id))}&select=method,amount`):[];
+  const paymentTotals=Object.values(payments.reduce((totals,payment)=>{
+    const rawMethod=String(payment.method??'').trim().toUpperCase()||'LAINNYA';
+    const method=['CASH','TUNAI'].includes(rawMethod)?'CASH':rawMethod;
+    totals[method]??={method,expectedAmount:0};
+    totals[method].expectedAmount+=Number(payment.amount);
+    return totals;
+  },{}));
+  const cashPayments=paymentTotals.find((item)=>item.method==='CASH')?.expectedAmount??0;
+  const expectedNow = Number(shift.opening_cash) + cashPayments + movements.reduce((sum, item) => sum + (item.movement_type === 'CASH_IN' ? Number(item.amount) : -Number(item.amount)), 0);
+  const cash=paymentTotals.find((item)=>item.method==='CASH');
+  if(cash)cash.expectedAmount=expectedNow;
+  else paymentTotals.unshift({method:'CASH',expectedAmount:expectedNow});
+  return { ...shift, cashier_name: cashier?.display_name, expectedNow, paymentTotals, movements };
 }
 
 async function loadReturnableSale(context, { saleId = null, receiptNo = null } = {}) {
@@ -796,7 +809,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '1.24.1-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '1.25.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'login') {
@@ -1586,6 +1599,175 @@ async function routeRequest(request, response, route) {
     return send(response,result.duplicate?200:201,result);
   }
 
+  if(request.method==='GET'&&route==='workforce/overview'){
+    requirePermission(session,'workforce.self');
+    const canManage=session.permissions.includes('workforce.manage');
+    const tenant=encodeURIComponent(context.tenantId);
+    const today=todayInTimeZone(new Date(),context.outlet.timezone??'Asia/Makassar');
+    const monthStart=`${today.slice(0,7)}-01`;
+    const monthEnd=new Date(Date.UTC(Number(today.slice(0,4)),Number(today.slice(5,7)),0)).toISOString().slice(0,10);
+    const userFilter=canManage?'':`&user_id=eq.${encodeURIComponent(session.authUser.id)}`;
+    const [profiles,schedules,attendance,targets,sales]=await Promise.all([
+      rest('profiles',`tenant_id=eq.${tenant}&active=eq.true${canManage?'':`&user_id=eq.${encodeURIComponent(session.authUser.id)}`}&select=user_id,display_name,role&order=display_name`),
+      rest('employee_schedules',`tenant_id=eq.${tenant}${userFilter}&work_date=gte.${monthStart}&work_date=lte.${monthEnd}&select=*&order=work_date,starts_at`),
+      rest('attendance_records',`tenant_id=eq.${tenant}${userFilter}&work_date=gte.${monthStart}&work_date=lte.${monthEnd}&select=*&order=clock_in_at.desc`),
+      rest('employee_targets',`tenant_id=eq.${tenant}${userFilter}&period_start=lte.${today}&period_end=gte.${today}&active=eq.true&select=*`),
+      rest('sales',`tenant_id=eq.${tenant}${canManage?'':`&cashier_id=eq.${encodeURIComponent(session.authUser.id)}`}&occurred_at=gte.${monthStart}T00:00:00Z&occurred_at=lt.${new Date(Date.UTC(Number(today.slice(0,4)),Number(today.slice(5,7)),1)).toISOString()}&status=eq.COMPLETED&select=id,cashier_id,outlet_id,grand_total,occurred_at`)
+    ]);
+    const performance=profiles.map((profile)=>{
+      const target=targets.find((item)=>item.user_id===profile.user_id);
+      const employeeSales=sales.filter((sale)=>sale.cashier_id===profile.user_id&&(!target?.outlet_id||sale.outlet_id===target.outlet_id));
+      const salesTotal=employeeSales.reduce((sum,sale)=>sum+Number(sale.grand_total),0);
+      const commission=calculateEmployeeCommission({
+        salesTotal,transactions:employeeSales.length,
+        commissionType:target?.commission_type??'SALES_PERCENT',
+        commissionValue:Number(target?.commission_value??0)
+      });
+      return {userId:profile.user_id,displayName:profile.display_name,role:profile.role,target,salesTotal,transactions:employeeSales.length,commission};
+    });
+    return send(response,200,{
+      canManage,today,profiles,outlets:context.outlets,schedules,attendance,targets,performance,
+      activeAttendance:attendance.find((item)=>item.user_id===session.authUser.id&&!item.clock_out_at)??null
+    });
+  }
+
+  if(request.method==='POST'&&route==='workforce/schedules'){
+    requirePermission(session,'workforce.manage');
+    const input=bodyOf(request),deviceId=request.headers['x-device-id']||null;
+    const employee=await profileFor(input.userId);
+    if(!employee?.active||employee.tenant_id!==context.tenantId)throw Object.assign(new Error('Karyawan aktif tidak ditemukan'),{status:404});
+    if(!context.outlets.some((outlet)=>outlet.id===input.outletId))throw Object.assign(new Error('Outlet tidak dapat diakses'),{status:403});
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(input.workDate??''))||!/^\d{2}:\d{2}$/.test(String(input.startsAt??''))||!/^\d{2}:\d{2}$/.test(String(input.endsAt??''))){
+      throw Object.assign(new Error('Tanggal dan jam jadwal tidak valid'),{status:400});
+    }
+    const rows=await rest('employee_schedules','',{method:'POST',prefer:'return=representation',body:{
+      tenant_id:context.tenantId,user_id:input.userId,outlet_id:input.outletId,work_date:input.workDate,
+      starts_at:input.startsAt,ends_at:input.endsAt,note:String(input.note??'').trim().slice(0,240)||null,
+      created_by:session.authUser.id
+    }});
+    await rest('audit_logs','',{method:'POST',body:{tenant_id:context.tenantId,actor_id:session.authUser.id,
+      action:'EMPLOYEE_SCHEDULE_CREATED',entity_type:'employee_schedule',entity_id:rows[0].id,
+      details_json:{userId:input.userId,outletId:input.outletId,workDate:input.workDate,deviceId}}});
+    return send(response,201,rows[0]);
+  }
+
+  if(request.method==='POST'&&route==='workforce/attendance'){
+    requirePermission(session,'workforce.self');
+    const input=bodyOf(request);
+    const result=await rpc('clock_employee_attendance',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_outlet_id:context.outlet.id,
+      p_device_id:request.headers['x-device-id']||null,p_action:input.action,p_note:String(input.note??'').trim().slice(0,240)
+    });
+    return send(response,200,result);
+  }
+
+  if(request.method==='POST'&&route==='workforce/targets'){
+    requirePermission(session,'workforce.manage');
+    const input=bodyOf(request),employee=await profileFor(input.userId),deviceId=request.headers['x-device-id']||null;
+    if(!employee?.active||employee.tenant_id!==context.tenantId)throw Object.assign(new Error('Karyawan aktif tidak ditemukan'),{status:404});
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(input.periodStart??''))||!/^\d{4}-\d{2}-\d{2}$/.test(String(input.periodEnd??''))||input.periodEnd<input.periodStart){
+      throw Object.assign(new Error('Periode target tidak valid'),{status:400});
+    }
+    if(input.outletId&&!context.outlets.some((outlet)=>outlet.id===input.outletId))throw Object.assign(new Error('Outlet tidak dapat diakses'),{status:403});
+    const commissionType=input.commissionType==='FIXED_PER_TRANSACTION'?'FIXED_PER_TRANSACTION':'SALES_PERCENT';
+    const commissionValue=moneyInput(input.commissionValue,'Nilai komisi',{allowZero:true});
+    calculateEmployeeCommission({commissionType,commissionValue,salesTotal:0,transactions:0});
+    const row={tenant_id:context.tenantId,user_id:input.userId,outlet_id:input.outletId||null,
+      period_start:input.periodStart,period_end:input.periodEnd,
+      sales_target:moneyInput(input.salesTarget,'Target penjualan',{allowZero:true}),
+      transaction_target:Math.max(0,Math.trunc(Number(input.transactionTarget)||0)),
+      commission_type:commissionType,commission_value:commissionValue,
+      active:true,created_by:session.authUser.id,updated_at:new Date().toISOString()};
+    const outletFilter=row.outlet_id?`outlet_id=eq.${encodeURIComponent(row.outlet_id)}`:'outlet_id=is.null';
+    const matches=await rest('employee_targets',
+      `tenant_id=eq.${context.tenantId}&user_id=eq.${encodeURIComponent(input.userId)}&${outletFilter}&period_start=eq.${input.periodStart}&period_end=eq.${input.periodEnd}&select=id&limit=1`);
+    const rows=matches[0]
+      ?await rest('employee_targets',`id=eq.${matches[0].id}`,{
+        method:'PATCH',prefer:'return=representation',body:{
+          sales_target:row.sales_target,transaction_target:row.transaction_target,
+          commission_type:row.commission_type,commission_value:row.commission_value,
+          active:true,updated_at:row.updated_at
+        }
+      })
+      :await rest('employee_targets','',{method:'POST',prefer:'return=representation',body:row});
+    await rest('audit_logs','',{method:'POST',body:{tenant_id:context.tenantId,actor_id:session.authUser.id,
+      action:'EMPLOYEE_TARGET_SAVED',entity_type:'employee_target',entity_id:rows[0].id,
+      details_json:{userId:input.userId,periodStart:input.periodStart,periodEnd:input.periodEnd,deviceId}}});
+    return send(response,200,rows[0]);
+  }
+
+  if(request.method==='GET'&&route==='approvals'){
+    requirePermission(session,'workforce.self');
+    const canManage=session.permissions.includes('approval.manage');
+    const requests=await rest('approval_requests',`tenant_id=eq.${context.tenantId}${canManage?'':`&requester_id=eq.${encodeURIComponent(session.authUser.id)}`}&select=*&order=requested_at.desc&limit=100`);
+    const policies=canManage?await rest('approval_policies',`tenant_id=eq.${context.tenantId}&select=*&order=action_type,minimum_amount`):[];
+    const actorIds=[...new Set(requests.flatMap((item)=>[item.requester_id,...(item.decisions_json??[]).map((decision)=>decision.actorId)].filter(Boolean)))];
+    const actors=actorIds.length?await rest('profiles',`tenant_id=eq.${context.tenantId}&user_id=${inFilter(actorIds)}&select=user_id,display_name,role`):[];
+    return send(response,200,{canManage,requests,policies,actors});
+  }
+
+  if(request.method==='POST'&&route==='approvals/requests'){
+    requirePermission(session,'workforce.self');
+    const input=bodyOf(request),action=String(input.actionType??'').toUpperCase(),deviceId=request.headers['x-device-id']||null;
+    if(!['DISCOUNT','VOID','PURCHASE','STOCK_COUNT'].includes(action))throw Object.assign(new Error('Jenis persetujuan tidak valid'),{status:400});
+    const reason=String(input.reason??'').trim();
+    if(reason.length<5)throw Object.assign(new Error('Alasan minimal 5 karakter'),{status:400});
+    const amount=moneyInput(input.amount,'Nilai permintaan',{allowZero:true});
+    const policies=await rest('approval_policies',`tenant_id=eq.${context.tenantId}&action_type=eq.${action}&active=eq.true&minimum_amount=lte.${amount}&select=*&order=minimum_amount.desc&limit=1`);
+    const rows=await rest('approval_requests','',{method:'POST',prefer:'return=representation',body:{
+      tenant_id:context.tenantId,outlet_id:context.outlet.id,requester_id:session.authUser.id,
+      action_type:action,entity_type:String(input.entityType??'').trim()||null,
+      entity_id:input.entityId||null,amount,reason,required_levels:Number(policies[0]?.required_levels??1)
+    }});
+    await rest('audit_logs','',{method:'POST',body:{tenant_id:context.tenantId,actor_id:session.authUser.id,
+      action:'APPROVAL_REQUESTED',entity_type:'approval_request',entity_id:rows[0].id,
+      details_json:{actionType:action,amount,requiredLevels:Number(policies[0]?.required_levels??1),deviceId}}});
+    return send(response,201,rows[0]);
+  }
+
+  if(request.method==='POST'&&/^approvals\/[^/]+\/decision$/.test(route)){
+    requirePermission(session,'approval.manage');
+    const input=bodyOf(request),requestId=route.split('/')[1];
+    return send(response,200,await rpc('decide_approval_request',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_request_id:requestId,
+      p_decision:input.decision,p_note:String(input.note??'').trim().slice(0,240)
+    }));
+  }
+
+  if(request.method==='POST'&&route==='approvals/policies'){
+    requirePermission(session,'approval.manage');
+    const input=bodyOf(request),action=String(input.actionType??'').toUpperCase();
+    if(!['DISCOUNT','VOID','PURCHASE','STOCK_COUNT'].includes(action))throw Object.assign(new Error('Jenis kebijakan tidak valid'),{status:400});
+    const row={tenant_id:context.tenantId,action_type:action,
+      minimum_amount:moneyInput(input.minimumAmount,'Batas nilai',{allowZero:true}),
+      required_levels:Math.max(1,Math.min(2,Math.trunc(Number(input.requiredLevels)||1))),
+      active:true,updated_by:session.authUser.id,updated_at:new Date().toISOString()};
+    const rows=await rest('approval_policies','on_conflict=tenant_id,action_type,minimum_amount',{
+      method:'POST',prefer:'resolution=merge-duplicates,return=representation',body:row
+    });
+    return send(response,200,rows[0]);
+  }
+
+  if(request.method==='GET'&&route==='workforce/activity'){
+    requirePermission(session,'workforce.manage');
+    const logs=await rest('audit_logs',`tenant_id=eq.${context.tenantId}&select=*&order=occurred_at.desc&limit=200`);
+    const actorIds=[...new Set(logs.map((item)=>item.actor_id).filter(Boolean))];
+    const actors=actorIds.length?await rest('profiles',`tenant_id=eq.${context.tenantId}&user_id=${inFilter(actorIds)}&select=user_id,display_name,role`):[];
+    return send(response,200,{logs:logs.map((log)=>({...log,actor:actors.find((actor)=>actor.user_id===log.actor_id)??null}))});
+  }
+
+  if(request.method==='GET'&&route==='workforce/reconciliations'){
+    requirePermission(session,'workforce.manage');
+    const shifts=await rest('shifts',`tenant_id=eq.${context.tenantId}&outlet_id=${inFilter(context.outlets.map((outlet)=>outlet.id))}&status=eq.CLOSED&select=*&order=closed_at.desc&limit=50`);
+    const ids=shifts.map((shift)=>shift.id);
+    const [rows,cashiers]=ids.length?await Promise.all([
+      rest('shift_reconciliations',`tenant_id=eq.${context.tenantId}&shift_id=${inFilter(ids)}&select=*&order=reconciled_at.desc`),
+      rest('profiles',`tenant_id=eq.${context.tenantId}&user_id=${inFilter([...new Set(shifts.map((shift)=>shift.cashier_id))])}&select=user_id,display_name`)
+    ]):[[],[]];
+    return send(response,200,{shifts:shifts.map((shift)=>({...shift,cashierName:cashiers.find((item)=>item.user_id===shift.cashier_id)?.display_name??'Karyawan',
+      methods:rows.filter((row)=>row.shift_id===shift.id)}))});
+  }
+
   if (request.method === 'POST' && route === 'shifts/open') {
     requirePermission(session, 'pos.sell');
     const input = bodyOf(request);
@@ -1617,12 +1799,15 @@ async function routeRequest(request, response, route) {
   if (request.method === 'POST' && route === 'shifts/close') {
     requirePermission(session, 'pos.sell');
     const input = bodyOf(request);
-    const closingCash = moneyInput(input.closingCash, 'Kas fisik', { allowZero: true });
-    const shifts = await rest('shifts', `tenant_id=eq.${context.tenantId}&outlet_id=eq.${context.outlet.id}&cashier_id=eq.${session.authUser.id}&id=eq.${encodeURIComponent(input.shiftId ?? '')}&status=eq.OPEN&select=*`);
-    const detail = await shiftDetail(context.tenantId, shifts[0]);
-    if (!detail) { const error = new Error('Shift tidak ditemukan'); error.status = 404; throw error; }
-    const rows = await rest('shifts', `id=eq.${encodeURIComponent(input.shiftId)}&tenant_id=eq.${context.tenantId}&outlet_id=eq.${context.outlet.id}&cashier_id=eq.${session.authUser.id}&status=eq.OPEN`, { method: 'PATCH', prefer: 'return=representation', body: { status: 'CLOSED', closed_at: new Date().toISOString(), expected_cash: detail.expectedNow, closing_cash: closingCash, difference: closingCash - detail.expectedNow } });
-    return send(response, 200, rows[0]);
+    const declarations=Array.isArray(input.declarations)&&input.declarations.length
+      ?input.declarations.map((item)=>({method:String(item.method??'').trim().toUpperCase().replace(/^TUNAI$/,'CASH'),declaredAmount:moneyInput(item.declaredAmount,'Jumlah rekonsiliasi',{allowZero:true})}))
+      :[{method:'CASH',declaredAmount:moneyInput(input.closingCash,'Kas fisik',{allowZero:true})}];
+    if(declarations.some((item)=>!item.method)||new Set(declarations.map((item)=>item.method)).size!==declarations.length){
+      throw Object.assign(new Error('Metode rekonsiliasi kosong atau ganda'),{status:400});
+    }
+    return send(response,200,await rpc('close_shift_with_reconciliation',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_shift_id:input.shiftId,p_declarations:declarations
+    }));
   }
 
   if (request.method === 'GET' && route === 'inventory') {

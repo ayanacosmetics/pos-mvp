@@ -101,7 +101,8 @@ test('fondasi checkout mencakup hold, split payment, kembalian, struk, dan kas a
   assert.match(migration,/abs\(v_paid-v_due\)>0\.01/);
   assert.match(migration,/tendered_amount/);
   assert.match(migration,/p_idempotency_key\|\|':stock:'\|\|v_line_index/);
-  assert.match(api,/method=in\.\(CASH,Tunai\)/);
+  assert.match(api,/const paymentTotals=Object\.values/);
+  assert.match(api,/\['CASH','TUNAI'\]\.includes\(rawMethod\)\?'CASH'/);
   assert.match(html,/id="receipt-dialog"/);
   assert.match(html,/Gabungkan beberapa metode/);
   assert.match(script,/holdCurrentCart/);

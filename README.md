@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Paket Operasional v1.24.1
+# Kasir Nusa POS — Paket Operasional v1.25.0
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -93,6 +93,12 @@ Untuk kandidat v1.23, jalankan satu file
 Migrasi ini menambahkan tier member, poin, voucher, segmentasi CRM, posting
 loyalitas atomik saat checkout, dan pembalikan saat void.
 
+Untuk kandidat v1.25, jalankan satu file
+`supabase/migrations/202607270029_employee_operations.sql` sebelum deployment.
+Migrasi ini menambahkan jadwal dan absensi, target serta komisi, approval
+bertingkat, log aktivitas perangkat, dan rekonsiliasi shift per metode
+pembayaran. Jangan deploy source v1.25 sebelum migrasi berhasil.
+
 Klik dua kali `Deploy-Kasir-Nusa.cmd` dan tunggu sampai muncul tulisan **Deployment berhasil**.
 
 Rahasia Supabase hanya boleh tersimpan di pengaturan Environment Variables Vercel. Jangan menaruh `SUPABASE_SERVICE_ROLE_KEY` di browser, screenshot, chat, atau repository.
@@ -105,7 +111,7 @@ Jalankan:
 npm test
 ```
 
-Paket operasional v1.24.1 memiliki 133 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
+Kandidat v1.25.0 memiliki 136 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
 
 ## Aplikasi kasir Android
 

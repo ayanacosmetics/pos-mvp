@@ -21,6 +21,14 @@ let localLocations = [
   { id: 'outlet-utama', outlet_id: 'outlet-utama', code: 'TOKO', name: 'Toko Utama', kind: 'STORE', active:true },
   { id: 'gudang-utama', outlet_id: 'outlet-utama', code: 'GDG', name: 'Gudang Utama', kind: 'WAREHOUSE', active:true }
 ];
+const localWorkforce = {
+  schedules: [],
+  attendance: [],
+  targets: [],
+  approvals: [],
+  policies: [],
+  reconciliations: []
+};
 
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
@@ -61,7 +69,7 @@ function requirePermission(request, response, permission) {
 }
 
 async function api(request, response, url) {
-  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '1.21.0-local', storage: 'sqlite' });
+  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '1.25.0-local', storage: 'sqlite' });
 
   if (request.method === 'POST' && url.pathname === '/api/login') {
     const input = await bodyOf(request);
@@ -245,6 +253,98 @@ async function api(request, response, url) {
     return json(response, 201, store.createSupplier(await bodyOf(request), session.user.id));
   }
 
+  if(request.method==='GET'&&url.pathname==='/api/workforce/overview'){
+    const session=requirePermission(request,response,PERMISSIONS.WORKFORCE_SELF);if(!session)return;
+    const canManage=can(session,PERMISSIONS.MANAGE_WORKFORCE);
+    const profiles=(canManage?demoUsers:demoUsers.filter((user)=>user.id===session.user.id)).map((user)=>({user_id:user.id,display_name:user.displayName,role:user.role}));
+    const sales=store.recentPosSales(500);
+    const performance=profiles.map((profile)=>{
+      const target=localWorkforce.targets.find((item)=>item.user_id===profile.user_id);
+      const rows=sales.filter((sale)=>sale.cashier_id===profile.user_id&&sale.status==='COMPLETED');
+      const salesTotal=rows.reduce((sum,sale)=>sum+Number(sale.grandTotal??sale.grand_total??0),0);
+      const commission=target?.commission_type==='FIXED_PER_TRANSACTION'?rows.length*Number(target.commission_value):salesTotal*Number(target?.commission_value??0)/100;
+      return{userId:profile.user_id,displayName:profile.display_name,role:profile.role,target,salesTotal,transactions:rows.length,commission};
+    });
+    return json(response,200,{canManage,today:new Date().toISOString().slice(0,10),profiles,outlets:localOutletSettings,
+      schedules:localWorkforce.schedules.filter((item)=>canManage||item.user_id===session.user.id),
+      attendance:localWorkforce.attendance.filter((item)=>canManage||item.user_id===session.user.id),
+      targets:localWorkforce.targets.filter((item)=>canManage||item.user_id===session.user.id),performance,
+      activeAttendance:localWorkforce.attendance.find((item)=>item.user_id===session.user.id&&!item.clock_out_at)??null});
+  }
+
+  if(request.method==='POST'&&url.pathname==='/api/workforce/schedules'){
+    const session=requirePermission(request,response,PERMISSIONS.MANAGE_WORKFORCE);if(!session)return;
+    const input=await bodyOf(request),row={id:crypto.randomUUID(),user_id:input.userId,outlet_id:input.outletId,
+      work_date:input.workDate,starts_at:input.startsAt,ends_at:input.endsAt,note:input.note||null,status:'SCHEDULED',
+      created_by:session.user.id,created_at:new Date().toISOString()};
+    localWorkforce.schedules.push(row);return json(response,201,row);
+  }
+
+  if(request.method==='POST'&&url.pathname==='/api/workforce/attendance'){
+    const session=requirePermission(request,response,PERMISSIONS.WORKFORCE_SELF);if(!session)return;
+    const input=await bodyOf(request),active=localWorkforce.attendance.find((item)=>item.user_id===session.user.id&&!item.clock_out_at);
+    if(input.action==='CLOCK_IN'){
+      if(active)return json(response,409,{error:'Absensi masuk masih aktif'});
+      const row={id:crypto.randomUUID(),user_id:session.user.id,outlet_id:session.user.outletIds[0],work_date:new Date().toISOString().slice(0,10),clock_in_at:new Date().toISOString(),clock_out_at:null,status:'PRESENT',note:input.note||null};
+      localWorkforce.attendance.push(row);return json(response,200,row);
+    }
+    if(!active)return json(response,409,{error:'Belum ada absensi masuk aktif'});
+    active.clock_out_at=new Date().toISOString();active.status='COMPLETED';return json(response,200,active);
+  }
+
+  if(request.method==='POST'&&url.pathname==='/api/workforce/targets'){
+    const session=requirePermission(request,response,PERMISSIONS.MANAGE_WORKFORCE);if(!session)return;
+    const input=await bodyOf(request),row={id:crypto.randomUUID(),user_id:input.userId,outlet_id:input.outletId,
+      period_start:input.periodStart,period_end:input.periodEnd,sales_target:Number(input.salesTarget),
+      transaction_target:Number(input.transactionTarget),commission_type:input.commissionType,
+      commission_value:Number(input.commissionValue),active:true,created_by:session.user.id};
+    const index=localWorkforce.targets.findIndex((item)=>item.user_id===row.user_id&&item.period_start===row.period_start&&item.period_end===row.period_end);
+    if(index>=0)localWorkforce.targets[index]={...localWorkforce.targets[index],...row};else localWorkforce.targets.push(row);
+    return json(response,200,row);
+  }
+
+  if(request.method==='GET'&&url.pathname==='/api/approvals'){
+    const session=requirePermission(request,response,PERMISSIONS.WORKFORCE_SELF);if(!session)return;
+    const canManage=can(session,PERMISSIONS.MANAGE_APPROVALS);
+    return json(response,200,{canManage,requests:localWorkforce.approvals.filter((item)=>canManage||item.requester_id===session.user.id),
+      policies:canManage?localWorkforce.policies:[],actors:demoUsers.map((user)=>({user_id:user.id,display_name:user.displayName,role:user.role}))});
+  }
+
+  if(request.method==='POST'&&url.pathname==='/api/approvals/requests'){
+    const session=requirePermission(request,response,PERMISSIONS.WORKFORCE_SELF);if(!session)return;
+    const input=await bodyOf(request),policy=localWorkforce.policies.filter((item)=>item.action_type===input.actionType&&item.minimum_amount<=Number(input.amount)).sort((a,b)=>b.minimum_amount-a.minimum_amount)[0];
+    const row={id:crypto.randomUUID(),requester_id:session.user.id,outlet_id:session.user.outletIds[0],action_type:input.actionType,
+      amount:Number(input.amount),reason:input.reason,required_levels:Number(policy?.required_levels??1),current_level:0,status:'PENDING',decisions_json:[],requested_at:new Date().toISOString()};
+    localWorkforce.approvals.push(row);return json(response,201,row);
+  }
+
+  if(request.method==='POST'&&/^\/api\/approvals\/[^/]+\/decision$/.test(url.pathname)){
+    const session=requirePermission(request,response,PERMISSIONS.MANAGE_APPROVALS);if(!session)return;
+    const item=localWorkforce.approvals.find((row)=>row.id===url.pathname.split('/')[3]),input=await bodyOf(request);
+    if(!item)return json(response,404,{error:'Permintaan tidak ditemukan'});
+    if(item.requester_id===session.user.id)return json(response,409,{error:'Pemohon tidak dapat menyetujui permintaan sendiri'});
+    if(input.decision==='REJECT'){item.status='REJECTED';item.decided_at=new Date().toISOString();}
+    else{item.current_level+=1;item.status=item.current_level>=item.required_levels?'APPROVED':'PENDING';}
+    item.decisions_json.push({actorId:session.user.id,decision:input.decision,at:new Date().toISOString()});
+    return json(response,200,item);
+  }
+
+  if(request.method==='POST'&&url.pathname==='/api/approvals/policies'){
+    const session=requirePermission(request,response,PERMISSIONS.MANAGE_APPROVALS);if(!session)return;
+    const input=await bodyOf(request),row={id:crypto.randomUUID(),action_type:input.actionType,minimum_amount:Number(input.minimumAmount),required_levels:Number(input.requiredLevels),active:true};
+    localWorkforce.policies.push(row);return json(response,200,row);
+  }
+
+  if(request.method==='GET'&&url.pathname==='/api/workforce/activity'){
+    if(!requirePermission(request,response,PERMISSIONS.MANAGE_WORKFORCE))return;
+    return json(response,200,{logs:store.auditLogs(200).map((log)=>({...log,actor:{display_name:demoUsers.find((user)=>user.id===log.actor_id)?.displayName??'Sistem'}}))});
+  }
+
+  if(request.method==='GET'&&url.pathname==='/api/workforce/reconciliations'){
+    if(!requirePermission(request,response,PERMISSIONS.MANAGE_WORKFORCE))return;
+    return json(response,200,{shifts:localWorkforce.reconciliations});
+  }
+
   if (request.method === 'POST' && url.pathname === '/api/shifts/open') {
     const session = requirePermission(request, response, PERMISSIONS.POS_SELL);
     if (!session) return;
@@ -268,7 +368,10 @@ async function api(request, response, url) {
   if (request.method === 'POST' && url.pathname === '/api/shifts/close') {
     const session = requirePermission(request, response, PERMISSIONS.POS_SELL);
     if (!session) return;
-    return json(response, 200, store.closeShift({ ...(await bodyOf(request)), actorId: session.user.id }));
+    const input=await bodyOf(request),cash=input.declarations?.find((item)=>['CASH','TUNAI'].includes(String(item.method).toUpperCase()));
+    const closed=store.closeShift({shiftId:input.shiftId,closingCash:Number(cash?.declaredAmount??input.closingCash),actorId:session.user.id});
+    localWorkforce.reconciliations.unshift({...closed,cashierName:session.user.displayName,methods:(input.declarations??[]).map((item)=>({payment_method:item.method,expected_amount:item.declaredAmount,declared_amount:item.declaredAmount,difference:0}))});
+    return json(response, 200, closed);
   }
 
   if (request.method === 'POST' && url.pathname === '/api/cost-comparison') {

@@ -45,6 +45,19 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat berikutnya — belum live
+
+- **Paket Operasional Karyawan v1.25.0** menambahkan halaman terpisah untuk
+  jadwal/absensi, target/komisi, antrean approval bertingkat, aktivitas
+  pengguna/perangkat, dan rekonsiliasi shift per metode pembayaran.
+- Kandidat memakai migrasi tunggal
+  `supabase/migrations/202607270029_employee_operations.sql`.
+- Versi kandidat: UI `v1.25.0`, API `1.25.0-cloud`, cache
+  `nusa-pos-shell-v51`.
+- Source tidak boleh didorong atau dideploy sebelum pengguna mengonfirmasi
+  migrasi `029` berhasil di Supabase. Setelah itu jalankan seluruh tes,
+  push/deploy satu kali, lalu verifikasi API dan UI produksi.
+
 ### Terakhir dikonfirmasi live
 
 - **Hotfix v1.24.1** memperbaiki startup aplikasi Android yang tertahan pada
@@ -355,7 +368,8 @@ langkah operasional sebelum pemakaian toko, bukan pekerjaan source code.
 Status: migrasi utama, 112 pengujian otomatis, 5 pengujian browser, deployment
 produksi, hotfix benturan nomor struk, dan privasi harga internal pada struk
 selesai pada 26 Juli 2026. SQL penguatan
-`202607260026_receipt_sequence_collision_fix.sql` menunggu diterapkan.
+`202607260026_receipt_sequence_collision_fix.sql` telah diterapkan melalui
+migrasi `027` yang idempotent.
 
 ### v1.22 — Perencanaan restok dan pembelian (selesai)
 
@@ -384,7 +398,7 @@ migrasi `027`, 119 pengujian otomatis, dan deployment produksi selesai pada
 Status: implementasi domain, database, API, UI, privasi WhatsApp, backup, void,
 125 pengujian otomatis, migrasi `028`, dan deployment produksi selesai.
 
-### v1.24 — Operasional karyawan
+### v1.25 — Operasional karyawan (kandidat, menunggu SQL/deployment)
 
 - jadwal kerja dan absensi sederhana;
 - target serta komisi sales/kasir;
@@ -392,7 +406,12 @@ Status: implementasi domain, database, API, UI, privasi WhatsApp, backup, void,
 - log aktivitas per pengguna dan perangkat;
 - rekonsiliasi shift antar-metode pembayaran.
 
-### v1.25 — Akuntansi dan analitik owner
+Status: source kandidat dan migrasi `029` sudah disiapkan. Nomor v1.24 telah
+dipakai aplikasi kasir Android, sehingga paket roadmap ini dirilis sebagai
+v1.25.0. Belum boleh ditandai live sampai SQL, seluruh tes, deployment, dan
+verifikasi produksi selesai.
+
+### v1.26 — Akuntansi dan analitik owner
 
 - ringkasan laba rugi operasional;
 - biaya outlet dan kategori biaya;
@@ -401,7 +420,7 @@ Status: implementasi domain, database, API, UI, privasi WhatsApp, backup, void,
 - dashboard tren, produk lambat/cepat, margin rendah, dan dead stock;
 - ekspor yang siap diberikan kepada akuntan.
 
-### v1.26 — Multi-outlet tingkat lanjut
+### v1.27 — Multi-outlet tingkat lanjut
 
 - permintaan transfer dari cabang;
 - approval dan penerimaan transfer;
