@@ -64,13 +64,11 @@ kode frontend, dokumentasi publik, atau chat.
   halaman Keuangan, cache `nusa-pos-shell-v52`, route finansial terlindungi
   sesi, dan APK kasir tetap tersedia.
 
-### Kandidat berikutnya — belum live
+### Rilis v1.27 dikonfirmasi live
 
-- **Paket Multi-outlet Tingkat Lanjut v1.27.0** sudah selesai di source lokal.
-- Migrasi tunggal yang harus dijalankan lebih dahulu:
-  `supabase/migrations/202607270031_advanced_multi_outlet.sql`.
-- Source belum boleh didorong/deploy sebelum pengguna mengonfirmasi SQL
-  berhasil.
+- **Paket Multi-outlet Tingkat Lanjut v1.27.0** live pada 27 Juli 2026.
+- Migrasi `supabase/migrations/202607270031_advanced_multi_outlet.sql`
+  dikonfirmasi berhasil sebelum source didorong.
 - Tujuh halaman terpisah di accordion Multi-outlet: permintaan transfer,
   persetujuan/pengiriman, stok perjalanan, harga outlet, promo outlet,
   konsolidasi, dan notifikasi.
@@ -82,8 +80,13 @@ kode frontend, dokumentasi publik, atau chat.
   tetap global.
 - Notifikasi terbuka mencakup stok di bawah kebijakan minimum dan selisih
   rekonsiliasi shift minimal Rp100.000.
-- API/UI `v1.27.0`, cache PWA `nusa-pos-shell-v53`, dan 144/144 pengujian
-  otomatis lulus. Deployment produksi masih menunggu konfirmasi SQL.
+- Commit source `9a5230e` didorong ke `origin/main`; 144/144 pengujian
+  otomatis lulus.
+- Deployment Git/Vercel `dpl_CUndEUhYHtg2rphwPmYCBckz5nEa` berstatus Ready
+  dan alias `kasir-nusa-pos.vercel.app` aktif.
+- Verifikasi produksi mengembalikan API `1.27.0-cloud`, UI `v1.27.0`, tujuh
+  halaman Multi-outlet, cache `nusa-pos-shell-v53`, route konsolidasi
+  terlindungi sesi, dan APK kasir tetap tersedia.
 - **Paket Operasional Karyawan v1.25.0** live pada 27 Juli 2026.
 - Migrasi `supabase/migrations/202607270029_employee_operations.sql`
   dikonfirmasi berhasil sebelum deployment.
@@ -469,10 +472,9 @@ dan verifikasi produksi selesai pada 27 Juli 2026.
 - konsolidasi owner serta pembatasan manager outlet;
 - notifikasi stok kritis dan aktivitas tidak wajar.
 
-Status: kandidat source selesai dengan migrasi `031`, workflow stok atomik,
-role Manajer Outlet, tujuh halaman terpisah, audit, dan 144 pengujian otomatis.
-Belum live; jalankan migrasi `031` lalu lanjutkan commit, push, deployment, dan
-verifikasi produksi.
+Status: migrasi `031`, workflow stok atomik, role Manajer Outlet, tujuh halaman
+terpisah, audit, 144 pengujian otomatis, push, deployment, dan verifikasi
+produksi selesai pada 27 Juli 2026.
 
 ### v2.0 — Pilot produksi dan hardening
 

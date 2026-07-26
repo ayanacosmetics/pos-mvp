@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Kandidat Multi-outlet v1.27.0
+# Kasir Nusa POS — Paket Multi-outlet v1.27.0
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -109,7 +109,7 @@ deployment. Migrasi ini menambahkan kategori dan buku biaya outlet, laporan
 laba-rugi operasional, arus kas, aging hutang/piutang, serta analitik produk.
 Jangan deploy source v1.26 sebelum migrasi berhasil.
 
-Untuk kandidat v1.27, jalankan satu file
+Untuk rilis v1.27, jalankan satu file
 `supabase/migrations/202607270031_advanced_multi_outlet.sql` sebelum
 deployment. Migrasi ini menambahkan workflow transfer bertahap, harga dan
 cakupan promo outlet, role Manajer Outlet, serta notifikasi operasional.
