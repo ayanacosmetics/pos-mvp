@@ -24,7 +24,7 @@ function installCloudMock(onRpc){
     if(target.includes('/rest/v1/stock_balances?'))return responseOf([{product_id:ids.product,quantity:'20'}]);
     if(target.includes('/rest/v1/promotions?')||target.includes('/rest/v1/promotion_versions?'))return responseOf([]);
     if(target.includes('/rest/v1/tenants?'))return responseOf([{id:ids.tenant,name:'Toko Nusa',receipt_footer:'Terima kasih'}]);
-    if(target.endsWith('/rest/v1/rpc/complete_sale_v5')){const body=JSON.parse(options.body);onRpc(body);return responseOf({id:'sale',receiptNo:'UTM-000001',status:'COMPLETED',change:5000,payments:body.p_payments});}
+    if(target.endsWith('/rest/v1/rpc/complete_sale_v6')){const body=JSON.parse(options.body);onRpc(body);return responseOf({id:'sale',receiptNo:'UTM-000001',status:'COMPLETED',change:5000,payments:body.p_payments});}
     return responseOf({message:`Mock belum menangani ${target}`},500);
   };
 }

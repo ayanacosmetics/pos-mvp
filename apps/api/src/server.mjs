@@ -61,7 +61,7 @@ function requirePermission(request, response, permission) {
 }
 
 async function api(request, response, url) {
-  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '1.20.1-local', storage: 'sqlite' });
+  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '1.21.0-local', storage: 'sqlite' });
 
   if (request.method === 'POST' && url.pathname === '/api/login') {
     const input = await bodyOf(request);
@@ -153,7 +153,7 @@ async function api(request, response, url) {
       }
       quote = applySaleAdjustment(quote, approval.adjustment, approval);
     }
-    const persisted = store.recordSale({ key, quote, lines: input.lines, cashier: session.user, customerGroupId: input.customerGroupId, paymentMethod: input.paymentMethod, shiftId: shift.id });
+    const persisted = store.recordSale({ key, quote, lines: input.lines, cashier: session.user, customerId:input.customerId??null, customerGroupId: input.customerGroupId, paymentMethod: input.paymentMethod, shiftId: shift.id, notes:input.notes??'' });
     if (approval) approval.consumed = true;
     const receipt = { id: persisted.id, receiptNo: persisted.receipt_no, status: persisted.status, occurredAt: persisted.occurred_at, cashier: persisted.cashier_name, quote };
     return json(response, 201, receipt);
@@ -163,6 +163,27 @@ async function api(request, response, url) {
     if (!requirePermission(request, response, PERMISSIONS.PROCESS_RETURN)) return;
     const sale = store.saleByReceipt(url.searchParams.get('receiptNo'));
     return sale ? json(response, 200, { sale }) : json(response, 404, { error: 'Nomor struk tidak ditemukan' });
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/pos-sales') {
+    if (!requirePermission(request,response,PERMISSIONS.POS_SELL)) return;
+    const query=String(url.searchParams.get('q')??'').trim().toLowerCase();
+    const sales=store.recentPosSales(50).filter((sale)=>!query||`${sale.receiptNo} ${sale.cashier} ${sale.customer?.name??''} ${sale.customer?.phone??''}`.toLowerCase().includes(query));
+    return json(response,200,{sales});
+  }
+
+  if (request.method === 'POST' && /^\/api\/pos-sales\/[^/]+\/void$/.test(url.pathname)) {
+    const session=requirePermission(request,response,PERMISSIONS.POS_SELL);if(!session)return;
+    const input=await bodyOf(request);
+    let approver=session.user;
+    if(!['OWNER','ADMIN'].includes(session.user.role)){
+      approver=demoUsers.find((user)=>user.email===String(input.approverEmail??'').trim().toLowerCase()&&user.password===input.approverPassword&&['OWNER','ADMIN'].includes(user.role));
+      if(!approver)return json(response,422,{error:'Email atau kata sandi Owner/Admin salah'});
+    }
+    try{
+      const saleId=decodeURIComponent(url.pathname.split('/')[3]);
+      return json(response,200,store.voidSale({saleId,reason:input.reason,actorId:session.user.id,approvedBy:approver.id}));
+    }catch(error){return json(response,409,{error:error.message});}
   }
 
   if (request.method === 'GET' && url.pathname.startsWith('/api/sales/')) {

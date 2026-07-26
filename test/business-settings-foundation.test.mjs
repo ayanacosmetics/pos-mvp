@@ -15,7 +15,7 @@ test('fondasi pengaturan menghubungkan identitas, outlet, lokasi, perangkat, dan
   assert.match(migration,/'SALE:'\|\|p_outlet_id::text/);
   assert.match(migration,/v_outlet\.receipt_prefix\|\|'-'/);
   assert.match(api,/route === 'settings'/);
-  assert.match(api,/complete_sale_v5/);
+  assert.match(api,/complete_sale_v6/);
   assert.match(html,/id="page-settings"/);
   assert.match(html,/id="current-outlet-select"/);
   assert.match(script,/switchActiveOutlet/);

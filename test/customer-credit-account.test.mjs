@@ -31,5 +31,5 @@ test('antarmuka menyediakan profil kredit, rekening pelanggan, faktur, dan pemba
   assert.match(script,/openCustomerStatement/);
   assert.match(script,/recordCustomerPayment/);
   assert.match(api,/customer-payments/);
-  assert.match(api,/complete_sale_v5/);
+  assert.match(api,/complete_sale_v6/);
 });

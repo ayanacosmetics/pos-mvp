@@ -4,7 +4,7 @@ import { deviceIdentity, enqueueCommand, listCommands, migrateLegacyQueue, remov
 import { clearStoredAuth, isAuthStorageEvent, loadAuth, saveAuth } from './auth-store.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [] };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [] };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 const el = (id) => document.getElementById(id);
 const posDevice = deviceIdentity();
@@ -161,6 +161,7 @@ async function applyBootstrap(data, { offline = false } = {}) {
   if (!offline && state.session.permissions.includes('catalog.manage')) await loadProductManagement();
   if (!offline && state.session.permissions.includes('promotion.manage')) await loadPromotionManagement();
   if (!offline && state.session.permissions.includes('pos.sell')) await loadHeldSales();
+  if (!offline && state.session.permissions.includes('pos.sell')) await loadPosSales();
   if (!offline && state.session.permissions.includes('pos.sell')) await loadCustomerAging();
   if (!offline && state.session.permissions.includes('sales.return')) await loadRecentReturns();
 }
@@ -210,16 +211,41 @@ async function refreshCatalog() {
   if (state.session.permissions.includes('catalog.manage')) await loadProductManagement();
 }
 
+function favoriteProductIds() {
+  try { return new Set(JSON.parse(localStorage.getItem(`pos_favorites:${state.session?.user?.id ?? 'anonymous'}`) ?? '[]')); }
+  catch { return new Set(); }
+}
+
+function saveFavoriteProductIds(ids) {
+  localStorage.setItem(`pos_favorites:${state.session.user.id}`, JSON.stringify([...ids]));
+}
+
+function renderPosCategoryFilters() {
+  const categories=[...new Set(state.products.map((product)=>product.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'id'));
+  el('pos-category-filters').innerHTML=['',...categories].map((category)=>`<button class="category-filter ${state.posCategoryFilter===category?'active':''}" type="button" data-category="${escapeHtml(category)}">${escapeHtml(category||'Semua')}</button>`).join('');
+}
+
 function renderProducts(query = '') {
   const normalized = query.trim().toLowerCase();
-  const list = state.products.filter((product) => !normalized || `${product.name} ${product.sku} ${product.units.map((unit) => unit.barcode).join(' ')}`.toLowerCase().includes(normalized));
+  const favorites=favoriteProductIds();
+  const list = state.products.filter((product) =>
+    (!normalized || `${product.name} ${product.sku} ${product.units.map((unit) => unit.barcode).join(' ')}`.toLowerCase().includes(normalized))
+    && (!state.posCategoryFilter || product.category===state.posCategoryFilter)
+    && (!state.favoriteOnly || favorites.has(product.id))
+  );
+  renderPosCategoryFilters();
+  el('favorite-filter').setAttribute('aria-pressed',String(state.favoriteOnly));
   el('product-grid').innerHTML = list.map((product) => {
     const unit = product.units[0];
     const rule = product.priceRules.find((item) => item.customerGroupId === 'retail') ?? product.priceRules[0];
     const empty = Number(product.stockBase ?? 0) <= 0;
-    return `<button class="product-card ${empty ? 'out-of-stock' : ''}" data-product="${product.id}" data-unit="${unit.id}" ${empty ? 'disabled' : ''}><span class="category">${product.category}</span><strong>${product.name}</strong><small>${empty ? 'STOK KOSONG' : `${money.format(rule?.unitPriceBase ?? 0)} · stok ${product.stockBase} pcs`}</small></button>`;
-  }).join('');
+    return `<article class="product-card-shell"><button class="product-card ${empty ? 'out-of-stock' : ''}" data-product="${product.id}" data-unit="${unit.id}" ${empty ? 'disabled' : ''}><span class="category">${escapeHtml(product.category)}</span><strong>${escapeHtml(product.name)}</strong><small>${empty ? 'STOK KOSONG' : `${money.format(rule?.unitPriceBase ?? 0)} · stok ${product.stockBase} pcs`}</small></button><button class="favorite-product ${favorites.has(product.id)?'active':''}" type="button" data-favorite-product="${product.id}" aria-label="${favorites.has(product.id)?'Hapus dari':'Tambahkan ke'} favorit" aria-pressed="${favorites.has(product.id)}">★</button></article>`;
+  }).join('') || '<div class="empty-state compact">Tidak ada produk untuk filter ini.</div>';
   document.querySelectorAll('.product-card').forEach((button) => button.addEventListener('click', () => addToCart(button.dataset.product, button.dataset.unit)));
+  document.querySelectorAll('.favorite-product').forEach((button)=>button.addEventListener('click',()=>{
+    const ids=favoriteProductIds();if(ids.has(button.dataset.favoriteProduct))ids.delete(button.dataset.favoriteProduct);else ids.add(button.dataset.favoriteProduct);
+    saveFavoriteProductIds(ids);renderProducts(el('product-search').value);
+  }));
 }
 
 async function loadProductManagement() {
@@ -295,6 +321,10 @@ function syncCustomerSearchLabel() {
     el('customer-search').value = customer?.name ?? '';
   }
   el('clear-pos-customer')?.classList.toggle('hidden', !customer);
+  const notePanel=el('customer-service-note');
+  const note=String(customer?.notes??'').trim();
+  notePanel.textContent=note;
+  notePanel.classList.toggle('hidden',!note);
 }
 
 function matchingCustomers(query = '') {
@@ -334,6 +364,7 @@ async function selectPosCustomer(customerId) {
   el('customer-group').value = customer.group_id ?? 'retail';
   el('customer-search').value = customer.name;
   el('customer-search-results').classList.add('hidden');
+  syncCustomerSearchLabel();
   await updateQuote();
 }
 
@@ -913,6 +944,7 @@ async function updateQuote() {
 }
 
 function renderCart() {
+  el('mobile-cart-count').textContent=state.cart.reduce((sum,line)=>sum+Number(line.qty??0),0);
   if (!state.quote) {
     el('cart-lines').innerHTML = '<div class="empty-state">Belum ada barang.<br><small>Scan barcode atau pilih produk.</small></div>';
     el('subtotal').textContent = money.format(0); el('discount').textContent = `−${money.format(0)}`; el('grand-total').textContent = money.format(0); el('pay-button').disabled = true; el('hold-cart').disabled = true;
@@ -2449,13 +2481,13 @@ async function holdCurrentCart(){
   if(state.saleAuthorization)return toast('Batalkan diskon manual sebelum menahan transaksi.');
   const label=window.prompt('Beri nama transaksi agar mudah ditemukan:',`Pelanggan ${new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`);
   if(label===null)return;
-  const payload={label:label.trim()||'Tanpa nama',lines:structuredClone(state.cart),customerId:el('customer-select').value||null,customerGroupId:el('customer-group').value};
+  const payload={label:label.trim()||'Tanpa nama',lines:structuredClone(state.cart),customerId:el('customer-select').value||null,customerGroupId:el('customer-group').value,notes:el('sale-note').value.trim()};
   try{
     if(navigator.onLine)await request('/api/held-sales',{method:'POST',body:JSON.stringify(payload)});
     else{
-      const rows=localHeldSales();rows.push({id:crypto.randomUUID(),local:true,userId:state.session.user.id,outletId:state.activeOutletId,label:payload.label,cart:payload.lines,quote:structuredClone(state.quote),customerId:payload.customerId,customerGroupId:payload.customerGroupId,createdAt:new Date().toISOString()});saveLocalHeldSales(rows);
+      const rows=localHeldSales();rows.push({id:crypto.randomUUID(),local:true,userId:state.session.user.id,outletId:state.activeOutletId,label:payload.label,cart:payload.lines,quote:structuredClone(state.quote),customerId:payload.customerId,customerGroupId:payload.customerGroupId,notes:payload.notes,createdAt:new Date().toISOString()});saveLocalHeldSales(rows);
     }
-    state.cart=[];resetPosCustomer();invalidateSaleAuthorization();await updateQuote();await loadHeldSales();toast('Transaksi ditahan. Stok belum berkurang.');
+    state.cart=[];resetPosCustomer();el('sale-note').value='';invalidateSaleAuthorization();await updateQuote();await loadHeldSales();toast('Transaksi ditahan. Stok belum berkurang.');
   }catch(error){toast(error.message);}
 }
 
@@ -2467,12 +2499,12 @@ async function actOnHeldSale(holdId,action,isLocal){
     let result;
     if(isLocal){
       const rows=localHeldSales();saveLocalHeldSales(rows.filter((item)=>item.id!==holdId));
-      result={cart:hold.cart,customerId:hold.customerId,customerGroupId:hold.customerGroupId};
+      result={cart:hold.cart,customerId:hold.customerId,customerGroupId:hold.customerGroupId,notes:hold.notes??''};
     }else result=await request(`/api/held-sales/${holdId}/${action}`,{method:'POST',body:'{}'});
     if(action==='resume'){
       resetPosCustomer();
       if(result.customerId&&state.customers.some((customer)=>customer.id===result.customerId))el('customer-select').value=result.customerId;
-      invalidateSaleAuthorization();el('customer-group').value=result.customerGroupId??'retail';state.cart=structuredClone(result.cart??[]);await updateQuote();
+      invalidateSaleAuthorization();el('customer-group').value=result.customerGroupId??'retail';el('sale-note').value=result.notes??'';state.cart=structuredClone(result.cart??[]);await updateQuote();
       syncCustomerSearchLabel();
       el('held-sales-dialog').close();toast('Transaksi dilanjutkan.');
     }else toast('Transaksi ditahan dibatalkan.');
@@ -2512,7 +2544,7 @@ function openPaymentDialog(){
 }
 
 function renderReceipt(receipt,payments){
-  const customer=state.customers.find((item)=>item.id===el('customer-select').value);
+  const customer=receipt.customer??state.customers.find((item)=>item.id===el('customer-select').value);
   const lines=receipt.quote?.lines??[];
   const change=Number(receipt.change??0);
   const business=receipt.business??state.business;
@@ -2521,7 +2553,7 @@ function renderReceipt(receipt,payments){
   const phone=outlet.phone||business.phone;
   const footer=outlet.receipt_footer||business.receiptFooter||'Terima kasih telah berbelanja.';
   const receiptDiscount=Number(receipt.quote.discountTotal??0);
-  const body=`<div class="receipt-head"><strong>${escapeHtml(business.name??'Kasir Nusa')}</strong><span>${escapeHtml(receipt.outletName??outlet.name??'Outlet')}</span>${address?`<small>${escapeHtml(address)}</small>`:''}${phone?`<small>Tel. ${escapeHtml(phone)}</small>`:''}<small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small><b>${escapeHtml(receipt.receiptNo)}</b></div><div class="receipt-meta"><span>Kasir</span><strong>${escapeHtml(receipt.cashier)}</strong><span>Pelanggan</span><strong>${escapeHtml(customer?.name??'Pelanggan umum')}</strong></div><div class="receipt-lines">${lines.map((line)=>`<div><span><strong>${escapeHtml(line.productName)}</strong><small>${line.qty} ${escapeHtml(line.unitName)} × ${money.format(line.gross/line.qty)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div><div class="receipt-totals"><div><span>Subtotal</span><strong>${money.format(receipt.quote.subtotal)}</strong></div><div><span>Promo & penyesuaian</span><strong>${receiptDiscount<0?'+':'−'}${money.format(Math.abs(receiptDiscount))}</strong></div><div class="receipt-grand"><span>Total</span><strong>${money.format(receipt.quote.grandTotal)}</strong></div>${payments.map((payment)=>`<div><span>${payment.method}${payment.method==='CASH'&&payment.tendered?` · diterima ${money.format(payment.tendered)}`:''}</span><strong>${money.format(payment.amount)}</strong></div>`).join('')}${change?`<div><span>Kembalian</span><strong>${money.format(change)}</strong></div>`:''}</div><p class="receipt-thanks">${escapeHtml(footer)}</p>`;
+  const body=`<div class="receipt-head"><strong>${escapeHtml(business.name??'Kasir Nusa')}</strong><span>${escapeHtml(receipt.outletName??outlet.name??'Outlet')}</span>${address?`<small>${escapeHtml(address)}</small>`:''}${phone?`<small>Tel. ${escapeHtml(phone)}</small>`:''}<small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small><b>${escapeHtml(receipt.receiptNo)}</b>${receipt.status==='VOIDED'?'<b>VOID / DIBATALKAN</b>':''}</div><div class="receipt-meta"><span>Kasir</span><strong>${escapeHtml(receipt.cashier)}</strong><span>Pelanggan</span><strong>${escapeHtml(customer?.name??'Pelanggan umum')}</strong></div><div class="receipt-lines">${lines.map((line)=>`<div><span><strong>${escapeHtml(line.productName)}</strong><small>${line.qty} ${escapeHtml(line.unitName)} × ${money.format(line.gross/line.qty)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div><div class="receipt-totals"><div><span>Subtotal</span><strong>${money.format(receipt.quote.subtotal)}</strong></div><div><span>Promo & penyesuaian</span><strong>${receiptDiscount<0?'+':'−'}${money.format(Math.abs(receiptDiscount))}</strong></div><div class="receipt-grand"><span>Total</span><strong>${money.format(receipt.quote.grandTotal)}</strong></div>${payments.map((payment)=>`<div><span>${payment.method}${payment.method==='CASH'&&payment.tendered?` · diterima ${money.format(payment.tendered)}`:''}</span><strong>${money.format(payment.amount)}</strong></div>`).join('')}${change?`<div><span>Kembalian</span><strong>${money.format(change)}</strong></div>`:''}</div>${receipt.notes?`<p class="receipt-thanks"><strong>Catatan:</strong> ${escapeHtml(receipt.notes)}</p>`:''}<p class="receipt-thanks">${escapeHtml(footer)}</p>`;
   const copies=Math.max(1,Math.min(3,Number(state.deviceSettings.receiptCopies??1)));
   el('receipt-content').innerHTML=Array.from({length:copies},(_,index)=>`<section class="receipt-copy">${body}${copies>1?`<small class="receipt-copy-label">Salinan ${index+1} dari ${copies}</small>`:''}</section>`).join('');
   const width=Number(state.deviceSettings.paperWidth??80)===58?58:80;
@@ -2543,7 +2575,7 @@ async function completePayment(event) {
   if(!navigator.onLine&&state.paymentDraft.length>1)return el('payment-error').textContent='Pembayaran gabungan memerlukan koneksi internet.';
   const sale = {
     key: crypto.randomUUID(), actorId: state.session.user.id, occurredAt: new Date().toISOString(), expectedTotal: state.quote.grandTotal,
-    payload: { lines: structuredClone(state.cart), offlineQuote: structuredClone(state.quote), customerId: el('customer-select').value || null, customerGroupId: el('customer-group').value, payments:structuredClone(state.paymentDraft),paymentMethod:({CASH:'Tunai',QRIS:'QRIS',TRANSFER:'Transfer',EDC:'EDC',CREDIT:'Piutang'})[state.paymentDraft[0].method], shiftId: state.currentShift.id, ...(state.saleAuthorization?{authorization:structuredClone(state.saleAuthorization)}:{}) }
+    payload: { lines: structuredClone(state.cart), offlineQuote: structuredClone(state.quote), customerId: el('customer-select').value || null, customerGroupId: el('customer-group').value, notes:el('sale-note').value.trim(), payments:structuredClone(state.paymentDraft),paymentMethod:({CASH:'Tunai',QRIS:'QRIS',TRANSFER:'Transfer',EDC:'EDC',CREDIT:'Piutang'})[state.paymentDraft[0].method], shiftId: state.currentShift.id, ...(state.saleAuthorization?{authorization:structuredClone(state.saleAuthorization)}:{}) }
   };
   let refreshAfterPayment = false;
   if (!navigator.onLine) {
@@ -2551,7 +2583,7 @@ async function completePayment(event) {
   } else {
     try {
       const receipt = await request('/api/sales', { method: 'POST', headers: { 'idempotency-key': sale.key }, body: JSON.stringify(sale.payload) });
-      toast(`Transaksi ${receipt.receiptNo} berhasil`);state.lastReceipt=receipt;
+      toast(`Transaksi ${receipt.receiptNo} berhasil`);state.lastReceipt={...receipt,payments:structuredClone(state.paymentDraft),customer:selectedPosCustomer()};
       renderReceipt(receipt,state.paymentDraft);
       refreshAfterPayment = true;
     } catch (error) {
@@ -2560,12 +2592,79 @@ async function completePayment(event) {
       await queueSale(sale); toast('Jaringan bermasalah. Transaksi diamankan di antrean.');
     }
   }
-  state.cart = []; resetPosCustomer(); invalidateSaleAuthorization(); await updateQuote(); el('payment-dialog').close();
+  state.cart = []; resetPosCustomer();el('sale-note').value='';invalidateSaleAuthorization(); await updateQuote(); el('payment-dialog').close();
   if (refreshAfterPayment) {
     await refreshCatalog();
     if (state.session.permissions.includes('inventory.manage')) await loadInventory();
     if (state.session.permissions.includes('report.view')) await loadReport();
+    await loadPosSales();
   }
+}
+
+async function loadPosSales(query='') {
+  if(!navigator.onLine)return;
+  try{
+    const data=await request(`/api/pos-sales${query?`?q=${encodeURIComponent(query)}`:''}`);
+    state.posSales=data.sales??[];
+    if(state.selectedPosSaleId&&!state.posSales.some((sale)=>sale.id===state.selectedPosSaleId))state.selectedPosSaleId=null;
+    renderPosSales();
+  }catch(error){
+    el('pos-history-list').innerHTML=`<div class="empty-state compact">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderPosSales(){
+  el('pos-history-list').innerHTML=state.posSales.length?state.posSales.map((sale)=>`<button class="pos-history-row ${sale.id===state.selectedPosSaleId?'active':''}" type="button" data-pos-sale-id="${sale.id}"><span><strong>${escapeHtml(sale.receiptNo)}</strong><small>${new Date(sale.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(sale.customer?.name??'Pelanggan umum')}</small></span><strong>${money.format(sale.quote.grandTotal)}</strong><small>${escapeHtml(sale.cashier)}</small><span class="${sale.status==='VOIDED'?'void-label':''}">${sale.status==='VOIDED'?'VOID':'Selesai'}</span></button>`).join(''):'<div class="empty-state compact">Transaksi tidak ditemukan.</div>';
+  const selected=state.posSales.find((sale)=>sale.id===state.selectedPosSaleId);
+  if(selected)renderPosSaleDetail(selected);
+  else el('pos-history-detail').innerHTML='<div class="empty-state compact">Pilih transaksi untuk melihat detail.</div>';
+}
+
+function renderPosSaleDetail(sale){
+  el('pos-history-detail').innerHTML=`<div class="pos-history-detail-head"><div><p class="eyebrow">${sale.status==='VOIDED'?'TRANSAKSI VOID':'TRANSAKSI SELESAI'}</p><h2>${escapeHtml(sale.receiptNo)}</h2><small>${new Date(sale.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(sale.cashier)}</small></div><strong>${money.format(sale.quote.grandTotal)}</strong></div><div class="pos-history-facts"><div><span>Pelanggan</span><strong>${escapeHtml(sale.customer?.name??'Pelanggan umum')}</strong></div><div><span>Pembayaran</span><strong>${sale.payments.map((payment)=>escapeHtml(payment.method)).join(' + ')}</strong></div></div><div class="pos-history-lines">${sale.quote.lines.map((line)=>`<div><span>${escapeHtml(line.productName)}<small> · ${line.qty} ${escapeHtml(line.unitName)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div>${sale.notes?`<div class="sale-note-display"><strong>Catatan transaksi</strong><br>${escapeHtml(sale.notes)}</div>`:''}${sale.customer?.notes?`<div class="sale-note-display"><strong>Catatan pelanggan</strong><br>${escapeHtml(sale.customer.notes)}</div>`:''}${sale.status==='VOIDED'?`<div class="sale-note-display"><strong>Alasan void</strong><br>${escapeHtml(sale.voidReason)}</div>`:''}<div class="pos-history-actions"><button class="button primary reprint-pos-sale" type="button">Cetak ulang struk</button>${sale.status==='COMPLETED'?'<button class="button danger open-void-sale" type="button">Void transaksi</button>':''}</div>`;
+}
+
+async function openPosHistory(){
+  el('pos-history-search').value='';
+  state.selectedPosSaleId=null;
+  el('pos-history-dialog').showModal();
+  await loadPosSales();
+  el('pos-history-search').focus();
+}
+
+function openVoidSale(sale){
+  if(!navigator.onLine)return toast('Void transaksi memerlukan koneksi internet.');
+  el('void-sale-id').value=sale.id;
+  el('void-sale-title').textContent=`Void ${sale.receiptNo}`;
+  el('void-sale-reason').value='';el('void-approver-email').value='';el('void-approver-password').value='';el('void-sale-error').textContent='';
+  const selfApproved=['OWNER','ADMIN'].includes(state.session.user.role);
+  el('void-supervisor-fields').classList.toggle('hidden',selfApproved);
+  el('void-self-approval').classList.toggle('hidden',!selfApproved);
+  el('void-approver-email').disabled=selfApproved;el('void-approver-password').disabled=selfApproved;
+  el('void-sale-dialog').showModal();el('void-sale-reason').focus();
+}
+
+async function submitVoidSale(event){
+  event.preventDefault();const button=el('confirm-void-sale');button.disabled=true;el('void-sale-error').textContent='';
+  try{
+    const result=await request(`/api/pos-sales/${el('void-sale-id').value}/void`,{method:'POST',body:JSON.stringify({reason:el('void-sale-reason').value,approverEmail:el('void-approver-email').value,approverPassword:el('void-approver-password').value})});
+    toast(`${result.receiptNo} berhasil di-void`);el('void-sale-dialog').close();await Promise.all([loadPosSales(el('pos-history-search').value),refreshCatalog(),refreshShift()]);
+    if(state.session.permissions.includes('report.view'))await loadReport();
+  }catch(error){el('void-sale-error').textContent=error.message;}
+  finally{button.disabled=false;}
+}
+
+function handlePosShortcut(event){
+  if(el('app-view').classList.contains('hidden')||document.querySelector('dialog[open]'))return;
+  const editing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)||document.activeElement?.isContentEditable;
+  if(event.key==='/'&&!editing){event.preventDefault();el('product-search').focus();el('product-search').select();return;}
+  if(event.key==='F9'&&state.quote&&state.currentShift){event.preventDefault();document.activeElement?.blur();openPaymentDialog();return;}
+  if(editing)return;
+  if((event.key==='+'||event.key==='=')&&state.cart.length){event.preventDefault();changeQty(state.cart.length-1,1);return;}
+  if(event.key==='-'&&state.cart.length){event.preventDefault();changeQty(state.cart.length-1,-1);return;}
+  if(event.key.toLowerCase()==='h'&&state.cart.length){event.preventDefault();holdCurrentCart();return;}
+  if(event.key.toLowerCase()==='p'&&state.lastReceipt){event.preventDefault();renderReceipt(state.lastReceipt,state.lastReceipt.payments??state.paymentDraft);setTimeout(()=>window.print(),250);return;}
+  if(event.key.toLowerCase()==='r'){event.preventDefault();openPosHistory();}
 }
 
 const mobileSidebarMedia = window.matchMedia('(max-width: 760px)');
@@ -2658,6 +2757,8 @@ syncSidebarMode();
 el('current-outlet-select').addEventListener('change', switchActiveOutlet);
 el('product-search').addEventListener('input', (event) => renderProducts(event.target.value));
 el('product-search').addEventListener('keydown', (event) => { if (event.key !== 'Enter') return; const value = event.target.value.trim(); const product = state.products.find((item) => item.units.some((unit) => unit.barcode === value)); if (product) { const unit = product.units.find((item) => item.barcode === value); addToCart(product.id, unit.id); } });
+el('pos-category-filters').addEventListener('click',(event)=>{const button=event.target.closest('[data-category]');if(!button)return;state.posCategoryFilter=button.dataset.category;renderProducts(el('product-search').value);});
+el('favorite-filter').addEventListener('click',()=>{state.favoriteOnly=!state.favoriteOnly;renderProducts(el('product-search').value);});
 el('scan-camera-pos').addEventListener('click', () => openBarcodeCamera('pos'));
 el('close-barcode-camera').addEventListener('click', stopBarcodeCamera);
 el('cancel-barcode-camera').addEventListener('click', stopBarcodeCamera);
@@ -2682,7 +2783,24 @@ el('new-pos-customer').addEventListener('click',()=>openCustomerEditor(null,'pos
 document.addEventListener('click', (event) => {
   if (!event.target.closest('.customer-pos-picker')) el('customer-search-results').classList.add('hidden');
 });
-el('clear-cart').addEventListener('click', async () => { state.cart = []; resetPosCustomer(); invalidateSaleAuthorization(); await updateQuote(); });
+el('clear-cart').addEventListener('click', async () => { state.cart = []; resetPosCustomer();el('sale-note').value='';invalidateSaleAuthorization(); await updateQuote(); });
+el('mobile-cart-jump').addEventListener('click',()=>document.querySelector('.cart-pane').scrollIntoView({behavior:'smooth',block:'start'}));
+el('open-pos-history').addEventListener('click',openPosHistory);
+el('close-pos-history').addEventListener('click',()=>el('pos-history-dialog').close());
+el('refresh-pos-history').addEventListener('click',()=>loadPosSales(el('pos-history-search').value));
+el('pos-history-search').addEventListener('input',(event)=>{clearTimeout(event.currentTarget.searchTimer);event.currentTarget.searchTimer=setTimeout(()=>loadPosSales(event.currentTarget.value),250);});
+el('pos-history-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-pos-sale-id]');if(!row)return;state.selectedPosSaleId=row.dataset.posSaleId;renderPosSales();});
+el('pos-history-detail').addEventListener('click',(event)=>{
+  const sale=state.posSales.find((item)=>item.id===state.selectedPosSaleId);if(!sale)return;
+  if(event.target.closest('.reprint-pos-sale')){state.lastReceipt=sale;renderReceipt(sale,sale.payments);}
+  if(event.target.closest('.open-void-sale'))openVoidSale(sale);
+});
+el('void-sale-form').addEventListener('submit',submitVoidSale);
+el('close-void-sale').addEventListener('click',()=>el('void-sale-dialog').close());
+el('cancel-void-sale').addEventListener('click',()=>el('void-sale-dialog').close());
+el('open-shortcuts').addEventListener('click',()=>el('shortcut-dialog').showModal());
+el('close-shortcuts').addEventListener('click',()=>el('shortcut-dialog').close());
+document.addEventListener('keydown',handlePosShortcut);
 el('open-order-adjustment').addEventListener('click',()=>openSaleAdjustmentDialog(null));
 el('sale-adjustment-form').addEventListener('submit',approveSaleAdjustment);
 el('close-sale-adjustment').addEventListener('click',()=>el('sale-adjustment-dialog').close());

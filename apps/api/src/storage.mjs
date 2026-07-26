@@ -112,6 +112,14 @@ export class PosStore {
     `);
     const saleColumns = this.db.prepare('pragma table_info(sales)').all().map((item) => item.name);
     if (!saleColumns.includes('shift_id')) this.db.exec('alter table sales add column shift_id text');
+    if (!saleColumns.includes('customer_id')) this.db.exec('alter table sales add column customer_id text');
+    if (!saleColumns.includes('notes')) this.db.exec('alter table sales add column notes text');
+    if (!saleColumns.includes('void_reason')) this.db.exec('alter table sales add column void_reason text');
+    if (!saleColumns.includes('voided_at')) this.db.exec('alter table sales add column voided_at text');
+    if (!saleColumns.includes('voided_by')) this.db.exec('alter table sales add column voided_by text');
+    if (!saleColumns.includes('void_approved_by')) this.db.exec('alter table sales add column void_approved_by text');
+    const customerColumns = this.db.prepare('pragma table_info(customers)').all().map((item) => item.name);
+    if (!customerColumns.includes('notes')) this.db.exec('alter table customers add column notes text');
     const returnColumns = this.db.prepare('pragma table_info(returns)').all().map((item) => item.name);
     if (!returnColumns.includes('idempotency_key')) this.db.exec('alter table returns add column idempotency_key text');
     if (!returnColumns.includes('refund_method')) this.db.exec('alter table returns add column refund_method text');
@@ -167,8 +175,8 @@ export class PosStore {
       for (const promo of promotions) insertPromotion.run(promo.id, promo.promotionId, promo.code, promo.name, promo.version, promo.status, promo.startsAt, promo.endsAt, promo.priority, promo.stackable ? 1 : 0, JSON.stringify({ condition: promo.condition, reward: promo.reward }), now());
     }
     if (!this.db.prepare('select count(*) as total from customers').get().total) {
-      this.db.prepare('insert into customers values (?, ?, ?, ?, ?, 1, ?)').run('customer-general', 'PLG-0001', 'Pelanggan Umum', null, 'retail', now());
-      this.db.prepare('insert into customers values (?, ?, ?, ?, ?, 1, ?)').run('customer-salon', 'PLG-0002', 'Salon Cantik Ayu', '081234567890', 'wholesale', now());
+      this.db.prepare('insert into customers(id,code,name,phone,group_id,active,created_at,notes) values (?, ?, ?, ?, ?, 1, ?, ?)').run('customer-general', 'PLG-0001', 'Pelanggan Umum', null, 'retail', now(), null);
+      this.db.prepare('insert into customers(id,code,name,phone,group_id,active,created_at,notes) values (?, ?, ?, ?, ?, 1, ?, ?)').run('customer-salon', 'PLG-0002', 'Salon Cantik Ayu', '081234567890', 'wholesale', now(), 'Pelanggan grosir rutin');
     }
     if (!this.db.prepare('select count(*) as total from suppliers').get().total) {
       this.db.prepare('insert into suppliers values (?, ?, ?, ?, ?, 1, ?)').run('sup-cantika', 'SUP-0001', 'PT Cantik Abadi', '081122334455', 'Makassar', now());
@@ -238,7 +246,7 @@ export class PosStore {
     if (!input.name?.trim()) throw new Error('Nama pelanggan wajib diisi');
     const id = crypto.randomUUID();
     const code = `PLG-${String(this.db.prepare('select count(*) total from customers').get().total + 1).padStart(4, '0')}`;
-    this.db.prepare('insert into customers values (?, ?, ?, ?, ?, 1, ?)').run(id, code, input.name.trim(), input.phone?.trim() || null, input.groupId === 'wholesale' ? 'wholesale' : 'retail', now());
+    this.db.prepare('insert into customers(id,code,name,phone,group_id,active,created_at,notes) values (?, ?, ?, ?, ?, 1, ?, ?)').run(id, code, input.name.trim(), input.phone?.trim() || null, input.groupId === 'wholesale' ? 'wholesale' : 'retail', now(), input.notes?.trim() || null);
     this.audit(actorId, 'CUSTOMER_CREATED', 'customer', id, { code, name: input.name.trim() });
     return this.db.prepare('select * from customers where id=?').get(id);
   }
@@ -346,7 +354,7 @@ export class PosStore {
     return { quantity: nextQty, avgCost: nextCost };
   }
 
-  recordSale({ key, quote, lines, cashier, customerGroupId, paymentMethod, shiftId, locationId = 'outlet-utama' }) {
+  recordSale({ key, quote, lines, cashier, customerId = null, customerGroupId, paymentMethod, shiftId, notes = '', locationId = 'outlet-utama' }) {
     const existing = this.db.prepare('select * from sales where idempotency_key = ?').get(key);
     if (existing) return this.sale(existing.id);
     return this.transaction(() => {
@@ -355,10 +363,10 @@ export class PosStore {
       const receiptNo = `UTM-${String(sequence).padStart(6, '0')}`;
       const occurredAt = now();
       let costTotal = 0;
-      this.db.prepare(`insert into sales(id,idempotency_key,receipt_no,cashier_id,cashier_name,customer_group_id,subtotal,discount_total,grand_total,cost_total,payment_method,occurred_at,status,shift_id)
-        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      this.db.prepare(`insert into sales(id,idempotency_key,receipt_no,cashier_id,cashier_name,customer_group_id,subtotal,discount_total,grand_total,cost_total,payment_method,occurred_at,status,shift_id,customer_id,notes)
+        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         id, key, receiptNo, cashier.id, cashier.displayName, customerGroupId, quote.subtotal, quote.discountTotal,
-        quote.grandTotal, 0, paymentMethod ?? 'Tunai', occurredAt, 'COMPLETED', shiftId ?? null
+        quote.grandTotal, 0, paymentMethod ?? 'Tunai', occurredAt, 'COMPLETED', shiftId ?? null, customerId, String(notes ?? '').trim().slice(0,500) || null
       );
       for (let index = 0; index < quote.lines.length; index += 1) {
         const line = quote.lines[index];
@@ -368,7 +376,7 @@ export class PosStore {
         costTotal += lineCost;
         this.db.prepare('insert into sale_lines values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
           crypto.randomUUID(), id, line.productId, line.productName, line.baseQty, line.gross, line.discount, line.total,
-          lineCost, JSON.stringify({ priceRuleId: line.priceRuleId }), JSON.stringify(line.promotions)
+          lineCost, JSON.stringify({ priceRuleId: line.priceRuleId, unitName: line.unitName, qty: line.qty }), JSON.stringify(line.promotions)
         );
         this.moveStock({ locationId, productId: line.productId, delta: -line.baseQty, unitCost: balance.avg_cost, eventType: 'SALE', referenceId: id, actorId: cashier.id, idempotencyKey: `${key}:stock:${index}` });
       }
@@ -386,6 +394,40 @@ export class PosStore {
   saleByReceipt(receiptNo) {
     const sale = this.db.prepare('select id from sales where upper(receipt_no)=upper(?)').get(String(receiptNo ?? '').trim());
     return sale ? this.returnableSale(sale.id) : null;
+  }
+
+  recentPosSales(limit = 50) {
+    return this.db.prepare("select * from sales where status in ('COMPLETED','VOIDED') order by occurred_at desc limit ?").all(limit).map((sale) => {
+      const customer = sale.customer_id ? this.db.prepare('select id,name,phone,notes from customers where id=?').get(sale.customer_id) ?? null : null;
+      const lines = this.db.prepare('select * from sale_lines where sale_id=? order by rowid').all(sale.id).map((line) => {
+        const pricing = JSON.parse(line.pricing_snapshot || '{}');
+        return { productId:line.product_id,productName:line.product_name,qty:Number(pricing.qty ?? line.base_qty),unitName:pricing.unitName ?? 'pcs',baseQty:Number(line.base_qty),gross:Number(line.gross),discount:Number(line.discount),total:Number(line.total),promotions:JSON.parse(line.promotion_snapshot || '[]') };
+      });
+      return {
+        id:sale.id,receiptNo:sale.receipt_no,status:sale.status,occurredAt:sale.occurred_at,cashier:sale.cashier_name,
+        outletName:'Toko Utama',customer,notes:sale.notes ?? '',voidReason:sale.void_reason ?? '',voidedAt:sale.voided_at ?? null,
+        quote:{lines,subtotal:Number(sale.subtotal),discountTotal:Number(sale.discount_total),grandTotal:Number(sale.grand_total)},
+        payments:[{method:sale.payment_method ?? 'Tunai',amount:Number(sale.grand_total),tendered:null,reference:''}]
+      };
+    });
+  }
+
+  voidSale({ saleId, reason, actorId, approvedBy }) {
+    const cleanReason=String(reason??'').trim().slice(0,240);
+    if(cleanReason.length<5)throw new Error('Alasan void minimal 5 karakter');
+    const sale=this.sale(saleId);
+    if(!sale)throw new Error('Transaksi tidak ditemukan');
+    if(sale.status==='VOIDED')return{ id:sale.id,receiptNo:sale.receipt_no,status:'VOIDED',duplicate:true };
+    if(sale.status!=='COMPLETED')throw new Error('Hanya transaksi selesai yang dapat dibatalkan');
+    if(!sale.shift_id||!this.db.prepare("select 1 from shifts where id=? and status='OPEN'").get(sale.shift_id))throw new Error('Void hanya dapat dilakukan sebelum shift transaksi ditutup');
+    if(String(sale.payment_method??'').toLowerCase().includes('piutang'))throw new Error('Transaksi piutang tidak dapat di-void; gunakan retur');
+    if(this.db.prepare("select 1 from returns where sale_id=? and status='COMPLETED' limit 1").get(saleId))throw new Error('Transaksi yang sudah diretur tidak dapat di-void');
+    return this.transaction(()=>{
+      sale.lines.forEach((line,index)=>this.moveStock({locationId:'outlet-utama',productId:line.product_id,delta:Number(line.base_qty),unitCost:Number(line.base_qty)>0?Number(line.cost_total)/Number(line.base_qty):0,eventType:'SALE_VOID',referenceId:sale.id,note:cleanReason,actorId,idempotencyKey:`VOID:${sale.id}:${index+1}`}));
+      this.db.prepare("update sales set status='VOIDED',void_reason=?,voided_at=?,voided_by=?,void_approved_by=? where id=?").run(cleanReason,now(),actorId,approvedBy,sale.id);
+      this.audit(actorId,'SALE_VOIDED','sale',sale.id,{receiptNo:sale.receipt_no,reason:cleanReason,approvedBy,grandTotal:Number(sale.grand_total)});
+      return{id:sale.id,receiptNo:sale.receipt_no,status:'VOIDED',reason:cleanReason,approvedBy,duplicate:false};
+    });
   }
 
   returnableSale(id) {

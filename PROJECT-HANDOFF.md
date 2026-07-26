@@ -76,6 +76,34 @@ UAT perangkat nyata Android/Windows tetap dilakukan mengikuti
 `GO-LIVE-CHECKLIST.md`; hasil otomatis tidak boleh diklaim sebagai pengujian
 perangkat keras fisik.
 
+### Kandidat lokal v1.21 — menunggu SQL dan deployment
+
+Source lokal sudah menyelesaikan paket **Kecepatan kasir dan layanan
+pelanggan**, tetapi produksi harus tetap dianggap v1.20.1 sampai urutan berikut
+selesai:
+
+1. jalankan `supabase/migrations/202607260025_pos_speed_customer_service.sql`;
+2. konfirmasi SQL berhasil tanpa error;
+3. lakukan satu deployment produksi;
+4. verifikasi API `1.21.0-cloud`, aplikasi v1.21, dan cache
+   `nusa-pos-shell-v39`.
+
+Isi kandidat:
+
+- favorit produk per pengguna dan filter kategori cepat;
+- shortcut pencarian, qty, tahan, bayar, cetak, dan riwayat;
+- riwayat transaksi POS dengan pencarian serta cetak ulang;
+- void transaksi sebelum shift ditutup dengan alasan, persetujuan Owner/Admin,
+  pemulihan stok/modal atomik, penolakan transaksi piutang/sudah diretur,
+  idempotensi, dan audit;
+- catatan transaksi yang bertahan saat transaksi ditahan;
+- catatan pelanggan yang terlihat secukupnya di POS dan riwayat;
+- tombol lompat keranjang dan checkout sticky untuk penggunaan satu tangan;
+- 101 pengujian otomatis dan 5 pengujian browser lulus pada kandidat lokal.
+
+Jangan deploy v1.21 sebelum migrasi di atas diterapkan karena API kandidat
+memanggil RPC `complete_sale_v6` dan `void_sale_v1`.
+
 ## 4. Kapabilitas yang sudah dibangun
 
 ### Identitas dan kontrol
@@ -186,7 +214,7 @@ setelah UAT, tetapi task baru tidak boleh melewati fondasi yang belum stabil.
 UAT kamera Android dan scanner/Chrome Windows pada perangkat fisik tetap menjadi
 langkah operasional sebelum pemakaian toko, bukan pekerjaan source code.
 
-### v1.21 — Kecepatan kasir dan layanan pelanggan
+### v1.21 — Kecepatan kasir dan layanan pelanggan (kandidat selesai)
 
 - favorit/produk cepat dan filter kategori di POS;
 - shortcut keyboard untuk pencarian, qty, tahan, bayar, dan cetak;
@@ -195,6 +223,9 @@ langkah operasional sebelum pemakaian toko, bukan pekerjaan source code.
 - pembatalan/void transaksi yang benar, beralasan, disetujui, dan diaudit;
 - catatan per transaksi dan catatan pelanggan yang terlihat secukupnya;
 - pengujian penggunaan satu tangan pada mobile.
+
+Status: seluruh pekerjaan source dan pengujian selesai; menunggu satu migrasi
+SQL dan satu deployment produksi sesuai urutan pada bagian status rilis.
 
 ### v1.22 — Perencanaan restok dan pembelian
 

@@ -392,6 +392,64 @@ async function loadReturnableSale(context, { saleId = null, receiptNo = null } =
   };
 }
 
+async function loadPosSales(context, query = '') {
+  const sales = await rest('sales', `tenant_id=eq.${context.tenantId}&outlet_id=eq.${context.outlet.id}&status=in.(COMPLETED,VOIDED)&select=*&order=occurred_at.desc&limit=50`);
+  if (!sales.length) return [];
+  const saleIds = sales.map((sale) => sale.id);
+  const customerIds = [...new Set(sales.map((sale) => sale.customer_id).filter(Boolean))];
+  const cashierIds = [...new Set(sales.map((sale) => sale.cashier_id).filter(Boolean))];
+  const [items,payments,customers,cashiers] = await Promise.all([
+    rest('sale_items', `tenant_id=eq.${context.tenantId}&sale_id=${inFilter(saleIds)}&select=*&order=id`),
+    rest('payments', `tenant_id=eq.${context.tenantId}&sale_id=${inFilter(saleIds)}&select=*&order=created_at`),
+    customerIds.length ? rest('customers', `tenant_id=eq.${context.tenantId}&id=${inFilter(customerIds)}&select=id,name,phone,notes`) : [],
+    cashierIds.length ? rest('profiles', `tenant_id=eq.${context.tenantId}&user_id=${inFilter(cashierIds)}&select=user_id,display_name`) : []
+  ]);
+  const normalized = String(query ?? '').trim().toLowerCase();
+  return sales.map((sale) => {
+    const customer = customers.find((item) => item.id === sale.customer_id) ?? null;
+    const cashier = cashiers.find((item) => item.user_id === sale.cashier_id)?.display_name ?? 'Kasir';
+    const lines = items.filter((item) => item.sale_id === sale.id).map((item) => ({
+      productId:item.product_id,productName:item.product_name,
+      qty:Number(item.pricing_snapshot?.qty ?? item.base_qty),
+      unitName:item.pricing_snapshot?.unitName ?? 'pcs',baseQty:Number(item.base_qty),
+      gross:Number(item.gross),discount:Number(item.discount),total:Number(item.total),
+      promotions:item.promotion_snapshot ?? []
+    }));
+    return {
+      id:sale.id,receiptNo:sale.receipt_no,status:sale.status,occurredAt:sale.occurred_at,
+      cashier,outletName:context.outlet.name,customer,notes:sale.notes ?? '',
+      voidReason:sale.void_reason ?? '',voidedAt:sale.voided_at ?? null,
+      quote:{lines,subtotal:Number(sale.subtotal),discountTotal:Number(sale.discount_total),grandTotal:Number(sale.grand_total)},
+      payments:payments.filter((item) => item.sale_id === sale.id).map((item) => ({
+        method:item.method,amount:Number(item.amount),tendered:item.tendered_amount == null ? null : Number(item.tendered_amount),
+        reference:item.reference ?? ''
+      }))
+    };
+  }).filter((sale) => !normalized || `${sale.receiptNo} ${sale.cashier} ${sale.customer?.name ?? ''} ${sale.customer?.phone ?? ''}`.toLowerCase().includes(normalized));
+}
+
+async function approvedSupervisor(session, tenantId, input) {
+  if (['OWNER','ADMIN'].includes(session.profile.role)) return { id:session.authUser.id, profile:session.profile };
+  const email = String(input.approverEmail ?? '').trim().toLowerCase();
+  const password = String(input.approverPassword ?? '');
+  if (!email || !password) { const error = new Error('Email dan kata sandi Owner/Admin wajib diisi'); error.status = 400; throw error; }
+  let auth;
+  try {
+    const config = env();
+    auth = await supabase('/auth/v1/token?grant_type=password', {
+      method:'POST',body:{email,password},token:config.anon
+    });
+  } catch {
+    const error = new Error('Email atau kata sandi Owner/Admin salah'); error.status = 422; throw error;
+  }
+  const profile = await profileFor(auth.user.id);
+  await supabase('/auth/v1/logout?scope=local', { method:'POST',token:auth.access_token }).catch(() => {});
+  if (!profile?.active || profile.tenant_id !== tenantId || !['OWNER','ADMIN'].includes(profile.role)) {
+    const error = new Error('Akun tersebut bukan Owner atau Admin aktif pada usaha ini'); error.status = 403; throw error;
+  }
+  return { id:auth.user.id, profile };
+}
+
 async function loadReturnablePurchase(context,{receiptId=null,documentNo=null,supplierId=null}={}) {
   const identifier=receiptId?`id=eq.${encodeURIComponent(receiptId)}`:`document_no=eq.${encodeURIComponent(String(documentNo??'').trim())}`;
   const supplierFilter=supplierId?`&supplier_id=eq.${encodeURIComponent(supplierId)}`:'';
@@ -653,7 +711,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '1.20.1-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '1.21.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'login') {
@@ -961,12 +1019,13 @@ async function routeRequest(request, response, route) {
       });
     }
     const payments=normalizeSalePayments(input,quote.grandTotal);
-    const result = await rpc('complete_sale_v5', {
+    const result = await rpc('complete_sale_v6', {
       p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_idempotency_key: key,
       p_outlet_id: context.outlet.id, p_shift_id: input.shiftId, p_customer_id: input.customerId ?? null,
       p_customer_group_id: input.customerGroupId, p_payments:payments, p_quote: quote,
       p_authorization_id: verifiedAuthorization?.approval.id ?? null,
-      p_basket_fingerprint: verifiedAuthorization?.fingerprint ?? null
+      p_basket_fingerprint: verifiedAuthorization?.fingerprint ?? null,
+      p_notes: String(input.notes ?? '').trim().slice(0,500)
     });
     const tenants = await rest('tenants', `id=eq.${context.tenantId}&select=*`);
     return send(response, 201, { ...result, occurredAt: new Date().toISOString(), cashier: session.profile.display_name, outletName:context.outlet.name, outlet:context.outlet, business:businessPayload(tenants[0]), quote });
@@ -975,7 +1034,7 @@ async function routeRequest(request, response, route) {
   if(request.method==='GET'&&route==='held-sales'){
     requirePermission(session,'pos.sell');
     const rows=await rest('parked_sales',`tenant_id=eq.${context.tenantId}&outlet_id=eq.${context.outlet.id}&status=eq.HELD&select=*&order=created_at.asc&limit=50`);
-    return send(response,200,{holds:rows.map((row)=>({id:row.id,label:row.label,customerId:row.customer_id,customerGroupId:row.customer_group_id,cart:row.cart_json,quote:row.quote_json,cashierId:row.cashier_id,createdAt:row.created_at}))});
+    return send(response,200,{holds:rows.map((row)=>({id:row.id,label:row.label,customerId:row.customer_id,customerGroupId:row.customer_group_id,notes:row.sale_notes??'',cart:row.cart_json,quote:row.quote_json,cashierId:row.cashier_id,createdAt:row.created_at}))});
   }
 
   if(request.method==='POST'&&route==='held-sales'){
@@ -985,7 +1044,7 @@ async function routeRequest(request, response, route) {
     const quote=quoteBasket({lines:input.lines,customerGroupId:input.customerGroupId,products:await loadCatalog(context.tenantId,context.storeLocation?.id),promotions:await loadPromotions(context.tenantId),at:new Date()});
     const rows=await rest('parked_sales','',{method:'POST',prefer:'return=representation',body:{
       tenant_id:context.tenantId,outlet_id:context.outlet.id,cashier_id:session.authUser.id,label:String(input.label??'').trim()||`Tahan ${new Date().toLocaleTimeString('id-ID')}`,
-      customer_id:input.customerId??null,customer_group_id:input.customerGroupId??'retail',cart_json:input.lines,quote_json:quote,status:'HELD'
+      customer_id:input.customerId??null,customer_group_id:input.customerGroupId??'retail',sale_notes:String(input.notes??'').trim().slice(0,500)||null,cart_json:input.lines,quote_json:quote,status:'HELD'
     }});
     return send(response,201,{id:rows[0].id,label:rows[0].label,quote});
   }
@@ -997,7 +1056,7 @@ async function routeRequest(request, response, route) {
     if(!rows[0]){const error=new Error('Transaksi tertahan tidak ditemukan atau sudah digunakan');error.status=404;throw error;}
     const status=action==='resume'?'RESUMED':'CANCELLED';
     await rest('parked_sales',`id=eq.${holdId}&tenant_id=eq.${context.tenantId}`,{method:'PATCH',body:{status,updated_at:new Date().toISOString(),...(status==='RESUMED'?{resumed_at:new Date().toISOString()}:{})}});
-    return send(response,200,{id:holdId,status,cart:rows[0].cart_json,customerId:rows[0].customer_id,customerGroupId:rows[0].customer_group_id});
+    return send(response,200,{id:holdId,status,cart:rows[0].cart_json,customerId:rows[0].customer_id,customerGroupId:rows[0].customer_group_id,notes:rows[0].sale_notes??''});
   }
 
   if (request.method === 'POST' && route === 'sync/sales') {
@@ -1021,6 +1080,11 @@ async function routeRequest(request, response, route) {
           p_idempotency_key: command.key, p_occurred_at: command.occurredAt, p_payload: command.payload,
           p_expected_total: Number(command.expectedTotal), p_quote: quote
         });
+        if (result.status === 'APPLIED' && result.result?.id && command.payload?.notes) {
+          await rest('sales', `tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(result.result.id)}`, {
+            method:'PATCH',body:{notes:String(command.payload.notes).trim().slice(0,500)}
+          });
+        }
         results.push(result);
       } catch (error) {
         results.push({ key: command.key ?? null, status: 'FAILED', error: error.message });
@@ -1581,6 +1645,23 @@ async function routeRequest(request, response, route) {
     const sale = await loadReturnableSale(context,{receiptNo});
     if (!sale) { const error = new Error('Nomor struk tidak ditemukan pada outlet yang dapat diakses'); error.status = 404; throw error; }
     return send(response,200,{sale});
+  }
+
+  if (request.method === 'GET' && route === 'pos-sales') {
+    requirePermission(session, 'pos.sell');
+    return send(response, 200, { sales: await loadPosSales(context, queryValue(request,'q') ?? '') });
+  }
+
+  if (request.method === 'POST' && /^pos-sales\/[^/]+\/void$/.test(route)) {
+    requirePermission(session, 'pos.sell');
+    const input = bodyOf(request);
+    const saleId = route.split('/')[1];
+    const supervisor = await approvedSupervisor(session, context.tenantId, input);
+    const result = await rpc('void_sale_v1', {
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_approved_by:supervisor.id,
+      p_sale_id:saleId,p_outlet_id:context.outlet.id,p_reason:String(input.reason ?? '')
+    });
+    return send(response, 200, result);
   }
 
   if (request.method === 'GET' && route.startsWith('sales/')) {
