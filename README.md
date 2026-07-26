@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Paket Operasional v1.23.3
+# Kasir Nusa POS — Paket Operasional v1.24.0
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -6,7 +6,7 @@ Produksi menggunakan:
 
 - Vercel untuk aplikasi web/PWA dan API.
 - Supabase untuk login, database PostgreSQL, transaksi atomik, dan audit.
-- PWA untuk penggunaan sebagai aplikasi Android dan Windows.
+- Aplikasi Android native untuk kasir; PWA untuk owner di iOS dan backoffice.
 
 Alamat produksi: <https://kasir-nusa-pos.vercel.app/>
 
@@ -50,10 +50,10 @@ kapabilitas retail yang lebih lengkap tersedia di
 - Laporan penjualan, laba, stok, pembelian, outlet, produk, supplier, dan audit.
 - Impor data awal, backup ber-checksum, sinkronisasi offline, dan resolusi konflik.
 - Pusat kesehatan untuk rekonsiliasi stok, pembayaran, piutang, hutang, shift, dan sinkronisasi.
-- Instalasi PWA dengan identitas aplikasi untuk Android dan Windows.
-- Cetak langsung ESC/POS ke printer Bluetooth Classic SPP dari Chrome/PWA
-  Android tanpa aplikasi bridge atau langganan; tersedia koneksi, sambung ulang,
-  tes cetak, status printer, lebar 58/80 mm, dan 1–3 salinan.
+- Aplikasi kasir Android terhubung langsung ke printer ESC/POS Bluetooth Classic
+  SPP tanpa kabel, bridge berbayar, atau langganan. Scanner Bluetooth HID
+  diteruskan langsung ke halaman kasir.
+- PWA tetap tersedia bagi owner di iOS dan penggunaan backoffice.
 - Navigasi accordion: menekan kelompok di sidebar membuka daftar subfitur
   memanjang tepat di bawah kelompok tersebut, tanpa panel atau halaman menu
   tambahan.
@@ -105,13 +105,22 @@ Jalankan:
 npm test
 ```
 
-Paket operasional v1.23.3 memiliki 129 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
+Paket operasional v1.24.0 memiliki 132 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
+
+## Aplikasi kasir Android
+
+Pasangkan printer WP58D dan scanner melalui Pengaturan Bluetooth Android.
+Instal `releases/Kasir-Nusa-Kasir-1.0.0-test.apk`, masuk dengan akun kasir, lalu
+cetak struk. Saat pertama mencetak, pilih WP58D dari daftar perangkat yang
+sudah dipasangkan. Scanner Bluetooth harus berada pada mode HID dan mengirim
+Enter setelah barcode.
 
 ## Struktur
 
 ```text
 api/                  API produksi Vercel
 apps/web/             Antarmuka POS dan backoffice PWA
+apps/android-cashier/ Aplikasi kasir Android, printer SPP, dan scanner HID
 apps/api/             Server demo lokal
 packages/domain/      Mesin harga, promo, akses, dan data contoh
 supabase/migrations/  Fondasi database produksi

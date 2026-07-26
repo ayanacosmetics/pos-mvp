@@ -2,14 +2,51 @@ import { customerReceiptView } from './receipt.mjs';
 
 const encoder = new TextEncoder();
 let activePort = null;
+const nativeRequests = new Map();
 
 const ESC = 0x1b;
 const GS = 0x1d;
 const LF = 0x0a;
 
-export const supportsBluetoothClassicPrinting = () => Boolean(navigator.serial);
-export const printerConnected = () => Boolean(activePort?.writable);
-export const printerSelected = () => Boolean(activePort);
+const nativeBridge = () => typeof window !== 'undefined' ? window.KasirNusaAndroid : null;
+
+if (typeof window !== 'undefined') {
+  window.__kasirNusaNativePrinterResponse = (requestId, success, message) => {
+    const request = nativeRequests.get(requestId);
+    if (!request) return;
+    nativeRequests.delete(requestId);
+    if (success) request.resolve(message);
+    else request.reject(new Error(message || 'Operasi printer Android gagal.'));
+  };
+}
+
+function nativeRequest(method, payload) {
+  return new Promise((resolve, reject) => {
+    const bridge = nativeBridge();
+    if (!bridge?.[method]) return reject(new Error('Bridge printer Android tidak tersedia.'));
+    const requestId = crypto.randomUUID();
+    nativeRequests.set(requestId, { resolve, reject });
+    const timeout = setTimeout(() => {
+      if (!nativeRequests.has(requestId)) return;
+      nativeRequests.delete(requestId);
+      reject(new Error('Printer tidak merespons. Periksa daya dan koneksi Bluetooth.'));
+    }, 30000);
+    nativeRequests.set(requestId, {
+      resolve: (value) => { clearTimeout(timeout); resolve(value); },
+      reject: (error) => { clearTimeout(timeout); reject(error); }
+    });
+    if (payload === undefined) bridge[method](requestId);
+    else bridge[method](requestId, payload);
+  });
+}
+
+export const supportsBluetoothClassicPrinting = () => Boolean(nativeBridge() || (typeof navigator !== 'undefined' && navigator.serial));
+export const printerConnected = () => nativeBridge()
+  ? Boolean(nativeBridge().isPrinterConnected())
+  : Boolean(activePort?.writable);
+export const printerSelected = () => nativeBridge()
+  ? Boolean(nativeBridge().isPrinterSelected())
+  : Boolean(activePort);
 
 function ascii(value = '') {
   return String(value)
@@ -105,6 +142,14 @@ async function ensureOpen() {
 }
 
 async function write(bytes) {
+  if (nativeBridge()) {
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += 8192) {
+      binary += String.fromCharCode(...bytes.slice(offset, offset + 8192));
+    }
+    await nativeRequest('printBase64', btoa(binary));
+    return;
+  }
   const port = await ensureOpen();
   const writer = port.writable.getWriter();
   try {
@@ -118,6 +163,7 @@ async function write(bytes) {
 
 export async function restoreGrantedPrinter() {
   if (!supportsBluetoothClassicPrinting()) return false;
+  if (nativeBridge()) return printerSelected();
   const ports = await navigator.serial.getPorts();
   activePort = ports[0] ?? null;
   return Boolean(activePort);
@@ -125,12 +171,20 @@ export async function restoreGrantedPrinter() {
 
 export async function selectBluetoothPrinter() {
   if (!supportsBluetoothClassicPrinting()) throw new Error('Chrome Android minimal versi 138 diperlukan.');
+  if (nativeBridge()) {
+    await nativeRequest('connectPrinter');
+    return true;
+  }
   if (!activePort) activePort = await navigator.serial.requestPort();
   await ensureOpen();
   return true;
 }
 
 export async function disconnectBluetoothPrinter() {
+  if (nativeBridge()) {
+    await nativeRequest('disconnectPrinter');
+    return;
+  }
   if (activePort?.writable) await activePort.close();
 }
 

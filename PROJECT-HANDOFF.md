@@ -9,7 +9,7 @@ Kasir Nusa adalah POS dan backoffice orisinal untuk:
 
 - toko kosmetik grosir dan ecer;
 - toko campuran grosir dan ecer;
-- operasional web backoffice, Android PWA, dan Windows PWA;
+- operasional web backoffice, aplikasi kasir Android, iOS PWA, dan Windows PWA;
 - beberapa outlet, toko, dan gudang.
 
 Targetnya adalah mencapai kedalaman kapabilitas retail yang sekelas produk
@@ -32,7 +32,8 @@ Prinsip produk:
 - API produksi: Vercel Functions pada `api/index.mjs`.
 - Demo lokal: Node.js dan SQLite pada `apps/api`.
 - Mesin domain bersama: `packages/domain`.
-- PWA digunakan untuk Android dan Windows terlebih dahulu.
+- Aplikasi native Android digunakan khusus kasir agar Bluetooth Classic SPP dan
+  scanner HID dapat diakses; owner tetap memakai PWA di iOS.
 - Laravel tidak digunakan. Keputusan ini disengaja agar tidak menambah
   backend kedua dan kompleksitas operasional yang belum diperlukan.
 
@@ -46,6 +47,17 @@ kode frontend, dokumentasi publik, atau chat.
 
 ### Terakhir dikonfirmasi live
 
+- **Kandidat v1.24.0** menambahkan aplikasi kasir Android native di
+  `apps/android-cashier`.
+- Printer WP58D memakai RFCOMM/SPP langsung dan ESC/POS tanpa kabel, bridge
+  berbayar, atau langganan. Daftar printer berasal dari perangkat yang sudah
+  dipasangkan pada Pengaturan Android.
+- Scanner Bluetooth HID ditangkap sebagai keyboard eksternal dan barcode
+  diteruskan ke halaman POS. Kamera tetap tersedia sebagai cadangan.
+- WebView dikunci ke `kasir-nusa-pos.vercel.app`, menolak cleartext dan akses
+  file lokal, serta tidak mencadangkan sesi atau data aplikasi.
+- APK uji ada di `releases/Kasir-Nusa-Kasir-1.0.0-test.apk`. Tidak memerlukan
+  SQL baru.
 - **Paket uji printer v1.23.3** memprioritaskan validasi printer fisik sebelum
   roadmap fitur dilanjutkan.
 - Chrome/PWA Android dapat memilih printer Bluetooth Classic SPP melalui Web
@@ -151,6 +163,15 @@ diterapkan melalui migrasi `027`; tidak ada SQL v1.21 yang masih tertunda.
 - Cetak manual, cetak ulang, shortcut P, dan cetak otomatis memakai jalur
   printer langsung; browser tanpa Web Serial tetap memakai dialog sistem.
 - Versi UI `v1.23.3`, API `1.23.3-cloud`, cache `nusa-pos-shell-v48`.
+- Tidak memerlukan migrasi Supabase.
+
+### Kandidat v1.24.0
+
+- Aplikasi Android native menggantikan keterbatasan Web Serial untuk printer
+  Bluetooth Classic WP58D.
+- UI/PWA mendeteksi bridge Android untuk memilih printer, menyambung ulang,
+  mengirim ESC/POS, dan menerima barcode scanner HID.
+- Versi UI `v1.24.0`, API `1.24.0-cloud`, cache `nusa-pos-shell-v49`.
 - Tidak memerlukan migrasi Supabase.
 
 ### Rilis v1.23 dikonfirmasi live

@@ -1295,6 +1295,16 @@ async function startNativeBarcodeDetection(video) {
   }
 }
 
+async function handleNativeScannerBarcode(value) {
+  const barcode = String(value ?? '').trim();
+  if (!barcode) return;
+  if (!el('page-pos').classList.contains('active')) return toast('Buka halaman Kasir sebelum memindai barang.');
+  const exact = barcodeMatch(barcode);
+  if (!exact) return toast(`Barcode ${barcode} belum terdaftar pada produk.`);
+  await addToCart(exact.product.id, exact.unit.id);
+  el('product-search').value = '';
+}
+
 async function startZxingBarcodeDetection(video) {
   const Reader = window.ZXingBrowser?.BrowserMultiFormatReader;
   if (!Reader) throw new Error('ZXing fallback unavailable');
@@ -3522,6 +3532,7 @@ window.addEventListener('appinstalled', () => {
   updateInstallAppControl();
   toast('Kasir Nusa berhasil dipasang di perangkat ini.');
 });
+window.addEventListener('kasirnusa:barcode', (event) => handleNativeScannerBarcode(event.detail?.value));
 updateInstallAppControl();
 restoreGrantedPrinter().then(()=>renderPrinterStatus()).catch(()=>renderPrinterStatus('Izin printer perlu dipilih ulang'));
 if (supportsBluetoothClassicPrinting()) {
