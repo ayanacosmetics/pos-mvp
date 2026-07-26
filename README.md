@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Paket Operasional v1.21.4
+# Kasir Nusa POS — Paket Operasional v1.22.0
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -34,6 +34,10 @@ kapabilitas retail yang lebih lengkap tersedia di
 - Pencarian pelanggan menurut nama/telepon serta pemilihan barang tanpa jeda.
 - Pelanggan, fasilitas kredit, umur piutang, pembayaran, dan retur kredit.
 - Supplier, Purchase Order, penerimaan/restok, hutang, dan pembayaran supplier.
+- Rencana restok memakai minimum, maksimum, safety stock, lead time, rata-rata
+  penjualan, stok tersedia, dan sisa PO yang belum datang.
+- Draft PO dapat dibuat dari rekomendasi per supplier, dengan approval
+  berdasarkan nominal serta penanda PO terlambat.
 - Histori modal per supplier dan batch, perbandingan supplier, serta indikator kenaikan.
 - Stok per outlet/gudang, transfer, opname, jurnal, batch, EXP, dan FEFO.
 - Retur pelanggan dan supplier dengan dampak stok serta keuangan.
@@ -65,6 +69,11 @@ Hotfix v1.21.1 menambahkan pemulihan otomatis penghitung nomor struk. Terapkan
 `supabase/migrations/202607260026_receipt_sequence_collision_fix.sql` untuk
 menyelaraskan seluruh penghitung dan memasang perlindungan benturan di database.
 
+Untuk kandidat v1.22, jalankan satu file
+`supabase/migrations/202607260027_restock_purchase_planning.sql`. Migrasi ini
+idempotent dan sudah menyertakan penguatan nomor struk v1.21 yang masih tertunda,
+kemudian menambahkan kebijakan restok serta approval pembelian berdasarkan nilai.
+
 Klik dua kali `Deploy-Kasir-Nusa.cmd` dan tunggu sampai muncul tulisan **Deployment berhasil**.
 
 Rahasia Supabase hanya boleh tersimpan di pengaturan Environment Variables Vercel. Jangan menaruh `SUPABASE_SERVICE_ROLE_KEY` di browser, screenshot, chat, atau repository.
@@ -77,7 +86,7 @@ Jalankan:
 npm test
 ```
 
-Paket operasional v1.21.4 memiliki 112 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
+Paket operasional v1.22.0 memiliki 119 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
 
 ## Struktur
 

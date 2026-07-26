@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#174c4f">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=43">
+  <link rel="stylesheet" href="/styles.css?v=44">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -58,7 +58,7 @@
         <button data-page="products" class="nav-item" data-permission="catalog.manage"><span>◇</span>Produk</button>
         <button data-page="promotions" class="nav-item" data-permission="promotion.manage"><span>％</span>Promo</button>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Operasional · v1.21.4</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Operasional · v1.22.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -126,9 +126,28 @@
       <section id="page-restock" class="page">
         <div class="content-width">
           <div class="page-title"><div><p class="eyebrow">PURCHASE ORDER & PENERIMAAN</p><h1>Pembelian dan restok</h1><p class="muted">Rencanakan pesanan, minta persetujuan, lalu terima barang sebagian atau seluruhnya.</p></div><span class="pill success">Alur terkontrol</span></div>
-          <div class="purchase-tabs" role="tablist"><button class="purchase-tab active" data-purchase-view="documents">Dokumen pembelian</button><button class="purchase-tab" data-purchase-view="order">Buat PO</button><button class="purchase-tab" data-purchase-view="receipt">Terima barang</button><button class="purchase-tab" data-purchase-view="supplier-return">Retur supplier</button></div>
+          <div class="purchase-tabs" role="tablist"><button class="purchase-tab active" data-purchase-view="planning">Rencana restok</button><button class="purchase-tab" data-purchase-view="documents">Dokumen pembelian</button><button class="purchase-tab" data-purchase-view="order">Buat PO</button><button class="purchase-tab" data-purchase-view="receipt">Terima barang</button><button class="purchase-tab" data-purchase-view="supplier-return">Retur supplier</button></div>
 
-          <div id="purchase-view-documents" class="purchase-view">
+          <div id="purchase-view-planning" class="purchase-view">
+            <div id="restock-planning-metrics" class="purchase-metrics"></div>
+            <div class="planning-layout">
+              <div class="surface planning-workspace">
+                <div class="document-toolbar planning-toolbar"><div><p class="eyebrow">REKOMENDASI PEMBELIAN</p><h2>Barang yang perlu dipesan</h2></div><div><select id="planning-location" aria-label="Lokasi rencana restok"></select><select id="planning-supplier-filter" aria-label="Filter supplier"><option value="">Semua supplier</option></select><button id="refresh-restock-planning" class="button secondary" type="button">Hitung ulang</button></div></div>
+                <label class="planning-needed-filter"><input id="planning-needed-only" type="checkbox" checked> Tampilkan hanya barang yang perlu dipesan</label>
+                <div id="restock-planning-list"><div class="empty-state compact">Memuat rekomendasi restok...</div></div>
+                <div class="planning-draft-actions"><span><strong id="planning-selected-count">0 barang dipilih</strong><small>Draft hanya dapat dibuat untuk satu supplier.</small></span><button id="create-planning-draft" class="button primary" type="button" disabled>Buat draft PO</button></div>
+              </div>
+              <form id="purchase-planning-settings-form" class="surface planning-settings">
+                <p class="eyebrow">ATURAN PEMBELIAN</p><h2>Analisis & persetujuan</h2>
+                <label>Rata-rata penjualan<input id="planning-lookback-days" type="number" min="7" max="365" value="30"><small>Jumlah hari histori yang dianalisis.</small></label>
+                <label>Batas PO tanpa approval<input id="planning-approval-threshold" type="number" min="0" step="1000" value="5000000"><small>Di atas nilai ini, Staff Pembelian menunggu Owner/Admin.</small></label>
+                <button id="save-planning-settings" class="button primary full" type="submit">Simpan aturan</button>
+                <p id="planning-settings-note" class="muted"></p>
+              </form>
+            </div>
+          </div>
+
+          <div id="purchase-view-documents" class="purchase-view hidden">
             <div id="purchase-metrics" class="purchase-metrics"></div>
             <div class="surface purchase-documents">
               <div class="document-toolbar"><div><p class="eyebrow">DAFTAR PURCHASE ORDER</p><h2>Dokumen terbaru</h2></div><div><select id="purchase-status-filter"><option value="">Semua status</option><option value="DRAFT">Draft</option><option value="SUBMITTED">Menunggu persetujuan</option><option value="APPROVED">Disetujui</option><option value="PARTIALLY_RECEIVED">Diterima sebagian</option><option value="RECEIVED">Selesai</option><option value="CANCELLED">Dibatalkan</option></select><button id="refresh-purchase-orders" class="button secondary">Muat ulang</button><button id="new-purchase-order" class="button primary">Buat PO baru</button></div></div>
@@ -453,9 +472,10 @@
     <p id="product-error" class="error"></p><div class="button-row"><button id="cancel-product" type="button" class="button secondary">Batal</button><button id="save-product-button" type="submit" class="button primary">Simpan produk</button></div>
   </form></dialog>
   <dialog id="supplier-comparison-dialog"><div class="dialog-card comparison-dialog"><div class="comparison-heading"><div><p class="eyebrow">PERBANDINGAN SUPPLIER</p><h2 id="comparison-product-name">Histori harga</h2></div><button id="close-supplier-comparison" class="icon-button" type="button">×</button></div><div id="supplier-comparison-content"></div></div></dialog>
+  <dialog id="restock-policy-dialog"><form id="restock-policy-form" class="dialog-card"><div class="comparison-heading"><div><p class="eyebrow">KEBIJAKAN RESTOK</p><h2 id="restock-policy-product">Atur barang</h2><p class="muted">Berlaku untuk kombinasi lokasi, produk, dan supplier ini.</p></div><button id="close-restock-policy" class="icon-button" type="button">×</button></div><input id="restock-policy-product-id" type="hidden"><div class="form-grid compact"><label>Supplier<select id="restock-policy-supplier" required></select></label><label>Stok minimum<input id="restock-policy-minimum" type="number" min="0" step="any" required></label><label>Stok maksimum<input id="restock-policy-maximum" type="number" min="0" step="any" required></label><label>Safety stock<input id="restock-policy-safety" type="number" min="0" step="any" required></label><label>Lead time supplier<input id="restock-policy-lead" type="number" min="0" max="365" required><small>Perkiraan hari sampai barang datang.</small></label></div><label class="switch-row"><input id="restock-policy-preferred" type="checkbox" checked><span><strong>Supplier utama</strong><small>Dipakai sebagai pilihan utama rekomendasi produk ini.</small></span></label><p id="restock-policy-error" class="error"></p><div class="button-row"><button id="cancel-restock-policy" class="button secondary" type="button">Batal</button><button class="button primary" type="submit">Simpan kebijakan</button></div></form></dialog>
   <dialog id="edit-user-dialog"><form id="edit-user-form" class="dialog-card wide user-editor"><div class="comparison-heading"><div><p class="eyebrow">HAK AKSES PENGGUNA</p><h2 id="edit-user-title">Ubah pengguna</h2><p id="edit-user-email" class="muted"></p></div><button id="close-user-editor" class="icon-button" type="button">×</button></div><input id="edit-user-id" type="hidden"><div class="form-grid compact"><label>Nama lengkap<input id="edit-user-name" required></label><label>Peran<select id="edit-user-role"><option value="CASHIER">Kasir</option><option value="PURCHASING">Pembelian</option><option value="WAREHOUSE">Gudang</option><option value="ADMIN">Admin</option><option value="OWNER">Owner</option></select></label></div><fieldset><legend>Penempatan outlet</legend><div id="edit-user-outlets" class="outlet-options"></div><small class="muted">Owner otomatis memiliki akses ke semua outlet.</small></fieldset><label class="switch-row"><input id="edit-user-active" type="checkbox"><span><strong>Akun aktif</strong><small>Pengguna dapat masuk dan bekerja sesuai perannya.</small></span></label><p id="edit-user-error" class="error" role="alert"></p><div class="button-row"><button id="cancel-user-edit" class="button secondary" type="button">Batal</button><button id="save-user" class="button primary" type="submit">Simpan perubahan</button></div></form></dialog>
   <div id="toast" class="toast" role="status"></div>
   <script src="/vendor/zxing-browser.min.js" defer></script>
-  <script type="module" src="/app.js?v=43"></script>
+  <script type="module" src="/app.js?v=44"></script>
 </body>
 </html>

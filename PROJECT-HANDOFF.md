@@ -86,6 +86,26 @@ untuk menyelaraskan semua outlet dan memasang trigger benturan di database.
 Pembayaran produksi sudah pulih melalui perbaikan penghitung dan fallback API;
 terapkan SQL tersebut sebelum melanjutkan paket database berikutnya.
 
+### Kandidat lokal siap SQL
+
+- **Paket Operasional v1.22.0** sudah selesai di source dan belum dideploy.
+- Migrasi tunggal `202607260027_restock_purchase_planning.sql` bersifat
+  idempotent dan menyertakan penguatan nomor struk dari migrasi `026`, sehingga
+  pengguna hanya perlu menjalankan satu SQL.
+- Rencana restok memakai stok lokasi, sisa PO disetujui yang belum datang,
+  rata-rata penjualan, minimum, maksimum, safety stock, dan lead time.
+- Daftar kebutuhan memprioritaskan stok kosong, dapat difilter per supplier,
+  dan dapat langsung membuat draft PO untuk satu supplier.
+- Dokumen PO menampilkan sisa barang serta status terlambat. Perbandingan modal
+  supplier menampilkan dua penerimaan terakhir dan tren perubahan.
+- Staff Pembelian memperoleh persetujuan otomatis sampai batas nominal tenant;
+  PO di atas batas menunggu Owner/Admin. Seluruh perubahan kebijakan, aturan,
+  draft rekomendasi, dan transisi PO dicatat dalam audit.
+- Admin kini memiliki hak pembelian yang konsisten dengan validasi database.
+- API kandidat `1.22.0-cloud`, UI `v1.22.0`, dan cache `nusa-pos-shell-v44`.
+- Seluruh 119 pengujian otomatis lulus. Deployment menunggu konfirmasi bahwa
+  SQL `027` berhasil.
+
 ### Isi rilis v1.21
 
 - favorit produk per pengguna dan filter kategori cepat;
@@ -227,7 +247,7 @@ produksi, hotfix benturan nomor struk, dan privasi harga internal pada struk
 selesai pada 26 Juli 2026. SQL penguatan
 `202607260026_receipt_sequence_collision_fix.sql` menunggu diterapkan.
 
-### v1.22 — Perencanaan restok dan pembelian
+### v1.22 — Perencanaan restok dan pembelian (source selesai, menunggu SQL/deploy)
 
 - minimum, maksimum, safety stock, dan lead time per produk/supplier;
 - saran jumlah restok berdasarkan penjualan rata-rata dan stok tersedia;
@@ -236,6 +256,10 @@ selesai pada 26 Juli 2026. SQL penguatan
 - perbandingan harga supplier lintas periode;
 - draft PO dari rekomendasi restok;
 - approval pembelian berdasarkan nilai.
+
+Status: implementasi domain, database, API, UI responsif, audit, hak akses, dan
+119 pengujian otomatis selesai. Jalankan satu migrasi `027`, lalu deploy kandidat
+yang sama tanpa perubahan source tambahan bila SQL berhasil.
 
 ### v1.23 — Loyalitas, CRM, dan promosi lanjutan
 

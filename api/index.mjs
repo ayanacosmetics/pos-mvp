@@ -5,7 +5,7 @@ import { applySaleAdjustment, normalizeSaleAdjustment, saleAdjustmentFingerprint
 
 const PERMISSIONS = {
   OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage'],
-  ADMIN: ['pos.sell','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view'],
+  ADMIN: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view'],
   CASHIER: ['pos.sell'],
   PURCHASING: ['purchasing.view_cost','purchasing.receive'],
   WAREHOUSE: ['inventory.manage']
@@ -15,7 +15,7 @@ const BACKUP_TABLES = [
   'tenants','profiles','outlets','stock_locations','user_outlets',
   'customers','customer_account_entries','customer_payment_receipts','customer_payment_allocations','suppliers','supplier_bills','supplier_payable_entries','supplier_payment_receipts','supplier_payment_allocations','products','product_units','price_rules','promotions','promotion_versions','promotion_redemptions',
   'shifts','cash_movements','sales','sale_items','payments','parked_sales','sale_adjustment_authorizations',
-  'purchase_orders','purchase_order_items','purchase_receipts','purchase_receipt_items','supplier_returns','supplier_return_items',
+  'purchase_planning_settings','restock_policies','purchase_orders','purchase_order_items','purchase_receipts','purchase_receipt_items','supplier_returns','supplier_return_items',
   'stock_balances','stock_ledger','inventory_batches','inventory_batch_movements',
   'stock_transfers','stock_transfer_items','stock_counts','stock_count_items',
   'customer_returns','customer_return_items','customer_refunds',
@@ -363,16 +363,21 @@ async function loadPurchaseOrders(tenantId, orderId = null, locationIds = []) {
   if (!orders.length) return [];
   const orderIds = orders.map((order) => order.id).join(',');
   const items = await rest('purchase_order_items', `tenant_id=eq.${tenant}&order_id=in.(${orderIds})&select=*&order=product_name`);
-  return orders.map((order) => ({
-    ...order,
-    subtotal: Number(order.subtotal), discount_amount: Number(order.discount_amount), tax_amount: Number(order.tax_amount),
-    other_cost: Number(order.other_cost), grand_total: Number(order.grand_total),
-    items: items.filter((item) => item.order_id === order.id).map((item) => ({
+  const today = new Date().toISOString().slice(0, 10);
+  return orders.map((order) => {
+    const mappedItems = items.filter((item) => item.order_id === order.id).map((item) => ({
       ...item, ordered_qty: Number(item.ordered_qty), received_qty: Number(item.received_qty),
       remaining_qty: Number(item.ordered_qty) - Number(item.received_qty), unit_cost: Number(item.unit_cost),
       line_discount: Number(item.line_discount), line_total: Number(item.line_total)
-    }))
-  }));
+    }));
+    return {
+    ...order, approval_required: Boolean(order.approval_required),
+    subtotal: Number(order.subtotal), discount_amount: Number(order.discount_amount), tax_amount: Number(order.tax_amount),
+    other_cost: Number(order.other_cost), grand_total: Number(order.grand_total),
+    outstanding_qty: mappedItems.reduce((sum, item) => sum + item.remaining_qty, 0),
+    overdue: Boolean(order.expected_on && order.expected_on < today && ['APPROVED','PARTIALLY_RECEIVED'].includes(order.status)),
+    items: mappedItems
+  }});
 }
 
 async function shiftDetail(tenantId, shift) {
@@ -780,7 +785,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '1.21.4-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '1.22.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'login') {
@@ -1663,6 +1668,76 @@ async function routeRequest(request, response, route) {
     return send(response, 200, { orders: await loadPurchaseOrders(context.tenantId, null, context.locationIds) });
   }
 
+  if (request.method === 'GET' && route === 'restock-planning') {
+    requirePermission(session, 'purchasing.view_cost');
+    const locationId = queryValue(request, 'locationId') ?? context.storeLocation?.id ?? context.locationIds[0];
+    requireLocationAccess(context, locationId);
+    const supplierId = queryValue(request, 'supplierId');
+    const lookback = queryValue(request, 'lookbackDays');
+    const result = await rpc('get_restock_recommendations_v1', {
+      p_tenant_id: context.tenantId, p_location_id: locationId,
+      p_supplier_id: supplierId || null, p_lookback_days: lookback ? Number(lookback) : null
+    });
+    return send(response, 200, result);
+  }
+
+  if (request.method === 'PUT' && route === 'restock-planning/settings') {
+    if (!['OWNER','ADMIN'].includes(session.profile.role)) {
+      const error = new Error('Hanya Owner/Admin yang dapat mengubah batas persetujuan pembelian');
+      error.status = 403;
+      throw error;
+    }
+    const input = bodyOf(request);
+    const result = await rpc('save_purchase_planning_settings_v1', {
+      p_tenant_id: context.tenantId, p_actor_id: session.authUser.id,
+      p_approval_threshold: moneyInput(input.approvalThreshold, 'Batas persetujuan', { allowZero: true }),
+      p_lookback_days: Number(input.lookbackDays)
+    });
+    return send(response, 200, result);
+  }
+
+  if (request.method === 'PUT' && route === 'restock-planning/policy') {
+    requirePermission(session, 'purchasing.receive');
+    const input = bodyOf(request);
+    requireLocationAccess(context, input.locationId);
+    const result = await rpc('save_restock_policy_v1', {
+      p_tenant_id: context.tenantId, p_actor_id: session.authUser.id,
+      p_location_id: input.locationId, p_product_id: input.productId, p_supplier_id: input.supplierId,
+      p_minimum_stock: Number(input.minimumStock ?? 0), p_maximum_stock: Number(input.maximumStock ?? 0),
+      p_safety_stock: Number(input.safetyStock ?? 0), p_lead_time_days: Number(input.leadTimeDays ?? 7),
+      p_preferred: input.preferred !== false
+    });
+    return send(response, 200, result);
+  }
+
+  if (request.method === 'POST' && route === 'restock-planning/draft') {
+    requirePermission(session, 'purchasing.receive');
+    const input = bodyOf(request);
+    requireLocationAccess(context, input.locationId);
+    if (!Array.isArray(input.items) || !input.items.length) {
+      const error = new Error('Pilih minimal satu rekomendasi restok');
+      error.status = 400;
+      throw error;
+    }
+    const items = input.items.map((item) => {
+      const qty = Number(item.baseQty);
+      const cost = Number(item.unitCost ?? 0);
+      if (!(qty > 0) || !(cost >= 0)) {
+        const error = new Error('Jumlah atau estimasi modal rekomendasi tidak valid');
+        error.status = 400;
+        throw error;
+      }
+      return { productId: item.productId, baseQty: qty, unitCost: cost, lineDiscount: 0 };
+    });
+    const result = await rpc('create_restock_purchase_order_v1', {
+      p_tenant_id: context.tenantId, p_actor_id: session.authUser.id,
+      p_supplier_id: input.supplierId, p_location_id: input.locationId,
+      p_expected_on: input.expectedOn ?? null,
+      p_notes: input.notes ?? 'Draft otomatis dari rekomendasi restok', p_items: items
+    });
+    return send(response, 201, result);
+  }
+
   if (request.method === 'GET' && /^purchase-orders\/[^/]+$/.test(route)) {
     requirePermission(session, 'purchasing.view_cost');
     const orderId = route.split('/')[1];
@@ -1750,15 +1825,26 @@ async function routeRequest(request, response, route) {
       rest('purchase_receipt_items', `tenant_id=eq.${context.tenantId}&product_id=eq.${encodeURIComponent(productId)}&select=*&order=received_at.desc&limit=500`),
       rest('price_rules', `tenant_id=eq.${context.tenantId}&product_id=eq.${encodeURIComponent(productId)}&select=*`)
     ]);
-    const latestBySupplier = new Map();
+    const historyBySupplier = new Map();
     for (const item of items) {
       const key = item.supplier_id ?? item.supplier_name;
-      if (!latestBySupplier.has(key)) latestBySupplier.set(key, item);
+      const history = historyBySupplier.get(key) ?? [];
+      history.push(item);
+      historyBySupplier.set(key, history);
     }
-    const suppliers = [...latestBySupplier.values()].map((item) => ({
-      supplierId: item.supplier_id, supplier: item.supplier_name, lastCost: Number(item.unit_cost),
-      lastDate: item.received_at, batch: item.batch_no, documentNo: item.document_no, baseQty: Number(item.base_qty)
-    })).sort((a,b)=>a.lastCost-b.lastCost);
+    const suppliers = [...historyBySupplier.values()].map((history) => {
+      const item = history[0];
+      const previous = history[1] ?? null;
+      const lastCost = Number(item.unit_cost);
+      const previousCost = previous ? Number(previous.unit_cost) : null;
+      return {
+      supplierId: item.supplier_id, supplier: item.supplier_name, lastCost,
+      previousCost, costTrend: previousCost === null ? null : lastCost - previousCost,
+      trendPercentage: previousCost > 0 ? Math.round(((lastCost - previousCost) / previousCost) * 10000) / 100 : null,
+      lastDate: item.received_at, previousDate: previous?.received_at ?? null,
+      batch: item.batch_no, documentNo: item.document_no, baseQty: Number(item.base_qty)
+    };
+    }).sort((a,b)=>a.lastCost-b.lastCost);
     const bestCost = suppliers[0]?.lastCost ?? null;
     const retailRule = rules.filter((rule)=>rule.customer_group_id==='retail' && Number(rule.min_base_qty)===1)
       .sort((a,b)=>Number(b.priority)-Number(a.priority))[0];
