@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Paket Owner v1.26.0
+# Kasir Nusa POS — Kandidat Multi-outlet v1.27.0
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -45,6 +45,10 @@ kapabilitas retail yang lebih lengkap tersedia di
   berdasarkan nominal serta penanda PO terlambat.
 - Histori modal per supplier dan batch, perbandingan supplier, serta indikator kenaikan.
 - Stok per outlet/gudang, transfer, opname, jurnal, batch, EXP, dan FEFO.
+- Transfer antar-outlet bertahap: permintaan, persetujuan, pengiriman, stok
+  dalam perjalanan, dan penerimaan tujuan.
+- Harga khusus dan cakupan promo per outlet, konsolidasi owner, Manajer Outlet
+  terbatas pada penempatannya, serta notifikasi stok kritis/selisih shift.
 - Retur pelanggan dan supplier dengan dampak stok serta keuangan.
 - Shift kasir, kas masuk/keluar, kas harapan, dan selisih penutupan.
 - Laporan penjualan, laba, stok, pembelian, outlet, produk, supplier, dan audit.
@@ -105,6 +109,12 @@ deployment. Migrasi ini menambahkan kategori dan buku biaya outlet, laporan
 laba-rugi operasional, arus kas, aging hutang/piutang, serta analitik produk.
 Jangan deploy source v1.26 sebelum migrasi berhasil.
 
+Untuk kandidat v1.27, jalankan satu file
+`supabase/migrations/202607270031_advanced_multi_outlet.sql` sebelum
+deployment. Migrasi ini menambahkan workflow transfer bertahap, harga dan
+cakupan promo outlet, role Manajer Outlet, serta notifikasi operasional.
+Jangan deploy source v1.27 sebelum migrasi berhasil.
+
 Klik dua kali `Deploy-Kasir-Nusa.cmd` dan tunggu sampai muncul tulisan **Deployment berhasil**.
 
 Rahasia Supabase hanya boleh tersimpan di pengaturan Environment Variables Vercel. Jangan menaruh `SUPABASE_SERVICE_ROLE_KEY` di browser, screenshot, chat, atau repository.
@@ -117,7 +127,7 @@ Jalankan:
 npm test
 ```
 
-Rilis v1.26.0 memiliki 140 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
+Kandidat v1.27.0 memiliki 144 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
 
 ## Aplikasi kasir Android
 

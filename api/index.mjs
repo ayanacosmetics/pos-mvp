@@ -6,8 +6,9 @@ import { applyVoucher } from '../packages/domain/src/loyalty.mjs';
 import { calculateEmployeeCommission } from '../packages/domain/src/employee-operations.mjs';
 
 const PERMISSIONS = {
-  OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner'],
-  ADMIN: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','workforce.self','workforce.manage','approval.manage'],
+  OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner','multioutlet.view','multioutlet.manage'],
+  ADMIN: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage'],
+  MANAGER: ['pos.sell','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage'],
   CASHIER: ['pos.sell','workforce.self'],
   PURCHASING: ['purchasing.view_cost','purchasing.receive','workforce.self'],
   WAREHOUSE: ['inventory.manage','workforce.self']
@@ -21,7 +22,7 @@ const BACKUP_TABLES = [
   'expense_categories','outlet_expenses',
   'purchase_planning_settings','restock_policies','purchase_orders','purchase_order_items','purchase_receipts','purchase_receipt_items','supplier_returns','supplier_return_items',
   'stock_balances','stock_ledger','inventory_batches','inventory_batch_movements',
-  'stock_transfers','stock_transfer_items','stock_counts','stock_count_items',
+  'stock_transfers','stock_transfer_items','transfer_requests','transfer_request_items','transfer_request_batches','outlet_price_overrides','promotion_outlets','operational_notifications','stock_counts','stock_count_items',
   'customer_returns','customer_return_items','customer_refunds',
   'pos_devices','sync_commands','document_sequences','audit_logs','import_jobs'
 ];
@@ -194,20 +195,24 @@ function authPayload(auth, profile) {
   };
 }
 
-async function loadCatalog(tenantId, locationId) {
+async function loadCatalog(tenantId, locationId, outletId = null) {
   const tenant = encodeURIComponent(tenantId);
-  const [products, units, rules, balances] = await Promise.all([
+  const [products, units, rules, balances, overrides] = await Promise.all([
     rest('products', `tenant_id=eq.${tenant}&active=eq.true&select=*&order=name`),
     rest('product_units', `tenant_id=eq.${tenant}&select=*`),
     rest('price_rules', `tenant_id=eq.${tenant}&select=*`),
-    locationId ? rest('stock_balances', `tenant_id=eq.${tenant}&location_id=eq.${encodeURIComponent(locationId)}&select=*`) : Promise.resolve([])
+    locationId ? rest('stock_balances', `tenant_id=eq.${tenant}&location_id=eq.${encodeURIComponent(locationId)}&select=*`) : Promise.resolve([]),
+    outletId ? rest('outlet_price_overrides', `tenant_id=eq.${tenant}&outlet_id=eq.${encodeURIComponent(outletId)}&active=eq.true&select=*`).catch(()=>[]) : Promise.resolve([])
   ]);
   return products.map((product) => ({
     id: product.id, sku: product.sku, name: product.name, category: product.category, brand: product.brand, active: product.active,
     variantGroup: product.variant_group, variantName: product.variant_name, minimumStock: Number(product.minimum_stock ?? 0), trackExpiry: Boolean(product.track_expiry),
     stockBase: Number(balances.find((item) => item.product_id === product.id)?.quantity ?? 0),
     units: units.filter((item) => item.product_id === product.id).map((unit) => ({ id: unit.id, name: unit.name, factor: Number(unit.factor_to_base), barcode: unit.barcode })).sort((a,b)=>a.factor-b.factor),
-    priceRules: rules.filter((item) => item.product_id === product.id).map((rule) => ({ id: rule.id, customerGroupId: rule.customer_group_id, minBaseQty: Number(rule.min_base_qty), unitPriceBase: Number(rule.unit_price_base), priority: rule.priority }))
+    priceRules: [
+      ...rules.filter((item) => item.product_id === product.id).map((rule) => ({ id: rule.id, customerGroupId: rule.customer_group_id, minBaseQty: Number(rule.min_base_qty), unitPriceBase: Number(rule.unit_price_base), priority: rule.priority })),
+      ...overrides.filter((item) => item.product_id === product.id).map((rule) => ({ id: rule.id, customerGroupId: rule.customer_group_id, minBaseQty: Number(rule.min_base_qty), unitPriceBase: Number(rule.unit_price_base), priority: 100000 }))
+    ]
   }));
 }
 
@@ -283,13 +288,18 @@ function normalizeProductInput(input,id=null) {
   return normalized;
 }
 
-async function loadPromotions(tenantId) {
+async function loadPromotions(tenantId, outletId = null) {
   const tenant = encodeURIComponent(tenantId);
-  const [promotions, versions] = await Promise.all([
+  const [promotions, versions, assignments] = await Promise.all([
     rest('promotions', `tenant_id=eq.${tenant}&select=*`),
-    rest('promotion_versions', `tenant_id=eq.${tenant}&status=eq.PUBLISHED&select=*&order=priority.desc`)
+    rest('promotion_versions', `tenant_id=eq.${tenant}&status=eq.PUBLISHED&select=*&order=priority.desc`),
+    outletId ? rest('promotion_outlets', `tenant_id=eq.${tenant}&select=promotion_version_id,outlet_id`).catch(()=>[]) : Promise.resolve([])
   ]);
-  return versions.filter((version)=>version.usage_limit_total==null||Number(version.usage_count??0)<Number(version.usage_limit_total)).map((version) => {
+  const assignedVersions = new Set(assignments.map((item)=>item.promotion_version_id));
+  return versions.filter((version)=>
+    (version.usage_limit_total==null||Number(version.usage_count??0)<Number(version.usage_limit_total))
+    && (!assignedVersions.has(version.id)||assignments.some((item)=>item.promotion_version_id===version.id&&item.outlet_id===outletId))
+  ).map((version) => {
     const promotion = promotions.find((item) => item.id === version.promotion_id);
     return { id: version.id, promotionId: version.promotion_id, code: promotion?.code, name: promotion?.name, version: version.version, status: version.status, startsAt: version.starts_at, endsAt: version.ends_at, priority: version.priority, stackable: version.stackable, usageLimitTotal: version.usage_limit_total, usageLimitPerCustomer: version.usage_limit_per_customer, usageCount:Number(version.usage_count??0), condition: version.rule_json.condition, reward: version.rule_json.reward };
   });
@@ -729,8 +739,8 @@ async function baseSaleQuote(context, input) {
   return quoteBasket({
     lines: input.lines,
     customerGroupId: input.customerGroupId,
-    products: await loadCatalog(context.tenantId, context.storeLocation?.id),
-    promotions: await loadPromotions(context.tenantId),
+    products: await loadCatalog(context.tenantId, context.storeLocation?.id, context.outlet.id),
+    promotions: await loadPromotions(context.tenantId, context.outlet.id),
     at: input.at ? new Date(input.at) : new Date()
   });
 }
@@ -810,7 +820,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '1.26.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '1.27.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'login') {
@@ -952,7 +962,7 @@ async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'bootstrap') {
     const deviceId = request.headers['x-device-id'];
     const [products, promotions, customers, suppliers, shifts, tenants, devices] = await Promise.all([
-      loadCatalog(context.tenantId, context.storeLocation?.id), loadPromotions(context.tenantId),
+      loadCatalog(context.tenantId, context.storeLocation?.id, context.outlet.id), loadPromotions(context.tenantId, context.outlet.id),
       loadCustomerAccounts(context.tenantId),
       session.permissions.includes('purchasing.receive') ? loadSupplierAccounts(context.tenantId) : [],
       rest('shifts', `tenant_id=eq.${context.tenantId}&outlet_id=eq.${context.outlet.id}&cashier_id=eq.${session.authUser.id}&status=eq.OPEN&select=*&limit=1`),
@@ -1228,7 +1238,7 @@ async function routeRequest(request, response, route) {
     requirePermission(session,'pos.sell');
     const input=bodyOf(request);
     if(!Array.isArray(input.lines)||!input.lines.length){const error=new Error('Keranjang kosong');error.status=400;throw error;}
-    const quote=quoteBasket({lines:input.lines,customerGroupId:input.customerGroupId,products:await loadCatalog(context.tenantId,context.storeLocation?.id),promotions:await loadPromotions(context.tenantId),at:new Date()});
+    const quote=quoteBasket({lines:input.lines,customerGroupId:input.customerGroupId,products:await loadCatalog(context.tenantId,context.storeLocation?.id,context.outlet.id),promotions:await loadPromotions(context.tenantId,context.outlet.id),at:new Date()});
     const rows=await rest('parked_sales','',{method:'POST',prefer:'return=representation',body:{
       tenant_id:context.tenantId,outlet_id:context.outlet.id,cashier_id:session.authUser.id,label:String(input.label??'').trim()||`Tahan ${new Date().toLocaleTimeString('id-ID')}`,
       customer_id:input.customerId??null,customer_group_id:input.customerGroupId??'retail',sale_notes:String(input.notes??'').trim().slice(0,500)||null,cart_json:input.lines,quote_json:quote,status:'HELD'
@@ -1253,7 +1263,7 @@ async function routeRequest(request, response, route) {
     if (!input.device?.id || !commands.length) { const error = new Error('Perangkat dan antrean sinkronisasi wajib diisi'); error.status = 400; throw error; }
     const outletId = input.device.outletId ?? context.outlet?.id;
     if (!context.outlets.some((outlet) => outlet.id === outletId)) { const error = new Error('Perangkat tidak terhubung ke outlet user'); error.status = 403; throw error; }
-    const [products, promotions] = await Promise.all([loadCatalog(context.tenantId, context.storeLocation?.id), loadPromotions(context.tenantId)]);
+    const [products, promotions] = await Promise.all([loadCatalog(context.tenantId, context.storeLocation?.id, context.outlet.id), loadPromotions(context.tenantId, context.outlet.id)]);
     const results = [];
     for (const command of commands) {
       try {
@@ -1425,7 +1435,7 @@ async function routeRequest(request, response, route) {
     requirePermission(session, 'promotion.manage');
     const input = bodyOf(request);
     const temporary = { id: '00000000-0000-4000-8000-000000000000', promotionId: 'simulation', version: 0, code: input.promo.code, name: input.promo.name, status: 'PUBLISHED', startsAt: new Date(Date.now()-60000).toISOString(), endsAt: new Date(Date.now()+60000).toISOString(), priority: 999, stackable: Boolean(input.promo.stackable), condition: input.promo.condition, reward: input.promo.reward };
-    return send(response, 200, quoteBasket({ lines: input.lines, customerGroupId: input.customerGroupId??'retail', products: await loadCatalog(context.tenantId, context.storeLocation?.id), promotions: [temporary], at: new Date() }));
+    return send(response, 200, quoteBasket({ lines: input.lines, customerGroupId: input.customerGroupId??'retail', products: await loadCatalog(context.tenantId, context.storeLocation?.id, context.outlet.id), promotions: [temporary], at: new Date() }));
   }
 
   if (request.method === 'GET' && route === 'customers/accounts') {
@@ -1833,6 +1843,181 @@ async function routeRequest(request, response, route) {
       today: todayInTimeZone(new Date(), 'Asia/Makassar')
     });
     return send(response, 200, dashboard);
+  }
+
+  if (request.method === 'GET' && route === 'multi-outlet/transfers') {
+    requirePermission(session, 'multioutlet.view');
+    const transfers = await rest('transfer_requests', `tenant_id=eq.${context.tenantId}&select=*&order=updated_at.desc&limit=200`);
+    const visible = transfers.filter((item)=>context.locationIds.includes(item.from_location_id)||context.locationIds.includes(item.to_location_id));
+    const ids=visible.map((item)=>item.id);
+    const items=ids.length?await rest('transfer_request_items',`tenant_id=eq.${context.tenantId}&transfer_request_id=${inFilter(ids)}&select=*`):[];
+    const productIds=[...new Set(items.map((item)=>item.product_id))];
+    const products=productIds.length?await rest('products',`tenant_id=eq.${context.tenantId}&id=${inFilter(productIds)}&select=id,sku,name`):[];
+    return send(response,200,{transfers:visible.map((item)=>({
+      ...item,
+      fromLocation:context.locations.find((location)=>location.id===item.from_location_id)??null,
+      toLocation:context.locations.find((location)=>location.id===item.to_location_id)??null,
+      items:items.filter((line)=>line.transfer_request_id===item.id).map((line)=>({
+        ...line,product:products.find((product)=>product.id===line.product_id)??null
+      }))
+    }))});
+  }
+
+  if (request.method === 'POST' && route === 'multi-outlet/transfers') {
+    requirePermission(session, 'multioutlet.manage');
+    const input=bodyOf(request),key=request.headers['idempotency-key'];
+    if(!key)throw Object.assign(new Error('Idempotency-Key wajib diisi'),{status:400});
+    requireLocationAccess(context,input.fromLocationId);
+    requireLocationAccess(context,input.toLocationId);
+    const result=await rpc('request_stock_transfer_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:key,
+      p_from_location_id:input.fromLocationId,p_to_location_id:input.toLocationId,
+      p_note:String(input.note??'').trim()||null,p_items:input.items
+    });
+    return send(response,result.duplicate?200:201,result);
+  }
+
+  const transferAction=route.match(/^multi-outlet\/transfers\/([^/]+)\/(approve|reject|cancel|ship|receive)$/);
+  if(request.method==='POST'&&transferAction){
+    requirePermission(session,'multioutlet.manage');
+    const transferId=transferAction[1],action=transferAction[2].toUpperCase(),input=bodyOf(request);
+    const rows=await rest('transfer_requests',`tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(transferId)}&select=from_location_id,to_location_id&limit=1`);
+    if(!rows[0]||(!context.locationIds.includes(rows[0].from_location_id)&&!context.locationIds.includes(rows[0].to_location_id)))
+      throw Object.assign(new Error('Dokumen transfer tidak ditemukan pada outlet yang dapat diakses'),{status:404});
+    if(action==='SHIP'&&!context.locationIds.includes(rows[0].from_location_id))
+      throw Object.assign(new Error('Pengiriman hanya dapat dilakukan dari lokasi yang dapat diakses'),{status:403});
+    if(action==='RECEIVE'&&!context.locationIds.includes(rows[0].to_location_id))
+      throw Object.assign(new Error('Penerimaan hanya dapat dilakukan pada lokasi tujuan yang dapat diakses'),{status:403});
+    return send(response,200,await rpc('advance_stock_transfer_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_transfer_id:transferId,
+      p_action:action,p_note:String(input.note??'').trim()||null
+    }));
+  }
+
+  if(request.method==='GET'&&route==='multi-outlet/pricing'){
+    requirePermission(session,'multioutlet.view');
+    const [overrides,baseRules]=await Promise.all([
+      rest('outlet_price_overrides',`tenant_id=eq.${context.tenantId}&outlet_id=${inFilter(context.outlets.map((item)=>item.id))}&select=*&order=updated_at.desc`),
+      rest('price_rules',`tenant_id=eq.${context.tenantId}&starts_at=is.null&ends_at=is.null&select=product_id,customer_group_id,min_base_qty,unit_price_base,priority`)
+    ]);
+    return send(response,200,{overrides,baseRules});
+  }
+
+  if(request.method==='PUT'&&route==='multi-outlet/pricing'){
+    requirePermission(session,'multioutlet.manage');
+    const input=bodyOf(request);
+    if(!context.outlets.some((item)=>item.id===input.outletId))throw Object.assign(new Error('Outlet harga tidak dapat diakses'),{status:403});
+    return send(response,200,await rpc('save_outlet_price_override_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_outlet_id:input.outletId,
+      p_product_id:input.productId,p_customer_group_id:input.customerGroupId??'retail',
+      p_min_base_qty:Number(input.minBaseQty??1),p_unit_price_base:Number(input.unitPriceBase),
+      p_active:input.active!==false
+    }));
+  }
+
+  if(request.method==='GET'&&route==='multi-outlet/promotions'){
+    requirePermission(session,'multioutlet.view');
+    const [versions,assignments]=await Promise.all([
+      loadPromotionManagement(context.tenantId),
+      rest('promotion_outlets',`tenant_id=eq.${context.tenantId}&select=*`)
+    ]);
+    return send(response,200,{versions:versions.map((item)=>({
+      ...item,outletIds:assignments.filter((row)=>row.promotion_version_id===item.id).map((row)=>row.outlet_id)
+    }))});
+  }
+
+  const promotionScope=route.match(/^multi-outlet\/promotions\/([^/]+)\/outlets$/);
+  if(request.method==='PUT'&&promotionScope){
+    requirePermission(session,'multioutlet.manage');
+    const input=bodyOf(request),outletIds=Array.isArray(input.outletIds)?input.outletIds:[];
+    if(outletIds.some((id)=>!context.outlets.some((outlet)=>outlet.id===id)))
+      throw Object.assign(new Error('Ada outlet promo yang tidak dapat diakses'),{status:403});
+    const currentAssignments=await rest('promotion_outlets',`tenant_id=eq.${context.tenantId}&promotion_version_id=eq.${encodeURIComponent(promotionScope[1])}&select=outlet_id`);
+    const inaccessible=currentAssignments.map((item)=>item.outlet_id).filter((id)=>!context.outlets.some((outlet)=>outlet.id===id));
+    const scopedOutletIds=[...new Set([...inaccessible,...outletIds])];
+    return send(response,200,await rpc('assign_promotion_outlets_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,
+      p_promotion_version_id:promotionScope[1],p_outlet_ids:scopedOutletIds
+    }));
+  }
+
+  if(request.method==='GET'&&route==='multi-outlet/consolidation'){
+    requirePermission(session,'multioutlet.view');
+    const outletIds=context.outlets.map((item)=>item.id),locationIds=context.locationIds;
+    const [balances,sales,transfers]=await Promise.all([
+      rest('stock_balances',`tenant_id=eq.${context.tenantId}&location_id=${inFilter(locationIds)}&select=location_id,product_id,quantity,avg_cost`),
+      rest('sales',`tenant_id=eq.${context.tenantId}&outlet_id=${inFilter(outletIds)}&status=eq.COMPLETED&occurred_at=gte.${encodeURIComponent(new Date(Date.now()-30*86400000).toISOString())}&select=outlet_id,grand_total,cost_total`),
+      rest('transfer_requests',`tenant_id=eq.${context.tenantId}&status=eq.IN_TRANSIT&select=id,from_location_id,to_location_id`)
+    ]);
+    const scopedTransfers=transfers.filter((item)=>locationIds.includes(item.from_location_id)||locationIds.includes(item.to_location_id));
+    const transferItems=scopedTransfers.length?await rest('transfer_request_items',`tenant_id=eq.${context.tenantId}&transfer_request_id=${inFilter(scopedTransfers.map((item)=>item.id))}&select=transfer_request_id,shipped_qty,unit_cost`):[];
+    return send(response,200,{
+      totals:{
+        outlets:context.outlets.length,
+        stockQty:balances.reduce((sum,item)=>sum+Number(item.quantity),0),
+        stockValue:balances.reduce((sum,item)=>sum+Number(item.quantity)*Number(item.avg_cost),0),
+        sales30d:sales.reduce((sum,item)=>sum+Number(item.grand_total),0),
+        grossProfit30d:sales.reduce((sum,item)=>sum+Number(item.grand_total)-Number(item.cost_total),0),
+        inTransitQty:transferItems.reduce((sum,item)=>sum+Number(item.shipped_qty),0),
+        inTransitValue:transferItems.reduce((sum,item)=>sum+Number(item.shipped_qty)*Number(item.unit_cost),0)
+      },
+      outlets:context.outlets.map((outlet)=>{
+        const ownLocations=context.locations.filter((location)=>location.outlet_id===outlet.id).map((item)=>item.id);
+        const ownBalances=balances.filter((item)=>ownLocations.includes(item.location_id));
+        const ownSales=sales.filter((item)=>item.outlet_id===outlet.id);
+        return {id:outlet.id,name:outlet.name,
+          stockQty:ownBalances.reduce((sum,item)=>sum+Number(item.quantity),0),
+          stockValue:ownBalances.reduce((sum,item)=>sum+Number(item.quantity)*Number(item.avg_cost),0),
+          sales30d:ownSales.reduce((sum,item)=>sum+Number(item.grand_total),0),
+          grossProfit30d:ownSales.reduce((sum,item)=>sum+Number(item.grand_total)-Number(item.cost_total),0)};
+      })
+    });
+  }
+
+  if(request.method==='GET'&&route==='multi-outlet/notifications'){
+    requirePermission(session,'multioutlet.view');
+    const [policies,recentShifts]=await Promise.all([
+      rest('restock_policies',`tenant_id=eq.${context.tenantId}&location_id=${inFilter(context.locationIds)}&active=eq.true&select=id,location_id,product_id,minimum_stock`),
+      rest('shifts',`tenant_id=eq.${context.tenantId}&outlet_id=${inFilter(context.outlets.map((item)=>item.id))}&status=eq.CLOSED&closed_at=gte.${encodeURIComponent(new Date(Date.now()-30*86400000).toISOString())}&select=id,outlet_id`)
+    ]);
+    const policyBalances=policies.length?await rest('stock_balances',`tenant_id=eq.${context.tenantId}&location_id=${inFilter(context.locationIds)}&select=location_id,product_id,quantity`):[];
+    const productIds=[...new Set(policies.map((item)=>item.product_id))];
+    const [products,reconciliations]=await Promise.all([
+      productIds.length?rest('products',`tenant_id=eq.${context.tenantId}&id=${inFilter(productIds)}&select=id,name`):[],
+      recentShifts.length?rest('shift_reconciliations',`tenant_id=eq.${context.tenantId}&shift_id=${inFilter(recentShifts.map((item)=>item.id))}&select=id,shift_id,payment_method,difference,reconciled_at`):[]
+    ]);
+    const stockAlerts=policies.filter((policy)=>{
+      const balance=policyBalances.find((item)=>item.location_id===policy.location_id&&item.product_id===policy.product_id);
+      return Number(balance?.quantity??0)<=Number(policy.minimum_stock);
+    }).map((policy)=>{
+      const location=context.locations.find((item)=>item.id===policy.location_id),product=products.find((item)=>item.id===policy.product_id);
+      const balance=policyBalances.find((item)=>item.location_id===policy.location_id&&item.product_id===policy.product_id);
+      return {tenant_id:context.tenantId,outlet_id:location?.outlet_id??null,notification_type:'CRITICAL_STOCK',severity:'CRITICAL',
+        fingerprint:`critical-stock:${policy.location_id}:${policy.product_id}`,title:`Stok kritis: ${product?.name??'Produk'}`,
+        message:`${location?.name??'Lokasi'} tersisa ${Number(balance?.quantity??0)}; batas minimum ${Number(policy.minimum_stock)}.`,
+        entity_type:'restock_policy',entity_id:policy.id,status:'OPEN'};
+    });
+    const unusualAlerts=reconciliations.filter((item)=>Math.abs(Number(item.difference))>=100000).map((item)=>{
+      const shift=recentShifts.find((row)=>row.id===item.shift_id),outlet=context.outlets.find((row)=>row.id===shift?.outlet_id);
+      return {tenant_id:context.tenantId,outlet_id:shift?.outlet_id??null,notification_type:'UNUSUAL_ACTIVITY',severity:'WARNING',
+        fingerprint:`shift-difference:${item.id}`,title:`Selisih shift ${outlet?.name??'outlet'}`,
+        message:`Metode ${item.payment_method} memiliki selisih Rp ${Math.abs(Number(item.difference)).toLocaleString('id-ID')}. Periksa rekonsiliasi dan audit.`,
+        entity_type:'shift_reconciliation',entity_id:item.id,status:'OPEN',detected_at:item.reconciled_at};
+    });
+    const generated=[...stockAlerts,...unusualAlerts];
+    if(generated.length)await rest('operational_notifications','on_conflict=tenant_id,fingerprint',{method:'POST',prefer:'resolution=ignore-duplicates,return=minimal',body:generated});
+    const notifications=await rest('operational_notifications',`tenant_id=eq.${context.tenantId}&status=eq.OPEN&select=*&order=detected_at.desc&limit=100`);
+    return send(response,200,{notifications:notifications.filter((item)=>!item.outlet_id||context.outlets.some((outlet)=>outlet.id===item.outlet_id))});
+  }
+
+  const notificationAction=route.match(/^multi-outlet\/notifications\/([^/]+)\/(acknowledge|dismiss)$/);
+  if(request.method==='POST'&&notificationAction){
+    requirePermission(session,'multioutlet.manage');
+    const status=notificationAction[2]==='acknowledge'?'ACKNOWLEDGED':'DISMISSED';
+    const rows=await rest('operational_notifications',`tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(notificationAction[1])}`,{
+      method:'PATCH',prefer:'return=representation',body:{status,acknowledged_by:session.authUser.id,acknowledged_at:new Date().toISOString()}
+    });
+    return send(response,200,rows[0]??{id:notificationAction[1],status});
   }
 
   if (request.method === 'POST' && route === 'transfers') {

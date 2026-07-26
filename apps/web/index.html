@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#174c4f">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=52">
+  <link rel="stylesheet" href="/styles.css?v=53">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -54,7 +54,6 @@
           <button data-page="products" class="feature-nav-item" data-permission="catalog.manage"><span>Produk</span><small>Master, satuan, barcode, harga</small></button>
           <button data-page="stock-list" data-target-page="stock" data-stock-view="list" class="feature-nav-item" data-permission="inventory.manage"><span>Daftar stok</span><small>Saldo per lokasi</small></button>
           <button data-page="stock-expiry" data-target-page="stock" data-stock-view="expiry" class="feature-nav-item" data-permission="inventory.manage"><span>Batch & EXP</span><small>FEFO dan kedaluwarsa</small></button>
-          <button data-page="stock-transfer" data-target-page="stock" data-stock-view="transfer" class="feature-nav-item" data-permission="inventory.manage"><span>Transfer stok</span><small>Pergerakan antar lokasi</small></button>
           <button data-page="stock-count" data-target-page="stock" data-stock-view="count" class="feature-nav-item" data-permission="inventory.manage"><span>Stok opname</span><small>Jumlah fisik dan selisih</small></button>
           <button data-page="stock-ledger" data-target-page="stock" data-stock-view="ledger" class="feature-nav-item" data-permission="inventory.manage"><span>Jurnal stok</span><small>Jejak pergerakan terbaru</small></button>
           <button data-page="restock-planning" data-target-page="restock" data-purchase-view-target="planning" class="feature-nav-item" data-permission="purchasing.view_cost"><span>Rencana restok</span><small>Rekomendasi kebutuhan</small></button>
@@ -62,6 +61,16 @@
           <button data-page="purchase-order" data-target-page="restock" data-purchase-view-target="order" class="feature-nav-item" data-permission="purchasing.view_cost"><span>Buat PO</span><small>Editor pesanan supplier</small></button>
           <button data-page="purchase-receipt" data-target-page="restock" data-purchase-view-target="receipt" class="feature-nav-item" data-permission="purchasing.receive"><span>Terima barang</span><small>Faktur dan penambahan stok</small></button>
           <button data-page="supplier-return" data-target-page="restock" data-purchase-view-target="supplier-return" class="feature-nav-item" data-permission="purchasing.receive"><span>Retur supplier</span><small>Nota retur dan kredit</small></button>
+        </div>
+        <button data-nav-group="multioutlet" class="nav-item" aria-expanded="false"><span>⌘</span><span>Multi-outlet<small>Transfer dan kontrol cabang</small></span><b>›</b></button>
+        <div data-nav-panel="multioutlet" class="feature-nav-panel">
+          <button data-page="outlet-transfer-request" class="feature-nav-item" data-permission="multioutlet.manage"><span>Permintaan transfer</span><small>Buat dokumen perpindahan stok</small></button>
+          <button data-page="outlet-transfer-approval" class="feature-nav-item" data-permission="multioutlet.manage"><span>Persetujuan & kirim</span><small>Setujui lalu keluarkan barang</small></button>
+          <button data-page="outlet-in-transit" class="feature-nav-item" data-permission="multioutlet.view"><span>Stok perjalanan</span><small>Terima barang di tujuan</small></button>
+          <button data-page="outlet-pricing" class="feature-nav-item" data-permission="multioutlet.manage"><span>Harga outlet</span><small>Override harga pusat per cabang</small></button>
+          <button data-page="outlet-promotions" class="feature-nav-item" data-permission="multioutlet.manage"><span>Promo outlet</span><small>Promo global atau cabang tertentu</small></button>
+          <button data-page="outlet-consolidation" class="feature-nav-item" data-permission="multioutlet.view"><span>Konsolidasi</span><small>Stok dan kinerja seluruh cabang</small></button>
+          <button data-page="outlet-notifications" class="feature-nav-item" data-permission="multioutlet.view"><span>Notifikasi</span><small>Stok kritis dan aktivitas tidak biasa</small></button>
         </div>
         <button data-nav-group="relations" class="nav-item" aria-expanded="false"><span>◎</span><span>Relasi<small>Pelanggan dan supplier</small></span><b>›</b></button>
         <div data-nav-panel="relations" class="feature-nav-panel">
@@ -111,7 +120,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Owner · v1.26.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Multi-outlet · v1.27.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -324,12 +333,46 @@
           <div id="expiry-metrics" class="expiry-metrics"></div>
           <div id="expiry-batch-list" class="expiry-batch-list"><div class="empty-state compact">Memuat kontrol kedaluwarsa...</div></div>
         </section>
-        <div class="stock-workspace">
-          <div class="surface"><p class="eyebrow">TRANSFER STOK</p><div class="form-grid compact"><label>Dari<select id="transfer-from"><option value="gudang-utama">Gudang Utama</option><option value="outlet-utama">Toko Utama</option></select></label><label>Ke<select id="transfer-to"><option value="outlet-utama">Toko Utama</option><option value="gudang-utama">Gudang Utama</option></select></label><label>Produk<select id="transfer-product"></select></label><label>Jumlah pcs<input id="transfer-qty" type="number" min="1" value="12"></label></div><button id="transfer-button" class="button primary">Kirim dan terima</button></div>
-          <div class="surface"><p class="eyebrow">STOK OPNAME TOKO</p><p class="muted">Isi jumlah fisik. Selisih akan masuk jurnal dan audit log.</p><div id="count-fields" class="count-fields"></div><button id="count-button" class="button primary">Posting opname</button></div>
-        </div>
+        <div class="stock-workspace"><div class="surface"><p class="eyebrow">STOK OPNAME TOKO</p><p class="muted">Isi jumlah fisik. Selisih akan masuk jurnal dan audit log.</p><div id="count-fields" class="count-fields"></div><button id="count-button" class="button primary">Posting opname</button></div></div>
         <div id="inventory-table" class="surface table-wrap"></div>
         <div class="page-title ledger-title"><div><p class="eyebrow">JEJAK PERGERAKAN</p><h2>Jurnal stok terbaru</h2></div></div><div id="ledger-table" class="surface table-wrap"></div>
+      </div></section>
+
+      <section id="page-outlet-transfer-request" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">MULTI-OUTLET</p><h1>Permintaan transfer</h1><p class="muted">Barang belum keluar dari stok sampai permintaan disetujui dan dikirim.</p></div><button class="button secondary" data-refresh-multioutlet>Muat ulang</button></div>
+        <form id="advanced-transfer-form" class="surface multioutlet-form"><div class="form-grid compact"><label>Dari lokasi<select id="advanced-transfer-from" required></select></label><label>Ke lokasi<select id="advanced-transfer-to" required></select></label><label>Produk<select id="advanced-transfer-product" required></select></label><label>Jumlah pcs<input id="advanced-transfer-qty" type="number" min="0.000001" step="any" value="1" required></label></div><label>Catatan<input id="advanced-transfer-note" maxlength="240" placeholder="Opsional"></label><button class="button primary" type="submit">Ajukan transfer</button></form>
+        <div id="transfer-request-list" class="multioutlet-list"></div>
+      </div></section>
+
+      <section id="page-outlet-transfer-approval" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">KONTROL TRANSFER</p><h1>Persetujuan & pengiriman</h1><p class="muted">Persetujuan tidak mengubah stok. Stok asal baru berkurang saat tombol Kirim ditekan.</p></div><button class="button secondary" data-refresh-multioutlet>Muat ulang</button></div>
+        <div id="transfer-approval-list" class="multioutlet-list"></div>
+      </div></section>
+
+      <section id="page-outlet-in-transit" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">STOK DALAM PERJALANAN</p><h1>Barang belum diterima</h1><p class="muted">Stok ini sudah keluar dari asal dan belum menambah saldo tujuan.</p></div><button class="button secondary" data-refresh-multioutlet>Muat ulang</button></div>
+        <div id="transfer-transit-metrics" class="report-cards"></div><div id="transfer-transit-list" class="multioutlet-list"></div>
+      </div></section>
+
+      <section id="page-outlet-pricing" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">HARGA CABANG</p><h1>Harga per outlet</h1><p class="muted">Harga ini mengungguli harga pusat hanya pada outlet yang dipilih.</p></div><button class="button secondary" data-refresh-multioutlet>Muat ulang</button></div>
+        <form id="outlet-price-form" class="surface multioutlet-form"><div class="form-grid compact"><label>Outlet<select id="outlet-price-outlet" required></select></label><label>Produk<select id="outlet-price-product" required></select></label><label>Kelompok pelanggan<select id="outlet-price-group"><option value="retail">Eceran</option><option value="wholesale">Grosir</option></select></label><label>Minimal pcs<input id="outlet-price-min-qty" type="number" min="0.000001" step="any" value="1" required></label><label>Harga per pcs<input id="outlet-price-amount" type="number" min="0" step="any" required></label></div><button class="button primary" type="submit">Simpan harga outlet</button></form>
+        <div id="outlet-price-list" class="surface table-wrap"></div>
+      </div></section>
+
+      <section id="page-outlet-promotions" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">PROMO CABANG</p><h1>Cakupan promo</h1><p class="muted">Tanpa pilihan outlet berarti promo berlaku global. Pilih cabang untuk membatasi promo.</p></div><button class="button secondary" data-refresh-multioutlet>Muat ulang</button></div>
+        <div id="outlet-promotion-list" class="multioutlet-list"></div>
+      </div></section>
+
+      <section id="page-outlet-consolidation" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">RINGKASAN OWNER</p><h1>Konsolidasi multi-outlet</h1><p class="muted">Kinerja 30 hari dan nilai persediaan sesuai outlet yang dapat diakses.</p></div><button class="button secondary" data-refresh-multioutlet>Muat ulang</button></div>
+        <div id="outlet-consolidation-metrics" class="report-cards"></div><div id="outlet-consolidation-list" class="surface table-wrap"></div>
+      </div></section>
+
+      <section id="page-outlet-notifications" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">PUSAT PERHATIAN</p><h1>Notifikasi operasional</h1><p class="muted">Stok kritis dan kejadian tidak biasa ditampilkan lintas outlet.</p></div><button class="button secondary" data-refresh-multioutlet>Muat ulang</button></div>
+        <div id="outlet-notification-list" class="multioutlet-list"></div>
       </div></section>
 
       <section id="page-reports" class="page"><div class="content-width">
@@ -401,7 +444,7 @@
             <label>Nama lengkap<input id="new-user-name" autocomplete="name" required placeholder="Contoh: Sari Kasir"></label>
             <label>Email login<input id="new-user-email" type="email" autocomplete="off" required placeholder="sari@tokosaya.com"></label>
             <label>Kata sandi sementara<input id="new-user-password" type="password" minlength="8" autocomplete="new-password" required placeholder="Minimal 8 karakter"></label>
-            <label>Peran<select id="new-user-role"><option value="CASHIER">Kasir</option><option value="PURCHASING">Pembelian</option><option value="WAREHOUSE">Gudang</option><option value="ADMIN">Admin</option><option value="OWNER">Owner</option></select></label>
+            <label>Peran<select id="new-user-role"><option value="CASHIER">Kasir</option><option value="PURCHASING">Pembelian</option><option value="WAREHOUSE">Gudang</option><option value="MANAGER">Manajer Outlet</option><option value="ADMIN">Admin</option><option value="OWNER">Owner</option></select></label>
             <fieldset><legend>Penempatan outlet</legend><div id="new-user-outlets" class="outlet-options"></div><small class="muted">Pilih minimal satu outlet. Owner otomatis dapat mengakses semua outlet.</small></fieldset>
             <p id="create-user-error" class="error" role="alert"></p>
             <button id="create-user" class="button primary full" type="submit">Buat akun pengguna</button>
@@ -622,7 +665,7 @@
   </form></dialog>
   <dialog id="supplier-comparison-dialog"><div class="dialog-card comparison-dialog"><div class="comparison-heading"><div><p class="eyebrow">PERBANDINGAN SUPPLIER</p><h2 id="comparison-product-name">Histori harga</h2></div><button id="close-supplier-comparison" class="icon-button" type="button">×</button></div><div id="supplier-comparison-content"></div></div></dialog>
   <dialog id="restock-policy-dialog"><form id="restock-policy-form" class="dialog-card"><div class="comparison-heading"><div><p class="eyebrow">KEBIJAKAN RESTOK</p><h2 id="restock-policy-product">Atur barang</h2><p class="muted">Berlaku untuk kombinasi lokasi, produk, dan supplier ini.</p></div><button id="close-restock-policy" class="icon-button" type="button">×</button></div><input id="restock-policy-product-id" type="hidden"><div class="form-grid compact"><label>Supplier<select id="restock-policy-supplier" required></select></label><label>Stok minimum<input id="restock-policy-minimum" type="number" min="0" step="any" required></label><label>Stok maksimum<input id="restock-policy-maximum" type="number" min="0" step="any" required></label><label>Safety stock<input id="restock-policy-safety" type="number" min="0" step="any" required></label><label>Lead time supplier<input id="restock-policy-lead" type="number" min="0" max="365" required><small>Perkiraan hari sampai barang datang.</small></label></div><label class="switch-row"><input id="restock-policy-preferred" type="checkbox" checked><span><strong>Supplier utama</strong><small>Dipakai sebagai pilihan utama rekomendasi produk ini.</small></span></label><p id="restock-policy-error" class="error"></p><div class="button-row"><button id="cancel-restock-policy" class="button secondary" type="button">Batal</button><button class="button primary" type="submit">Simpan kebijakan</button></div></form></dialog>
-  <dialog id="edit-user-dialog"><form id="edit-user-form" class="dialog-card wide user-editor"><div class="comparison-heading"><div><p class="eyebrow">HAK AKSES PENGGUNA</p><h2 id="edit-user-title">Ubah pengguna</h2><p id="edit-user-email" class="muted"></p></div><button id="close-user-editor" class="icon-button" type="button">×</button></div><input id="edit-user-id" type="hidden"><div class="form-grid compact"><label>Nama lengkap<input id="edit-user-name" required></label><label>Peran<select id="edit-user-role"><option value="CASHIER">Kasir</option><option value="PURCHASING">Pembelian</option><option value="WAREHOUSE">Gudang</option><option value="ADMIN">Admin</option><option value="OWNER">Owner</option></select></label></div><fieldset><legend>Penempatan outlet</legend><div id="edit-user-outlets" class="outlet-options"></div><small class="muted">Owner otomatis memiliki akses ke semua outlet.</small></fieldset><label class="switch-row"><input id="edit-user-active" type="checkbox"><span><strong>Akun aktif</strong><small>Pengguna dapat masuk dan bekerja sesuai perannya.</small></span></label><p id="edit-user-error" class="error" role="alert"></p><div class="button-row"><button id="cancel-user-edit" class="button secondary" type="button">Batal</button><button id="save-user" class="button primary" type="submit">Simpan perubahan</button></div></form></dialog>
+  <dialog id="edit-user-dialog"><form id="edit-user-form" class="dialog-card wide user-editor"><div class="comparison-heading"><div><p class="eyebrow">HAK AKSES PENGGUNA</p><h2 id="edit-user-title">Ubah pengguna</h2><p id="edit-user-email" class="muted"></p></div><button id="close-user-editor" class="icon-button" type="button">×</button></div><input id="edit-user-id" type="hidden"><div class="form-grid compact"><label>Nama lengkap<input id="edit-user-name" required></label><label>Peran<select id="edit-user-role"><option value="CASHIER">Kasir</option><option value="PURCHASING">Pembelian</option><option value="WAREHOUSE">Gudang</option><option value="MANAGER">Manajer Outlet</option><option value="ADMIN">Admin</option><option value="OWNER">Owner</option></select></label></div><fieldset><legend>Penempatan outlet</legend><div id="edit-user-outlets" class="outlet-options"></div><small class="muted">Owner otomatis memiliki akses ke semua outlet.</small></fieldset><label class="switch-row"><input id="edit-user-active" type="checkbox"><span><strong>Akun aktif</strong><small>Pengguna dapat masuk dan bekerja sesuai perannya.</small></span></label><p id="edit-user-error" class="error" role="alert"></p><div class="button-row"><button id="cancel-user-edit" class="button secondary" type="button">Batal</button><button id="save-user" class="button primary" type="submit">Simpan perubahan</button></div></form></dialog>
   <div id="toast" class="toast" role="status"></div>
   <script src="/vendor/zxing-browser.min.js" defer></script>
   <script>
@@ -638,6 +681,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=52"></script>
+  <script type="module" src="/app.js?v=53"></script>
 </body>
 </html>

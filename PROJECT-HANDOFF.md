@@ -63,6 +63,27 @@ kode frontend, dokumentasi publik, atau chat.
 - Verifikasi produksi mengembalikan API `1.26.0-cloud`, UI `v1.26.0`, enam
   halaman Keuangan, cache `nusa-pos-shell-v52`, route finansial terlindungi
   sesi, dan APK kasir tetap tersedia.
+
+### Kandidat berikutnya — belum live
+
+- **Paket Multi-outlet Tingkat Lanjut v1.27.0** sudah selesai di source lokal.
+- Migrasi tunggal yang harus dijalankan lebih dahulu:
+  `supabase/migrations/202607270031_advanced_multi_outlet.sql`.
+- Source belum boleh didorong/deploy sebelum pengguna mengonfirmasi SQL
+  berhasil.
+- Tujuh halaman terpisah di accordion Multi-outlet: permintaan transfer,
+  persetujuan/pengiriman, stok perjalanan, harga outlet, promo outlet,
+  konsolidasi, dan notifikasi.
+- Transfer baru bertahap dan atomik: `REQUESTED` → `APPROVED` → `IN_TRANSIT`
+  → `RECEIVED`; stok asal berkurang saat dikirim dan stok tujuan bertambah
+  saat diterima. Batch/EXP ikut berpindah dan seluruh tindakan diaudit.
+- Role `MANAGER`/Manajer Outlet dibatasi oleh penempatan outlet. Harga outlet
+  mengungguli harga pusat pada kasir outlet tersebut; promo tanpa penempatan
+  tetap global.
+- Notifikasi terbuka mencakup stok di bawah kebijakan minimum dan selisih
+  rekonsiliasi shift minimal Rp100.000.
+- API/UI `v1.27.0`, cache PWA `nusa-pos-shell-v53`, dan 144/144 pengujian
+  otomatis lulus. Deployment produksi masih menunggu konfirmasi SQL.
 - **Paket Operasional Karyawan v1.25.0** live pada 27 Juli 2026.
 - Migrasi `supabase/migrations/202607270029_employee_operations.sql`
   dikonfirmasi berhasil sebelum deployment.
@@ -447,6 +468,11 @@ dan verifikasi produksi selesai pada 27 Juli 2026.
 - harga dan promo per outlet;
 - konsolidasi owner serta pembatasan manager outlet;
 - notifikasi stok kritis dan aktivitas tidak wajar.
+
+Status: kandidat source selesai dengan migrasi `031`, workflow stok atomik,
+role Manajer Outlet, tujuh halaman terpisah, audit, dan 144 pengujian otomatis.
+Belum live; jalankan migrasi `031` lalu lanjutkan commit, push, deployment, dan
+verifikasi produksi.
 
 ### v2.0 — Pilot produksi dan hardening
 

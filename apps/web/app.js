@@ -6,14 +6,14 @@ import { customerReceiptView } from './receipt.mjs';
 import { disconnectBluetoothPrinter, printEscPosReceipt, printEscPosTest, printerConnected, printerSelected, restoreGrantedPrinter, selectBluetoothPrinter, supportsBluetoothClassicPrinting } from './escpos-printer.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] } };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]} };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
 state.restockPlanning = { recommendations: [], settings: { approvalThreshold: 5000000, lookbackDays: 30 }, locationId: null };
 const el = (id) => document.getElementById(id);
 const posDevice = deviceIdentity();
-const roleLabels = { OWNER: 'Owner', ADMIN: 'Admin', CASHIER: 'Kasir', PURCHASING: 'Pembelian', WAREHOUSE: 'Gudang' };
+const roleLabels = { OWNER: 'Owner', ADMIN: 'Admin', MANAGER: 'Manajer Outlet', CASHIER: 'Kasir', PURCHASING: 'Pembelian', WAREHOUSE: 'Gudang' };
 let refreshPromise = null;
 let deferredInstallPrompt = null;
 let quoteRevision = 0;
@@ -2009,12 +2009,6 @@ async function loadInventory() {
   state.expiryError = expiry.error ?? null;
   const storeLocation = state.locations.find((location) => location.kind === 'STORE');
   const warehouseLocation = state.locations.find((location) => location.kind === 'WAREHOUSE');
-  const locationOptions = state.locations.map((location) => `<option value="${location.id}">${location.name}</option>`).join('');
-  el('transfer-from').innerHTML = locationOptions;
-  el('transfer-to').innerHTML = locationOptions;
-  if (warehouseLocation) el('transfer-from').value = warehouseLocation.id;
-  if (storeLocation) el('transfer-to').value = storeLocation.id;
-  el('transfer-product').innerHTML = state.products.map((product) => `<option value="${product.id}">${product.name}</option>`).join('');
   const rows = state.products.map((product) => {
     const outlet = state.inventory.find((item) => item.location_id === storeLocation?.id && item.product_id === product.id);
     const warehouse = state.inventory.find((item) => item.location_id === warehouseLocation?.id && item.product_id === product.id);
@@ -2027,15 +2021,6 @@ async function loadInventory() {
   }).join('');
   el('ledger-table').innerHTML = `<table><thead><tr><th>Waktu</th><th>Lokasi</th><th>Produk</th><th>Jenis</th><th>Perubahan</th><th>Saldo</th></tr></thead><tbody>${state.ledger.map((item) => `<tr><td>${new Date(item.occurred_at).toLocaleString('id-ID')}</td><td>${locationName(item.location_id)}</td><td>${productName(item.product_id)}</td><td>${item.event_type.replaceAll('_', ' ')}</td><td>${item.delta > 0 ? '+' : ''}${item.delta}</td><td>${item.balance_after}</td></tr>`).join('') || '<tr><td colspan="6">Belum ada pergerakan stok.</td></tr>'}</tbody></table>`;
   renderExpiryDashboard();
-}
-
-async function transferStock() {
-  const payload = { fromLocationId: el('transfer-from').value, toLocationId: el('transfer-to').value, items: [{ productId: el('transfer-product').value, baseQty: Number(el('transfer-qty').value) }] };
-  try {
-    const transfer = await request('/api/transfers', { method: 'POST', headers: { 'idempotency-key': crypto.randomUUID() }, body: JSON.stringify(payload) });
-    toast(`Transfer ${transfer.transfer_no} berhasil`);
-    await loadInventory(); await refreshCatalog();
-  } catch (error) { toast(error.message); }
 }
 
 async function postStockCount() {
@@ -3373,6 +3358,87 @@ function showSettingsView(name='business'){
   Object.entries(views).forEach(([key,node])=>node?.classList.toggle('hidden',key!==name));
 }
 
+const multioutletPages=new Set([
+  'outlet-transfer-request','outlet-transfer-approval','outlet-in-transit',
+  'outlet-pricing','outlet-promotions','outlet-consolidation','outlet-notifications'
+]);
+
+const transferStatusLabels={
+  REQUESTED:'Menunggu persetujuan',APPROVED:'Disetujui',IN_TRANSIT:'Dalam perjalanan',
+  RECEIVED:'Diterima',REJECTED:'Ditolak',CANCELLED:'Dibatalkan'
+};
+
+function transferCard(transfer,actions=[]){
+  const lines=transfer.items.map((item)=>`${escapeHtml(item.product?.name??'Produk')} · ${Number(item.requested_qty)} pcs`).join('<br>');
+  return `<article class="surface multioutlet-card"><div class="multioutlet-card-heading"><div><strong>${escapeHtml(transfer.transfer_no)}</strong><small>${new Date(transfer.requested_at).toLocaleString('id-ID')}</small></div><span class="pill">${transferStatusLabels[transfer.status]??transfer.status}</span></div><p><strong>${escapeHtml(transfer.fromLocation?.name??'-')} → ${escapeHtml(transfer.toLocation?.name??'-')}</strong></p><p class="muted">${lines}</p>${transfer.note?`<p class="multioutlet-note">${escapeHtml(transfer.note)}</p>`:''}${actions.length?`<div class="button-row">${actions.map(([action,label,tone='secondary'])=>`<button type="button" class="button ${tone}" data-transfer-action="${action}" data-transfer-id="${transfer.id}">${label}</button>`).join('')}</div>`:''}</article>`;
+}
+
+function renderMultiOutletTransfers(){
+  const transfers=state.multioutlet.transfers;
+  const requests=transfers.filter((item)=>item.status!=='IN_TRANSIT');
+  el('transfer-request-list').innerHTML=requests.map((item)=>transferCard(item,[])).join('')||'<div class="empty-state">Belum ada dokumen transfer.</div>';
+  const approvals=transfers.filter((item)=>['REQUESTED','APPROVED'].includes(item.status));
+  el('transfer-approval-list').innerHTML=approvals.map((item)=>transferCard(item,item.status==='REQUESTED'
+    ?[['approve','Setujui','primary'],['reject','Tolak']]
+    :[['ship','Kirim barang','primary'],['cancel','Batalkan']]
+  )).join('')||'<div class="empty-state">Tidak ada transfer yang menunggu tindakan.</div>';
+  const transit=transfers.filter((item)=>item.status==='IN_TRANSIT');
+  const qty=transit.flatMap((item)=>item.items).reduce((sum,item)=>sum+Number(item.shipped_qty),0);
+  el('transfer-transit-metrics').innerHTML=`<article><span>Dokumen perjalanan</span><strong>${transit.length}</strong></article><article><span>Jumlah barang</span><strong>${qty} pcs</strong></article>`;
+  el('transfer-transit-list').innerHTML=transit.map((item)=>transferCard(item,[['receive','Terima di tujuan','primary']])).join('')||'<div class="empty-state">Tidak ada stok dalam perjalanan.</div>';
+}
+
+function renderOutletPricing(){
+  const rows=state.multioutlet.pricing.overrides;
+  el('outlet-price-list').innerHTML=`<table><thead><tr><th>Outlet</th><th>Produk</th><th>Kelompok</th><th>Minimal</th><th>Harga</th><th>Status</th></tr></thead><tbody>${rows.map((item)=>`<tr><td>${escapeHtml(state.outlets.find((outlet)=>outlet.id===item.outlet_id)?.name??'-')}</td><td>${escapeHtml(state.products.find((product)=>product.id===item.product_id)?.name??'-')}</td><td>${item.customer_group_id==='wholesale'?'Grosir':'Eceran'}</td><td>${Number(item.min_base_qty)} pcs</td><td>${money.format(item.unit_price_base)}</td><td>${item.active?'Aktif':'Nonaktif'}</td></tr>`).join('')||'<tr><td colspan="6">Belum ada harga khusus outlet.</td></tr>'}</tbody></table>`;
+}
+
+function renderOutletPromotions(){
+  el('outlet-promotion-list').innerHTML=state.multioutlet.promotions.map((promo)=>`<article class="surface multioutlet-card"><div class="multioutlet-card-heading"><div><strong>${escapeHtml(promo.name??promo.code)}</strong><small>${escapeHtml(promo.code)} · v${promo.version} · ${promo.status}</small></div><span class="pill">${promo.outletIds.length?`${promo.outletIds.length} outlet`:'Global'}</span></div><div class="outlet-scope-options">${state.outlets.map((outlet)=>`<label><input type="checkbox" data-promo-outlet="${promo.id}" value="${outlet.id}" ${promo.outletIds.includes(outlet.id)?'checked':''}> ${escapeHtml(outlet.name)}</label>`).join('')}</div><button type="button" class="button primary" data-save-promo-scope="${promo.id}">Simpan cakupan</button></article>`).join('')||'<div class="empty-state">Belum ada versi promo.</div>';
+}
+
+function renderOutletConsolidation(){
+  const data=state.multioutlet.consolidation;
+  if(!data)return;
+  const total=data.totals;
+  el('outlet-consolidation-metrics').innerHTML=[
+    ['Outlet',total.outlets],['Penjualan 30 hari',money.format(total.sales30d)],['Laba kotor 30 hari',money.format(total.grossProfit30d)],
+    ['Nilai stok',money.format(total.stockValue)],['Stok perjalanan',`${total.inTransitQty} pcs`]
+  ].map(([label,value])=>`<article><span>${label}</span><strong>${value}</strong></article>`).join('');
+  el('outlet-consolidation-list').innerHTML=`<table><thead><tr><th>Outlet</th><th>Penjualan 30 hari</th><th>Laba kotor</th><th>Jumlah stok</th><th>Nilai stok</th></tr></thead><tbody>${data.outlets.map((item)=>`<tr><td><strong>${escapeHtml(item.name)}</strong></td><td>${money.format(item.sales30d)}</td><td>${money.format(item.grossProfit30d)}</td><td>${item.stockQty} pcs</td><td>${money.format(item.stockValue)}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function renderOutletNotifications(){
+  el('outlet-notification-list').innerHTML=state.multioutlet.notifications.map((item)=>`<article class="surface multioutlet-card notification-${item.severity.toLowerCase()}"><div class="multioutlet-card-heading"><div><strong>${escapeHtml(item.title)}</strong><small>${new Date(item.detected_at).toLocaleString('id-ID')}</small></div><span class="pill">${item.severity}</span></div><p>${escapeHtml(item.message)}</p><div class="button-row"><button type="button" class="button primary" data-notification-action="acknowledge" data-notification-id="${item.id}">Sudah ditangani</button><button type="button" class="button secondary" data-notification-action="dismiss" data-notification-id="${item.id}">Abaikan</button></div></article>`).join('')||'<div class="empty-state">Tidak ada notifikasi terbuka.</div>';
+}
+
+function populateMultiOutletForms(){
+  const locationOptions=state.locations.map((item)=>`<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('');
+  el('advanced-transfer-from').innerHTML=locationOptions;
+  el('advanced-transfer-to').innerHTML=locationOptions;
+  if(state.locations[1])el('advanced-transfer-to').value=state.locations[1].id;
+  el('advanced-transfer-product').innerHTML=state.products.map((item)=>`<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('');
+  el('outlet-price-outlet').innerHTML=state.outlets.map((item)=>`<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('');
+  el('outlet-price-product').innerHTML=state.products.map((item)=>`<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('');
+}
+
+async function loadMultiOutletWorkspace(){
+  const [transfers,pricing,promotions,consolidation,notifications]=await Promise.all([
+    request('/api/multi-outlet/transfers'),request('/api/multi-outlet/pricing'),
+    request('/api/multi-outlet/promotions'),request('/api/multi-outlet/consolidation'),
+    request('/api/multi-outlet/notifications')
+  ]);
+  state.multioutlet={transfers:transfers.transfers??[],pricing,promotions:promotions.versions??[],consolidation,notifications:notifications.notifications??[]};
+  populateMultiOutletForms();renderMultiOutletTransfers();renderOutletPricing();renderOutletPromotions();renderOutletConsolidation();renderOutletNotifications();
+}
+
+async function advanceTransfer(id,action){
+  try{
+    await request(`/api/multi-outlet/transfers/${id}/${action}`,{method:'POST',body:'{}'});
+    toast('Status transfer diperbarui');await loadMultiOutletWorkspace();await refreshCatalog();
+  }catch(error){toast(error.message);}
+}
+
 function showPage(name) {
   const item=document.querySelector(`.feature-nav-item[data-page="${name}"]`);
   const target=item?.dataset.targetPage??name;
@@ -3385,6 +3451,7 @@ function showPage(name) {
   const group=item?.closest('[data-nav-panel]')?.dataset.navPanel;
   if(group)openNavGroup(group);
   localStorage.setItem('pos_active_page',name);
+  if(multioutletPages.has(name))loadMultiOutletWorkspace().catch((error)=>toast(error.message));
 }
 
 function openNavGroup(group,{toggle=false}={}){
@@ -3672,8 +3739,52 @@ el('restock-supplier').addEventListener('change', async () => {
 el('refresh-inventory').addEventListener('click', loadInventory);
 el('expiry-search').addEventListener('input', renderExpiryDashboard);
 el('expiry-filter').addEventListener('change', renderExpiryDashboard);
-el('transfer-button').addEventListener('click', transferStock);
 el('count-button').addEventListener('click', postStockCount);
+el('advanced-transfer-form').addEventListener('submit',async(event)=>{
+  event.preventDefault();
+  const from=el('advanced-transfer-from').value,to=el('advanced-transfer-to').value;
+  if(from===to)return toast('Lokasi asal dan tujuan harus berbeda.');
+  try{
+    await request('/api/multi-outlet/transfers',{method:'POST',headers:{'idempotency-key':crypto.randomUUID()},body:JSON.stringify({
+      fromLocationId:from,toLocationId:to,note:el('advanced-transfer-note').value,
+      items:[{productId:el('advanced-transfer-product').value,baseQty:Number(el('advanced-transfer-qty').value)}]
+    })});
+    event.currentTarget.reset();toast('Permintaan transfer dibuat');await loadMultiOutletWorkspace();
+  }catch(error){toast(error.message);}
+});
+el('outlet-price-form').addEventListener('submit',async(event)=>{
+  event.preventDefault();
+  try{
+    await request('/api/multi-outlet/pricing',{method:'PUT',body:JSON.stringify({
+      outletId:el('outlet-price-outlet').value,productId:el('outlet-price-product').value,
+      customerGroupId:el('outlet-price-group').value,minBaseQty:Number(el('outlet-price-min-qty').value),
+      unitPriceBase:Number(el('outlet-price-amount').value),active:true
+    })});
+    toast('Harga outlet disimpan');await loadMultiOutletWorkspace();await refreshCatalog();
+  }catch(error){toast(error.message);}
+});
+document.querySelectorAll('[data-refresh-multioutlet]').forEach((button)=>button.addEventListener('click',()=>loadMultiOutletWorkspace().catch((error)=>toast(error.message))));
+document.addEventListener('click',async(event)=>{
+  const transfer=event.target.closest('[data-transfer-action]');
+  if(transfer)return advanceTransfer(transfer.dataset.transferId,transfer.dataset.transferAction);
+  const promotion=event.target.closest('[data-save-promo-scope]');
+  if(promotion){
+    const id=promotion.dataset.savePromoScope;
+    const outletIds=[...document.querySelectorAll(`[data-promo-outlet="${id}"]:checked`)].map((input)=>input.value);
+    try{
+      await request(`/api/multi-outlet/promotions/${id}/outlets`,{method:'PUT',body:JSON.stringify({outletIds})});
+      toast(outletIds.length?'Cakupan promo disimpan':'Promo berlaku global');await loadMultiOutletWorkspace();await refreshCatalog();
+    }catch(error){toast(error.message);}
+    return;
+  }
+  const notification=event.target.closest('[data-notification-action]');
+  if(notification){
+    try{
+      await request(`/api/multi-outlet/notifications/${notification.dataset.notificationId}/${notification.dataset.notificationAction}`,{method:'POST',body:'{}'});
+      toast('Notifikasi diperbarui');await loadMultiOutletWorkspace();
+    }catch(error){toast(error.message);}
+  }
+});
 el('refresh-report').addEventListener('click', loadReport);
 el('apply-report-filter').addEventListener('click', loadReport);
 el('report-preset').addEventListener('change', applyReportPreset);
