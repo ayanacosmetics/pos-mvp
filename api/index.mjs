@@ -764,19 +764,40 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '1.21.2-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '1.21.3-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'login') {
     const input = bodyOf(request);
+    const portal = String(input.portal ?? '').trim().toUpperCase();
+    if (!['OWNER','STAFF'].includes(portal)) {
+      const error = new Error('Pilih jalur login Owner atau Staff');
+      error.status = 400;
+      throw error;
+    }
     const config = env();
     let auth = await supabase('/auth/v1/token?grant_type=password', { method: 'POST', body: { email: input.email, password: input.password }, token: config.anon });
     let profile = await profileFor(auth.user.id);
-    if (!profile && process.env.ALLOW_OWNER_BOOTSTRAP === 'true') {
+    if (!profile && portal === 'OWNER' && process.env.ALLOW_OWNER_BOOTSTRAP === 'true') {
       await rpc('bootstrap_owner', { p_user_id: auth.user.id, p_display_name: auth.user.user_metadata?.display_name ?? input.email, p_business_name: process.env.DEFAULT_BUSINESS_NAME ?? 'Kasir Nusa' });
       profile = await profileFor(auth.user.id);
     }
     if (!profile) { const error = new Error('User Auth belum dihubungkan ke profil usaha'); error.status = 403; throw error; }
+    if (!profile.active) {
+      await supabase('/auth/v1/logout?scope=local', { method:'POST', token:auth.access_token }).catch(() => {});
+      const error = new Error('Akun pengguna tidak aktif');
+      error.status = 403;
+      throw error;
+    }
+    const portalMatches = portal === 'OWNER' ? profile.role === 'OWNER' : profile.role !== 'OWNER';
+    if (!portalMatches) {
+      await supabase('/auth/v1/logout?scope=local', { method:'POST', token:auth.access_token }).catch(() => {});
+      const error = new Error(portal === 'OWNER'
+        ? 'Akun ini bukan akun Owner. Gunakan login Staff.'
+        : 'Akun Owner harus masuk melalui login Owner.');
+      error.status = 403;
+      throw error;
+    }
     setRefreshCookie(response, auth.refresh_token);
     return send(response, 200, authPayload(auth, profile));
   }

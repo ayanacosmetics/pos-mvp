@@ -7,6 +7,7 @@ import { customerReceiptView } from './receipt.mjs';
 const storedAuth = loadAuth();
 const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [] };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
+state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 const el = (id) => document.getElementById(id);
 const posDevice = deviceIdentity();
 const roleLabels = { OWNER: 'Owner', ADMIN: 'Admin', CASHIER: 'Kasir', PURCHASING: 'Pembelian', WAREHOUSE: 'Gudang' };
@@ -100,9 +101,31 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 }
 
-async function login(email, password) {
-  const data = await request('/api/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+function setLoginPortal(portal) {
+  state.loginPortal = portal === 'STAFF' ? 'STAFF' : 'OWNER';
+  sessionStorage.setItem('pos_login_portal', state.loginPortal);
+  const owner = state.loginPortal === 'OWNER';
+  el('login-title').textContent = owner ? 'Masuk sebagai Owner' : 'Masuk sebagai Staff';
+  el('login-description').textContent = owner
+    ? 'Kelola usaha, laporan, pengguna, harga, dan seluruh outlet.'
+    : 'Masuk sebagai Admin, Kasir, Pembelian, atau Gudang.';
+  el('login-role-label').textContent = owner ? 'Owner' : 'Staff';
+  el('login-help').textContent = owner
+    ? 'Gunakan akun Owner aktif pada usaha Anda.'
+    : 'Hak akses Staff mengikuti peran dan outlet yang diberikan Owner.';
+  el('login-form').querySelector('button[type="submit"]').textContent = owner ? 'Masuk sebagai Owner' : 'Masuk sebagai Staff';
+  document.querySelectorAll('[data-login-portal]').forEach((button) => {
+    const active = button.dataset.loginPortal === state.loginPortal;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+  el('login-error').textContent = '';
+}
+
+async function login(email, password, portal) {
+  const data = await request('/api/login', { method: 'POST', body: JSON.stringify({ email, password, portal }) });
   storeAuth(data);
+  sessionStorage.setItem('pos_login_portal', portal);
   await bootstrap({ reportError: true });
 }
 
@@ -137,7 +160,8 @@ async function applyBootstrap(data, { offline = false } = {}) {
   await migrateLegacyQueue(state.session.user.id);
   await updateQueueCount();
   el('user-name').textContent = state.session.user.displayName;
-  el('user-role').textContent = state.session.user.role;
+  el('user-role').textContent = roleLabels[state.session.user.role] ?? state.session.user.role;
+  el('switch-account').classList.toggle('hidden', state.session.user.role === 'CASHIER');
   document.querySelectorAll('[data-permission]').forEach((node) => node.classList.toggle('hidden', !state.session.permissions.includes(node.dataset.permission)));
   el('session-view').classList.add('hidden');
   el('login-view').classList.add('hidden');
@@ -2719,6 +2743,10 @@ function showPage(name) {
   document.querySelectorAll('.nav-item').forEach((button) => button.classList.toggle('active', button.dataset.page === name));
 }
 
+document.querySelectorAll('[data-login-portal]').forEach((button) => button.addEventListener('click', () => {
+  setLoginPortal(button.dataset.loginPortal);
+  el('email').focus();
+}));
 el('login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const button = event.currentTarget.querySelector('button[type="submit"]');
@@ -2726,15 +2754,16 @@ el('login-form').addEventListener('submit', async (event) => {
   button.disabled = true;
   button.textContent = 'Sedang masuk...';
   try {
-    await login(el('email').value, el('password').value);
+    await login(el('email').value, el('password').value, state.loginPortal);
   } catch (error) {
     el('login-error').textContent = error.message;
   } finally {
     button.disabled = false;
-    button.textContent = 'Masuk';
+    button.textContent = state.loginPortal === 'OWNER' ? 'Masuk sebagai Owner' : 'Masuk sebagai Staff';
   }
 });
-el('logout').addEventListener('click', async () => {
+
+async function endCurrentSession(nextPortal = null) {
   try {
     await request('/api/logout', {
       method: 'POST',
@@ -2742,7 +2771,18 @@ el('logout').addEventListener('click', async () => {
     }, false);
   } catch {}
   clearAuth();
+  if (nextPortal) sessionStorage.setItem('pos_login_portal', nextPortal);
   location.reload();
+}
+
+el('switch-account').addEventListener('click', async () => {
+  if (state.session?.user?.role === 'CASHIER') return toast('Akun Kasir tidak dapat menggunakan Ganti akun. Gunakan Keluar.');
+  const nextPortal = state.session?.user?.role === 'OWNER' ? 'STAFF' : 'OWNER';
+  await endCurrentSession(nextPortal);
+});
+el('logout').addEventListener('click', async () => {
+  const portal = state.session?.user?.role === 'OWNER' ? 'OWNER' : 'STAFF';
+  await endCurrentSession(portal);
 });
 el('nav').addEventListener('click', (event) => {
   const button = event.target.closest('[data-page]');
@@ -3029,4 +3069,5 @@ async function restoreAppSession() {
   }
 }
 
+setLoginPortal(state.loginPortal);
 restoreAppSession();

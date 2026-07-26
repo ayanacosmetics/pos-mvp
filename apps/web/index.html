@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#174c4f">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=42">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -25,13 +25,17 @@
     <form id="login-form" class="login-card">
       <div class="brand-mark">KN</div>
       <p class="eyebrow">KASIR NUSA</p>
-      <h1>Masuk ke ruang kerja</h1>
-      <p class="muted">POS grosir–ecer yang tetap tenang saat toko ramai.</p>
-      <label>Email<input id="email" type="email" value="owner@demo.local" autocomplete="username" required></label>
-      <label>Kata sandi<input id="password" type="password" value="owner123" autocomplete="current-password" required></label>
+      <h1 id="login-title">Masuk sebagai Owner</h1>
+      <p id="login-description" class="muted">Kelola usaha, laporan, pengguna, harga, dan seluruh outlet.</p>
+      <div class="login-role-switch" role="tablist" aria-label="Pilih jenis akun">
+        <button class="login-role-option active" type="button" role="tab" data-login-portal="OWNER" aria-selected="true">Owner</button>
+        <button class="login-role-option" type="button" role="tab" data-login-portal="STAFF" aria-selected="false">Staff</button>
+      </div>
+      <label>Email akun <span id="login-role-label">Owner</span><input id="email" type="email" autocomplete="username" required></label>
+      <label>Kata sandi<input id="password" type="password" autocomplete="current-password" required></label>
       <p id="login-error" class="error" role="alert"></p>
-      <button class="button primary full" type="submit">Masuk</button>
-      <details><summary>Akun demo</summary><small>Owner: owner@demo.local / owner123<br>Kasir: kasir@demo.local / kasir123<br>Pembelian: beli@demo.local / beli123</small></details>
+      <button class="button primary full" type="submit">Masuk sebagai Owner</button>
+      <small id="login-help" class="login-help">Gunakan akun Owner aktif pada usaha Anda.</small>
     </form>
   </section>
 
@@ -54,7 +58,7 @@
         <button data-page="products" class="nav-item" data-permission="catalog.manage"><span>◇</span>Produk</button>
         <button data-page="promotions" class="nav-item" data-permission="promotion.manage"><span>％</span>Promo</button>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Operasional · v1.21.2</small><button id="logout" class="link-button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Operasional · v1.21.3</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti akun</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -450,6 +454,6 @@
   <dialog id="edit-user-dialog"><form id="edit-user-form" class="dialog-card wide user-editor"><div class="comparison-heading"><div><p class="eyebrow">HAK AKSES PENGGUNA</p><h2 id="edit-user-title">Ubah pengguna</h2><p id="edit-user-email" class="muted"></p></div><button id="close-user-editor" class="icon-button" type="button">×</button></div><input id="edit-user-id" type="hidden"><div class="form-grid compact"><label>Nama lengkap<input id="edit-user-name" required></label><label>Peran<select id="edit-user-role"><option value="CASHIER">Kasir</option><option value="PURCHASING">Pembelian</option><option value="WAREHOUSE">Gudang</option><option value="ADMIN">Admin</option><option value="OWNER">Owner</option></select></label></div><fieldset><legend>Penempatan outlet</legend><div id="edit-user-outlets" class="outlet-options"></div><small class="muted">Owner otomatis memiliki akses ke semua outlet.</small></fieldset><label class="switch-row"><input id="edit-user-active" type="checkbox"><span><strong>Akun aktif</strong><small>Pengguna dapat masuk dan bekerja sesuai perannya.</small></span></label><p id="edit-user-error" class="error" role="alert"></p><div class="button-row"><button id="cancel-user-edit" class="button secondary" type="button">Batal</button><button id="save-user" class="button primary" type="submit">Simpan perubahan</button></div></form></dialog>
   <div id="toast" class="toast" role="status"></div>
   <script src="/vendor/zxing-browser.min.js" defer></script>
-  <script type="module" src="/app.js"></script>
+  <script type="module" src="/app.js?v=42"></script>
 </body>
 </html>
