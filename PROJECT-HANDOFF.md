@@ -46,49 +46,20 @@ kode frontend, dokumentasi publik, atau chat.
 
 ### Terakhir dikonfirmasi live
 
-- **Paket Operasional v1.20.1**
-- SQL terakhir tetap `202607230024_operational_v120.sql`; patch ini tidak
-  memerlukan SQL baru.
-- Deployment Vercel `dpl_J5zx6aGQtir8zWJrogQTHaWVoNbg` berstatus Ready pada
+- **Paket Operasional v1.21**
+- SQL `202607260025_pos_speed_customer_service.sql` berhasil diterapkan pada
+  Supabase sebelum deployment.
+- Deployment Vercel `dpl_6FS4NPHepjqreHE3fZvdVnnpgpvw` berstatus Ready pada
   26 Juli 2026 dan alias `kasir-nusa-pos.vercel.app` sudah aktif.
-- Verifikasi langsung produksi mengembalikan API `1.20.1-cloud`, aplikasi
-  `v1.20.1`, cache `nusa-pos-shell-v38`, ZXing lokal, kebijakan
-  `camera=(self)`, dan logout yang menghapus cookie refresh.
-- Validasi rilis mencakup 97 pengujian otomatis dan 7 pengujian browser
+- Verifikasi langsung produksi mengembalikan API `1.21.0-cloud`, aplikasi
+  `v1.21`, cache `nusa-pos-shell-v39`, ZXing lokal, kebijakan `camera=(self)`,
+  proteksi autentikasi riwayat POS, dan logout yang menghapus cookie refresh.
+- Skema Supabase mengonfirmasi RPC `complete_sale_v6` dan `void_sale_v1`
+  tersedia; verifikasi produksi tidak membuat transaksi nyata.
+- Validasi rilis mencakup 101 pengujian otomatis dan 5 pengujian browser
   tambahan; seluruhnya lulus.
 
-### Isi patch v1.20.1
-
-- sesi login permanen dipulihkan sampai pengguna Logout atau menghapus data
-  aplikasi; logout mencabut refresh session serta membersihkan sesi, cache
-  pengguna, dan tab lain;
-- tombol scanner barcode dan kamera berbentuk persegi serta hanya memakai ikon;
-- drawer/sidebar mobile berasal dari kiri dengan hamburger, backdrop, fokus,
-  Escape, dan tidak lagi menjadi bar bawah;
-- label sidebar tablet tidak keluar dan menimpa konten;
-- kamera memakai `BarcodeDetector` dan fallback ZXing lokal, serta selalu
-  menghentikan stream saat dialog ditutup atau halaman ditinggalkan;
-- cache PWA bernama `nusa-pos-shell-v38`;
-- viewport 360, 390, 430, 768, dan 1440 px divalidasi tanpa overflow;
-- input scanner fisik dan lifecycle kamera divalidasi otomatis di Chromium.
-
-UAT perangkat nyata Android/Windows tetap dilakukan mengikuti
-`GO-LIVE-CHECKLIST.md`; hasil otomatis tidak boleh diklaim sebagai pengujian
-perangkat keras fisik.
-
-### Kandidat lokal v1.21 — menunggu SQL dan deployment
-
-Source lokal sudah menyelesaikan paket **Kecepatan kasir dan layanan
-pelanggan**, tetapi produksi harus tetap dianggap v1.20.1 sampai urutan berikut
-selesai:
-
-1. jalankan `supabase/migrations/202607260025_pos_speed_customer_service.sql`;
-2. konfirmasi SQL berhasil tanpa error;
-3. lakukan satu deployment produksi;
-4. verifikasi API `1.21.0-cloud`, aplikasi v1.21, dan cache
-   `nusa-pos-shell-v39`.
-
-Isi kandidat:
+### Isi rilis v1.21
 
 - favorit produk per pengguna dan filter kategori cepat;
 - shortcut pencarian, qty, tahan, bayar, cetak, dan riwayat;
@@ -98,11 +69,11 @@ Isi kandidat:
   idempotensi, dan audit;
 - catatan transaksi yang bertahan saat transaksi ditahan;
 - catatan pelanggan yang terlihat secukupnya di POS dan riwayat;
-- tombol lompat keranjang dan checkout sticky untuk penggunaan satu tangan;
-- 101 pengujian otomatis dan 5 pengujian browser lulus pada kandidat lokal.
+- tombol lompat keranjang dan checkout sticky untuk penggunaan satu tangan.
 
-Jangan deploy v1.21 sebelum migrasi di atas diterapkan karena API kandidat
-memanggil RPC `complete_sale_v6` dan `void_sale_v1`.
+UAT perangkat nyata Android/Windows tetap dilakukan mengikuti
+`GO-LIVE-CHECKLIST.md`; hasil otomatis tidak boleh diklaim sebagai pengujian
+perangkat keras fisik.
 
 ## 4. Kapabilitas yang sudah dibangun
 
@@ -214,7 +185,7 @@ setelah UAT, tetapi task baru tidak boleh melewati fondasi yang belum stabil.
 UAT kamera Android dan scanner/Chrome Windows pada perangkat fisik tetap menjadi
 langkah operasional sebelum pemakaian toko, bukan pekerjaan source code.
 
-### v1.21 — Kecepatan kasir dan layanan pelanggan (kandidat selesai)
+### v1.21 — Kecepatan kasir dan layanan pelanggan (selesai)
 
 - favorit/produk cepat dan filter kategori di POS;
 - shortcut keyboard untuk pencarian, qty, tahan, bayar, dan cetak;
@@ -224,8 +195,8 @@ langkah operasional sebelum pemakaian toko, bukan pekerjaan source code.
 - catatan per transaksi dan catatan pelanggan yang terlihat secukupnya;
 - pengujian penggunaan satu tangan pada mobile.
 
-Status: seluruh pekerjaan source dan pengujian selesai; menunggu satu migrasi
-SQL dan satu deployment produksi sesuai urutan pada bagian status rilis.
+Status: migrasi SQL, 101 pengujian otomatis, 5 pengujian browser, deployment
+produksi, dan verifikasi live selesai pada 26 Juli 2026.
 
 ### v1.22 — Perencanaan restok dan pembelian
 
