@@ -46,7 +46,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ### Terakhir dikonfirmasi live
 
-- **Paket Operasional v1.21.3**
+- **Paket Operasional v1.21.4**
 - SQL `202607260025_pos_speed_customer_service.sql` berhasil diterapkan pada
   Supabase sebelum deployment.
 - Hotfix nomor struk memperbaiki `document_sequences` produksi dari tidak ada
@@ -54,10 +54,10 @@ kode frontend, dokumentasi publik, atau chat.
 - API kini mendeteksi benturan `sales_tenant_id_receipt_no_key`, menyelaraskan
   penghitung secara aman, lalu mencoba ulang RPC dengan idempotency key yang
   sama sehingga transaksi tidak tercatat ganda.
-- Deployment Vercel `dpl_6tCdPkQKaSJHKgW5164k9HfeSQWK` berstatus Ready pada
+- Deployment Vercel `dpl_Hc9pMMr8F5y3STrg97axv53DJXzY` berstatus Ready pada
   26 Juli 2026 dan alias `kasir-nusa-pos.vercel.app` sudah aktif.
-- Verifikasi langsung produksi mengembalikan API `1.21.3-cloud`, aplikasi
-  `v1.21.3`, cache `nusa-pos-shell-v42`, ZXing lokal, kebijakan `camera=(self)`,
+- Verifikasi langsung produksi mengembalikan API `1.21.4-cloud`, aplikasi
+  `v1.21.4`, cache `nusa-pos-shell-v43`, ZXing lokal, kebijakan `camera=(self)`,
   proteksi autentikasi riwayat POS, dan logout yang menghapus cookie refresh.
 - Skema Supabase mengonfirmasi RPC `complete_sale_v6` dan `void_sale_v1`
   tersedia; verifikasi produksi tidak membuat transaksi nyata.
@@ -70,13 +70,15 @@ kode frontend, dokumentasi publik, atau chat.
   aturan privasi yang sama juga berlaku pada transaksi lama.
 - Halaman login memiliki jalur Owner dan Staff terpisah. API menolak peran yang
   masuk melalui jalur yang salah dan mencabut token login sementara.
-- Owner, Admin, Pembelian, dan Gudang dapat memakai Ganti akun; Kasir tidak
-  melihat kontrol tersebut dan tetap ditolak oleh pemeriksaan frontend.
-- Ganti akun selalu menjalankan logout server penuh, membersihkan sesi/cache
-  pengguna lama, lalu membuka jalur login peran lainnya.
+- Owner yang sudah login dapat memakai Ganti Owner untuk berpindah ke Owner
+  aktif lain dalam tenant yang sama tanpa memasukkan kredensial lagi.
+- Token autentikasi tetap milik Owner asal, Owner terpilih menjadi konteks kerja
+  aktif, perpindahan dicatat dalam audit, dan konteks bertahan saat reload.
+- Staff dan Kasir tidak melihat Ganti Owner. Logout mencabut sesi server serta
+  membersihkan token, cache bootstrap, dan konteks Owner dari browser.
 - Aset login memakai penanda versi agar CDN/PWA tidak mempertahankan tampilan
   lama, dan kartu login dibatasi aman pada viewport mobile.
-- Validasi rilis mencakup 110 pengujian otomatis dan 5 pengujian browser
+- Validasi rilis mencakup 112 pengujian otomatis dan 5 pengujian browser
   tambahan; seluruhnya lulus.
 
 SQL penguatan `202607260026_receipt_sequence_collision_fix.sql` sudah tersedia
@@ -220,7 +222,7 @@ langkah operasional sebelum pemakaian toko, bukan pekerjaan source code.
 - catatan per transaksi dan catatan pelanggan yang terlihat secukupnya;
 - pengujian penggunaan satu tangan pada mobile.
 
-Status: migrasi utama, 110 pengujian otomatis, 5 pengujian browser, deployment
+Status: migrasi utama, 112 pengujian otomatis, 5 pengujian browser, deployment
 produksi, hotfix benturan nomor struk, dan privasi harga internal pada struk
 selesai pada 26 Juli 2026. SQL penguatan
 `202607260026_receipt_sequence_collision_fix.sql` menunggu diterapkan.

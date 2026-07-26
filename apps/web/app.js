@@ -8,6 +8,7 @@ const storedAuth = loadAuth();
 const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [] };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
+state.ownerContextId = localStorage.getItem('pos_owner_context_id');
 const el = (id) => document.getElementById(id);
 const posDevice = deviceIdentity();
 const roleLabels = { OWNER: 'Owner', ADMIN: 'Admin', CASHIER: 'Kasir', PURCHASING: 'Pembelian', WAREHOUSE: 'Gudang' };
@@ -30,8 +31,10 @@ function storeAuth(data) {
 
 function clearAuth() {
   state.token = null; state.refreshToken = null; state.expiresAt = null; state.session = null;
+  state.ownerContextId = null;
   clearStoredAuth();
   localStorage.removeItem('pos_bootstrap_cache');
+  localStorage.removeItem('pos_owner_context_id');
 }
 
 async function refreshSession(allowStorageRecovery = true) {
@@ -72,6 +75,7 @@ async function refreshSession(allowStorageRecovery = true) {
 async function request(path, options = {}, allowRefresh = true) {
   const headers = { 'content-type': 'application/json', ...(options.headers ?? {}) };
   if (state.token) headers.authorization = `Bearer ${state.token}`;
+  if (state.ownerContextId) headers['x-owner-context-id'] = state.ownerContextId;
   if (state.session && state.activeOutletId) headers['x-outlet-id'] = state.activeOutletId;
   headers['x-device-id'] = posDevice.id;
   let response;
@@ -146,6 +150,9 @@ function cacheCurrentShift() {
 
 async function applyBootstrap(data, { offline = false } = {}) {
   state.session = data.session;
+  state.ownerContextId = data.session.ownerContextActive ? data.session.user.id : null;
+  if (state.ownerContextId) localStorage.setItem('pos_owner_context_id', state.ownerContextId);
+  else localStorage.removeItem('pos_owner_context_id');
   state.business = data.business ?? state.business;
   state.deviceSettings = { ...state.deviceSettings, ...(data.deviceSettings ?? {}) };
   state.outlets = data.outlets ?? [];
@@ -161,7 +168,7 @@ async function applyBootstrap(data, { offline = false } = {}) {
   await updateQueueCount();
   el('user-name').textContent = state.session.user.displayName;
   el('user-role').textContent = roleLabels[state.session.user.role] ?? state.session.user.role;
-  el('switch-account').classList.toggle('hidden', state.session.user.role === 'CASHIER');
+  el('switch-account').classList.toggle('hidden', !state.session.canSwitchOwners);
   document.querySelectorAll('[data-permission]').forEach((node) => node.classList.toggle('hidden', !state.session.permissions.includes(node.dataset.permission)));
   el('session-view').classList.add('hidden');
   el('login-view').classList.add('hidden');
@@ -2775,10 +2782,47 @@ async function endCurrentSession(nextPortal = null) {
   location.reload();
 }
 
-el('switch-account').addEventListener('click', async () => {
-  if (state.session?.user?.role === 'CASHIER') return toast('Akun Kasir tidak dapat menggunakan Ganti akun. Gunakan Keluar.');
-  const nextPortal = state.session?.user?.role === 'OWNER' ? 'STAFF' : 'OWNER';
-  await endCurrentSession(nextPortal);
+function renderOwnerContexts(data) {
+  el('owner-switch-list').innerHTML=(data.owners??[]).map((owner)=>`
+    <button class="owner-switch-option" type="button" data-owner-id="${escapeHtml(owner.id)}" ${owner.active?'disabled':''}>
+      <strong>${escapeHtml(owner.displayName)}</strong>
+      <small>${owner.authenticated?'Akun yang melakukan login':'Owner dalam usaha yang sama'}</small>
+      ${owner.active?'<span class="pill success">Aktif</span>':''}
+    </button>
+  `).join('')||'<div class="empty-state compact">Tidak ada Owner aktif lainnya.</div>';
+}
+
+async function openOwnerSwitch() {
+  if (!state.session?.canSwitchOwners) return toast('Hanya Owner yang dapat mengganti konteks Owner.');
+  setSidebarOpen(false);
+  el('owner-switch-list').innerHTML='<div class="empty-state compact">Memuat Owner...</div>';
+  el('owner-switch-dialog').showModal();
+  try {
+    renderOwnerContexts(await request('/api/owner-contexts'));
+  } catch (error) {
+    el('owner-switch-list').innerHTML=`<div class="empty-state compact">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function switchOwnerContext(ownerId) {
+  const result=await request('/api/owner-contexts/switch',{
+    method:'POST',body:JSON.stringify({ownerId})
+  });
+  state.ownerContextId=result.contextId??null;
+  if(state.ownerContextId)localStorage.setItem('pos_owner_context_id',state.ownerContextId);
+  else localStorage.removeItem('pos_owner_context_id');
+  localStorage.removeItem('pos_bootstrap_cache');
+  location.reload();
+}
+
+el('switch-account').addEventListener('click', openOwnerSwitch);
+el('close-owner-switch').addEventListener('click',()=>el('owner-switch-dialog').close());
+el('owner-switch-list').addEventListener('click',async(event)=>{
+  const button=event.target.closest('[data-owner-id]');
+  if(!button||button.disabled)return;
+  button.disabled=true;
+  try{await switchOwnerContext(button.dataset.ownerId);}
+  catch(error){button.disabled=false;toast(error.message);}
 });
 el('logout').addEventListener('click', async () => {
   const portal = state.session?.user?.role === 'OWNER' ? 'OWNER' : 'STAFF';
@@ -3032,6 +3076,12 @@ el('close-shift').addEventListener('click', closeShift);
 window.addEventListener('online', () => { el('network-dot').classList.remove('offline'); el('network-status').textContent = 'Online'; syncQueue(); });
 window.addEventListener('offline', () => { el('network-dot').classList.add('offline'); el('network-status').textContent = 'Offline'; });
 window.addEventListener('storage', (event) => {
+  if (event.key === 'pos_owner_context_id') {
+    state.ownerContextId = event.newValue || null;
+    localStorage.removeItem('pos_bootstrap_cache');
+    location.reload();
+    return;
+  }
   if (!isAuthStorageEvent(event)) return;
   const auth = loadAuth();
   state.token = auth.token;

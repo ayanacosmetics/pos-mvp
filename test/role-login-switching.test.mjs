@@ -84,7 +84,7 @@ test('jalur Staff menerima Staff dan menolak Owner',async()=>{
   });
 });
 
-test('UI membedakan login dan menyembunyikan Ganti akun untuk Kasir',async()=>{
+test('UI membedakan login dan hanya menampilkan Ganti Owner saat server mengizinkan',async()=>{
   const [html,script]=await Promise.all([
     readFile(new URL('../apps/web/index.html',import.meta.url),'utf8'),
     readFile(new URL('../apps/web/app.js',import.meta.url),'utf8')
@@ -92,10 +92,11 @@ test('UI membedakan login dan menyembunyikan Ganti akun untuk Kasir',async()=>{
   assert.match(html,/data-login-portal="OWNER"/);
   assert.match(html,/data-login-portal="STAFF"/);
   assert.match(html,/id="switch-account"/);
-  assert.match(html,/styles\.css\?v=42/);
-  assert.match(html,/app\.js\?v=42/);
+  assert.match(html,/styles\.css\?v=43/);
+  assert.match(html,/app\.js\?v=43/);
   assert.doesNotMatch(html,/owner@demo\.local|owner123|kasir123/);
-  assert.match(script,/state\.session\.user\.role === 'CASHIER'/);
-  assert.match(script,/endCurrentSession\(nextPortal\)/);
+  assert.match(script,/!state\.session\.canSwitchOwners/);
+  assert.match(script,/\/api\/owner-contexts\/switch/);
+  assert.match(script,/pos_owner_context_id/);
   assert.match(script,/body: JSON\.stringify\(\{ email, password, portal \}\)/);
 });

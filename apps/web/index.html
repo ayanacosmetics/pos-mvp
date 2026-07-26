@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#174c4f">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=42">
+  <link rel="stylesheet" href="/styles.css?v=43">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -58,7 +58,7 @@
         <button data-page="products" class="nav-item" data-permission="catalog.manage"><span>◇</span>Produk</button>
         <button data-page="promotions" class="nav-item" data-permission="promotion.manage"><span>％</span>Promo</button>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Operasional · v1.21.3</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti akun</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Operasional · v1.21.4</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -426,6 +426,8 @@
     </main>
   </div>
 
+  <dialog id="owner-switch-dialog"><div class="dialog-card owner-switch-dialog"><div class="comparison-heading"><div><p class="eyebrow">KONTEKS OWNER</p><h2>Ganti Owner aktif</h2><p class="muted">Pilih Owner lain dalam usaha ini tanpa login ulang. Perpindahan dicatat dalam audit.</p></div><button id="close-owner-switch" class="icon-button" type="button">×</button></div><div id="owner-switch-list" class="owner-switch-list"><div class="empty-state compact">Memuat Owner...</div></div></div></dialog>
+
   <dialog id="customer-dialog"><form id="customer-form" class="dialog-card customer-dialog"><div class="comparison-heading"><div><p class="eyebrow">PROFIL PELANGGAN</p><h2 id="customer-dialog-title">Tambah pelanggan</h2></div><button id="close-customer-dialog" class="icon-button" type="button">×</button></div><input id="edit-customer-id" type="hidden"><div class="form-grid compact"><label>Nama<input id="customer-name" required></label><label>Telepon<input id="customer-phone"></label><label>Email<input id="customer-email" type="email"></label><label>Kelompok harga<select id="customer-new-group"><option value="retail">Eceran</option><option value="wholesale">Grosir</option></select></label></div><label>Alamat<textarea id="customer-address" rows="2"></textarea></label><label>Catatan<textarea id="customer-notes" rows="2"></textarea></label><label class="switch-row"><input id="customer-credit-enabled" type="checkbox"><span><strong>Aktifkan fasilitas kredit</strong><small>Pelanggan dapat membayar sebagian atau mencatat piutang saat checkout.</small></span></label><div id="customer-credit-fields" class="form-grid compact hidden"><label>Batas kredit<input id="customer-credit-limit" type="number" min="0" value="0"></label><label>Jatuh tempo<input id="customer-credit-days" type="number" min="0" max="365" value="30"><small>Hari setelah transaksi</small></label></div><p id="customer-form-error" class="error"></p><div class="button-row"><button id="cancel-customer-dialog" class="button secondary" type="button">Batal</button><button class="button primary" type="submit">Simpan pelanggan</button></div></form></dialog>
 
   <dialog id="customer-statement-dialog"><div class="dialog-card customer-statement-dialog"><div class="comparison-heading"><div><p class="eyebrow">REKENING PELANGGAN</p><h2 id="statement-customer-name">Pelanggan</h2></div><button id="close-customer-statement" class="icon-button" type="button">×</button></div><div id="statement-summary" class="statement-summary"></div><form id="customer-payment-form" class="customer-payment-form"><p class="eyebrow">CATAT PEMBAYARAN</p><div class="form-grid compact"><label>Nominal<input id="customer-payment-amount" type="number" min="1" required></label><label>Metode<select id="customer-payment-method"><option value="CASH">Tunai</option><option value="QRIS">QRIS</option><option value="TRANSFER">Transfer</option><option value="EDC">Kartu / EDC</option></select></label><label id="customer-payment-reference-wrap" class="hidden">Referensi<input id="customer-payment-reference"></label><label>Catatan<input id="customer-payment-note"></label></div><p id="customer-payment-error" class="error"></p><button class="button primary" type="submit">Terima pembayaran</button></form><div><p class="eyebrow">FAKTUR BELUM LUNAS</p><div id="statement-invoices" class="table-wrap"></div></div><div><p class="eyebrow">MUTASI REKENING</p><div id="statement-entries" class="table-wrap"></div></div></div></dialog>
@@ -454,6 +456,6 @@
   <dialog id="edit-user-dialog"><form id="edit-user-form" class="dialog-card wide user-editor"><div class="comparison-heading"><div><p class="eyebrow">HAK AKSES PENGGUNA</p><h2 id="edit-user-title">Ubah pengguna</h2><p id="edit-user-email" class="muted"></p></div><button id="close-user-editor" class="icon-button" type="button">×</button></div><input id="edit-user-id" type="hidden"><div class="form-grid compact"><label>Nama lengkap<input id="edit-user-name" required></label><label>Peran<select id="edit-user-role"><option value="CASHIER">Kasir</option><option value="PURCHASING">Pembelian</option><option value="WAREHOUSE">Gudang</option><option value="ADMIN">Admin</option><option value="OWNER">Owner</option></select></label></div><fieldset><legend>Penempatan outlet</legend><div id="edit-user-outlets" class="outlet-options"></div><small class="muted">Owner otomatis memiliki akses ke semua outlet.</small></fieldset><label class="switch-row"><input id="edit-user-active" type="checkbox"><span><strong>Akun aktif</strong><small>Pengguna dapat masuk dan bekerja sesuai perannya.</small></span></label><p id="edit-user-error" class="error" role="alert"></p><div class="button-row"><button id="cancel-user-edit" class="button secondary" type="button">Batal</button><button id="save-user" class="button primary" type="submit">Simpan perubahan</button></div></form></dialog>
   <div id="toast" class="toast" role="status"></div>
   <script src="/vendor/zxing-browser.min.js" defer></script>
-  <script type="module" src="/app.js?v=42"></script>
+  <script type="module" src="/app.js?v=43"></script>
 </body>
 </html>

@@ -151,11 +151,27 @@ async function profileFor(userId) {
 async function sessionOf(request) {
   const token = request.headers.authorization?.replace(/^Bearer\s+/i, '');
   if (!token) return null;
-  const user = await supabase('/auth/v1/user', { token });
-  const profile = await profileFor(user.id);
-  if (!profile?.active) return null;
-  const assignments = profile.role === 'OWNER' ? [] : await rest('user_outlets', `tenant_id=eq.${profile.tenant_id}&user_id=eq.${user.id}&select=outlet_id`);
-  return { token, authUser: user, profile, outletIds: assignments.map((item) => item.outlet_id), permissions: PERMISSIONS[profile.role] ?? [] };
+  const authenticatedUser = await supabase('/auth/v1/user', { token });
+  const authenticatedProfile = await profileFor(authenticatedUser.id);
+  if (!authenticatedProfile?.active) return null;
+  const requestedOwnerId = String(request.headers['x-owner-context-id'] ?? '').trim();
+  let authUser = authenticatedUser;
+  let profile = authenticatedProfile;
+  let ownerContextActive = false;
+  if (requestedOwnerId && requestedOwnerId !== authenticatedUser.id && authenticatedProfile.role === 'OWNER') {
+    const requestedProfile = await profileFor(requestedOwnerId);
+    if (requestedProfile?.active && requestedProfile.role === 'OWNER' && requestedProfile.tenant_id === authenticatedProfile.tenant_id) {
+      authUser = { ...authenticatedUser, id: requestedOwnerId };
+      profile = requestedProfile;
+      ownerContextActive = true;
+    }
+  }
+  const assignments = profile.role === 'OWNER' ? [] : await rest('user_outlets', `tenant_id=eq.${profile.tenant_id}&user_id=eq.${authUser.id}&select=outlet_id`);
+  return {
+    token, authUser, profile, outletIds: assignments.map((item) => item.outlet_id),
+    permissions: PERMISSIONS[profile.role] ?? [], authenticatedUser,
+    authenticatedProfile, ownerContextActive
+  };
 }
 
 function requirePermission(session, permission) {
@@ -764,7 +780,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '1.21.3-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '1.21.4-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'login') {
@@ -854,6 +870,55 @@ async function routeRequest(request, response, route) {
     }));
   }
 
+  if (request.method === 'GET' && route === 'owner-contexts') {
+    if (session.authenticatedProfile.role !== 'OWNER') {
+      const error = new Error('Hanya Owner yang dapat mengganti konteks Owner');
+      error.status = 403;
+      throw error;
+    }
+    const owners = await rest(
+      'profiles',
+      `tenant_id=eq.${context.tenantId}&role=eq.OWNER&active=eq.true&select=user_id,display_name,created_at&order=display_name`
+    );
+    return send(response, 200, {
+      authenticatedOwnerId: session.authenticatedUser.id,
+      activeOwnerId: session.authUser.id,
+      owners: owners.map((owner) => ({
+        id: owner.user_id, displayName: owner.display_name,
+        authenticated: owner.user_id === session.authenticatedUser.id,
+        active: owner.user_id === session.authUser.id
+      }))
+    });
+  }
+
+  if (request.method === 'POST' && route === 'owner-contexts/switch') {
+    if (session.authenticatedProfile.role !== 'OWNER') {
+      const error = new Error('Hanya Owner yang dapat mengganti konteks Owner');
+      error.status = 403;
+      throw error;
+    }
+    const input = bodyOf(request);
+    const targetOwnerId = String(input.ownerId ?? '').trim();
+    const targetOwner = await profileFor(targetOwnerId);
+    if (!targetOwner?.active || targetOwner.role !== 'OWNER' || targetOwner.tenant_id !== context.tenantId) {
+      const error = new Error('Owner tujuan tidak aktif atau tidak berada dalam usaha yang sama');
+      error.status = 422;
+      throw error;
+    }
+    await rest('audit_logs','',{method:'POST',body:{
+      tenant_id:context.tenantId,actor_id:session.authenticatedUser.id,
+      action:'OWNER_CONTEXT_SWITCHED',entity_type:'profile',entity_id:targetOwnerId,
+      details_json:{
+        fromOwnerId:session.authUser.id,toOwnerId:targetOwnerId,
+        authenticatedOwnerId:session.authenticatedUser.id
+      }
+    }});
+    return send(response, 200, {
+      contextId: targetOwnerId === session.authenticatedUser.id ? null : targetOwnerId,
+      owner: { id:targetOwner.user_id, displayName:targetOwner.display_name, role:targetOwner.role }
+    });
+  }
+
   if (request.method === 'GET' && route === 'bootstrap') {
     const deviceId = request.headers['x-device-id'];
     const [products, promotions, customers, suppliers, shifts, tenants, devices] = await Promise.all([
@@ -865,7 +930,14 @@ async function routeRequest(request, response, route) {
       deviceId ? rest('pos_devices', `tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(deviceId)}&select=*&limit=1`) : []
     ]);
     return send(response, 200, {
-      session: { token: session.token, user: { id: session.authUser.id, displayName: session.profile.display_name, role: session.profile.role, outletIds: context.outlets.map((item) => item.id) }, permissions: session.permissions },
+      session: {
+        token: session.token,
+        user: { id: session.authUser.id, displayName: session.profile.display_name, role: session.profile.role, outletIds: context.outlets.map((item) => item.id) },
+        authenticatedOwnerId: session.authenticatedProfile.role === 'OWNER' ? session.authenticatedUser.id : null,
+        ownerContextActive: session.ownerContextActive,
+        canSwitchOwners: session.authenticatedProfile.role === 'OWNER',
+        permissions: session.permissions
+      },
       outlets: context.outlets, activeOutletId: context.outlet.id, locations: context.locations,
       business: businessPayload(tenants[0]), deviceSettings: devicePayload(devices[0], deviceId),
       customerGroups: [{ id: 'retail', name: 'Eceran' }, { id: 'wholesale', name: 'Grosir' }], customers, suppliers, products, promotions,
