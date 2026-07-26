@@ -110,10 +110,11 @@ Paket operasional v1.24.0 memiliki 132 pengujian otomatis. Pengujian toko nyata 
 ## Aplikasi kasir Android
 
 Pasangkan printer WP58D dan scanner melalui Pengaturan Bluetooth Android.
-Instal `releases/Kasir-Nusa-Kasir-1.0.0-test.apk`, masuk dengan akun kasir, lalu
-cetak struk. Saat pertama mencetak, pilih WP58D dari daftar perangkat yang
-sudah dipasangkan. Scanner Bluetooth harus berada pada mode HID dan mengirim
-Enter setelah barcode.
+Unduh dan instal APK dari
+<https://kasir-nusa-pos.vercel.app/downloads/Kasir-Nusa-Kasir-1.0.0-test.apk>,
+masuk dengan akun kasir, lalu cetak struk. Saat pertama mencetak, pilih WP58D
+dari daftar perangkat yang sudah dipasangkan. Scanner Bluetooth harus berada
+pada mode HID dan mengirim Enter setelah barcode.
 
 ## Struktur
 
