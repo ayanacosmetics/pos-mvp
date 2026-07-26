@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Paket Operasional v1.23.1
+# Kasir Nusa POS — Paket Operasional v1.23.2
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -51,8 +51,9 @@ kapabilitas retail yang lebih lengkap tersedia di
 - Impor data awal, backup ber-checksum, sinkronisasi offline, dan resolusi konflik.
 - Pusat kesehatan untuk rekonsiliasi stok, pembayaran, piutang, hutang, shift, dan sinkronisasi.
 - Instalasi PWA dengan identitas aplikasi untuk Android dan Windows.
-- Navigasi dua tingkat: sidebar utama membuka daftar fitur di panel kedua,
-  kemudian setiap pilihan menampilkan halaman kerjanya sendiri.
+- Navigasi accordion: menekan kelompok di sidebar membuka daftar subfitur
+  memanjang tepat di bawah kelompok tersebut, tanpa panel atau halaman menu
+  tambahan.
 - Promo dan Loyalitas, serta Pelanggan dan Supplier, memiliki halaman terpisah;
   rincian Stok, Pembelian, Laporan, dan Pengaturan juga dipisahkan sebagai
   tujuan navigasi masing-masing.
@@ -101,7 +102,7 @@ Jalankan:
 npm test
 ```
 
-Paket operasional v1.23.1 memiliki 127 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
+Paket operasional v1.23.2 memiliki 127 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
 
 ## Struktur
 

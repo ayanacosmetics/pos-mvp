@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 
-test('sidebar memakai kelompok dan panel fitur kedua untuk seluruh modul', async () => {
+test('sidebar memakai accordion subfitur untuk seluruh modul', async () => {
   const [html, script, css] = await Promise.all([
     read('../apps/web/index.html'), read('../apps/web/app.js'), read('../apps/web/styles.css')
   ]);
@@ -12,10 +12,13 @@ test('sidebar memakai kelompok dan panel fitur kedua untuk seluruh modul', async
     assert.match(html, new RegExp(`data-nav-group="${group}"`));
     assert.match(html, new RegExp(`data-nav-panel="${group}"`));
   }
-  assert.match(html, /id="feature-nav"/);
+  assert.doesNotMatch(html, /id="feature-nav"/);
+  assert.match(html, /<nav id="nav">[\s\S]*data-nav-group="sales"[\s\S]*data-nav-panel="sales"[\s\S]*data-nav-group="inventory"/);
   assert.match(script, /function openNavGroup/);
   assert.match(script, /function syncNavigationPermissions/);
-  assert.match(css, /\.app\.feature-nav-open/);
+  assert.match(script, /aria-expanded/);
+  assert.match(css, /\.feature-nav-panel\.active\{display:grid\}/);
+  assert.match(css, /\.feature-nav-panel\{[^}]*border-left/);
 });
 
 test('fitur gabungan dipisahkan menjadi tujuan halaman sendiri', async () => {

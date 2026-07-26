@@ -46,6 +46,15 @@ kode frontend, dokumentasi publik, atau chat.
 
 ### Terakhir dikonfirmasi live
 
+- **Paket Operasional v1.23.2** mengganti panel navigasi kedua dengan accordion
+  langsung di sidebar.
+- Menekan Penjualan, Barang & Stok, Relasi, Pertumbuhan, Analitik, atau Sistem
+  membuka subfiturnya memanjang tepat di bawah induk. Menekan ulang menutupnya.
+- Hanya satu kelompok terbuka pada satu waktu. Setelah subfitur dipilih,
+  halaman kerja tampil di area kanan; drawer mobile menutup otomatis.
+- Pemisahan halaman Promo/Loyalitas, Pelanggan/Supplier, dan tampilan kerja
+  fitur lainnya tetap dipertahankan.
+- Tidak memerlukan SQL baru dan 127 pengujian otomatis lulus.
 - **Paket Operasional v1.23.1** menambahkan navigasi dua tingkat responsif.
 - Sidebar utama berisi enam kelompok: Penjualan, Barang & Stok, Relasi,
   Pertumbuhan, Analitik, dan Sistem. Memilih kelompok membuka daftar fitur
@@ -113,6 +122,15 @@ diterapkan melalui migrasi `027`; tidak ada SQL v1.21 yang masih tertunda.
 - Versi UI `v1.23.1`, API `1.23.1-cloud`, dan cache `nusa-pos-shell-v46`.
 - Tidak memerlukan migrasi Supabase.
 - Validasi lokal: 127/127 pengujian otomatis lulus.
+
+### Rilis v1.23.2
+
+- Panel/kolom subfitur kedua dihapus.
+- Seluruh subfitur menjadi accordion yang menyatu dengan sidebar.
+- Versi UI `v1.23.2`, API `1.23.2-cloud`, dan cache `nusa-pos-shell-v47`.
+- Tidak memerlukan migrasi Supabase.
+- Validasi lokal: 127/127 pengujian otomatis dan inspeksi browser desktop/mobile
+  lulus.
 
 ### Rilis v1.23 dikonfirmasi live
 
