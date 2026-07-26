@@ -6,7 +6,8 @@ import { PosStore } from './storage.mjs';
 import {
   PERMISSIONS, can, compareCost, costHistory, customerGroups, demoUsers,
   outlets, permissionsFor, products, promotionVersions, quoteBasket,
-  applySaleAdjustment, normalizeSaleAdjustment, saleAdjustmentFingerprintPayload
+  applySaleAdjustment, normalizeSaleAdjustment, saleAdjustmentFingerprintPayload,
+  operatingProfitSummary, productHealth
 } from '../../../packages/domain/src/index.mjs';
 
 const webRoot = fileURLToPath(new URL('../../web/', import.meta.url));
@@ -28,6 +29,14 @@ const localWorkforce = {
   approvals: [],
   policies: [],
   reconciliations: []
+};
+const localFinance = {
+  categories: [
+    ['Gaji dan tunjangan','OPERATING'],['Sewa tempat','OPERATING'],
+    ['Listrik, air, dan internet','OPERATING'],['Perlengkapan toko','OPERATING'],
+    ['Pemasaran','OPERATING'],['Pembelian aset','INVESTING'],
+  ].map(([name,cash_flow_group])=>({id:crypto.randomUUID(),name,cash_flow_group,active:true})),
+  expenses: []
 };
 
 const mimeTypes = {
@@ -69,7 +78,7 @@ function requirePermission(request, response, permission) {
 }
 
 async function api(request, response, url) {
-  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '1.25.0-local', storage: 'sqlite' });
+  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '1.26.0-local', storage: 'sqlite' });
 
   if (request.method === 'POST' && url.pathname === '/api/login') {
     const input = await bodyOf(request);
@@ -425,6 +434,58 @@ async function api(request, response, url) {
   if (request.method === 'GET' && url.pathname === '/api/reports/summary') {
     if (!requirePermission(request, response, PERMISSIONS.VIEW_REPORTS)) return;
     return json(response, 200, store.reportSummary({ from: url.searchParams.get('from'), to: url.searchParams.get('to') }));
+  }
+
+  if(request.method==='GET'&&url.pathname==='/api/owner-finance'){
+    if(!requirePermission(request,response,PERMISSIONS.OWNER_FINANCE))return;
+    const report=store.reportSummary({from:url.searchParams.get('from'),to:url.searchParams.get('to')});
+    const selectedExpenses=localFinance.expenses.filter((item)=>item.occurredOn>=report.period.from&&item.occurredOn<=report.period.to);
+    const operatingExpenses=selectedExpenses.filter((item)=>item.status==='POSTED'&&item.cashFlowGroup==='OPERATING').reduce((sum,item)=>sum+item.amount,0);
+    const cashOutflow=selectedExpenses.filter((item)=>item.status==='POSTED').reduce((sum,item)=>sum+item.amount,0);
+    const metrics={...operatingProfitSummary({netSales:report.metrics.netSales,costOfGoods:report.metrics.costOfGoods,operatingExpenses}),receivables:0,payables:0};
+    const daily=report.daily.map((day)=>{
+      const expenses=selectedExpenses.filter((item)=>item.status==='POSTED'&&item.cashFlowGroup==='OPERATING'&&item.occurredOn===day.date).reduce((sum,item)=>sum+item.amount,0);
+      return{date:day.date,netSales:day.netSales,grossProfit:day.grossProfit,expenses,operatingProfit:day.grossProfit-expenses};
+    });
+    const inventory=store.inventory(),catalog=store.catalog();
+    const products=catalog.map((product)=>{
+      const balance=inventory.filter((item)=>item.product_id===product.id).reduce((row,item)=>({qty:row.qty+Number(item.quantity),value:row.value+Number(item.quantity)*Number(item.avg_cost)}),{qty:0,value:0});
+      const sold=report.products.find((item)=>item.productId===product.id)??{netQty:0,netRevenue:0,grossProfit:0};
+      const health=productHealth({stockQty:balance.qty,netQty:sold.netQty,netRevenue:sold.netRevenue,grossProfit:sold.grossProfit,lastSaleOn:sold.netQty>0?report.period.to:null,asOf:report.period.to,fastMoving:report.products.slice(0,Math.max(1,Math.ceil(report.products.length/5))).some((item)=>item.productId===product.id)});
+      return{productId:product.id,sku:product.sku,productName:product.name,category:product.category,brand:product.brand,stockQty:balance.qty,stockValue:balance.value,netQty:sold.netQty,netRevenue:sold.netRevenue,grossProfit:sold.grossProfit,lastSaleOn:sold.netQty>0?report.period.to:null,...health};
+    }).filter((item)=>item.stockQty||item.netQty);
+    const expenseBreakdown=localFinance.categories.map((category)=>({categoryId:category.id,categoryName:category.name,cashFlowGroup:category.cash_flow_group,amount:selectedExpenses.filter((item)=>item.status==='POSTED'&&item.categoryId===category.id).reduce((sum,item)=>sum+item.amount,0)}));
+    return json(response,200,{period:report.period,metrics,daily,expenses:selectedExpenses,expenseBreakdown,
+      cashFlow:{totalInflow:report.metrics.netSales,totalOutflow:cashOutflow,netCashFlow:report.metrics.netSales-cashOutflow,methods:[{method:'CASH',inflow:report.metrics.netSales,outflow:cashOutflow,net:report.metrics.netSales-cashOutflow}]},
+      aging:{receivables:{current:0,days1To30:0,days31To60:0,daysOver60:0,dueNext30:0},payables:{current:0,days1To30:0,days31To60:0,daysOver60:0,dueNext30:0}},
+      supplierActions:[],customerActions:[],products,categories:localFinance.categories,outlets:localOutletSettings,generatedAt:new Date().toISOString()});
+  }
+
+  if(request.method==='POST'&&url.pathname==='/api/expense-categories'){
+    if(!requirePermission(request,response,PERMISSIONS.OWNER_FINANCE))return;
+    const input=await bodyOf(request),existing=localFinance.categories.find((item)=>item.name.toLowerCase()===String(input.name).trim().toLowerCase());
+    if(existing){existing.cash_flow_group=input.cashFlowGroup;return json(response,200,existing);}
+    const row={id:crypto.randomUUID(),name:String(input.name).trim(),cash_flow_group:input.cashFlowGroup,active:true};
+    localFinance.categories.push(row);return json(response,200,row);
+  }
+
+  if(request.method==='POST'&&url.pathname==='/api/outlet-expenses'){
+    const session=requirePermission(request,response,PERMISSIONS.OWNER_FINANCE);if(!session)return;
+    const input=await bodyOf(request),key=request.headers['idempotency-key'];
+    const existing=localFinance.expenses.find((item)=>item.idempotencyKey===key);if(existing)return json(response,200,{id:existing.id,expenseNo:existing.expenseNo,duplicate:true});
+    const category=localFinance.categories.find((item)=>item.id===input.categoryId),outlet=localOutletSettings.find((item)=>item.id===input.outletId);
+    if(!category||!outlet)return json(response,400,{error:'Kategori atau outlet tidak valid'});
+    const row={id:crypto.randomUUID(),idempotencyKey:key,expenseNo:`BYA-DEMO-${String(localFinance.expenses.length+1).padStart(4,'0')}`,
+      occurredOn:input.occurredOn,outletId:outlet.id,outletName:outlet.name,categoryId:category.id,categoryName:category.name,
+      cashFlowGroup:category.cash_flow_group,amount:Number(input.amount),paymentMethod:input.paymentMethod,reference:input.reference||null,
+      vendorName:input.vendorName||null,note:input.note,status:'POSTED',createdBy:session.user.id};
+    localFinance.expenses.unshift(row);return json(response,201,{id:row.id,expenseNo:row.expenseNo,amount:row.amount,duplicate:false});
+  }
+
+  if(request.method==='POST'&&/^\/api\/outlet-expenses\/[^/]+\/void$/.test(url.pathname)){
+    if(!requirePermission(request,response,PERMISSIONS.OWNER_FINANCE))return;
+    const row=localFinance.expenses.find((item)=>item.id===url.pathname.split('/')[3]);if(!row)return json(response,404,{error:'Biaya tidak ditemukan'});
+    row.status='VOIDED';row.voidReason=(await bodyOf(request)).reason;return json(response,200,row);
   }
 
   if (request.method === 'GET' && url.pathname === '/api/audit') {

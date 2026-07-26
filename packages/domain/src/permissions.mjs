@@ -11,7 +11,8 @@ export const PERMISSIONS = Object.freeze({
   MANAGE_USERS: 'identity.manage',
   WORKFORCE_SELF: 'workforce.self',
   MANAGE_WORKFORCE: 'workforce.manage',
-  MANAGE_APPROVALS: 'approval.manage'
+  MANAGE_APPROVALS: 'approval.manage',
+  OWNER_FINANCE: 'finance.owner'
 });
 
 export const ROLE_PERMISSIONS = Object.freeze({

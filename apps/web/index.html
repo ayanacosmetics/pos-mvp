@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#174c4f">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=51">
+  <link rel="stylesheet" href="/styles.css?v=52">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -82,6 +82,15 @@
           <button data-page="reports-audit" data-target-page="reports" data-report-view="audit" class="feature-nav-item" data-permission="audit.view"><span>Audit log</span><small>Aktivitas sensitif</small></button>
           <button data-page="sync-review" class="feature-nav-item" data-permission="audit.view"><span>Sinkronisasi</span><small>Konflik transaksi offline <b id="sync-review-nav-count" class="nav-count hidden">0</b></small></button>
         </div>
+        <button data-nav-group="finance" class="nav-item" aria-expanded="false"><span>Rp</span><span>Keuangan<small>Akuntansi dan analitik owner</small></span><b>›</b></button>
+        <div data-nav-panel="finance" class="feature-nav-panel">
+          <button data-page="owner-profit-loss" class="feature-nav-item" data-permission="finance.owner"><span>Laba rugi</span><small>Penjualan, HPP, biaya, laba</small></button>
+          <button data-page="owner-expenses" class="feature-nav-item" data-permission="finance.owner"><span>Biaya outlet</span><small>Kategori dan pengeluaran</small></button>
+          <button data-page="owner-cashflow" class="feature-nav-item" data-permission="finance.owner"><span>Arus kas</span><small>Masuk, keluar, dan proyeksi</small></button>
+          <button data-page="owner-aging" class="feature-nav-item" data-permission="finance.owner"><span>Aging hutang/piutang</span><small>Tagihan yang perlu ditindaklanjuti</small></button>
+          <button data-page="owner-product-analytics" class="feature-nav-item" data-permission="finance.owner"><span>Kesehatan produk</span><small>Cepat, lambat, margin, dead stock</small></button>
+          <button data-page="owner-accountant-export" class="feature-nav-item" data-permission="finance.owner"><span>Ekspor akuntan</span><small>Data siap olah dalam CSV</small></button>
+        </div>
         <button data-nav-group="workforce" class="nav-item" aria-expanded="false"><span>♙</span><span>Karyawan<small>Jadwal, target, approval</small></span><b>›</b></button>
         <div data-nav-panel="workforce" class="feature-nav-panel">
           <button data-page="workforce-schedule" class="feature-nav-item" data-permission="workforce.self"><span>Jadwal & absensi</span><small>Jam kerja dan kehadiran</small></button>
@@ -102,7 +111,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Operasional · v1.25.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Owner · v1.26.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -332,6 +341,45 @@
         <div class="report-grid"><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">KINERJA OUTLET</p><h2>Kontribusi per lokasi usaha</h2></div></div><div id="outlet-performance"></div></div><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">PEMBELIAN</p><h2>Nilai penerimaan per supplier</h2></div></div><div id="supplier-purchases"></div></div></div>
         <div class="surface report-wide-section"><div class="report-section-heading"><div><p class="eyebrow">TRANSAKSI TERBARU</p><h2>Penjualan dan dampak retur</h2></div></div><div id="recent-sales" class="table-wrap"></div></div>
         <div class="surface report-wide-section"><div class="report-section-heading"><div><p class="eyebrow">AUDIT LOG</p><h2>Aktivitas sensitif terbaru</h2></div></div><div id="audit-logs"></div></div>
+      </div></section>
+
+      <section id="page-owner-profit-loss" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">KEUANGAN OWNER</p><h1>Laba rugi operasional</h1><p class="muted">Penjualan bersih dikurangi HPP dan biaya outlet yang sudah diposting.</p></div><button id="refresh-owner-finance" class="button secondary" type="button">Muat ulang</button></div>
+        <div class="surface owner-finance-filter"><label>Dari tanggal<input id="owner-finance-from" type="date"></label><label>Sampai tanggal<input id="owner-finance-to" type="date"></label><label>Outlet<select id="owner-finance-outlet"><option value="">Semua outlet</option></select></label><button id="apply-owner-finance" class="button primary" type="button">Tampilkan</button></div>
+        <div id="owner-finance-status" class="report-status muted">Memuat laporan keuangan...</div>
+        <div id="owner-profit-metrics" class="report-cards owner-report-cards"></div>
+        <section class="surface"><div class="report-section-heading"><div><p class="eyebrow">PER HARI</p><h2>Laba setelah biaya operasional</h2></div></div><div id="owner-profit-daily" class="table-wrap"></div></section>
+      </div></section>
+
+      <section id="page-owner-expenses" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">BUKU BIAYA</p><h1>Biaya outlet</h1><p class="muted">Setiap biaya memiliki nomor dokumen, kategori, outlet, dan jejak pembatalan.</p></div></div>
+        <div class="owner-finance-grid">
+          <form id="outlet-expense-form" class="surface"><p class="eyebrow">CATAT BIAYA</p><div class="form-grid compact"><label>Tanggal<input id="expense-date" type="date" required></label><label>Outlet<select id="expense-outlet" required></select></label><label>Kategori<select id="expense-category" required></select></label><label>Nominal<input id="expense-amount" type="number" min="1" required></label><label>Metode<select id="expense-method"><option value="CASH">Tunai</option><option value="TRANSFER">Transfer</option><option value="QRIS">QRIS</option><option value="EDC">EDC</option><option value="OTHER">Lainnya</option></select></label><label>Referensi<input id="expense-reference" placeholder="Wajib untuk non-tunai"></label><label>Vendor<input id="expense-vendor" maxlength="100" placeholder="Opsional"></label></div><label>Keterangan<textarea id="expense-note" minlength="3" maxlength="240" required></textarea></label><button class="button primary" type="submit">Simpan biaya</button></form>
+          <form id="expense-category-form" class="surface"><p class="eyebrow">KATEGORI BIAYA</p><label>Nama kategori<input id="expense-category-name" minlength="2" maxlength="80" required></label><label>Kelompok arus kas<select id="expense-category-group"><option value="OPERATING">Operasional</option><option value="INVESTING">Investasi</option><option value="FINANCING">Pendanaan</option></select></label><button class="button secondary" type="submit">Tambah kategori</button><div id="expense-breakdown" class="expense-breakdown"></div></form>
+        </div>
+        <section class="surface report-wide-section"><div class="report-section-heading"><div><p class="eyebrow">RIWAYAT BIAYA</p><h2>Dokumen periode terpilih</h2></div></div><div id="owner-expense-list" class="table-wrap"></div></section>
+      </div></section>
+
+      <section id="page-owner-cashflow" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">LIKUIDITAS</p><h1>Arus kas</h1><p class="muted">Menggabungkan penerimaan penjualan/piutang dengan pembayaran supplier, refund, dan biaya.</p></div></div>
+        <div id="owner-cashflow-metrics" class="report-cards"></div>
+        <div class="owner-finance-grid"><section class="surface"><p class="eyebrow">PER METODE</p><div id="owner-cashflow-methods"></div></section><section class="surface"><p class="eyebrow">PROYEKSI 30 HARI</p><div id="owner-cashflow-projection"></div></section></div>
+      </div></section>
+
+      <section id="page-owner-aging" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">TINDAK LANJUT TAGIHAN</p><h1>Aging hutang dan piutang</h1><p class="muted">Prioritaskan saldo paling lama dan jatuh tempo terdekat.</p></div></div>
+        <div class="owner-finance-grid"><section class="surface"><p class="eyebrow">PIUTANG PELANGGAN</p><div id="owner-receivable-aging" class="customer-aging-buckets"></div><div id="owner-customer-actions" class="table-wrap"></div></section><section class="surface"><p class="eyebrow">HUTANG SUPPLIER</p><div id="owner-payable-aging" class="customer-aging-buckets"></div><div id="owner-supplier-actions" class="table-wrap"></div></section></div>
+      </div></section>
+
+      <section id="page-owner-product-analytics" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">KESEHATAN PERSEDIAAN</p><h1>Produk cepat, lambat, dan berisiko</h1><p class="muted">Dead stock: masih ada stok tetapi tidak terjual lebih dari 90 hari.</p></div></div>
+        <div class="surface product-health-filter"><label>Cari produk<input id="owner-product-search" placeholder="Nama, SKU, kategori"></label><label>Status<select id="owner-product-status"><option value="">Semua status</option><option value="DEAD">Dead stock</option><option value="SLOW">Lambat</option><option value="FAST">Cepat</option><option value="LOW_MARGIN">Margin rendah</option></select></label></div>
+        <section class="surface report-wide-section"><div id="owner-product-health" class="table-wrap"></div></section>
+      </div></section>
+
+      <section id="page-owner-accountant-export" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">SERAH TERIMA DATA</p><h1>Ekspor untuk akuntan</h1><p class="muted">CSV berisi ringkasan laba rugi, arus kas, biaya, aging, dan persediaan berisiko.</p></div></div>
+        <section class="surface accountant-export-card"><div><strong>Data mengikuti periode dan outlet pada halaman Laba rugi.</strong><p id="accountant-export-summary" class="muted"></p></div><button id="export-accountant-csv" class="button primary" type="button">Unduh paket CSV</button></section>
       </div></section>
 
       <section id="page-sync-review" class="page"><div class="content-width">
@@ -590,6 +638,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=51"></script>
+  <script type="module" src="/app.js?v=52"></script>
 </body>
 </html>

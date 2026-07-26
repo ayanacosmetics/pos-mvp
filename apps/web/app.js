@@ -6,7 +6,7 @@ import { customerReceiptView } from './receipt.mjs';
 import { disconnectBluetoothPrinter, printEscPosReceipt, printEscPosTest, printerConnected, printerSelected, restoreGrantedPrinter, selectBluetoothPrinter, supportsBluetoothClassicPrinting } from './escpos-printer.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] } };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] } };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -191,6 +191,7 @@ async function applyBootstrap(data, { offline = false } = {}) {
   if (!offline && state.session.permissions.includes('inventory.manage')) await loadInventory();
   if (!offline && state.session.permissions.includes('report.view')) await loadReport();
   if (!offline && state.session.permissions.includes('report.view')) await loadCrmDashboard();
+  if (!offline && state.session.permissions.includes('finance.owner')) await loadOwnerFinance();
   if (!offline && state.session.permissions.includes('audit.view')) { await loadSyncReview(); await loadImportHistory(); }
   if (!offline && state.session.permissions.includes('identity.manage')) await loadBackupHistory();
   if (!offline && state.session.permissions.includes('identity.manage')) await loadSettings();
@@ -2660,6 +2661,159 @@ function storeDateToday() {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
+function initializeOwnerFinanceFilters() {
+  const today = storeDateToday();
+  if (!el('owner-finance-to').value) el('owner-finance-to').value = today;
+  if (!el('owner-finance-from').value) el('owner-finance-from').value = shiftReportDate(today, -29);
+  if (!el('expense-date').value) el('expense-date').value = today;
+  const selected = el('owner-finance-outlet').value;
+  const options = '<option value="">Semua outlet</option>' + state.outlets.map((outlet) => `<option value="${escapeHtml(outlet.id)}">${escapeHtml(outlet.name)}</option>`).join('');
+  el('owner-finance-outlet').innerHTML = options;
+  if (state.outlets.some((outlet) => outlet.id === selected)) el('owner-finance-outlet').value = selected;
+  el('expense-outlet').innerHTML = state.outlets.map((outlet) => `<option value="${escapeHtml(outlet.id)}">${escapeHtml(outlet.name)}</option>`).join('');
+}
+
+function agingCards(targetId, buckets = {}) {
+  el(targetId).innerHTML = [
+    ['Belum jatuh tempo', buckets.current ?? 0, 'safe'],
+    ['1–30 hari', buckets.days1To30 ?? 0, 'notice'],
+    ['31–60 hari', buckets.days31To60 ?? 0, 'warning'],
+    ['Lebih 60 hari', buckets.daysOver60 ?? 0, 'danger'],
+  ].map(([label, value, level]) => `<div class="${level}"><span>${label}</span><strong>${money.format(value)}</strong></div>`).join('');
+}
+
+function renderOwnerProductHealth() {
+  const data = state.ownerFinance;
+  if (!data) return;
+  const query = el('owner-product-search').value.trim().toLowerCase();
+  const status = el('owner-product-status').value;
+  const products = data.products.filter((product) => {
+    const matchesQuery = !query || `${product.productName} ${product.sku} ${product.category} ${product.brand ?? ''}`.toLowerCase().includes(query);
+    const matchesStatus = !status
+      || (status === 'DEAD' && product.deadStock)
+      || (status === 'SLOW' && product.slowMoving)
+      || (status === 'FAST' && product.fastMoving)
+      || (status === 'LOW_MARGIN' && product.lowMargin);
+    return matchesQuery && matchesStatus;
+  });
+  el('owner-product-health').innerHTML = reportTable(
+    ['Produk', 'Stok', 'Penjualan', 'Omzet', 'Margin', 'Terakhir terjual', 'Status'],
+    products.map((product) => {
+      const badges = [
+        product.deadStock ? '<span class="status-badge danger">Dead stock</span>' : '',
+        product.slowMoving && !product.deadStock ? '<span class="status-badge warning">Lambat</span>' : '',
+        product.fastMoving ? '<span class="status-badge approved">Cepat</span>' : '',
+        product.lowMargin ? '<span class="status-badge submitted">Margin rendah</span>' : '',
+      ].filter(Boolean).join(' ') || '<span class="status-badge draft">Normal</span>';
+      return `<tr><td><strong>${escapeHtml(product.productName)}</strong><br><small>${escapeHtml(product.sku)} · ${escapeHtml(product.category)}</small></td><td>${Number(product.stockQty).toLocaleString('id-ID')}<br><small>${money.format(product.stockValue)}</small></td><td>${Number(product.netQty).toLocaleString('id-ID')}</td><td>${money.format(product.netRevenue)}</td><td class="${Number(product.marginPercent)<15?'negative':'positive'}">${Number(product.marginPercent).toLocaleString('id-ID',{maximumFractionDigits:2})}%</td><td>${product.lastSaleOn?new Date(`${product.lastSaleOn}T00:00:00`).toLocaleDateString('id-ID'):'Belum pernah'}</td><td>${badges}</td></tr>`;
+    }),
+  );
+}
+
+function renderOwnerFinance() {
+  const data = state.ownerFinance;
+  if (!data) return;
+  const metrics = data.metrics;
+  el('owner-profit-metrics').innerHTML = [
+    ['Penjualan bersih', metrics.netSales],
+    ['HPP', metrics.costOfGoods],
+    ['Laba kotor', metrics.grossProfit],
+    ['Biaya operasional', metrics.operatingExpenses],
+    ['Laba operasional', metrics.operatingProfit],
+    ['Margin operasional', `${Number(metrics.operatingMarginPercent).toLocaleString('id-ID',{maximumFractionDigits:2})}%`, true],
+  ].map(([label, value, text]) => `<div class="metric"><span>${label}</span><strong class="${label==='Laba operasional'&&Number(metrics.operatingProfit)<0?'negative':''}">${text?value:money.format(value)}</strong></div>`).join('');
+  el('owner-profit-daily').innerHTML = reportTable(
+    ['Tanggal','Penjualan bersih','Laba kotor','Biaya','Laba operasional'],
+    [...data.daily].reverse().map((item) => `<tr><td>${new Date(`${item.date}T00:00:00`).toLocaleDateString('id-ID')}</td><td>${money.format(item.netSales)}</td><td>${money.format(item.grossProfit)}</td><td>${money.format(item.expenses)}</td><td class="${Number(item.operatingProfit)>=0?'positive':'negative'}"><strong>${money.format(item.operatingProfit)}</strong></td></tr>`),
+  );
+  el('expense-category').innerHTML = data.categories.map((category) => `<option value="${escapeHtml(category.id)}">${escapeHtml(category.name)}</option>`).join('');
+  el('expense-breakdown').innerHTML = data.expenseBreakdown.filter((item) => Number(item.amount)>0).map((item) => `<div><span>${escapeHtml(item.categoryName)}</span><strong>${money.format(item.amount)}</strong></div>`).join('') || '<small class="muted">Belum ada biaya pada periode ini.</small>';
+  el('owner-expense-list').innerHTML = reportTable(
+    ['Tanggal','Dokumen','Outlet','Kategori','Keterangan','Metode','Nominal',''],
+    data.expenses.map((expense) => `<tr class="${expense.status==='VOIDED'?'voided-row':''}"><td>${new Date(`${expense.occurredOn}T00:00:00`).toLocaleDateString('id-ID')}</td><td><strong>${escapeHtml(expense.expenseNo)}</strong><br><small>${escapeHtml(expense.status)}</small></td><td>${escapeHtml(expense.outletName)}</td><td>${escapeHtml(expense.categoryName)}</td><td>${escapeHtml(expense.note)}${expense.vendorName?`<br><small>${escapeHtml(expense.vendorName)}</small>`:''}</td><td>${escapeHtml(expense.paymentMethod)}${expense.reference?`<br><small>${escapeHtml(expense.reference)}</small>`:''}</td><td><strong>${money.format(expense.amount)}</strong></td><td>${expense.status==='POSTED'?`<button class="link-button void-expense" data-id="${escapeHtml(expense.id)}" type="button">Batalkan</button>`:''}</td></tr>`),
+  );
+  const cash = data.cashFlow;
+  el('owner-cashflow-metrics').innerHTML = [
+    ['Kas masuk', cash.totalInflow],['Kas keluar', cash.totalOutflow],['Arus kas bersih', cash.netCashFlow],
+  ].map(([label,value]) => `<div class="metric"><span>${label}</span><strong class="${label==='Arus kas bersih'&&Number(value)<0?'negative':''}">${money.format(value)}</strong></div>`).join('');
+  el('owner-cashflow-methods').innerHTML = cash.methods.map((item) => `<div class="cashflow-method"><strong>${escapeHtml(item.method)}</strong><span>Masuk ${money.format(item.inflow)}</span><span>Keluar ${money.format(item.outflow)}</span><b class="${Number(item.net)>=0?'positive':'negative'}">${money.format(item.net)}</b></div>`).join('') || '<div class="empty-state compact">Belum ada arus kas.</div>';
+  const dueReceivable = Number(data.aging.receivables.dueNext30 ?? 0);
+  const duePayable = Number(data.aging.payables.dueNext30 ?? 0);
+  el('owner-cashflow-projection').innerHTML = `<div class="projection-value"><span>Piutang jatuh tempo</span><strong>${money.format(dueReceivable)}</strong></div><div class="projection-value"><span>Hutang jatuh tempo</span><strong>${money.format(duePayable)}</strong></div><div class="projection-value total"><span>Proyeksi bersih</span><strong class="${dueReceivable-duePayable>=0?'positive':'negative'}">${money.format(dueReceivable-duePayable)}</strong></div>`;
+  agingCards('owner-receivable-aging', data.aging.receivables);
+  agingCards('owner-payable-aging', data.aging.payables);
+  el('owner-customer-actions').innerHTML = reportTable(['Pelanggan','Struk','Jatuh tempo','Sisa','Terlambat'],data.customerActions.map((item)=>`<tr><td>${escapeHtml(item.customerName)}</td><td>${escapeHtml(item.receiptNo)}</td><td>${item.dueOn?new Date(`${item.dueOn}T00:00:00`).toLocaleDateString('id-ID'):'-'}</td><td><strong>${money.format(item.outstanding)}</strong></td><td>${Number(item.daysOverdue)} hari</td></tr>`));
+  el('owner-supplier-actions').innerHTML = reportTable(['Supplier','Faktur','Jatuh tempo','Sisa','Terlambat'],data.supplierActions.map((item)=>`<tr><td>${escapeHtml(item.supplierName)}</td><td>${escapeHtml(item.documentNo)}</td><td>${item.dueOn?new Date(`${item.dueOn}T00:00:00`).toLocaleDateString('id-ID'):'-'}</td><td><strong>${money.format(item.outstanding)}</strong></td><td>${Number(item.daysOverdue)} hari</td></tr>`));
+  renderOwnerProductHealth();
+  el('accountant-export-summary').textContent = `Periode ${data.period.from}–${data.period.to} · ${data.expenses.length} dokumen biaya · ${data.products.length} produk dianalisis.`;
+  el('owner-finance-status').textContent = `Periode ${data.period.from}–${data.period.to} · Dibuat ${new Date(data.generatedAt).toLocaleString('id-ID')}`;
+}
+
+async function loadOwnerFinance() {
+  initializeOwnerFinanceFilters();
+  const from=el('owner-finance-from').value,to=el('owner-finance-to').value;
+  if(!from||!to||from>to)return toast('Periode laporan keuangan tidak valid.');
+  const params=new URLSearchParams({from,to});
+  if(el('owner-finance-outlet').value)params.set('outletId',el('owner-finance-outlet').value);
+  el('owner-finance-status').textContent='Menghitung laba, kas, aging, dan kesehatan produk...';
+  try{
+    state.ownerFinance=await request(`/api/owner-finance?${params}`);
+    renderOwnerFinance();
+  }catch(error){
+    el('owner-finance-status').textContent=`Laporan keuangan belum dapat dimuat: ${error.message}`;
+    toast(error.message);
+  }
+}
+
+async function saveOutletExpense(event) {
+  event.preventDefault();
+  try{
+    await request('/api/outlet-expenses',{method:'POST',headers:{'idempotency-key':crypto.randomUUID()},body:JSON.stringify({
+      occurredOn:el('expense-date').value,outletId:el('expense-outlet').value,
+      categoryId:el('expense-category').value,amount:Number(el('expense-amount').value),
+      paymentMethod:el('expense-method').value,reference:el('expense-reference').value,
+      vendorName:el('expense-vendor').value,note:el('expense-note').value,
+      shiftId:el('expense-method').value==='CASH'&&state.currentShift?.outlet_id===el('expense-outlet').value?state.currentShift.id:null,
+    })});
+    el('outlet-expense-form').reset();el('expense-date').value=storeDateToday();
+    toast('Biaya outlet berhasil dicatat');await loadOwnerFinance();
+  }catch(error){toast(error.message);}
+}
+
+async function saveExpenseCategory(event) {
+  event.preventDefault();
+  try{
+    await request('/api/expense-categories',{method:'POST',body:JSON.stringify({
+      name:el('expense-category-name').value,cashFlowGroup:el('expense-category-group').value,
+    })});
+    el('expense-category-name').value='';toast('Kategori biaya tersimpan');await loadOwnerFinance();
+  }catch(error){toast(error.message);}
+}
+
+async function voidExpense(event) {
+  const button=event.target.closest('.void-expense');if(!button)return;
+  const reason=prompt('Alasan pembatalan biaya (minimal 5 karakter):');if(!reason)return;
+  try{await request(`/api/outlet-expenses/${button.dataset.id}/void`,{method:'POST',body:JSON.stringify({reason})});toast('Biaya berhasil dibatalkan');await loadOwnerFinance();}
+  catch(error){toast(error.message);}
+}
+
+function exportAccountantCsv() {
+  const data=state.ownerFinance;if(!data)return toast('Muat laporan keuangan terlebih dahulu.');
+  const rows=[
+    ['BAGIAN','TANGGAL/DOKUMEN','KETERANGAN','DEBIT/MASUK','KREDIT/KELUAR','SALDO/NILAI'],
+    ['LABA RUGI',data.period.from+' s.d. '+data.period.to,'Penjualan bersih',data.metrics.netSales,'',data.metrics.netSales],
+    ['LABA RUGI','','HPP','',data.metrics.costOfGoods,data.metrics.grossProfit],
+    ['LABA RUGI','','Biaya operasional','',data.metrics.operatingExpenses,data.metrics.operatingProfit],
+  ];
+  for(const item of data.expenses)rows.push(['BIAYA',item.expenseNo,`${item.categoryName} · ${item.outletName} · ${item.note}`,'',item.status==='POSTED'?item.amount:0,item.paymentMethod]);
+  for(const item of data.cashFlow.methods)rows.push(['ARUS KAS',item.method,'Rekap metode',item.inflow,item.outflow,item.net]);
+  for(const item of data.customerActions)rows.push(['PIUTANG',item.receiptNo,item.customerName,item.outstanding,'',item.dueOn??'']);
+  for(const item of data.supplierActions)rows.push(['HUTANG',item.documentNo,item.supplierName,'',item.outstanding,item.dueOn??'']);
+  for(const item of data.products.filter((product)=>product.deadStock||product.lowMargin||product.slowMoving))rows.push(['PERSEDIAAN',item.sku,`${item.productName} · ${item.deadStock?'DEAD STOCK':item.lowMargin?'MARGIN RENDAH':'LAMBAT'}`,'','',item.stockValue]);
+  const blob=new Blob([`\uFEFF${rows.map((row)=>row.map(csvCell).join(',')).join('\r\n')}`],{type:'text/csv;charset=utf-8'});
+  const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=`paket-akuntan-${data.period.from}-${data.period.to}.csv`;link.click();URL.revokeObjectURL(link.href);
+}
+
 function shiftReportDate(value, days) {
   const date = new Date(`${value}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
@@ -3524,6 +3678,14 @@ el('refresh-report').addEventListener('click', loadReport);
 el('apply-report-filter').addEventListener('click', loadReport);
 el('report-preset').addEventListener('change', applyReportPreset);
 el('export-report').addEventListener('click', exportReportCsv);
+el('refresh-owner-finance').addEventListener('click',loadOwnerFinance);
+el('apply-owner-finance').addEventListener('click',loadOwnerFinance);
+el('outlet-expense-form').addEventListener('submit',saveOutletExpense);
+el('expense-category-form').addEventListener('submit',saveExpenseCategory);
+el('owner-expense-list').addEventListener('click',voidExpense);
+el('owner-product-search').addEventListener('input',renderOwnerProductHealth);
+el('owner-product-status').addEventListener('change',renderOwnerProductHealth);
+el('export-accountant-csv').addEventListener('click',exportAccountantCsv);
 el('refresh-users').addEventListener('click', loadUsers);
 el('create-user-form').addEventListener('submit', createUser);
 el('user-search').addEventListener('input', renderUsers);

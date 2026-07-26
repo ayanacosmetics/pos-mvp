@@ -6,7 +6,7 @@ import { applyVoucher } from '../packages/domain/src/loyalty.mjs';
 import { calculateEmployeeCommission } from '../packages/domain/src/employee-operations.mjs';
 
 const PERMISSIONS = {
-  OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage','workforce.self','workforce.manage','approval.manage'],
+  OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner'],
   ADMIN: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','workforce.self','workforce.manage','approval.manage'],
   CASHIER: ['pos.sell','workforce.self'],
   PURCHASING: ['purchasing.view_cost','purchasing.receive','workforce.self'],
@@ -18,6 +18,7 @@ const BACKUP_TABLES = [
   'customers','loyalty_settings','customer_tiers','customer_point_entries','vouchers','voucher_redemptions','customer_account_entries','customer_payment_receipts','customer_payment_allocations','suppliers','supplier_bills','supplier_payable_entries','supplier_payment_receipts','supplier_payment_allocations','products','product_units','price_rules','promotions','promotion_versions','promotion_redemptions',
   'shifts','cash_movements','shift_reconciliations','sales','sale_items','payments','parked_sales','sale_adjustment_authorizations',
   'employee_schedules','attendance_records','employee_targets','approval_policies','approval_requests',
+  'expense_categories','outlet_expenses',
   'purchase_planning_settings','restock_policies','purchase_orders','purchase_order_items','purchase_receipts','purchase_receipt_items','supplier_returns','supplier_return_items',
   'stock_balances','stock_ledger','inventory_batches','inventory_batch_movements',
   'stock_transfers','stock_transfer_items','stock_counts','stock_count_items',
@@ -809,7 +810,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '1.25.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '1.26.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'login') {
@@ -2222,6 +2223,76 @@ async function routeRequest(request, response, route) {
       return{...supplier,returnCount:Number(returned?.returnCount??0),returnCredit,netPurchaseValue:Number(supplier.purchaseValue??0)-returnCredit};
     });
     return send(response, 200, report);
+  }
+
+  if(request.method==='GET'&&route==='owner-finance'){
+    requirePermission(session,'finance.owner');
+    const timezone=context.outlet.timezone??'Asia/Makassar';
+    const today=todayInTimeZone(new Date(),timezone);
+    const from=queryValue(request,'from')??shiftIsoDate(today,-29);
+    const to=queryValue(request,'to')??today;
+    const outletId=queryValue(request,'outletId');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to){
+      throw Object.assign(new Error('Periode laporan keuangan tidak valid'),{status:400});
+    }
+    if(outletId&&!context.outlets.some((outlet)=>outlet.id===outletId)){
+      throw Object.assign(new Error('Outlet laporan tidak dapat diakses'),{status:403});
+    }
+    const outletIds=outletId?[outletId]:context.outlets.map((outlet)=>outlet.id);
+    const [finance,products,categories]=await Promise.all([
+      rpc('report_owner_finance',{
+        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_outlet_ids:outletIds,
+        p_from:from,p_to:to,p_timezone:timezone
+      }),
+      rpc('owner_product_analytics',{
+        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_outlet_ids:outletIds,
+        p_from:from,p_to:to,p_timezone:timezone
+      }),
+      rest('expense_categories',`tenant_id=eq.${context.tenantId}&active=eq.true&select=*&order=name`)
+    ]);
+    return send(response,200,{...finance,products:products.products??[],categories,outlets:context.outlets});
+  }
+
+  if(request.method==='POST'&&route==='expense-categories'){
+    requirePermission(session,'finance.owner');
+    const input=bodyOf(request),name=String(input.name??'').trim();
+    const cashFlowGroup=['OPERATING','INVESTING','FINANCING'].includes(input.cashFlowGroup)?input.cashFlowGroup:'OPERATING';
+    if(name.length<2||name.length>80)throw Object.assign(new Error('Nama kategori harus 2–80 karakter'),{status:400});
+    const rows=await rest('expense_categories','on_conflict=tenant_id,name',{
+      method:'POST',prefer:'resolution=merge-duplicates,return=representation',
+      body:{tenant_id:context.tenantId,name,cash_flow_group:cashFlowGroup,active:true,
+        created_by:session.authUser.id,updated_at:new Date().toISOString()}
+    });
+    await rest('audit_logs','',{method:'POST',body:{
+      tenant_id:context.tenantId,actor_id:session.authUser.id,action:'EXPENSE_CATEGORY_SAVED',
+      entity_type:'expense_category',entity_id:rows[0].id,
+      details_json:{name,cashFlowGroup,deviceId:request.headers['x-device-id']||null}
+    }});
+    return send(response,200,rows[0]);
+  }
+
+  if(request.method==='POST'&&route==='outlet-expenses'){
+    requirePermission(session,'finance.owner');
+    const input=bodyOf(request),key=request.headers['idempotency-key'];
+    if(!key)throw Object.assign(new Error('Idempotency-Key wajib diisi'),{status:400});
+    if(!context.outlets.some((outlet)=>outlet.id===input.outletId))throw Object.assign(new Error('Outlet biaya tidak dapat diakses'),{status:403});
+    const result=await rpc('record_outlet_expense',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:key,
+      p_outlet_id:input.outletId,p_category_id:input.categoryId,p_occurred_on:input.occurredOn,
+      p_amount:moneyInput(input.amount,'Nominal biaya'),p_payment_method:input.paymentMethod,
+      p_reference:String(input.reference??'').trim(),p_vendor_name:String(input.vendorName??'').trim(),
+      p_note:String(input.note??'').trim(),p_shift_id:input.shiftId||null
+    });
+    return send(response,result.duplicate?200:201,result);
+  }
+
+  if(request.method==='POST'&&/^outlet-expenses\/[^/]+\/void$/.test(route)){
+    requirePermission(session,'finance.owner');
+    const input=bodyOf(request),expenseId=route.split('/')[1];
+    return send(response,200,await rpc('void_outlet_expense',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_expense_id:expenseId,
+      p_reason:String(input.reason??'').trim()
+    }));
   }
 
   if (request.method === 'GET' && route === 'audit') {

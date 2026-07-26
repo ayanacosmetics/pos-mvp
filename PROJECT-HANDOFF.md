@@ -45,6 +45,23 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat berikutnya — belum live
+
+- **Paket Akuntansi dan Analitik Owner v1.26.0** menambahkan enam halaman
+  terpisah di accordion Keuangan: laba rugi, biaya outlet, arus kas, aging,
+  kesehatan produk, dan ekspor akuntan.
+- Biaya memiliki kategori arus kas, nomor dokumen, idempotensi, status
+  posting/pembatalan, hak akses khusus Owner, dan audit.
+- Laba operasional memisahkan penjualan bersih, HPP, biaya operasional, dan
+  pembelian aset/pendanaan. Arus kas tidak menganggap penjualan kredit sebagai
+  kas masuk.
+- Migrasi tunggal:
+  `supabase/migrations/202607270030_owner_accounting_analytics.sql`.
+- Versi kandidat: UI `v1.26.0`, API `1.26.0-cloud`, cache
+  `nusa-pos-shell-v52`; 140 pengujian otomatis lulus.
+- Jangan push/deploy kandidat sebelum pengguna mengonfirmasi SQL `030`
+  berhasil. Setelah konfirmasi, push, deploy, dan verifikasi produksi.
+
 ### Terakhir dikonfirmasi live
 
 - **Paket Operasional Karyawan v1.25.0** live pada 27 Juli 2026.
@@ -410,7 +427,7 @@ Status: migrasi `029`, source, 136 pengujian otomatis, push, deployment, dan
 verifikasi produksi selesai pada 27 Juli 2026. Nomor v1.24 telah dipakai
 aplikasi kasir Android, sehingga paket roadmap ini dirilis sebagai v1.25.0.
 
-### v1.26 — Akuntansi dan analitik owner
+### v1.26 — Akuntansi dan analitik owner (kandidat, menunggu SQL/deployment)
 
 - ringkasan laba rugi operasional;
 - biaya outlet dan kategori biaya;
@@ -418,6 +435,10 @@ aplikasi kasir Android, sehingga paket roadmap ini dirilis sebagai v1.25.0.
 - aging supplier dan pelanggan yang dapat ditindaklanjuti;
 - dashboard tren, produk lambat/cepat, margin rendah, dan dead stock;
 - ekspor yang siap diberikan kepada akuntan.
+
+Status: domain, migrasi `030`, API cloud/lokal, enam halaman responsif,
+hak akses khusus Owner, ekspor CSV, dan 140 pengujian otomatis sudah selesai.
+Belum live sampai SQL, push, deployment, dan verifikasi produksi selesai.
 
 ### v1.27 — Multi-outlet tingkat lanjut
 
