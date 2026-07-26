@@ -47,6 +47,11 @@ kode frontend, dokumentasi publik, atau chat.
 
 ### Terakhir dikonfirmasi live
 
+- **Hotfix v1.24.1** memperbaiki startup aplikasi Android yang tertahan pada
+  “Memulihkan sesi kerja”. WebView native tidak lagi mengakses Web Serial yang
+  tidak tersedia, dan watchdog 12 detik menjamin login tetap dapat ditampilkan.
+- Versi UI `v1.24.1`, API `1.24.1-cloud`, cache `nusa-pos-shell-v50`. Tidak
+  memerlukan SQL maupun APK baru karena aplikasi memuat web produksi.
 - **Rilis v1.24.0 dikonfirmasi live** dan menambahkan aplikasi kasir Android native di
   `apps/android-cashier`.
 - Printer WP58D memakai RFCOMM/SPP langsung dan ESC/POS tanpa kabel, bridge

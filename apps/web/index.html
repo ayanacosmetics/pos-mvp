@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#174c4f">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=49">
+  <link rel="stylesheet" href="/styles.css?v=50">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -94,7 +94,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Operasional · v1.24.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Operasional · v1.24.1</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -535,6 +535,19 @@
   <dialog id="edit-user-dialog"><form id="edit-user-form" class="dialog-card wide user-editor"><div class="comparison-heading"><div><p class="eyebrow">HAK AKSES PENGGUNA</p><h2 id="edit-user-title">Ubah pengguna</h2><p id="edit-user-email" class="muted"></p></div><button id="close-user-editor" class="icon-button" type="button">×</button></div><input id="edit-user-id" type="hidden"><div class="form-grid compact"><label>Nama lengkap<input id="edit-user-name" required></label><label>Peran<select id="edit-user-role"><option value="CASHIER">Kasir</option><option value="PURCHASING">Pembelian</option><option value="WAREHOUSE">Gudang</option><option value="ADMIN">Admin</option><option value="OWNER">Owner</option></select></label></div><fieldset><legend>Penempatan outlet</legend><div id="edit-user-outlets" class="outlet-options"></div><small class="muted">Owner otomatis memiliki akses ke semua outlet.</small></fieldset><label class="switch-row"><input id="edit-user-active" type="checkbox"><span><strong>Akun aktif</strong><small>Pengguna dapat masuk dan bekerja sesuai perannya.</small></span></label><p id="edit-user-error" class="error" role="alert"></p><div class="button-row"><button id="cancel-user-edit" class="button secondary" type="button">Batal</button><button id="save-user" class="button primary" type="submit">Simpan perubahan</button></div></form></dialog>
   <div id="toast" class="toast" role="status"></div>
   <script src="/vendor/zxing-browser.min.js" defer></script>
-  <script type="module" src="/app.js?v=49"></script>
+  <script>
+    window.setTimeout(() => {
+      const session = document.getElementById('session-view');
+      const login = document.getElementById('login-view');
+      const app = document.getElementById('app-view');
+      if (session && !session.classList.contains('hidden') && app?.classList.contains('hidden')) {
+        session.classList.add('hidden');
+        login?.classList.remove('hidden');
+        const message = document.getElementById('login-error');
+        if (message) message.textContent = 'Pemulihan sesi terlalu lama. Silakan masuk kembali.';
+      }
+    }, 12000);
+  </script>
+  <script type="module" src="/app.js?v=50"></script>
 </body>
 </html>

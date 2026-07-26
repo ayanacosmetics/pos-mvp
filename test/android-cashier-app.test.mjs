@@ -22,6 +22,7 @@ const webPrinter = await readFile(
   'utf8',
 );
 const webApp = await readFile(new URL('../apps/web/app.js', import.meta.url), 'utf8');
+const webHtml = await readFile(new URL('../apps/web/index.html', import.meta.url), 'utf8');
 
 test('Android cashier app locks its WebView to the production POS and blocks unsafe file access', () => {
   assert.match(androidBuild, /applicationId\s+"app\.kasirnusa\.cashier"/);
@@ -52,4 +53,10 @@ test('Bluetooth HID scanner input is forwarded to the active POS page', () => {
   assert.match(activity, /now - scannerLastKeyAt > 250/);
   assert.match(webApp, /addEventListener\('kasirnusa:barcode'/);
   assert.match(webApp, /handleNativeScannerBarcode/);
+});
+
+test('Android startup never touches unavailable Web Serial and has a login watchdog', () => {
+  assert.match(webApp, /typeof navigator !== 'undefined' && navigator\.serial/);
+  assert.doesNotMatch(webApp, /if \(supportsBluetoothClassicPrinting\(\)\) \{\s*navigator\.serial/);
+  assert.match(webHtml, /Pemulihan sesi terlalu lama[\s\S]*12000/);
 });

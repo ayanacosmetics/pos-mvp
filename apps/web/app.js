@@ -3535,7 +3535,7 @@ window.addEventListener('appinstalled', () => {
 window.addEventListener('kasirnusa:barcode', (event) => handleNativeScannerBarcode(event.detail?.value));
 updateInstallAppControl();
 restoreGrantedPrinter().then(()=>renderPrinterStatus()).catch(()=>renderPrinterStatus('Izin printer perlu dipilih ulang'));
-if (supportsBluetoothClassicPrinting()) {
+if (typeof navigator !== 'undefined' && navigator.serial) {
   navigator.serial.addEventListener('connect', async () => { await restoreGrantedPrinter(); renderPrinterStatus(); });
   navigator.serial.addEventListener('disconnect', () => renderPrinterStatus('Koneksi printer terputus'));
 }
