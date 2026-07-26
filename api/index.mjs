@@ -111,6 +111,38 @@ async function supabase(path, { method = 'GET', body, token, prefer } = {}) {
 const rest = (table, query = '', options = {}) => supabase(`/rest/v1/${table}${query ? `?${query}` : ''}`, options);
 const rpc = (name, body) => supabase(`/rest/v1/rpc/${name}`, { method: 'POST', body });
 
+function isSaleReceiptCollision(error) {
+  const detail = `${error?.message ?? ''} ${error?.details?.message ?? ''} ${error?.details?.details ?? ''} ${error?.details?.constraint ?? ''}`;
+  return error?.details?.code === '23505'
+    && /sales_tenant_id_receipt_no_key|receipt_no/i.test(detail);
+}
+
+async function repairSaleReceiptSequence(context) {
+  const prefix = String(context.outlet?.receipt_prefix ?? '').trim();
+  if (!prefix) throw new Error('Awalan nomor struk outlet belum dikonfigurasi');
+  const tenantId = encodeURIComponent(context.tenantId);
+  const receipts = await rest(
+    'sales',
+    `tenant_id=eq.${tenantId}&receipt_no=like.${encodeURIComponent(`${prefix}-*`)}&select=receipt_no&limit=10000`
+  );
+  const highest = receipts.reduce((maximum, sale) => {
+    const match = String(sale.receipt_no ?? '').match(new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)$`));
+    return match ? Math.max(maximum, Number(match[1])) : maximum;
+  }, 0);
+  const requiredNext = highest + 1;
+  const kind = `SALE:${context.outlet.id}`;
+  await rest('document_sequences', 'on_conflict=tenant_id,kind', {
+    method: 'POST',
+    prefer: 'resolution=ignore-duplicates,return=minimal',
+    body: { tenant_id: context.tenantId, kind, next_value: requiredNext }
+  });
+  await rest(
+    'document_sequences',
+    `tenant_id=eq.${tenantId}&kind=eq.${encodeURIComponent(kind)}&next_value=lt.${requiredNext}`,
+    { method: 'PATCH', prefer: 'return=minimal', body: { next_value: requiredNext } }
+  );
+}
+
 async function profileFor(userId) {
   const rows = await rest('profiles', `user_id=eq.${encodeURIComponent(userId)}&select=*`);
   return rows[0] ?? null;
@@ -711,7 +743,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '1.21.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '1.21.1-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'login') {
@@ -1019,14 +1051,22 @@ async function routeRequest(request, response, route) {
       });
     }
     const payments=normalizeSalePayments(input,quote.grandTotal);
-    const result = await rpc('complete_sale_v6', {
+    const saleCommand = {
       p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_idempotency_key: key,
       p_outlet_id: context.outlet.id, p_shift_id: input.shiftId, p_customer_id: input.customerId ?? null,
       p_customer_group_id: input.customerGroupId, p_payments:payments, p_quote: quote,
       p_authorization_id: verifiedAuthorization?.approval.id ?? null,
       p_basket_fingerprint: verifiedAuthorization?.fingerprint ?? null,
       p_notes: String(input.notes ?? '').trim().slice(0,500)
-    });
+    };
+    let result;
+    try {
+      result = await rpc('complete_sale_v6', saleCommand);
+    } catch (error) {
+      if (!isSaleReceiptCollision(error)) throw error;
+      await repairSaleReceiptSequence(context);
+      result = await rpc('complete_sale_v6', saleCommand);
+    }
     const tenants = await rest('tenants', `id=eq.${context.tenantId}&select=*`);
     return send(response, 201, { ...result, occurredAt: new Date().toISOString(), cashier: session.profile.display_name, outletName:context.outlet.name, outlet:context.outlet, business:businessPayload(tenants[0]), quote });
   }

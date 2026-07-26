@@ -11,12 +11,13 @@ async function callApi(method,route,body,headers={}){
   return {status:response.statusCode,body:JSON.parse(payload)};
 }
 
-function installCloudMock(onRpc){
+function installCloudMock(onRpc,{collisionOnce=false,onSequenceWrite=()=>{}}={}){
+  let rpcAttempts=0;
   return async(url,options={})=>{
     const target=String(url);
     if(target.endsWith('/auth/v1/user'))return responseOf({id:ids.user});
     if(target.includes('/rest/v1/profiles?'))return responseOf([{user_id:ids.user,tenant_id:ids.tenant,display_name:'Kasir Utama',role:'OWNER',active:true}]);
-    if(target.includes('/rest/v1/outlets?'))return responseOf([{id:ids.outlet,name:'Toko Utama',active:true}]);
+    if(target.includes('/rest/v1/outlets?'))return responseOf([{id:ids.outlet,name:'Toko Utama',receipt_prefix:'UTM',active:true}]);
     if(target.includes('/rest/v1/stock_locations?'))return responseOf([{id:ids.location,outlet_id:ids.outlet,name:'Toko Utama',kind:'STORE'}]);
     if(target.includes('/rest/v1/products?'))return responseOf([{id:ids.product,sku:'SKU-1',name:'Produk',category:'Umum',brand:null,active:true}]);
     if(target.includes('/rest/v1/product_units?'))return responseOf([{id:ids.unit,product_id:ids.product,name:'pcs',factor_to_base:'1',barcode:'8991'}]);
@@ -24,7 +25,13 @@ function installCloudMock(onRpc){
     if(target.includes('/rest/v1/stock_balances?'))return responseOf([{product_id:ids.product,quantity:'20'}]);
     if(target.includes('/rest/v1/promotions?')||target.includes('/rest/v1/promotion_versions?'))return responseOf([]);
     if(target.includes('/rest/v1/tenants?'))return responseOf([{id:ids.tenant,name:'Toko Nusa',receipt_footer:'Terima kasih'}]);
-    if(target.endsWith('/rest/v1/rpc/complete_sale_v6')){const body=JSON.parse(options.body);onRpc(body);return responseOf({id:'sale',receiptNo:'UTM-000001',status:'COMPLETED',change:5000,payments:body.p_payments});}
+    if(target.includes('/rest/v1/sales?'))return responseOf([{receipt_no:'UTM-000004'}]);
+    if(target.includes('/rest/v1/document_sequences')){onSequenceWrite(target,options);return responseOf([]);}
+    if(target.endsWith('/rest/v1/rpc/complete_sale_v6')){
+      const body=JSON.parse(options.body);onRpc(body);rpcAttempts+=1;
+      if(collisionOnce&&rpcAttempts===1)return responseOf({code:'23505',message:'duplicate key value violates unique constraint "sales_tenant_id_receipt_no_key"'},409);
+      return responseOf({id:'sale',receiptNo:'UTM-000005',status:'COMPLETED',change:5000,payments:body.p_payments});
+    }
     return responseOf({message:`Mock belum menangani ${target}`},500);
   };
 }
@@ -43,6 +50,25 @@ test('pembayaran tunai dan QRIS diteruskan atomik dengan kembalian tunai',async(
     assert.equal(rpcBody.p_payments.length,2);
     assert.equal(rpcBody.p_payments[0].method,'CASH');
     assert.equal(rpcBody.p_payments[1].reference,'QR-1');
+  }finally{
+    globalThis.fetch=originalFetch;
+    for(const [key,value] of Object.entries(previous)){const envKey={url:'SUPABASE_URL',anon:'SUPABASE_ANON_KEY',service:'SUPABASE_SERVICE_ROLE_KEY'}[key];if(value===undefined)delete process.env[envKey];else process.env[envKey]=value;}
+  }
+});
+
+test('checkout memperbaiki penghitung struk dan mencoba ulang setelah benturan nomor',async()=>{
+  const originalFetch=globalThis.fetch;
+  const previous={url:process.env.SUPABASE_URL,anon:process.env.SUPABASE_ANON_KEY,service:process.env.SUPABASE_SERVICE_ROLE_KEY};
+  process.env.SUPABASE_URL='https://project.supabase.test';process.env.SUPABASE_ANON_KEY='anon';process.env.SUPABASE_SERVICE_ROLE_KEY='service';
+  let rpcAttempts=0;const sequenceWrites=[];
+  globalThis.fetch=installCloudMock(()=>{rpcAttempts+=1;},{collisionOnce:true,onSequenceWrite:(url,options)=>sequenceWrites.push({url,method:options.method,body:options.body})});
+  try{
+    const result=await callApi('POST','sales',{lines:[{productId:ids.product,unitId:ids.unit,qty:2}],customerGroupId:'retail',shiftId:ids.shift,payments:[{method:'CASH',amount:20000,tendered:20000}]},{'idempotency-key':'sale-receipt-retry'});
+    assert.equal(result.status,201);
+    assert.equal(result.body.receiptNo,'UTM-000005');
+    assert.equal(rpcAttempts,2);
+    assert.equal(sequenceWrites.length,2);
+    assert.match(sequenceWrites[0].body,/"next_value":5/);
   }finally{
     globalThis.fetch=originalFetch;
     for(const [key,value] of Object.entries(previous)){const envKey={url:'SUPABASE_URL',anon:'SUPABASE_ANON_KEY',service:'SUPABASE_SERVICE_ROLE_KEY'}[key];if(value===undefined)delete process.env[envKey];else process.env[envKey]=value;}
