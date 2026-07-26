@@ -86,6 +86,20 @@ kode frontend, dokumentasi publik, atau chat.
 Penguatan `202607260026_receipt_sequence_collision_fix.sql` sudah tercakup dan
 diterapkan melalui migrasi `027`; tidak ada SQL v1.21 yang masih tertunda.
 
+### Kandidat v1.23 siap diterapkan
+
+- Source **Paket Operasional v1.23.0** selesai dan 125 pengujian otomatis lulus.
+- Satu migrasi tertunda: `202607260028_loyalty_crm_vouchers.sql`.
+- Migrasi menambahkan pengaturan loyalitas, tier Member/Silver/Gold, mutasi
+  poin, voucher berkode, kuota total/per pelanggan, satu kali pakai, masa
+  berlaku, outlet, segmen aktif/tidak aktif/nilai tinggi/ulang tahun, serta
+  pembalikan poin dan kuota saat void.
+- Checkout memakai `complete_sale_v7`; void memakai `void_sale_v2`.
+- Profil pelanggan menyimpan tanggal lahir dan persetujuan WhatsApp. Tombol
+  WhatsApp hanya tersedia setelah persetujuan dan selalu memerlukan klik kasir.
+- UI kandidat `v1.23.0`, API `1.23.0-cloud`, cache `nusa-pos-shell-v45`.
+- Jangan deploy kandidat ini sebelum migrasi `028` berhasil.
+
 ### Rilis v1.22 dikonfirmasi live
 
 - **Paket Operasional v1.22.0** sudah selesai dan live.
@@ -270,6 +284,10 @@ migrasi `027`, 119 pengujian otomatis, dan deployment produksi selesai pada
 - kupon satu kali dan batas per outlet/pelanggan;
 - kirim struk atau ringkasan transaksi melalui WhatsApp dengan persetujuan;
 - dashboard pelanggan aktif, tidak aktif, dan nilai belanja.
+
+Status: implementasi domain, database, API, UI, privasi WhatsApp, backup, void,
+dan 125 pengujian otomatis selesai. Menunggu penerapan migrasi `028` dan
+deployment produksi.
 
 ### v1.24 — Operasional karyawan
 

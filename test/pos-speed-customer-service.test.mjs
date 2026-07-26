@@ -24,7 +24,7 @@ test('void transaksi wajib persetujuan, alasan, audit, dan pengembalian stok ato
   assert.match(migration,/'SALE_VOIDED'/);
   assert.match(migration,/for update/);
   assert.match(api,/approvedSupervisor/);
-  assert.match(api,/rpc\('void_sale_v1'/);
+  assert.match(api,/rpc\('void_sale_v2'/);
 });
 
 test('SQLite demo mengembalikan stok sekali dan menyimpan catatan saat void',()=>{
@@ -57,7 +57,7 @@ test('POS v1.21 menyediakan produk cepat, filter, shortcut, riwayat, cetak ulang
   assert.match(script,/reprint-pos-sale/);
   assert.match(script,/notes:el\('sale-note'\)\.value\.trim\(\)/);
   assert.match(api,/route === 'pos-sales'/);
-  assert.match(api,/complete_sale_v6/);
+  assert.match(api,/complete_sale_v7/);
 });
 
 test('tampilan satu tangan menjaga akses keranjang dan aksi checkout pada mobile',async()=>{

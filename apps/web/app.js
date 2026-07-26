@@ -5,7 +5,7 @@ import { clearStoredAuth, isAuthStorageEvent, loadAuth, saveAuth } from './auth-
 import { customerReceiptView } from './receipt.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [] };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [] };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -188,6 +188,7 @@ async function applyBootstrap(data, { offline = false } = {}) {
   if (!offline && state.session.permissions.includes('purchasing.view_cost')) await loadRecentSupplierReturns();
   if (!offline && state.session.permissions.includes('inventory.manage')) await loadInventory();
   if (!offline && state.session.permissions.includes('report.view')) await loadReport();
+  if (!offline && state.session.permissions.includes('report.view')) await loadCrmDashboard();
   if (!offline && state.session.permissions.includes('audit.view')) { await loadSyncReview(); await loadImportHistory(); }
   if (!offline && state.session.permissions.includes('identity.manage')) await loadBackupHistory();
   if (!offline && state.session.permissions.includes('identity.manage')) await loadSettings();
@@ -333,9 +334,12 @@ function renderRelations() {
   const totalBalance=state.customers.reduce((sum,customer)=>sum+Number(customer.account_balance??0),0);
   const overdue=state.customers.reduce((sum,customer)=>sum+Number(customer.overdue_balance??0),0);
   el('customer-account-metrics').innerHTML=[['Pelanggan aktif',state.customers.length],['Total piutang',money.format(totalBalance)],['Sudah jatuh tempo',money.format(overdue)],['Fasilitas kredit',state.customers.filter((customer)=>customer.credit_enabled).length]].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
+  const crm=state.crmDashboard?.metrics;
+  el('crm-metrics').innerHTML=crm?[['Member bertransaksi',crm.active],['Member tidak aktif',crm.inactive],['Nilai pelanggan',money.format(crm.lifetimeValue)],['Poin beredar',Number(crm.pointsOutstanding).toLocaleString('id-ID')]].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join(''):'';
   el('customer-list').innerHTML=customers.length?customers.map((customer)=>{
     const balance=Number(customer.account_balance??0),overdueBalance=Number(customer.overdue_balance??0);
-    return `<article class="customer-account-card" data-customer-id="${escapeHtml(customer.id)}"><div><div class="customer-account-name"><strong>${escapeHtml(customer.name)}</strong><span class="badge ${customer.group_id==='wholesale'?'warning':'ok'}">${customer.group_id==='wholesale'?'Grosir':'Eceran'}</span>${customer.credit_enabled?'<span class="badge info">Kredit aktif</span>':''}</div><small>${escapeHtml(customer.code)} · ${escapeHtml(customer.phone??'tanpa telepon')}</small></div><div class="customer-account-balance ${overdueBalance>0?'overdue':''}"><span>Saldo piutang</span><strong>${money.format(balance)}</strong><small>${overdueBalance>0?`${money.format(overdueBalance)} jatuh tempo`:`Sisa plafon ${money.format(customer.available_credit??0)}`}</small></div><div class="customer-account-actions"><button class="button secondary customer-statement" type="button">Lihat rekening</button>${['OWNER','ADMIN'].includes(state.session.user.role)?'<button class="button secondary edit-customer" type="button">Edit</button>':''}</div></article>`;
+    const tier=state.loyalty.tiers.find((item)=>item.id===customer.tier_id);
+    return `<article class="customer-account-card" data-customer-id="${escapeHtml(customer.id)}"><div><div class="customer-account-name"><strong>${escapeHtml(customer.name)}</strong><span class="badge ${customer.group_id==='wholesale'?'warning':'ok'}">${customer.group_id==='wholesale'?'Grosir':'Eceran'}</span>${tier?`<span class="badge info">${escapeHtml(tier.name)}</span>`:''}${customer.credit_enabled?'<span class="badge info">Kredit aktif</span>':''}</div><small>${escapeHtml(customer.code)} · ${escapeHtml(customer.phone??'tanpa telepon')} · ${Number(customer.loyalty_points??0).toLocaleString('id-ID')} poin</small><br><small>Nilai transaksi ${money.format(customer.lifetime_spend??0)}${customer.last_purchase_at?` · terakhir ${new Date(customer.last_purchase_at).toLocaleDateString('id-ID')}`:' · belum bertransaksi'}</small></div><div class="customer-account-balance ${overdueBalance>0?'overdue':''}"><span>Saldo piutang</span><strong>${money.format(balance)}</strong><small>${overdueBalance>0?`${money.format(overdueBalance)} jatuh tempo`:`Sisa plafon ${money.format(customer.available_credit??0)}`}</small></div><div class="customer-account-actions"><button class="button secondary customer-statement" type="button">Lihat rekening</button>${['OWNER','ADMIN'].includes(state.session.user.role)?'<button class="button secondary edit-customer" type="button">Edit</button>':''}</div></article>`;
   }).join(''):'<div class="empty-state compact">Pelanggan tidak ditemukan.</div>';
   const canSeeSuppliers = state.session.permissions.includes('purchasing.receive');
   el('supplier-panel').classList.toggle('hidden', !canSeeSuppliers);
@@ -381,6 +385,7 @@ function renderCustomerSearchResults(query = '') {
 }
 
 async function selectPosCustomer(customerId) {
+  state.voucherCode='';el('voucher-code').value='';
   if (!customerId) {
     invalidateSaleAuthorization();
     el('customer-select').value = '';
@@ -408,6 +413,7 @@ function resetPosCustomer() {
   el('customer-search').value = '';
   el('customer-search-results').classList.add('hidden');
   syncCustomerSearchLabel();
+  state.voucherCode='';el('voucher-code').value='';
 }
 
 async function loadCustomerAging(){
@@ -416,6 +422,11 @@ async function loadCustomerAging(){
     const buckets=state.customerAging.buckets??{};
     el('customer-aging-buckets').innerHTML=[['Belum jatuh tempo',buckets.current??0,'safe'],['Terlambat 1–30 hari',buckets.days1To30??0,'notice'],['Terlambat 31–60 hari',buckets.days31To60??0,'warning'],['Lebih dari 60 hari',buckets.daysOver60??0,'danger']].map(([label,value,level])=>`<div class="${level}"><span>${label}</span><strong>${money.format(value)}</strong></div>`).join('');
   }catch(error){el('customer-aging-buckets').innerHTML=`<small class="muted">${escapeHtml(error.message)}</small>`;}
+}
+
+async function loadCrmDashboard(){
+  try{state.crmDashboard=await request('/api/crm/dashboard');renderRelations();}
+  catch(error){el('crm-metrics').innerHTML=`<small class="muted">${escapeHtml(error.message)}</small>`;}
 }
 
 function renderProductUnitEditor(){
@@ -477,6 +488,7 @@ function openCustomerEditor(customerId=null,source='relations'){
   el('customer-name').value=customer?.name??'';el('customer-phone').value=customer?.phone??'';
   el('customer-phone').required=source==='pos';
   el('customer-email').value=customer?.email??'';el('customer-address').value=customer?.address??'';
+  el('customer-birth-date').value=customer?.birth_date??'';el('customer-whatsapp-consent').checked=Boolean(customer?.whatsapp_consent);
   el('customer-notes').value=customer?.notes??'';el('customer-new-group').value=customer?.group_id??'retail';
   el('customer-credit-enabled').checked=Boolean(customer?.credit_enabled);
   el('customer-credit-limit').value=customer?.credit_limit??0;el('customer-credit-days').value=customer?.credit_days??30;
@@ -487,7 +499,7 @@ function openCustomerEditor(customerId=null,source='relations'){
 
 async function saveCustomer(event) {
   event.preventDefault();const id=el('edit-customer-id').value,button=event.currentTarget.querySelector('[type="submit"]');button.disabled=true;
-  const payload={name:el('customer-name').value,phone:el('customer-phone').value,email:el('customer-email').value,address:el('customer-address').value,notes:el('customer-notes').value,groupId:el('customer-new-group').value,creditEnabled:el('customer-credit-enabled').checked,creditLimit:Number(el('customer-credit-limit').value||0),creditDays:Number(el('customer-credit-days').value||0),active:true};
+  const payload={name:el('customer-name').value,phone:el('customer-phone').value,email:el('customer-email').value,address:el('customer-address').value,notes:el('customer-notes').value,groupId:el('customer-new-group').value,birthDate:el('customer-birth-date').value||null,whatsappConsent:el('customer-whatsapp-consent').checked,creditEnabled:el('customer-credit-enabled').checked,creditLimit:Number(el('customer-credit-limit').value||0),creditDays:Number(el('customer-credit-days').value||0),active:true};
   try{
     const customer=await request(id?`/api/customers/${id}`:'/api/customers',{method:id?'PUT':'POST',body:JSON.stringify(payload)});
     const selectForSale=!id&&state.customerEditorSource==='pos';
@@ -827,8 +839,38 @@ function syncPromotionForm(){
 }
 
 async function loadPromotionManagement(){
-  try{const data=await request('/api/promotions/manage');state.promotionVersions=data.promotions??[];renderPromotionList();}
+  try{
+    const [data,loyalty]=await Promise.all([request('/api/promotions/manage'),request('/api/loyalty')]);
+    state.promotionVersions=data.promotions??[];state.loyalty=loyalty;renderPromotionList();renderLoyalty();
+  }
   catch(error){toast(error.message);}
+}
+
+function renderLoyalty(){
+  const settings=state.loyalty.settings??{};
+  el('loyalty-earn-amount').value=Number(settings.earn_amount_per_point??10000);
+  el('loyalty-inactivity-days').value=Number(settings.inactivity_days??90);
+  el('loyalty-summary').textContent=`${state.loyalty.vouchers.filter((item)=>item.active).length} voucher aktif`;
+  el('tier-list').innerHTML=state.loyalty.tiers.map((tier)=>`<span class="tier-chip" style="--tier-color:${escapeHtml(tier.color)}"><strong>${escapeHtml(tier.name)}</strong><small>mulai ${money.format(tier.min_lifetime_spend)} · ${Number(tier.points_multiplier)}× poin</small></span>`).join('');
+  el('voucher-list').innerHTML=state.loyalty.vouchers.map((voucher)=>`<article class="voucher-card" data-voucher-id="${escapeHtml(voucher.id)}"><div><strong>${escapeHtml(voucher.code)} · ${escapeHtml(voucher.name)}</strong><small>${voucher.discount_type==='PERCENT'?`${Number(voucher.discount_value)}%`:money.format(voucher.discount_value)} · min. ${money.format(voucher.min_purchase)} · ${escapeHtml(voucher.segment)}</small><small>${new Date(voucher.starts_at).toLocaleDateString('id-ID')}–${new Date(voucher.ends_at).toLocaleDateString('id-ID')} · dipakai ${voucher.usage_count}${voucher.usage_limit_total?`/${voucher.usage_limit_total}`:''}</small></div><button class="button ${voucher.active?'danger-button':'secondary'} voucher-status" data-active="${!voucher.active}" type="button">${voucher.active?'Hentikan':'Aktifkan'}</button></article>`).join('')||'<div class="empty-state compact">Belum ada voucher berkode.</div>';
+  if(!el('voucher-new-start').value){const start=new Date(),end=new Date(Date.now()+30*86400000);el('voucher-new-start').value=localDateTimeValue(start);el('voucher-new-end').value=localDateTimeValue(end);}
+}
+
+async function saveLoyaltySettings(event){
+  event.preventDefault();
+  try{await request('/api/loyalty/settings',{method:'PUT',body:JSON.stringify({earnAmountPerPoint:Number(el('loyalty-earn-amount').value),inactivityDays:Number(el('loyalty-inactivity-days').value),enabled:true})});toast('Aturan poin disimpan');await loadPromotionManagement();}
+  catch(error){toast(error.message);}
+}
+
+async function publishVoucher(event){
+  event.preventDefault();el('voucher-form-error').textContent='';
+  const payload={code:el('voucher-new-code').value,name:el('voucher-new-name').value,discountType:el('voucher-new-type').value,
+    discountValue:Number(el('voucher-new-value').value),maxDiscount:Number(el('voucher-new-max').value)||null,minPurchase:Number(el('voucher-new-min').value||0),
+    startsAt:new Date(el('voucher-new-start').value).toISOString(),endsAt:new Date(el('voucher-new-end').value).toISOString(),
+    segment:el('voucher-new-segment').value,usageLimitTotal:Number(el('voucher-new-limit-total').value)||null,
+    usageLimitPerCustomer:Number(el('voucher-new-limit-customer').value)||null,oneTime:el('voucher-new-once').checked};
+  try{await request('/api/vouchers',{method:'POST',body:JSON.stringify(payload)});toast(`Voucher ${payload.code.toUpperCase()} diterbitkan`);event.currentTarget.reset();await loadPromotionManagement();}
+  catch(error){el('voucher-form-error').textContent=error.message;}
 }
 
 async function publishPromotion(event) {
@@ -953,11 +995,13 @@ async function updateQuote() {
   const input = {
     lines: state.cart,
     customerGroupId: el('customer-group').value,
+    customerId:el('customer-select').value||null,
+    ...(state.voucherCode?{voucherCode:state.voucherCode}:{}),
     at: new Date().toISOString(),
     ...(state.saleAuthorization ? { authorization: state.saleAuthorization } : {})
   };
   try {
-    if (!state.saleAuthorization) {
+    if (!state.saleAuthorization&&!state.voucherCode) {
       state.quote = quoteOffline({ ...input, products: state.products, promotions: state.promotions, at: new Date(input.at) });
       renderCart();
     }
@@ -969,7 +1013,7 @@ async function updateQuote() {
         state.quote = verified;
         renderCart();
       } catch (error) {
-        if (revision === quoteRevision && error.status) toast(`Harga belum terverifikasi: ${error.message}`);
+        if (revision === quoteRevision && error.status){if(state.voucherCode){state.voucherCode='';el('voucher-code').value='';}toast(`Harga belum terverifikasi: ${error.message}`);renderCart();}
       }
     }, 220);
   } catch (error) {
@@ -983,6 +1027,7 @@ function renderCart() {
     el('cart-lines').innerHTML = '<div class="empty-state">Belum ada barang.<br><small>Scan barcode atau pilih produk.</small></div>';
     el('subtotal').textContent = money.format(0); el('discount').textContent = `−${money.format(0)}`; el('price-adjustment-summary').classList.add('hidden'); el('grand-total').textContent = money.format(0); el('pay-button').disabled = true; el('hold-cart').disabled = true;
     renderSaleAuthorizationStatus();
+    el('voucher-status').textContent='';el('remove-voucher').classList.add('hidden');
     return;
   }
   el('cart-lines').innerHTML = state.quote.lines.map((line, index) => {
@@ -999,6 +1044,8 @@ function renderCart() {
   el('price-adjustment-summary').classList.toggle('hidden',!internalAmount);
   el('price-adjustment').textContent=`${Number(internalAmount)<0?'+':'−'}${money.format(Math.abs(internalAmount))}`;
   el('grand-total').textContent = money.format(state.quote.grandTotal); el('pay-button').disabled = !state.currentShift; el('hold-cart').disabled = false;
+  el('voucher-status').textContent=state.quote.voucher?`${state.quote.voucher.code}: hemat ${money.format(state.quote.voucher.discount)}`:(state.voucherCode?'Memverifikasi voucher...':'');
+  el('remove-voucher').classList.toggle('hidden',!state.voucherCode);
   renderSaleAuthorizationStatus();
 }
 
@@ -1199,6 +1246,18 @@ function cameraErrorMessage(error) {
   if (error?.name === 'NotReadableError') return 'Kamera sedang dipakai aplikasi lain. Tutup aplikasi kamera lalu coba lagi.';
   if (error?.name === 'OverconstrainedError') return 'Kamera perangkat tidak cocok dengan pengaturan pemindaian.';
   return 'Kamera tidak dapat dibuka. Periksa izin kamera lalu coba kembali.';
+}
+
+async function applyVoucherCode(){
+  if(!navigator.onLine)return toast('Voucher hanya dapat diverifikasi saat online.');
+  if(!selectedPosCustomer())return toast('Pilih member terlebih dahulu.');
+  if(!state.cart.length)return toast('Keranjang masih kosong.');
+  state.voucherCode=el('voucher-code').value.trim().toUpperCase();
+  if(!state.voucherCode)return;
+  try{
+    state.quote=await request('/api/quote',{method:'POST',body:JSON.stringify({lines:state.cart,customerGroupId:el('customer-group').value,customerId:el('customer-select').value,voucherCode:state.voucherCode,at:new Date().toISOString(),...(state.saleAuthorization?{authorization:state.saleAuthorization}:{})})});
+    renderCart();toast(`Voucher ${state.voucherCode} dipakai`);
+  }catch(error){state.voucherCode='';el('voucher-code').value='';renderCart();toast(error.message);}
 }
 
 async function completeCameraBarcode(value, controls = null) {
@@ -2661,6 +2720,7 @@ async function loadHeldSales(){
 async function holdCurrentCart(){
   if(!state.cart.length)return;
   if(state.saleAuthorization)return toast('Batalkan diskon manual sebelum menahan transaksi.');
+  if(state.voucherCode)return toast('Hapus voucher sebelum menahan transaksi agar kuotanya tidak terkunci semu.');
   const label=window.prompt('Beri nama transaksi agar mudah ditemukan:',`Pelanggan ${new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`);
   if(label===null)return;
   const payload={label:label.trim()||'Tanpa nama',lines:structuredClone(state.cart),customerId:el('customer-select').value||null,customerGroupId:el('customer-group').value,notes:el('sale-note').value.trim()};
@@ -2737,14 +2797,25 @@ function renderReceipt(receipt,payments){
   const customerView=customerReceiptView(receipt.quote),receiptDiscount=Number(customerView.discountTotal);
   const body=`<div class="receipt-head"><strong>${escapeHtml(business.name??'Kasir Nusa')}</strong><span>${escapeHtml(receipt.outletName??outlet.name??'Outlet')}</span>${address?`<small>${escapeHtml(address)}</small>`:''}${phone?`<small>Tel. ${escapeHtml(phone)}</small>`:''}<small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small><b>${escapeHtml(receipt.receiptNo)}</b>${receipt.status==='VOIDED'?'<b>VOID / DIBATALKAN</b>':''}</div><div class="receipt-meta"><span>Kasir</span><strong>${escapeHtml(receipt.cashier)}</strong><span>Pelanggan</span><strong>${escapeHtml(customer?.name??'Pelanggan umum')}</strong></div><div class="receipt-lines">${customerView.lines.map((line)=>`<div><span><strong>${escapeHtml(line.productName)}</strong><small>${line.qty} ${escapeHtml(line.unitName)} × ${money.format(line.customerUnitPrice)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div><div class="receipt-totals"><div><span>Subtotal</span><strong>${money.format(customerView.subtotal)}</strong></div>${Math.abs(receiptDiscount)>0.01?`<div><span>Promo & diskon</span><strong>${receiptDiscount<0?'+':'−'}${money.format(Math.abs(receiptDiscount))}</strong></div>`:''}<div class="receipt-grand"><span>Total</span><strong>${money.format(customerView.grandTotal)}</strong></div>${payments.map((payment)=>`<div><span>${payment.method}${payment.method==='CASH'&&payment.tendered?` · diterima ${money.format(payment.tendered)}`:''}</span><strong>${money.format(payment.amount)}</strong></div>`).join('')}${change?`<div><span>Kembalian</span><strong>${money.format(change)}</strong></div>`:''}</div>${receipt.notes?`<p class="receipt-thanks"><strong>Catatan:</strong> ${escapeHtml(receipt.notes)}</p>`:''}<p class="receipt-thanks">${escapeHtml(footer)}</p>`;
   const copies=Math.max(1,Math.min(3,Number(state.deviceSettings.receiptCopies??1)));
-  el('receipt-content').innerHTML=Array.from({length:copies},(_,index)=>`<section class="receipt-copy">${body}${copies>1?`<small class="receipt-copy-label">Salinan ${index+1} dari ${copies}</small>`:''}</section>`).join('');
+  const pointsMarkup=Number(receipt.pointsEarned)>0?`<p class="receipt-thanks">Poin +${Number(receipt.pointsEarned)} · saldo ${Number(receipt.pointsBalance)}${receipt.tierName?` · ${escapeHtml(receipt.tierName)}`:''}</p>`:'';
+  el('receipt-content').innerHTML=Array.from({length:copies},(_,index)=>`<section class="receipt-copy">${body}${pointsMarkup}${copies>1?`<small class="receipt-copy-label">Salinan ${index+1} dari ${copies}</small>`:''}</section>`).join('');
   const width=Number(state.deviceSettings.paperWidth??80)===58?58:80;
   el('receipt-dialog').classList.toggle('paper-58',width===58);
   let printStyle=el('receipt-print-page-style');
   if(!printStyle){printStyle=document.createElement('style');printStyle.id='receipt-print-page-style';document.head.append(printStyle);}
   printStyle.textContent=`@media print{@page{size:${width}mm auto;margin:2mm}}`;
+  el('whatsapp-receipt').classList.toggle('hidden',!(customer?.phone&&customer?.whatsapp_consent));
   el('receipt-dialog').showModal();
   if(state.deviceSettings.autoPrint)setTimeout(()=>window.print(),250);
+}
+
+function shareReceiptWhatsApp(){
+  const receipt=state.lastReceipt,customer=receipt?.customer;
+  if(!receipt||!customer?.phone||!customer.whatsapp_consent)return toast('Pelanggan belum memberi izin WhatsApp.');
+  const lines=(receipt.quote?.lines??[]).map((line)=>`${line.qty} ${line.unitName} ${line.productName}: ${money.format(line.total)}`).join('\n');
+  const text=`${receipt.business?.name??state.business.name}\nStruk ${receipt.receiptNo}\n${lines}\nTotal: ${money.format(receipt.quote?.grandTotal??0)}\nTerima kasih.`;
+  let digits=String(customer.phone).replace(/\D/g,'');if(digits.startsWith('0'))digits=`62${digits.slice(1)}`;
+  window.open(`https://wa.me/${digits}?text=${encodeURIComponent(text)}`,'_blank','noopener,noreferrer');
 }
 
 async function completePayment(event) {
@@ -2753,11 +2824,12 @@ async function completePayment(event) {
   const totals=paymentTotals();
   if(Math.abs(totals.allocated-state.quote.grandTotal)>0.01)return el('payment-error').textContent='Total pembayaran harus sama dengan total transaksi.';
   if(!navigator.onLine&&state.saleAuthorization)return el('payment-error').textContent='Diskon berizin hanya dapat diselesaikan saat online. Sambungkan internet atau batalkan diskon manual.';
+  if(!navigator.onLine&&state.voucherCode)return el('payment-error').textContent='Voucher memerlukan koneksi internet untuk memeriksa kuota.';
   if(!navigator.onLine&&state.paymentDraft.some((payment)=>payment.method==='CREDIT'))return el('payment-error').textContent='Penjualan kredit memerlukan koneksi internet untuk memeriksa plafon pelanggan.';
   if(!navigator.onLine&&state.paymentDraft.length>1)return el('payment-error').textContent='Pembayaran gabungan memerlukan koneksi internet.';
   const sale = {
     key: crypto.randomUUID(), actorId: state.session.user.id, occurredAt: new Date().toISOString(), expectedTotal: state.quote.grandTotal,
-    payload: { lines: structuredClone(state.cart), offlineQuote: structuredClone(state.quote), customerId: el('customer-select').value || null, customerGroupId: el('customer-group').value, notes:el('sale-note').value.trim(), payments:structuredClone(state.paymentDraft),paymentMethod:({CASH:'Tunai',QRIS:'QRIS',TRANSFER:'Transfer',EDC:'EDC',CREDIT:'Piutang'})[state.paymentDraft[0].method], shiftId: state.currentShift.id, ...(state.saleAuthorization?{authorization:structuredClone(state.saleAuthorization)}:{}) }
+    payload: { lines: structuredClone(state.cart), offlineQuote: structuredClone(state.quote), customerId: el('customer-select').value || null, customerGroupId: el('customer-group').value, voucherCode:state.voucherCode||null, notes:el('sale-note').value.trim(), payments:structuredClone(state.paymentDraft),paymentMethod:({CASH:'Tunai',QRIS:'QRIS',TRANSFER:'Transfer',EDC:'EDC',CREDIT:'Piutang'})[state.paymentDraft[0].method], shiftId: state.currentShift.id, ...(state.saleAuthorization?{authorization:structuredClone(state.saleAuthorization)}:{}) }
   };
   let refreshAfterPayment = false;
   if (!navigator.onLine) {
@@ -3041,6 +3113,9 @@ el('sale-adjustment-form').addEventListener('submit',approveSaleAdjustment);
 el('close-sale-adjustment').addEventListener('click',()=>el('sale-adjustment-dialog').close());
 el('cancel-sale-adjustment').addEventListener('click',()=>el('sale-adjustment-dialog').close());
 el('pay-button').addEventListener('click',openPaymentDialog);
+el('apply-voucher').addEventListener('click',applyVoucherCode);
+el('voucher-code').addEventListener('keydown',(event)=>{if(event.key==='Enter'){event.preventDefault();applyVoucherCode();}});
+el('remove-voucher').addEventListener('click',async()=>{state.voucherCode='';el('voucher-code').value='';await updateQuote();});
 el('payment-form').addEventListener('submit',completePayment);
 el('cancel-payment').addEventListener('click',()=>el('payment-dialog').close());
 el('close-payment').addEventListener('click',()=>el('payment-dialog').close());
@@ -3066,6 +3141,7 @@ el('open-held-sales').addEventListener('click',async()=>{await loadHeldSales();e
 el('close-held-sales').addEventListener('click',()=>el('held-sales-dialog').close());
 el('held-sales-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-hold-id]');if(!row)return;if(event.target.closest('.resume-held-sale'))actOnHeldSale(row.dataset.holdId,'resume',row.dataset.local==='true');if(event.target.closest('.cancel-held-sale'))actOnHeldSale(row.dataset.holdId,'cancel',row.dataset.local==='true');});
 el('close-receipt').addEventListener('click',()=>el('receipt-dialog').close());
+el('whatsapp-receipt').addEventListener('click',shareReceiptWhatsApp);
 el('print-receipt').addEventListener('click',()=>window.print());
 el('sync-button').addEventListener('click', syncQueue);
 el('find-return-sale').addEventListener('click',findReturnSale);
@@ -3217,6 +3293,9 @@ el('close-supplier-statement').addEventListener('click',()=>el('supplier-stateme
 el('supplier-payment-form').addEventListener('submit',recordSupplierPayment);
 el('supplier-payment-method').addEventListener('change',()=>el('supplier-payment-reference-wrap').classList.toggle('hidden',el('supplier-payment-method').value==='CASH'));
 el('promotion-form').addEventListener('submit', publishPromotion);
+el('loyalty-settings-form').addEventListener('submit',saveLoyaltySettings);
+el('voucher-form').addEventListener('submit',publishVoucher);
+el('voucher-list').addEventListener('click',async(event)=>{const button=event.target.closest('.voucher-status');if(!button)return;try{await request(`/api/vouchers/${button.closest('[data-voucher-id]').dataset.voucherId}/status`,{method:'POST',body:JSON.stringify({active:button.dataset.active==='true'})});await loadPromotionManagement();}catch(error){toast(error.message);}});
 el('simulate-promo').addEventListener('click', simulatePromotion);
 el('promo-type').addEventListener('change',syncPromotionForm);
 el('promo-target-type').addEventListener('change',syncPromotionForm);

@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { compareCost, quoteBasket } from '../packages/domain/src/pricing.mjs';
 import { summarizeExpiryBatches, todayInTimeZone } from '../packages/domain/src/expiry.mjs';
 import { applySaleAdjustment, normalizeSaleAdjustment, saleAdjustmentFingerprintPayload } from '../packages/domain/src/sale-adjustment.mjs';
+import { applyVoucher } from '../packages/domain/src/loyalty.mjs';
 
 const PERMISSIONS = {
   OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage'],
@@ -13,7 +14,7 @@ const PERMISSIONS = {
 
 const BACKUP_TABLES = [
   'tenants','profiles','outlets','stock_locations','user_outlets',
-  'customers','customer_account_entries','customer_payment_receipts','customer_payment_allocations','suppliers','supplier_bills','supplier_payable_entries','supplier_payment_receipts','supplier_payment_allocations','products','product_units','price_rules','promotions','promotion_versions','promotion_redemptions',
+  'customers','loyalty_settings','customer_tiers','customer_point_entries','vouchers','voucher_redemptions','customer_account_entries','customer_payment_receipts','customer_payment_allocations','suppliers','supplier_bills','supplier_payable_entries','supplier_payment_receipts','supplier_payment_allocations','products','product_units','price_rules','promotions','promotion_versions','promotion_redemptions',
   'shifts','cash_movements','sales','sale_items','payments','parked_sales','sale_adjustment_authorizations',
   'purchase_planning_settings','restock_policies','purchase_orders','purchase_order_items','purchase_receipts','purchase_receipt_items','supplier_returns','supplier_return_items',
   'stock_balances','stock_ledger','inventory_batches','inventory_batch_movements',
@@ -720,6 +721,16 @@ async function baseSaleQuote(context, input) {
   });
 }
 
+async function voucherSaleQuote(context, input, quote) {
+  const code=String(input.voucherCode??'').trim();
+  if(!code)return quote;
+  const voucher=await rpc('quote_voucher_v1',{
+    p_tenant_id:context.tenantId,p_customer_id:input.customerId??null,p_outlet_id:context.outlet.id,
+    p_code:code,p_basket_total:Number(quote.grandTotal)
+  });
+  return applyVoucher(quote,voucher);
+}
+
 async function verifySaleAuthorization(context, session, input) {
   const authorization = input.authorization;
   if (!authorization?.id || !authorization?.token || !authorization?.adjustment) {
@@ -785,7 +796,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '1.22.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '1.23.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'login') {
@@ -1152,6 +1163,7 @@ async function routeRequest(request, response, route) {
         approvedBy: verified.approvedBy
       });
     }
+    quote = await voucherSaleQuote(context,input,quote);
     return send(response, 200, quote);
   }
 
@@ -1169,6 +1181,7 @@ async function routeRequest(request, response, route) {
         approvedBy: verifiedAuthorization.approvedBy
       });
     }
+    quote = await voucherSaleQuote(context,input,quote);
     const payments=normalizeSalePayments(input,quote.grandTotal);
     const saleCommand = {
       p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_idempotency_key: key,
@@ -1176,15 +1189,16 @@ async function routeRequest(request, response, route) {
       p_customer_group_id: input.customerGroupId, p_payments:payments, p_quote: quote,
       p_authorization_id: verifiedAuthorization?.approval.id ?? null,
       p_basket_fingerprint: verifiedAuthorization?.fingerprint ?? null,
-      p_notes: String(input.notes ?? '').trim().slice(0,500)
+      p_notes: String(input.notes ?? '').trim().slice(0,500),
+      p_voucher_code:String(input.voucherCode??'').trim()||null
     };
     let result;
     try {
-      result = await rpc('complete_sale_v6', saleCommand);
+      result = await rpc('complete_sale_v7', saleCommand);
     } catch (error) {
       if (!isSaleReceiptCollision(error)) throw error;
       await repairSaleReceiptSequence(context);
-      result = await rpc('complete_sale_v6', saleCommand);
+      result = await rpc('complete_sale_v7', saleCommand);
     }
     const tenants = await rest('tenants', `id=eq.${context.tenantId}&select=*`);
     return send(response, 201, { ...result, occurredAt: new Date().toISOString(), cashier: session.profile.display_name, outletName:context.outlet.name, outlet:context.outlet, business:businessPayload(tenants[0]), quote });
@@ -1405,6 +1419,83 @@ async function routeRequest(request, response, route) {
     return send(response,200,{customers:await loadCustomerAccounts(context.tenantId)});
   }
 
+  if(request.method==='GET'&&route==='crm/dashboard'){
+    requirePermission(session,'report.view');
+    const tenant=encodeURIComponent(context.tenantId);
+    const [customers,tiers,settings]=await Promise.all([
+      rest('customers',`tenant_id=eq.${tenant}&active=eq.true&select=id,lifetime_spend,last_purchase_at,loyalty_points,tier_id,birth_date`),
+      rest('customer_tiers',`tenant_id=eq.${tenant}&active=eq.true&select=*`),
+      rest('loyalty_settings',`tenant_id=eq.${tenant}&select=*&limit=1`)
+    ]);
+    const inactivityDays=Number(settings[0]?.inactivity_days??90),cutoff=Date.now()-inactivityDays*86400000;
+    const active=customers.filter((item)=>item.last_purchase_at&&new Date(item.last_purchase_at).getTime()>=cutoff).length;
+    return send(response,200,{metrics:{customers:customers.length,active,inactive:customers.length-active,
+      lifetimeValue:customers.reduce((sum,item)=>sum+Number(item.lifetime_spend??0),0),
+      pointsOutstanding:customers.reduce((sum,item)=>sum+Number(item.loyalty_points??0),0)},
+      tiers:tiers.map((tier)=>({...tier,memberCount:customers.filter((item)=>item.tier_id===tier.id).length}))});
+  }
+
+  if(request.method==='GET'&&route==='loyalty'){
+    requirePermission(session,'promotion.manage');
+    const tenant=encodeURIComponent(context.tenantId);
+    const [settings,tiers,vouchers]=await Promise.all([
+      rest('loyalty_settings',`tenant_id=eq.${tenant}&select=*&limit=1`),
+      rest('customer_tiers',`tenant_id=eq.${tenant}&select=*&order=min_lifetime_spend.asc`),
+      rest('vouchers',`tenant_id=eq.${tenant}&select=*&order=created_at.desc`)
+    ]);
+    return send(response,200,{settings:settings[0]??null,tiers,vouchers});
+  }
+
+  if(request.method==='PUT'&&route==='loyalty/settings'){
+    requirePermission(session,'promotion.manage');
+    const input=bodyOf(request);
+    const rows=await rest('loyalty_settings',`tenant_id=eq.${encodeURIComponent(context.tenantId)}`,{
+      method:'PATCH',prefer:'return=representation',body:{enabled:input.enabled!==false,
+        earn_amount_per_point:Number(input.earnAmountPerPoint??10000),inactivity_days:Number(input.inactivityDays??90),updated_at:new Date().toISOString()}
+    });
+    return send(response,200,rows[0]);
+  }
+
+  if(request.method==='POST'&&route==='loyalty/tiers'){
+    requirePermission(session,'promotion.manage');
+    const input=bodyOf(request),payload={tenant_id:context.tenantId,code:String(input.code??'').trim().toUpperCase(),
+      name:String(input.name??'').trim(),min_lifetime_spend:Number(input.minLifetimeSpend??0),
+      points_multiplier:Number(input.pointsMultiplier??1),color:input.color??'#0f766e',active:input.active!==false};
+    const rows=await rest('customer_tiers','on_conflict=tenant_id,code',{method:'POST',prefer:'resolution=merge-duplicates,return=representation',body:payload});
+    return send(response,201,rows[0]);
+  }
+
+  if(request.method==='POST'&&route==='vouchers'){
+    requirePermission(session,'promotion.manage');
+    const input=bodyOf(request);
+    const payload={tenant_id:context.tenantId,outlet_id:input.outletId||null,code:String(input.code??'').trim().toUpperCase(),
+      name:String(input.name??'').trim(),discount_type:input.discountType,discount_value:Number(input.discountValue),
+      max_discount:input.maxDiscount?Number(input.maxDiscount):null,min_purchase:Number(input.minPurchase??0),
+      starts_at:input.startsAt,ends_at:input.endsAt,usage_limit_total:input.usageLimitTotal?Number(input.usageLimitTotal):null,
+      usage_limit_per_customer:input.usageLimitPerCustomer?Number(input.usageLimitPerCustomer):null,
+      segment:input.segment??'ALL',one_time:Boolean(input.oneTime),active:true,created_by:session.authUser.id};
+    if(!payload.code||!payload.name){const error=new Error('Kode dan nama voucher wajib diisi');error.status=400;throw error;}
+    const rows=await rest('vouchers','',{method:'POST',prefer:'return=representation',body:payload});
+    return send(response,201,rows[0]);
+  }
+
+  if(request.method==='POST'&&/^vouchers\/[^/]+\/status$/.test(route)){
+    requirePermission(session,'promotion.manage');
+    const input=bodyOf(request),voucherId=route.split('/')[1];
+    const rows=await rest('vouchers',`tenant_id=eq.${encodeURIComponent(context.tenantId)}&id=eq.${encodeURIComponent(voucherId)}`,{
+      method:'PATCH',prefer:'return=representation',body:{active:Boolean(input.active)}
+    });
+    if(!rows[0]){const error=new Error('Voucher tidak ditemukan');error.status=404;throw error;}
+    return send(response,200,rows[0]);
+  }
+
+  if(request.method==='GET'&&/^customers\/[^/]+\/loyalty$/.test(route)){
+    requirePermission(session,'pos.sell');
+    const customerId=route.split('/')[1],tenant=encodeURIComponent(context.tenantId);
+    const entries=await rest('customer_point_entries',`tenant_id=eq.${tenant}&customer_id=eq.${encodeURIComponent(customerId)}&select=*&order=occurred_at.desc&limit=100`);
+    return send(response,200,{entries});
+  }
+
   if (request.method === 'GET' && route === 'customer-credit/aging') {
     requirePermission(session,'pos.sell');
     return send(response,200,await rpc('customer_credit_aging',{
@@ -1450,7 +1541,9 @@ async function routeRequest(request, response, route) {
       p_credit_enabled:Boolean(input.creditEnabled),p_credit_limit:Number(input.creditLimit??0),p_credit_days:Number(input.creditDays??0),
       p_notes:input.notes??'',p_active:true
     });
-    return send(response,201,customer);
+    const crm=await rpc('save_customer_crm_profile_v1',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,
+      p_customer_id:customer.id,p_birth_date:input.birthDate||null,p_whatsapp_consent:Boolean(input.whatsappConsent)});
+    return send(response,201,crm);
   }
 
   if (request.method === 'PUT' && /^customers\/[^/]+$/.test(route)) {
@@ -1462,7 +1555,9 @@ async function routeRequest(request, response, route) {
       p_credit_enabled:Boolean(input.creditEnabled),p_credit_limit:Number(input.creditLimit??0),p_credit_days:Number(input.creditDays??0),
       p_notes:input.notes??'',p_active:input.active!==false
     });
-    return send(response,200,customer);
+    const crm=await rpc('save_customer_crm_profile_v1',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,
+      p_customer_id:customer.id,p_birth_date:input.birthDate||null,p_whatsapp_consent:Boolean(input.whatsappConsent)});
+    return send(response,200,crm);
   }
 
   if (request.method === 'POST' && route === 'suppliers') {
@@ -1897,7 +1992,7 @@ async function routeRequest(request, response, route) {
     const input = bodyOf(request);
     const saleId = route.split('/')[1];
     const supervisor = await approvedSupervisor(session, context.tenantId, input);
-    const result = await rpc('void_sale_v1', {
+    const result = await rpc('void_sale_v2', {
       p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_approved_by:supervisor.id,
       p_sale_id:saleId,p_outlet_id:context.outlet.id,p_reason:String(input.reason ?? '')
     });

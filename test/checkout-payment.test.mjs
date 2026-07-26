@@ -27,7 +27,7 @@ function installCloudMock(onRpc,{collisionOnce=false,onSequenceWrite=()=>{}}={})
     if(target.includes('/rest/v1/tenants?'))return responseOf([{id:ids.tenant,name:'Toko Nusa',receipt_footer:'Terima kasih'}]);
     if(target.includes('/rest/v1/sales?'))return responseOf([{receipt_no:'UTM-000004'}]);
     if(target.includes('/rest/v1/document_sequences')){onSequenceWrite(target,options);return responseOf([]);}
-    if(target.endsWith('/rest/v1/rpc/complete_sale_v6')){
+    if(target.endsWith('/rest/v1/rpc/complete_sale_v7')){
       const body=JSON.parse(options.body);onRpc(body);rpcAttempts+=1;
       if(collisionOnce&&rpcAttempts===1)return responseOf({code:'23505',message:'duplicate key value violates unique constraint "sales_tenant_id_receipt_no_key"'},409);
       return responseOf({id:'sale',receiptNo:'UTM-000005',status:'COMPLETED',change:5000,payments:body.p_payments});

@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Paket Operasional v1.22.0
+# Kasir Nusa POS — Paket Operasional v1.23.0
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -23,6 +23,11 @@ kapabilitas retail yang lebih lengkap tersedia di
 - Satuan pcs, lusin, karton, serta konversi ke satuan dasar.
 - Harga ecer, harga pelanggan grosir, dan harga bertingkat berdasarkan jumlah.
 - Promo terversi, terjadwal, konsisten online/offline, simulasi, dan batas pemakaian.
+- Poin pelanggan, tier otomatis, histori mutasi, segmentasi, dan dashboard CRM.
+- Voucher berkode dengan masa berlaku, minimal belanja, kuota total/per member,
+  satu kali pakai, outlet, serta segmen ulang tahun/aktif/tidak aktif/nilai tinggi.
+- Struk WhatsApp hanya tersedia untuk pelanggan yang memberi persetujuan dan
+  hanya dibuka setelah kasir menekan tombol.
 - POS, tahan transaksi, pembayaran tunai/non-tunai/split, piutang, dan struk.
 - Transaksi baru selalu dimulai sebagai pelanggan umum; member dipilih secara sadar.
 - Member baru dapat dibuat langsung dari halaman kasir tanpa meninggalkan keranjang.
@@ -74,6 +79,11 @@ Untuk kandidat v1.22, jalankan satu file
 idempotent dan sudah menyertakan penguatan nomor struk v1.21 yang masih tertunda,
 kemudian menambahkan kebijakan restok serta approval pembelian berdasarkan nilai.
 
+Untuk kandidat v1.23, jalankan satu file
+`supabase/migrations/202607260028_loyalty_crm_vouchers.sql` sebelum deployment.
+Migrasi ini menambahkan tier member, poin, voucher, segmentasi CRM, posting
+loyalitas atomik saat checkout, dan pembalikan saat void.
+
 Klik dua kali `Deploy-Kasir-Nusa.cmd` dan tunggu sampai muncul tulisan **Deployment berhasil**.
 
 Rahasia Supabase hanya boleh tersimpan di pengaturan Environment Variables Vercel. Jangan menaruh `SUPABASE_SERVICE_ROLE_KEY` di browser, screenshot, chat, atau repository.
@@ -86,7 +96,7 @@ Jalankan:
 npm test
 ```
 
-Paket operasional v1.22.0 memiliki 119 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
+Paket operasional v1.23.0 memiliki 125 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
 
 ## Struktur
 
