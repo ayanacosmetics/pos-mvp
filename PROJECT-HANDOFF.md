@@ -45,25 +45,24 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat berikutnya — belum live
-
-- **Paket Akuntansi dan Analitik Owner v1.26.0** menambahkan enam halaman
-  terpisah di accordion Keuangan: laba rugi, biaya outlet, arus kas, aging,
-  kesehatan produk, dan ekspor akuntan.
-- Biaya memiliki kategori arus kas, nomor dokumen, idempotensi, status
-  posting/pembatalan, hak akses khusus Owner, dan audit.
-- Laba operasional memisahkan penjualan bersih, HPP, biaya operasional, dan
-  pembelian aset/pendanaan. Arus kas tidak menganggap penjualan kredit sebagai
-  kas masuk.
-- Migrasi tunggal:
-  `supabase/migrations/202607270030_owner_accounting_analytics.sql`.
-- Versi kandidat: UI `v1.26.0`, API `1.26.0-cloud`, cache
-  `nusa-pos-shell-v52`; 140 pengujian otomatis lulus.
-- Jangan push/deploy kandidat sebelum pengguna mengonfirmasi SQL `030`
-  berhasil. Setelah konfirmasi, push, deploy, dan verifikasi produksi.
-
 ### Terakhir dikonfirmasi live
 
+- **Paket Akuntansi dan Analitik Owner v1.26.0** live pada 27 Juli 2026.
+- Migrasi `supabase/migrations/202607270030_owner_accounting_analytics.sql`
+  dikonfirmasi berhasil sebelum source didorong.
+- Enam halaman terpisah tersedia di accordion Keuangan: laba rugi, biaya
+  outlet, arus kas, aging, kesehatan produk, dan ekspor akuntan.
+- Biaya memiliki kategori arus kas, nomor dokumen, idempotensi, status
+  posting/pembatalan, integrasi kas keluar saat memakai shift Owner, hak akses
+  khusus Owner, dan audit.
+- Laba operasional memisahkan biaya operasional dari investasi/pendanaan dan
+  arus kas tidak menganggap penjualan kredit sebagai kas masuk.
+- Commit `e6af84a` sudah didorong ke `origin/main`; 140/140 pengujian lulus.
+- Deployment Git/Vercel `dpl_G1JQL6oAiwtnQJmCU9XnYxHUA2SX` berstatus Ready
+  dan alias `kasir-nusa-pos.vercel.app` aktif.
+- Verifikasi produksi mengembalikan API `1.26.0-cloud`, UI `v1.26.0`, enam
+  halaman Keuangan, cache `nusa-pos-shell-v52`, route finansial terlindungi
+  sesi, dan APK kasir tetap tersedia.
 - **Paket Operasional Karyawan v1.25.0** live pada 27 Juli 2026.
 - Migrasi `supabase/migrations/202607270029_employee_operations.sql`
   dikonfirmasi berhasil sebelum deployment.
@@ -427,7 +426,7 @@ Status: migrasi `029`, source, 136 pengujian otomatis, push, deployment, dan
 verifikasi produksi selesai pada 27 Juli 2026. Nomor v1.24 telah dipakai
 aplikasi kasir Android, sehingga paket roadmap ini dirilis sebagai v1.25.0.
 
-### v1.26 — Akuntansi dan analitik owner (kandidat, menunggu SQL/deployment)
+### v1.26 — Akuntansi dan analitik owner (selesai)
 
 - ringkasan laba rugi operasional;
 - biaya outlet dan kategori biaya;
@@ -437,8 +436,8 @@ aplikasi kasir Android, sehingga paket roadmap ini dirilis sebagai v1.25.0.
 - ekspor yang siap diberikan kepada akuntan.
 
 Status: domain, migrasi `030`, API cloud/lokal, enam halaman responsif,
-hak akses khusus Owner, ekspor CSV, dan 140 pengujian otomatis sudah selesai.
-Belum live sampai SQL, push, deployment, dan verifikasi produksi selesai.
+hak akses khusus Owner, ekspor CSV, 140 pengujian otomatis, push, deployment,
+dan verifikasi produksi selesai pada 27 Juli 2026.
 
 ### v1.27 — Multi-outlet tingkat lanjut
 

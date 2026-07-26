@@ -99,7 +99,7 @@ Migrasi ini menambahkan jadwal dan absensi, target serta komisi, approval
 bertingkat, log aktivitas perangkat, dan rekonsiliasi shift per metode
 pembayaran. Jangan deploy source v1.25 sebelum migrasi berhasil.
 
-Untuk kandidat v1.26, jalankan satu file
+Untuk rilis v1.26, jalankan satu file
 `supabase/migrations/202607270030_owner_accounting_analytics.sql` sebelum
 deployment. Migrasi ini menambahkan kategori dan buku biaya outlet, laporan
 laba-rugi operasional, arus kas, aging hutang/piutang, serta analitik produk.
@@ -117,7 +117,7 @@ Jalankan:
 npm test
 ```
 
-Kandidat v1.26.0 memiliki 140 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
+Rilis v1.26.0 memiliki 140 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
 
 ## Aplikasi kasir Android
 
