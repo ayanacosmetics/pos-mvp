@@ -2,6 +2,7 @@ import { formatExpiryValue, parseExpiryDate } from './date.mjs';
 import { quoteBasket as quoteOffline } from './pricing.mjs';
 import { deviceIdentity, enqueueCommand, listCommands, migrateLegacyQueue, removeCommand, updateCommand } from './offline-store.mjs';
 import { clearStoredAuth, isAuthStorageEvent, loadAuth, saveAuth } from './auth-store.mjs';
+import { customerReceiptView } from './receipt.mjs';
 
 const storedAuth = loadAuth();
 const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [] };
@@ -947,7 +948,7 @@ function renderCart() {
   el('mobile-cart-count').textContent=state.cart.reduce((sum,line)=>sum+Number(line.qty??0),0);
   if (!state.quote) {
     el('cart-lines').innerHTML = '<div class="empty-state">Belum ada barang.<br><small>Scan barcode atau pilih produk.</small></div>';
-    el('subtotal').textContent = money.format(0); el('discount').textContent = `−${money.format(0)}`; el('grand-total').textContent = money.format(0); el('pay-button').disabled = true; el('hold-cart').disabled = true;
+    el('subtotal').textContent = money.format(0); el('discount').textContent = `−${money.format(0)}`; el('price-adjustment-summary').classList.add('hidden'); el('grand-total').textContent = money.format(0); el('pay-button').disabled = true; el('hold-cart').disabled = true;
     renderSaleAuthorizationStatus();
     return;
   }
@@ -959,7 +960,12 @@ function renderCart() {
   }).join('');
   document.querySelectorAll('.cart-controls button:not(.manual-line-adjustment)').forEach((button) => button.addEventListener('click', () => changeQty(Number(button.dataset.index), Number(button.dataset.delta))));
   document.querySelectorAll('.manual-line-adjustment').forEach((button) => button.addEventListener('click', () => openSaleAdjustmentDialog(Number(button.dataset.index))));
-  el('subtotal').textContent = money.format(state.quote.subtotal); el('discount').textContent = `${Number(state.quote.discountTotal) < 0 ? '+' : '−'}${money.format(Math.abs(state.quote.discountTotal))}`; el('grand-total').textContent = money.format(state.quote.grandTotal); el('pay-button').disabled = !state.currentShift; el('hold-cart').disabled = false;
+  const receiptView=customerReceiptView(state.quote),internalAmount=receiptView.internalPriceAdjustment;
+  el('subtotal').textContent = money.format(state.quote.subtotal);
+  el('discount').textContent = `${Number(receiptView.discountTotal) < 0 ? '+' : '−'}${money.format(Math.abs(receiptView.discountTotal))}`;
+  el('price-adjustment-summary').classList.toggle('hidden',!internalAmount);
+  el('price-adjustment').textContent=`${Number(internalAmount)<0?'+':'−'}${money.format(Math.abs(internalAmount))}`;
+  el('grand-total').textContent = money.format(state.quote.grandTotal); el('pay-button').disabled = !state.currentShift; el('hold-cart').disabled = false;
   renderSaleAuthorizationStatus();
 }
 
@@ -979,8 +985,9 @@ function renderSaleAuthorizationStatus() {
   }
   const authorization = state.saleAuthorization;
   const remaining = Math.max(0, Math.ceil((new Date(authorization.expiresAt).getTime() - Date.now()) / 60000));
-  const direction = Number(authorization.discountAmount) < 0 ? 'kenaikan' : 'potongan';
-  panel.innerHTML = `<div><strong>Harga manual disetujui</strong><small>${escapeHtml(authorization.approvedBy)} · ${direction} ${money.format(Math.abs(authorization.discountAmount))} · berlaku sekitar ${remaining} menit</small></div><button id="remove-sale-authorization" class="link-button" type="button">Batalkan</button>`;
+  const isInternalPrice=authorization.adjustment?.scope==='LINE';
+  const direction = Number(authorization.discountAmount) < 0 ? 'kenaikan' : 'penurunan';
+  panel.innerHTML = `<div><strong>${isInternalPrice?'Harga internal':'Diskon transaksi'} disetujui</strong><small>${escapeHtml(authorization.approvedBy)} · ${isInternalPrice?direction:'diskon'} ${money.format(Math.abs(authorization.discountAmount))} · berlaku sekitar ${remaining} menit</small></div><button id="remove-sale-authorization" class="link-button" type="button">Batalkan</button>`;
   el('remove-sale-authorization').addEventListener('click', async () => {
     invalidateSaleAuthorization();
     await updateQuote();
@@ -994,12 +1001,18 @@ function openSaleAdjustmentDialog(lineIndex = null) {
   state.adjustmentTargetIndex = lineIndex;
   const isLine = Number.isInteger(lineIndex);
   const line = isLine ? state.quote.lines[lineIndex] : null;
+  el('adjustment-eyebrow').textContent=isLine?'PENYESUAIAN HARGA INTERNAL':'DISKON PELANGGAN';
   el('adjustment-title').textContent = isLine ? 'Ubah harga jual barang' : 'Diskon transaksi';
+  el('adjustment-help').textContent=isLine
+    ? 'Tetapkan harga jual akhir untuk transaksi ini. Rinciannya hanya tersimpan di audit internal dan tidak dicetak pada struk.'
+    : 'Diskon ini diberikan kepada pelanggan dan akan ditampilkan sebagai diskon pada struk.';
   el('adjustment-target').innerHTML = isLine
     ? `<strong>${escapeHtml(line.productName)}</strong><small>${line.qty} ${escapeHtml(line.unitName)} · harga aktif ${money.format(line.total / line.qty)} per satuan</small>`
     : `<strong>Seluruh transaksi</strong><small>Total aktif ${money.format(state.quote.grandTotal)}</small>`;
+  el('adjustment-mode-field').classList.toggle('hidden',isLine);
+  el('adjustment-value-label').textContent=isLine?'Harga jual akhir per satuan':'Nilai diskon';
   el('adjustment-mode').innerHTML = isLine
-    ? '<option value="FIXED_PRICE">Tetapkan harga jual per satuan</option><option value="FIXED_DISCOUNT">Potongan Rupiah per satuan</option><option value="PERCENT">Diskon persen</option>'
+    ? '<option value="FIXED_PRICE">Harga jual akhir per satuan</option>'
     : '<option value="PERCENT">Diskon persen</option><option value="FIXED_DISCOUNT">Potongan nominal</option>';
   el('adjustment-value').value = '';
   el('adjustment-reason').value = '';
@@ -1012,6 +1025,7 @@ function openSaleAdjustmentDialog(lineIndex = null) {
   el('approver-password').disabled = selfApproved;
   el('adjustment-error').textContent = '';
   el('sale-adjustment-dialog').showModal();
+  el('approve-adjustment').textContent=isLine?'Simpan harga internal':'Terapkan diskon';
   el('adjustment-value').focus();
 }
 
@@ -1052,7 +1066,7 @@ async function approveSaleAdjustment(event) {
     el('adjustment-error').textContent = error.message;
   } finally {
     button.disabled = false;
-    button.textContent = 'Terapkan harga';
+    button.textContent = line ? 'Simpan harga internal' : 'Terapkan diskon';
   }
 }
 
@@ -2552,8 +2566,8 @@ function renderReceipt(receipt,payments){
   const address=outlet.address||business.address;
   const phone=outlet.phone||business.phone;
   const footer=outlet.receipt_footer||business.receiptFooter||'Terima kasih telah berbelanja.';
-  const receiptDiscount=Number(receipt.quote.discountTotal??0);
-  const body=`<div class="receipt-head"><strong>${escapeHtml(business.name??'Kasir Nusa')}</strong><span>${escapeHtml(receipt.outletName??outlet.name??'Outlet')}</span>${address?`<small>${escapeHtml(address)}</small>`:''}${phone?`<small>Tel. ${escapeHtml(phone)}</small>`:''}<small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small><b>${escapeHtml(receipt.receiptNo)}</b>${receipt.status==='VOIDED'?'<b>VOID / DIBATALKAN</b>':''}</div><div class="receipt-meta"><span>Kasir</span><strong>${escapeHtml(receipt.cashier)}</strong><span>Pelanggan</span><strong>${escapeHtml(customer?.name??'Pelanggan umum')}</strong></div><div class="receipt-lines">${lines.map((line)=>`<div><span><strong>${escapeHtml(line.productName)}</strong><small>${line.qty} ${escapeHtml(line.unitName)} × ${money.format(line.gross/line.qty)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div><div class="receipt-totals"><div><span>Subtotal</span><strong>${money.format(receipt.quote.subtotal)}</strong></div><div><span>Promo & penyesuaian</span><strong>${receiptDiscount<0?'+':'−'}${money.format(Math.abs(receiptDiscount))}</strong></div><div class="receipt-grand"><span>Total</span><strong>${money.format(receipt.quote.grandTotal)}</strong></div>${payments.map((payment)=>`<div><span>${payment.method}${payment.method==='CASH'&&payment.tendered?` · diterima ${money.format(payment.tendered)}`:''}</span><strong>${money.format(payment.amount)}</strong></div>`).join('')}${change?`<div><span>Kembalian</span><strong>${money.format(change)}</strong></div>`:''}</div>${receipt.notes?`<p class="receipt-thanks"><strong>Catatan:</strong> ${escapeHtml(receipt.notes)}</p>`:''}<p class="receipt-thanks">${escapeHtml(footer)}</p>`;
+  const customerView=customerReceiptView(receipt.quote),receiptDiscount=Number(customerView.discountTotal);
+  const body=`<div class="receipt-head"><strong>${escapeHtml(business.name??'Kasir Nusa')}</strong><span>${escapeHtml(receipt.outletName??outlet.name??'Outlet')}</span>${address?`<small>${escapeHtml(address)}</small>`:''}${phone?`<small>Tel. ${escapeHtml(phone)}</small>`:''}<small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small><b>${escapeHtml(receipt.receiptNo)}</b>${receipt.status==='VOIDED'?'<b>VOID / DIBATALKAN</b>':''}</div><div class="receipt-meta"><span>Kasir</span><strong>${escapeHtml(receipt.cashier)}</strong><span>Pelanggan</span><strong>${escapeHtml(customer?.name??'Pelanggan umum')}</strong></div><div class="receipt-lines">${customerView.lines.map((line)=>`<div><span><strong>${escapeHtml(line.productName)}</strong><small>${line.qty} ${escapeHtml(line.unitName)} × ${money.format(line.customerUnitPrice)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div><div class="receipt-totals"><div><span>Subtotal</span><strong>${money.format(customerView.subtotal)}</strong></div>${Math.abs(receiptDiscount)>0.01?`<div><span>Promo & diskon</span><strong>${receiptDiscount<0?'+':'−'}${money.format(Math.abs(receiptDiscount))}</strong></div>`:''}<div class="receipt-grand"><span>Total</span><strong>${money.format(customerView.grandTotal)}</strong></div>${payments.map((payment)=>`<div><span>${payment.method}${payment.method==='CASH'&&payment.tendered?` · diterima ${money.format(payment.tendered)}`:''}</span><strong>${money.format(payment.amount)}</strong></div>`).join('')}${change?`<div><span>Kembalian</span><strong>${money.format(change)}</strong></div>`:''}</div>${receipt.notes?`<p class="receipt-thanks"><strong>Catatan:</strong> ${escapeHtml(receipt.notes)}</p>`:''}<p class="receipt-thanks">${escapeHtml(footer)}</p>`;
   const copies=Math.max(1,Math.min(3,Number(state.deviceSettings.receiptCopies??1)));
   el('receipt-content').innerHTML=Array.from({length:copies},(_,index)=>`<section class="receipt-copy">${body}${copies>1?`<small class="receipt-copy-label">Salinan ${index+1} dari ${copies}</small>`:''}</section>`).join('');
   const width=Number(state.deviceSettings.paperWidth??80)===58?58:80;

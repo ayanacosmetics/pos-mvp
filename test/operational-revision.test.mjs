@@ -44,15 +44,17 @@ test('PO dan restok menyediakan cari, scan, stok kosong teratas, serta baris ins
 });
 
 test('harga manual naik atau turun tetap memerlukan otorisasi dan tercatat di audit', async () => {
-  const [migration, api, html] = await Promise.all([
+  const [migration, api, html, script] = await Promise.all([
     readProject('supabase/migrations/202607230023_manual_price_override.sql'),
     readProject('api/index.mjs'),
-    readProject('apps/web/index.html')
+    readProject('apps/web/index.html'),
+    readProject('apps/web/app.js')
   ]);
   assert.match(migration, /discount_amount <> 0/);
   assert.match(migration, /SALE_PRICE_OVERRIDE_APPROVED/);
   assert.match(migration, /'direction'.*'DECREASE'.*'INCREASE'/s);
   assert.match(api, /\['OWNER','ADMIN'\]\.includes\(session\.profile\.role\)/);
   assert.match(api, /Email dan kata sandi Owner\/Admin wajib diisi/);
-  assert.match(html, /UBAH HARGA & DISKON/);
+  assert.match(html, /PENYESUAIAN HARGA INTERNAL/);
+  assert.match(script, /DISKON PELANGGAN/);
 });

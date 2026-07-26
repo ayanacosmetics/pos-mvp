@@ -46,7 +46,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ### Terakhir dikonfirmasi live
 
-- **Paket Operasional v1.21.1**
+- **Paket Operasional v1.21.2**
 - SQL `202607260025_pos_speed_customer_service.sql` berhasil diterapkan pada
   Supabase sebelum deployment.
 - Hotfix nomor struk memperbaiki `document_sequences` produksi dari tidak ada
@@ -54,14 +54,19 @@ kode frontend, dokumentasi publik, atau chat.
 - API kini mendeteksi benturan `sales_tenant_id_receipt_no_key`, menyelaraskan
   penghitung secara aman, lalu mencoba ulang RPC dengan idempotency key yang
   sama sehingga transaksi tidak tercatat ganda.
-- Deployment Vercel `dpl_GRqjV5vNcm2hs3qnSS6eDMiSuTxN` berstatus Ready pada
+- Deployment Vercel `dpl_7tzqbzxjdyN3aL6rVp9m14QJ9Usy` berstatus Ready pada
   26 Juli 2026 dan alias `kasir-nusa-pos.vercel.app` sudah aktif.
-- Verifikasi langsung produksi mengembalikan API `1.21.1-cloud`, aplikasi
-  `v1.21.1`, cache `nusa-pos-shell-v40`, ZXing lokal, kebijakan `camera=(self)`,
+- Verifikasi langsung produksi mengembalikan API `1.21.2-cloud`, aplikasi
+  `v1.21.2`, cache `nusa-pos-shell-v41`, ZXing lokal, kebijakan `camera=(self)`,
   proteksi autentikasi riwayat POS, dan logout yang menghapus cookie refresh.
 - Skema Supabase mengonfirmasi RPC `complete_sale_v6` dan `void_sale_v1`
   tersedia; verifikasi produksi tidak membuat transaksi nyata.
-- Validasi rilis mencakup 103 pengujian otomatis dan 5 pengujian browser
+- Penyesuaian harga barang kini menjadi alur internal tersendiri dan hanya
+  menetapkan harga jual akhir. Struk menampilkan harga akhir sebagai harga
+  normal tanpa nominal, alasan, approver, atau label penyesuaian internal.
+- Promo dan diskon pelanggan tetap dicantumkan tersendiri pada struk serta
+  tidak digabung dengan penyesuaian harga internal.
+- Validasi rilis mencakup 107 pengujian otomatis dan 5 pengujian browser
   tambahan; seluruhnya lulus.
 
 SQL penguatan `202607260026_receipt_sequence_collision_fix.sql` sudah tersedia
@@ -205,9 +210,10 @@ langkah operasional sebelum pemakaian toko, bukan pekerjaan source code.
 - catatan per transaksi dan catatan pelanggan yang terlihat secukupnya;
 - pengujian penggunaan satu tangan pada mobile.
 
-Status: migrasi utama, 103 pengujian otomatis, 5 pengujian browser, deployment
-produksi, serta hotfix benturan nomor struk selesai pada 26 Juli 2026. SQL
-penguatan `202607260026_receipt_sequence_collision_fix.sql` menunggu diterapkan.
+Status: migrasi utama, 107 pengujian otomatis, 5 pengujian browser, deployment
+produksi, hotfix benturan nomor struk, dan privasi harga internal pada struk
+selesai pada 26 Juli 2026. SQL penguatan
+`202607260026_receipt_sequence_collision_fix.sql` menunggu diterapkan.
 
 ### v1.22 — Perencanaan restok dan pembelian
 
