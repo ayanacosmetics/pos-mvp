@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat v2.3.4 siap deploy
+### Rilis v2.3.4 dikonfirmasi live
 
 - **Pilih Langsung v2.3.4** menghapus kewajiban mengatur kebijakan/supplier
   utama per produk sebelum barang dapat dicentang pada rencana restok.
@@ -57,7 +57,12 @@ kode frontend, dokumentasi publik, atau chat.
 - QA mobile 390 x 844 pada barang tanpa aturan berhasil membuat pesanan 7 pcs
   kepada supplier yang dipilih, tanpa overflow atau error JavaScript.
 - Tidak memerlukan migrasi SQL. Cache offline dinaikkan ke
-  `nusa-pos-shell-v63`; 178 pengujian otomatis ditargetkan lulus.
+  `nusa-pos-shell-v63`; 178/178 pengujian otomatis lulus.
+- Commit `f545c67` didorong ke `origin/main`. Deployment Vercel
+  `dpl_HBWipvKHATRoe4vAMZmnU9ZFR2bJ` berstatus Ready dan alias produksi aktif.
+- Verifikasi domain publik mengembalikan API `2.3.4-cloud`, identitas
+  `Pilih Langsung · v2.3.4`, checkbox/jumlah tanpa pengunci aturan, pilihan
+  supplier per pesanan, aset `v63`, serta cache `nusa-pos-shell-v63`.
 
 ### Rilis v2.3.3 dikonfirmasi live
 
