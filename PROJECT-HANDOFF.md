@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Paket v2.4.10 Kelola Staff siap deployment
+### Rilis v2.4.10 Kelola Staff dikonfirmasi live
 
 - Menu `Pengguna` diganti menjadi `Kelola Staff`.
 - Halaman utama hanya menampilkan ringkasan dan daftar Staff/Admin; akun Owner
@@ -58,6 +58,11 @@ kode frontend, dokumentasi publik, atau chat.
 - Seluruh 192 pengujian otomatis lulus. Pemeriksaan visual daftar dan dialog
   lulus pada desktop 1365×900 serta ponsel 390×844 tanpa overflow horizontal.
 - Tidak memerlukan migrasi SQL.
+- Commit fitur `b5c71cb` sudah didorong ke `origin/main`.
+- Deployment Vercel `dpl_8d5ftiQWVyaiFcXeMfvCc8vnz85h` berstatus Ready dan
+  alias `kasir-nusa-pos.vercel.app` aktif.
+- Verifikasi publik mengembalikan API `2.4.10-cloud`, menu Kelola Staff,
+  daftar sebelum dialog pembuatan, aset `v74`, serta cache PWA `v74`.
 
 ### Rilis v2.4.9 Hak Akses Akun dikonfirmasi live
 
