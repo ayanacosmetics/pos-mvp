@@ -8,7 +8,7 @@ import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, uni
 import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -168,6 +168,7 @@ function escapeHtml(value) {
 function productImageUrl(product) {
   const value = String(product?.imageUrl ?? '').trim();
   if (!value) return '';
+  if(/^data:image\/(png|jpeg|webp);base64,/i.test(value))return value;
   try {
     const url = new URL(value);
     return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
@@ -680,6 +681,35 @@ function renderProductUnitEditor(){
   el('product-units-editor').innerHTML=state.productUnitsDraft.map((unit,index)=>`<div class="product-unit-row" data-index="${index}"><label>Nama satuan<input class="unit-name" value="${escapeHtml(unit.name)}" placeholder="pcs / lusin / karton" required></label><label>Isi dalam pcs<input class="unit-factor" type="number" min="1" step="any" value="${unit.factor}" required></label><label>Barcode<input class="unit-barcode" value="${escapeHtml(unit.barcode??'')}" placeholder="Scan atau ketik"></label><button class="icon-button remove-product-unit" type="button" aria-label="Hapus satuan" ${state.productUnitsDraft.length===1?'disabled':''}>×</button></div>`).join('');
 }
 
+function renderProductPhotoPreview(url=''){
+  el('new-image-preview').innerHTML=url
+    ?`<img src="${escapeHtml(url)}" alt="Pratinjau foto produk">`
+    :'<span>Belum ada foto</span>';
+  const image=el('new-image-preview').querySelector('img');
+  if(image)image.addEventListener('error',()=>{el('new-image-preview').innerHTML='<span>Foto tidak dapat dibuka</span>';},{once:true});
+}
+
+async function productImageDataFromFile(file){
+  if(!file?.type?.match(/^image\/(png|jpeg|webp)$/))throw new Error('Pilih foto PNG, JPEG, atau WebP.');
+  if(file.size>12_000_000)throw new Error('Foto maksimal 12 MB sebelum diperkecil.');
+  const source=URL.createObjectURL(file);
+  try{
+    const image=await new Promise((resolve,reject)=>{
+      const node=new Image();node.onload=()=>resolve(node);node.onerror=()=>reject(new Error('Foto tidak dapat dibuka.'));node.src=source;
+    });
+    let scale=Math.min(1,900/image.width,900/image.height),result='';
+    for(let attempt=0;attempt<4;attempt+=1){
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
+      const context=canvas.getContext('2d');context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(image,0,0,canvas.width,canvas.height);
+      result=canvas.toDataURL('image/jpeg',.84-attempt*.08);
+      if(result.length<=1_150_000)return result;
+      scale*=.78;
+    }
+    throw new Error('Foto masih terlalu besar. Pilih foto lain.');
+  }finally{URL.revokeObjectURL(source);}
+}
+
 function openProductEditor(productId=null){
   const product=productId?state.managedProducts.find((item)=>item.id===productId):null;
   const prices=product?productPrices(product):{retail:'',byGroup:{},tierQty:'',tierPrice:''};
@@ -690,6 +720,8 @@ function openProductEditor(productId=null){
   el('new-sku').value=product?.sku??'';el('new-name').value=product?.name??'';
   el('new-category').value=product?.category??'';el('new-brand').value=product?.brand??'';
   el('new-image-url').value=product?.imageUrl??'';
+  state.productImageFile=null;state.productImagePreviewUrl=product?.imageUrl??'';
+  renderProductPhotoPreview(state.productImagePreviewUrl);
   el('new-variant-group').value=product?.variantGroup??'';el('new-variant-name').value=product?.variantName??'';
   el('new-min-stock').value=product?.minimumStock??0;el('new-track-expiry').checked=Boolean(product?.trackExpiry);
   el('new-retail-price').value=prices.retail;
@@ -719,11 +751,19 @@ async function saveProduct(event) {
   event.preventDefault();el('product-error').textContent='';
   const payload=productPayload(),button=el('save-product-button');button.disabled=true;
   try{
+    if(state.productImageFile){
+      button.textContent='Mengunggah foto...';
+      const media=await request('/api/media/product-image',{method:'POST',body:JSON.stringify({
+        dataUrl:await productImageDataFromFile(state.productImageFile)
+      })});
+      payload.imageUrl=media.imageUrl;
+    }
+    button.textContent='Menyimpan...';
     const path=payload.id?`/api/products/${payload.id}`:'/api/products';
     const product=await request(path,{method:payload.id?'PUT':'POST',body:JSON.stringify(payload)});
     toast(`${product.name} berhasil ${payload.id?'diperbarui':'ditambahkan'}`);el('product-dialog').close();
     await refreshCatalog();await renderRestock();if(state.session.permissions.includes('inventory.manage'))await loadInventory();
-  }catch(error){el('product-error').textContent=error.message;}finally{button.disabled=false;}
+  }catch(error){el('product-error').textContent=error.message;}finally{button.disabled=false;button.textContent='Simpan produk';}
 }
 
 async function toggleProductStatus(productId,active){
@@ -4933,6 +4973,24 @@ el('product-table').addEventListener('click',(event)=>{
   const toggle=event.target.closest('.toggle-product');if(toggle)toggleProductStatus(row.dataset.productId,toggle.dataset.active==='true');
 });
 el('product-form').addEventListener('submit', saveProduct);
+el('new-image-file').addEventListener('change',(event)=>{
+  const file=event.target.files?.[0];if(!file)return;
+  if(!file.type.match(/^image\/(png|jpeg|webp)$/))return el('product-error').textContent='Pilih foto PNG, JPEG, atau WebP.';
+  if(state.productImagePreviewUrl?.startsWith('blob:'))URL.revokeObjectURL(state.productImagePreviewUrl);
+  state.productImageFile=file;state.productImagePreviewUrl=URL.createObjectURL(file);
+  el('new-image-url').value='';el('product-error').textContent='';
+  renderProductPhotoPreview(state.productImagePreviewUrl);
+});
+el('new-image-url').addEventListener('input',(event)=>{
+  state.productImageFile=null;state.productImagePreviewUrl=event.target.value.trim();
+  renderProductPhotoPreview(state.productImagePreviewUrl);
+});
+el('remove-product-image').addEventListener('click',()=>{
+  if(state.productImagePreviewUrl?.startsWith('blob:'))URL.revokeObjectURL(state.productImagePreviewUrl);
+  state.productImageFile=null;state.productImagePreviewUrl='';
+  el('new-image-file').value='';el('new-image-url').value='';
+  renderProductPhotoPreview();
+});
 el('download-import-template').addEventListener('click', downloadImportTemplate);
 el('import-file').addEventListener('change', inspectImportFile);
 el('import-kind').addEventListener('change', () => {

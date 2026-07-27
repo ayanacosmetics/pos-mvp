@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Desain Struk v2.6.0
+# Kasir Nusa POS — Foto Galeri v2.6.1
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -23,6 +23,9 @@ Produksi menggunakan:
 - Owner dapat mengatur desain struk dari `Sistem → Desain struk`: memasukkan
   logo, melihat pratinjau langsung, mengubah posisi dan kerapatan, serta memilih
   informasi yang dicetak. Desain yang sama berlaku ke seluruh kasir.
+- Logo struk dan foto produk dapat dipilih langsung dari galeri atau kamera.
+  Foto produk diperkecil otomatis dan disimpan di media storage agar katalog
+  ribuan produk tidak terbebani data gambar mentah.
 - Owner mengatur hak akses setiap akun Staff/Admin melalui checklist fitur.
   Harga manual dan void hanya tersedia bagi akun yang diberi izin, tanpa
   membagikan atau memasukkan sandi Owner.

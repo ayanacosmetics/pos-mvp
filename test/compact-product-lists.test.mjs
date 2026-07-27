@@ -20,13 +20,14 @@ test('Kasir, restok, dan stok memakai daftar produk memanjang dengan thumbnail',
   assert.match(css, /\.inventory-list-heading,\.inventory-product-row\{display:grid/);
 });
 
-test('foto produk dapat diatur dari editor dan URL yang rusak kembali ke placeholder', async () => {
+test('foto produk dapat dipilih dari galeri dan gambar rusak kembali ke placeholder', async () => {
   const [html, script] = await Promise.all([
     read('../apps/web/index.html'),
     read('../apps/web/app.js')
   ]);
+  assert.match(html, /id="new-image-file" type="file"/);
   assert.match(html, /id="new-image-url" type="url"/);
-  assert.match(html, /foto tampil di Kasir, Restok, dan Stok/);
+  assert.match(html, /Foto otomatis diperkecil sebelum diunggah/);
   assert.match(script, /imageUrl:el\('new-image-url'\)\.value/);
   assert.match(script, /function bindProductImageFallbacks/);
   assert.match(script, /image\.addEventListener\('error', \(\) => image\.remove\(\)/);

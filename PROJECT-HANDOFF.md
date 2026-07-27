@@ -45,6 +45,22 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat v2.6.1 Foto Galeri menunggu migrasi dan deployment
+
+- Logo struk mengutamakan pilihan langsung dari galeri/kamera; URL dipindahkan
+  ke opsi lanjutan.
+- Editor produk kini menerima foto langsung dari galeri/kamera, menampilkan
+  pratinjau, memperkecil gambar otomatis, dan menyediakan tombol hapus.
+- Foto produk diunggah ke bucket publik `pos-media` dengan nama acak per tenant,
+  sehingga tabel dan bootstrap katalog tetap ringan untuk ribuan produk.
+- Upload hanya tersedia untuk akun dengan izin kelola katalog, dibatasi tipe
+  PNG/JPEG/WebP dan ukuran hasil maksimal 900 KB.
+- Kandidat memakai API `2.6.1-cloud`, aset web `v78`, dan cache PWA `v78`.
+- Seluruh 202 pengujian otomatis lulus. Editor produk lulus pemeriksaan visual
+  ponsel 390×844 tanpa overlap atau overflow.
+- Jalankan migrasi `supabase/migrations/202607280040_pos_media_storage.sql`
+  sebelum deployment.
+
 ### Rilis v2.6.0 Desain Struk dikonfirmasi live
 
 - Owner mendapat halaman `Sistem → Desain struk` dengan pratinjau langsung.

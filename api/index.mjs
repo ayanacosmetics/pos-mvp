@@ -139,6 +139,33 @@ async function supabase(path, { method = 'GET', body, token, prefer } = {}) {
   return data;
 }
 
+async function uploadPublicMedia(tenantId, kind, dataUrl) {
+  const match=String(dataUrl??'').match(/^data:image\/(jpeg|png|webp);base64,([a-z0-9+/=\s]+)$/i);
+  if(!match)throw Object.assign(new Error('Pilih foto PNG, JPEG, atau WebP yang valid'),{status:400});
+  const contentType=`image/${match[1].toLowerCase()}`;
+  const bytes=Buffer.from(match[2].replace(/\s/g,''),'base64');
+  if(!bytes.length||bytes.length>900000)throw Object.assign(new Error('Foto terlalu besar setelah diperkecil'),{status:400});
+  const extension=contentType==='image/jpeg'?'jpg':contentType.split('/')[1];
+  const objectPath=`${tenantId}/${kind}/${randomBytes(18).toString('hex')}.${extension}`;
+  const config=env();
+  const upload=await fetch(`${config.url}/storage/v1/object/pos-media/${objectPath}`,{
+    method:'POST',
+    headers:{
+      apikey:config.service,authorization:`Bearer ${config.service}`,
+      'content-type':contentType,'x-upsert':'false'
+    },
+    body:bytes
+  });
+  if(!upload.ok){
+    const detail=await upload.text();
+    const error=new Error(/bucket.*not found/i.test(detail)
+      ?'Penyimpanan foto belum aktif. Jalankan migrasi media terbaru.'
+      :'Foto gagal diunggah. Coba ulangi.');
+    error.status=upload.status;throw error;
+  }
+  return `${config.url}/storage/v1/object/public/pos-media/${objectPath}`;
+}
+
 const rest = (table, query = '', options = {}) => supabase(`/rest/v1/${table}${query ? `?${query}` : ''}`, options);
 const rpc = (name, body) => supabase(`/rest/v1/rpc/${name}`, { method: 'POST', body });
 
@@ -920,7 +947,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.6.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.6.1-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1503,6 +1530,13 @@ async function routeRequest(request, response, route) {
     const actionMap = { approve: 'APPLY_SERVER', 'apply-server': 'APPLY_SERVER', 'honor-offline': 'HONOR_OFFLINE', reject: 'REJECT' };
     const result = await rpc('resolve_sync_sale', { p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_command_id: commandId, p_action: actionMap[action] });
     return send(response, 200, result);
+  }
+
+  if(request.method==='POST'&&route==='media/product-image'){
+    requirePermission(session,'catalog.manage');
+    const input=bodyOf(request);
+    const imageUrl=await uploadPublicMedia(context.tenantId,'products',input.dataUrl);
+    return send(response,201,{imageUrl});
   }
 
   if (request.method === 'POST' && route === 'products') {

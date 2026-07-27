@@ -62,7 +62,7 @@ async function bodyOf(request) {
   let raw = '';
   for await (const chunk of request) {
     raw += chunk;
-    if (raw.length > 1_000_000) throw new Error('Payload terlalu besar');
+    if (raw.length > 2_000_000) throw new Error('Payload terlalu besar');
   }
   return raw ? JSON.parse(raw) : {};
 }
@@ -86,7 +86,7 @@ function requirePermission(request, response, permission) {
 }
 
 async function api(request, response, url) {
-  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '2.6.0-local', storage: 'sqlite' });
+  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '2.6.1-local', storage: 'sqlite' });
 
   if (request.method === 'POST' && url.pathname === '/api/login') {
     const input = await bodyOf(request);
@@ -242,6 +242,13 @@ async function api(request, response, url) {
     const session = requirePermission(request, response, PERMISSIONS.MANAGE_PRODUCTS);
     if (!session) return;
     return json(response, 201, store.createProduct(await bodyOf(request), session.user.id));
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/media/product-image') {
+    if (!requirePermission(request, response, PERMISSIONS.MANAGE_PRODUCTS)) return;
+    const input=await bodyOf(request);
+    if(!/^data:image\/(png|jpeg|webp);base64,/i.test(String(input.dataUrl??'')))return json(response,400,{error:'Pilih foto PNG, JPEG, atau WebP yang valid'});
+    return json(response,201,{imageUrl:input.dataUrl});
   }
 
   if (request.method === 'POST' && url.pathname === '/api/promotions/publish') {
