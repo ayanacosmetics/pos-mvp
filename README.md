@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Kandidat Akuntansi Inti v2.1.0
+# Kasir Nusa POS — Akuntansi Inti v2.1.0
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 

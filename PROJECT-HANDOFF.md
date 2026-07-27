@@ -45,11 +45,11 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat berikutnya — belum live
+### Rilis v2.1 dikonfirmasi live
 
-- **Akuntansi Inti v2.1.0** selesai di source lokal dan belum didorong/deploy.
-- Satu migrasi menunggu konfirmasi:
-  `supabase/migrations/202607270033_core_accounting.sql`.
+- **Akuntansi Inti v2.1.0** live pada 27 Juli 2026.
+- Migrasi `supabase/migrations/202607270033_core_accounting.sql`
+  dikonfirmasi berhasil sebelum source didorong.
 - Enam halaman Owner terpisah tersedia di accordion Keuangan: daftar akun,
   jurnal umum, buku besar, neraca saldo, neraca, serta periode/tutup buku.
 - Pembukuan memakai debit-kredit berimbang. Penjualan/void, retur pelanggan,
@@ -60,8 +60,13 @@ kode frontend, dokumentasi publik, atau chat.
   menghapus histori.
 - Data akuntansi masuk backup. Saldo awal modal/persediaan dari masa sebelum
   Kasir Nusa tetap harus dimasukkan Owner melalui jurnal manual setelah live.
-- 152/152 pengujian otomatis lulus. Source tidak boleh didorong atau
-  dideploy sebelum migrasi `033` dikonfirmasi berhasil.
+- Commit source `6cb386a` didorong ke `origin/main`; 152/152 pengujian
+  otomatis lulus.
+- Deployment Vercel `dpl_Cfkp2kcW8kqHSLJbBqhLiyjZpa4E` berstatus Ready dan
+  alias `kasir-nusa-pos.vercel.app` aktif.
+- Verifikasi produksi mengembalikan API `2.1.0-cloud`, UI `v2.1.0`, enam
+  halaman Akuntansi, cache `nusa-pos-shell-v55`, dan route dashboard
+  akuntansi terlindungi sesi.
 
 ### Rilis v2.0 dikonfirmasi live
 
@@ -541,9 +546,9 @@ pengujian otomatis, push, deployment, dan verifikasi produksi selesai pada
 - neraca saldo serta neraca dengan laba berjalan;
 - periode akuntansi dan tutup buku.
 
-Status: kandidat source selesai dengan migrasi `033`, enam halaman Owner,
-backup, audit, kontrol periode, dan 152 pengujian otomatis. Menunggu SQL
-berhasil sebelum push dan deployment.
+Status: migrasi `033`, enam halaman Owner, backup, audit, kontrol periode,
+152 pengujian otomatis, push, deployment, dan verifikasi produksi selesai
+pada 27 Juli 2026.
 
 ### Fitur opsional, bukan prioritas otomatis
 
