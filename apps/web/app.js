@@ -4,9 +4,10 @@ import { deviceIdentity, enqueueCommand, listCommands, migrateLegacyQueue, remov
 import { clearStoredAuth, isAuthStorageEvent, loadAuth, saveAuth } from './auth-store.mjs';
 import { customerReceiptView } from './receipt.mjs';
 import { disconnectBluetoothPrinter, printEscPosReceipt, printEscPosTest, printerConnected, printerSelected, restoreGrantedPrinter, selectBluetoothPrinter, supportsBluetoothClassicPrinting } from './escpos-printer.mjs';
+import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, unitFitsStock } from './pos-units.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -296,12 +297,12 @@ function renderProducts(query = '') {
   renderPosCategoryFilters();
   el('favorite-filter').setAttribute('aria-pressed',String(state.favoriteOnly));
   el('product-grid').innerHTML = list.map((product) => {
-    const unit = product.units[0];
+    const unit = sortedProductUnits(product)[0];
     const rule = product.priceRules.find((item) => item.customerGroupId === 'retail') ?? product.priceRules[0];
     const empty = Number(product.stockBase ?? 0) <= 0;
     return `<article class="product-card-shell"><button class="product-card ${empty ? 'out-of-stock' : ''}" data-product="${product.id}" data-unit="${unit.id}" ${empty ? 'disabled' : ''}><span class="category">${escapeHtml(product.category)}</span><strong>${escapeHtml(product.name)}</strong><small>${empty ? 'STOK KOSONG' : `${money.format(rule?.unitPriceBase ?? 0)} · stok ${product.stockBase} pcs`}</small></button><button class="favorite-product ${favorites.has(product.id)?'active':''}" type="button" data-favorite-product="${product.id}" aria-label="${favorites.has(product.id)?'Hapus dari':'Tambahkan ke'} favorit" aria-pressed="${favorites.has(product.id)}">★</button></article>`;
   }).join('') || '<div class="empty-state compact">Tidak ada produk untuk filter ini.</div>';
-  document.querySelectorAll('.product-card').forEach((button) => button.addEventListener('click', () => addToCart(button.dataset.product, button.dataset.unit)));
+  document.querySelectorAll('.product-card').forEach((button) => button.addEventListener('click', () => choosePosProduct(button.dataset.product)));
   document.querySelectorAll('.favorite-product').forEach((button)=>button.addEventListener('click',()=>{
     const ids=favoriteProductIds();if(ids.has(button.dataset.favoriteProduct))ids.delete(button.dataset.favoriteProduct);else ids.add(button.dataset.favoriteProduct);
     saveFavoriteProductIds(ids);renderProducts(el('product-search').value);
@@ -1094,6 +1095,75 @@ async function closeShift() {
   } catch (error) { toast(error.message); }
 }
 
+function openUnitPicker(productId, { cartIndex = null, scanFallback = false } = {}) {
+  const product = state.products.find((item) => item.id === productId);
+  const units = sortedProductUnits(product);
+  if (!product || !units.length) return toast('Produk atau satuan tidak ditemukan.');
+  if (units.length === 1 && cartIndex === null) return addToCart(product.id, units[0].id);
+  const line = cartIndex === null ? null : state.cart[cartIndex];
+  const qty = Number(line?.qty ?? 1);
+  const usedOutsideLine = productBaseQuantity(state.cart, product, cartIndex ?? -1);
+  state.unitPicker = { productId, cartIndex, scanFallback };
+  el('unit-picker-product').textContent = product.name;
+  el('unit-picker-help').textContent = scanFallback
+    ? 'Barcode dasar dikenali. Pilih satuan yang sedang dijual.'
+    : cartIndex === null
+      ? 'Pilih satuan yang ingin dimasukkan ke keranjang.'
+      : `Ganti satuan untuk ${qty} barang ini.`;
+  el('unit-picker-options').innerHTML = units.map((unit) => {
+    const factor = Number(unit.factor ?? 0);
+    const available = factor > 0 ? Math.floor(Math.max(0, Number(product.stockBase ?? 0) - usedOutsideLine) / factor) : 0;
+    const fits = unitFitsStock({ cart: state.cart, product, unit, qty, excludeIndex: cartIndex ?? -1 });
+    const current = line?.unitId === unit.id;
+    const barcode = String(unit.barcode ?? '').trim();
+    return `<button class="unit-picker-option ${current ? 'current' : ''}" type="button" data-unit-id="${unit.id}" ${fits ? '' : 'disabled'}>
+      <span class="unit-picker-copy"><strong>${escapeHtml(unit.name)}</strong><small>${factor === 1 ? 'Satuan dasar' : `Isi ${factor} pcs`}${barcode ? ` · barcode terdaftar` : ' · tanpa barcode'}</small></span>
+      <span class="unit-picker-stock"><strong>${available}</strong><small>tersedia${current ? ' · dipakai' : ''}</small></span>
+    </button>`;
+  }).join('');
+  const dialog = el('unit-picker-dialog');
+  if (!dialog.open) dialog.showModal();
+}
+
+function choosePosProduct(productId) {
+  const product = state.products.find((item) => item.id === productId);
+  const units = sortedProductUnits(product);
+  if (!product || !units.length) return toast('Produk atau satuan tidak ditemukan.');
+  if (units.length === 1) return addToCart(product.id, units[0].id);
+  openUnitPicker(product.id);
+}
+
+async function addScannedProduct(product, scannedUnit) {
+  if (shouldChooseUnitAfterScan(product, scannedUnit)) {
+    openUnitPicker(product.id, { scanFallback: true });
+    return;
+  }
+  await addToCart(product.id, scannedUnit.id);
+}
+
+async function changeCartUnit(index, unitId) {
+  const line = state.cart[index];
+  const product = state.products.find((item) => item.id === line?.productId);
+  const unit = product?.units.find((item) => item.id === unitId);
+  if (!line || !product || !unit) return toast('Produk atau satuan tidak ditemukan.');
+  if (!unitFitsStock({ cart: state.cart, product, unit, qty: line.qty, excludeIndex: index })) {
+    return toast(`${product.name}: stok tidak cukup untuk ${line.qty} ${unit.name}.`);
+  }
+  invalidateSaleAuthorization();
+  const duplicateIndex = state.cart.findIndex((item, candidateIndex) =>
+    candidateIndex !== index && item.productId === line.productId && item.unitId === unit.id
+  );
+  if (duplicateIndex >= 0) {
+    state.cart[duplicateIndex].qty += Number(line.qty);
+    state.cart.splice(index, 1);
+  } else {
+    line.unitId = unit.id;
+  }
+  state.unitPicker = null;
+  el('unit-picker-dialog').close();
+  await updateQuote();
+}
+
 async function addToCart(productId, unitId) {
   invalidateSaleAuthorization();
   const product=state.products.find((item)=>item.id===productId);
@@ -1176,9 +1246,14 @@ function renderCart() {
     const cartLine=state.cart[index],product=state.products.find((item)=>item.id===cartLine.productId),unit=product?.units.find((item)=>item.id===cartLine.unitId);
     const usedBase=state.cart.filter((item)=>item.productId===cartLine.productId).reduce((sum,item)=>sum+Number(item.qty)*Number(product?.units.find((candidate)=>candidate.id===item.unitId)?.factor??0),0);
     const atLimit=!product||!unit||usedBase+Number(unit.factor)>Number(product.stockBase??0);
-    return `<div class="cart-line"><div class="cart-line-main"><div><strong>${line.productName}</strong><br><small>${line.qty} ${line.unitName} · ${money.format(line.gross / line.qty)} · stok ${product?.stockBase??0} pcs</small></div><strong>${money.format(line.total)}</strong></div><div class="cart-controls"><button data-index="${index}" data-delta="-1">−</button><span>${line.qty}</span><button data-index="${index}" data-delta="1" ${atLimit?'disabled title="Stok tidak mencukupi"':''}>+</button><button class="manual-line-adjustment" data-index="${index}" type="button" ${state.saleAuthorization?'disabled':''}>Ubah harga</button></div>${line.promotions.map((promo) => { const raised=Number(promo.discount)<0; return `<div class="promo-note ${promo.manual?'manual':''}">${promo.manual?'Harga manual ':''}${escapeHtml(promo.code)} v${promo.version}: ${raised?'+':'−'}${money.format(Math.abs(promo.discount))}${promo.approvedBy?` · ${escapeHtml(promo.approvedBy)}`:''}</div>`; }).join('')}</div>`;
+    return `<div class="cart-line"><div class="cart-line-main"><div><strong>${line.productName}</strong><br><small class="cart-line-meta">${line.qty} <button class="cart-unit-change" data-index="${index}" type="button" aria-label="Ganti satuan ${escapeHtml(line.productName)}">${escapeHtml(line.unitName)} <span aria-hidden="true">⌄</span></button> · ${money.format(line.gross / line.qty)} · stok ${product?.stockBase??0} pcs</small></div><strong>${money.format(line.total)}</strong></div><div class="cart-controls"><button data-index="${index}" data-delta="-1">−</button><span>${line.qty}</span><button data-index="${index}" data-delta="1" ${atLimit?'disabled title="Stok tidak mencukupi"':''}>+</button><button class="manual-line-adjustment" data-index="${index}" type="button" ${state.saleAuthorization?'disabled':''}>Ubah harga</button></div>${line.promotions.map((promo) => { const raised=Number(promo.discount)<0; return `<div class="promo-note ${promo.manual?'manual':''}">${promo.manual?'Harga manual ':''}${escapeHtml(promo.code)} v${promo.version}: ${raised?'+':'−'}${money.format(Math.abs(promo.discount))}${promo.approvedBy?` · ${escapeHtml(promo.approvedBy)}`:''}</div>`; }).join('')}</div>`;
   }).join('');
-  document.querySelectorAll('.cart-controls button:not(.manual-line-adjustment)').forEach((button) => button.addEventListener('click', () => changeQty(Number(button.dataset.index), Number(button.dataset.delta))));
+  document.querySelectorAll('.cart-controls button[data-delta]').forEach((button) => button.addEventListener('click', () => changeQty(Number(button.dataset.index), Number(button.dataset.delta))));
+  document.querySelectorAll('.cart-unit-change').forEach((button) => button.addEventListener('click', () => {
+    const index = Number(button.dataset.index);
+    const line = state.cart[index];
+    if (line) openUnitPicker(line.productId, { cartIndex: index });
+  }));
   document.querySelectorAll('.manual-line-adjustment').forEach((button) => button.addEventListener('click', () => openSaleAdjustmentDialog(Number(button.dataset.index))));
   const receiptView=customerReceiptView(state.quote),internalAmount=receiptView.internalPriceAdjustment;
   el('subtotal').textContent = money.format(state.quote.subtotal);
@@ -1359,7 +1434,7 @@ async function handleCameraBarcode(value) {
   const exact = barcodeMatch(value);
   if (!exact) return toast(`Barcode ${value} belum terdaftar pada produk.`);
   if (barcodeCameraTarget === 'pos') {
-    await addToCart(exact.product.id, exact.unit.id);
+    await addScannedProduct(exact.product, exact.unit);
     el('product-search').value = '';
     return;
   }
@@ -1441,7 +1516,7 @@ async function handleNativeScannerBarcode(value) {
   if (!el('page-pos').classList.contains('active')) return toast('Buka halaman Kasir sebelum memindai barang.');
   const exact = barcodeMatch(barcode);
   if (!exact) return toast(`Barcode ${barcode} belum terdaftar pada produk.`);
-  await addToCart(exact.product.id, exact.unit.id);
+  await addScannedProduct(exact.product, exact.unit);
   el('product-search').value = '';
 }
 
@@ -3764,7 +3839,13 @@ else mobileSidebarMedia.addListener(syncSidebarMode);
 syncSidebarMode();
 el('current-outlet-select').addEventListener('change', switchActiveOutlet);
 el('product-search').addEventListener('input', (event) => renderProducts(event.target.value));
-el('product-search').addEventListener('keydown', (event) => { if (event.key !== 'Enter') return; const value = event.target.value.trim(); const product = state.products.find((item) => item.units.some((unit) => unit.barcode === value)); if (product) { const unit = product.units.find((item) => item.barcode === value); addToCart(product.id, unit.id); } });
+el('product-search').addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  const value = event.target.value.trim();
+  const exact = barcodeMatch(value);
+  if (exact) addScannedProduct(exact.product, exact.unit);
+});
 el('pos-category-filters').addEventListener('click',(event)=>{const button=event.target.closest('[data-category]');if(!button)return;state.posCategoryFilter=button.dataset.category;renderProducts(el('product-search').value);});
 el('favorite-filter').addEventListener('click',()=>{state.favoriteOnly=!state.favoriteOnly;renderProducts(el('product-search').value);});
 el('scan-camera-pos').addEventListener('click', () => openBarcodeCamera('pos'));
@@ -3813,6 +3894,17 @@ el('open-order-adjustment').addEventListener('click',()=>openSaleAdjustmentDialo
 el('sale-adjustment-form').addEventListener('submit',approveSaleAdjustment);
 el('close-sale-adjustment').addEventListener('click',()=>el('sale-adjustment-dialog').close());
 el('cancel-sale-adjustment').addEventListener('click',()=>el('sale-adjustment-dialog').close());
+el('unit-picker-options').addEventListener('click', async (event) => {
+  const option = event.target.closest('[data-unit-id]');
+  const context = state.unitPicker;
+  if (!option || !context) return;
+  if (context.cartIndex !== null) return changeCartUnit(context.cartIndex, option.dataset.unitId);
+  state.unitPicker = null;
+  el('unit-picker-dialog').close();
+  await addToCart(context.productId, option.dataset.unitId);
+});
+el('close-unit-picker').addEventListener('click',()=>el('unit-picker-dialog').close());
+el('unit-picker-dialog').addEventListener('close',()=>{state.unitPicker=null;});
 el('pay-button').addEventListener('click',openPaymentDialog);
 el('apply-voucher').addEventListener('click',applyVoucherCode);
 el('voucher-code').addEventListener('keydown',(event)=>{if(event.key==='Enter'){event.preventDefault();applyVoucherCode();}});

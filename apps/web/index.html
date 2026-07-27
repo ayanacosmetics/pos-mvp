@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=56">
+  <link rel="stylesheet" href="/styles.css?v=57">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -143,7 +143,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Nusa Commerce · v2.2.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Satuan Pintar · v2.2.1</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -741,6 +741,8 @@
 
   <dialog id="sale-adjustment-dialog"><form id="sale-adjustment-form" class="dialog-card adjustment-dialog"><div class="comparison-heading"><div><p id="adjustment-eyebrow" class="eyebrow">PENYESUAIAN HARGA INTERNAL</p><h2 id="adjustment-title">Harga jual manual</h2><p id="adjustment-help" class="muted">Rincian internal selalu tercatat pada audit.</p></div><button id="close-sale-adjustment" class="icon-button" type="button">×</button></div><div id="adjustment-target" class="adjustment-target"></div><div class="adjustment-fields"><label id="adjustment-mode-field"><span>Jenis diskon</span><select id="adjustment-mode"></select></label><label><span id="adjustment-value-label">Harga jual akhir per satuan</span><input id="adjustment-value" type="number" min="0.01" step="any" required placeholder="Contoh: 25000"></label></div><label>Alasan internal<textarea id="adjustment-reason" rows="3" minlength="5" required placeholder="Contoh: harga rak belum diperbarui"></textarea></label><div id="supervisor-approval-fields" class="supervisor-approval"><div><strong>Persetujuan Owner/Admin</strong><small>Kata sandi tidak disimpan. Izin hanya berlaku untuk keranjang ini selama 5 menit.</small></div><label>Email Owner/Admin<input id="approver-email" type="email" autocomplete="username"></label><label>Kata sandi<input id="approver-password" type="password" autocomplete="current-password"></label></div><div id="self-approval-note" class="self-approval-note hidden"><strong>Disetujui dengan akun Anda</strong><small>Karena Anda masuk sebagai Owner/Admin, tidak perlu memasukkan kata sandi lagi.</small></div><p id="adjustment-error" class="error"></p><div class="button-row"><button id="cancel-sale-adjustment" class="button secondary" type="button">Batal</button><button id="approve-adjustment" class="button primary" type="submit">Simpan harga internal</button></div></form></dialog>
 
+  <dialog id="unit-picker-dialog"><div class="dialog-card unit-picker-dialog"><div class="comparison-heading"><div><p class="eyebrow">PILIH SATUAN JUAL</p><h2 id="unit-picker-product">Pilih satuan</h2><p id="unit-picker-help" class="muted">Harga dan stok dihitung otomatis sesuai isi satuan.</p></div><button id="close-unit-picker" class="icon-button" type="button" aria-label="Tutup pilihan satuan">×</button></div><div id="unit-picker-options" class="unit-picker-options"></div><small class="unit-picker-note">Barcode satuan besar yang terdaftar akan memilih satuan tersebut secara langsung.</small></div></dialog>
+
   <dialog id="barcode-camera-dialog"><div class="dialog-card barcode-camera-dialog"><div class="comparison-heading"><div><p class="eyebrow">SCAN BARCODE DENGAN KAMERA</p><h2>Arahkan kamera ke barcode</h2></div><button id="close-barcode-camera" class="icon-button" type="button">×</button></div><div class="barcode-camera-stage"><video id="barcode-camera-video" autoplay muted playsinline></video><div class="barcode-camera-guide"></div></div><p id="barcode-camera-status" class="muted">Menyiapkan kamera...</p><button id="cancel-barcode-camera" class="button secondary full" type="button">Batal</button></div></dialog>
   <dialog id="pos-history-dialog"><div class="dialog-card wide pos-history-dialog"><div class="comparison-heading"><div><p class="eyebrow">LAYANAN PELANGGAN</p><h2>Riwayat transaksi</h2><p class="muted">Cari struk, cetak ulang, atau ajukan void dengan jejak audit.</p></div><button id="close-pos-history" class="icon-button" type="button">×</button></div><div class="pos-history-search"><input id="pos-history-search" autocomplete="off" placeholder="Nomor struk, pelanggan, telepon, atau kasir"><button id="refresh-pos-history" class="button secondary" type="button">Muat ulang</button></div><div class="pos-history-layout"><div id="pos-history-list" class="pos-history-list"></div><div id="pos-history-detail" class="pos-history-detail"><div class="empty-state compact">Pilih transaksi untuk melihat detail.</div></div></div></div></dialog>
   <dialog id="void-sale-dialog"><form id="void-sale-form" class="dialog-card"><div class="comparison-heading"><div><p class="eyebrow">VOID TRANSAKSI</p><h2 id="void-sale-title">Batalkan transaksi</h2><p class="muted">Stok akan dikembalikan dan tindakan dicatat dalam audit.</p></div><button id="close-void-sale" class="icon-button" type="button">×</button></div><input id="void-sale-id" type="hidden"><label>Alasan void<textarea id="void-sale-reason" rows="3" minlength="5" maxlength="240" required placeholder="Jelaskan kesalahan transaksi"></textarea></label><div id="void-supervisor-fields"><label>Email Owner/Admin<input id="void-approver-email" type="email" autocomplete="username"></label><label>Kata sandi<input id="void-approver-password" type="password" autocomplete="current-password"></label></div><div id="void-self-approval" class="self-approval-note hidden"><strong>Persetujuan menggunakan akun Anda</strong><small>Owner/Admin dapat menyetujui void sendiri.</small></div><p id="void-sale-error" class="error"></p><div class="button-row"><button id="cancel-void-sale" class="button secondary" type="button">Batal</button><button id="confirm-void-sale" class="button danger" type="submit">Void dan kembalikan stok</button></div></form></dialog>
@@ -775,6 +777,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=56"></script>
+  <script type="module" src="/app.js?v=57"></script>
 </body>
 </html>

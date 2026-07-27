@@ -604,3 +604,50 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
   .main{background:#fff}
   .surface,.table-wrap{box-shadow:none}
 }
+
+/* POS unit selection */
+.unit-picker-dialog{width:min(500px,92vw)}
+.unit-picker-options{display:grid;gap:8px;margin-top:18px}
+.unit-picker-option{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:18px;
+  width:100%;
+  min-height:68px;
+  padding:13px 14px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--surface);
+  color:var(--ink);
+  text-align:left;
+  transition:border-color .15s ease,background .15s ease,transform .1s ease;
+}
+.unit-picker-option:hover:not(:disabled){border-color:#8fb4ae;background:#f5faf8}
+.unit-picker-option:active:not(:disabled){transform:translateY(1px)}
+.unit-picker-option.current{border-color:#8bbab3;background:var(--brand-2)}
+.unit-picker-option:disabled{cursor:not-allowed;opacity:.45}
+.unit-picker-copy,.unit-picker-stock{display:grid;gap:3px}
+.unit-picker-copy strong{font-size:14px}
+.unit-picker-copy small,.unit-picker-stock small,.unit-picker-note{color:var(--muted);font-size:10px}
+.unit-picker-stock{text-align:right}
+.unit-picker-stock strong{color:var(--brand);font-size:18px;font-variant-numeric:tabular-nums}
+.unit-picker-note{display:block;margin-top:14px;line-height:1.5}
+.cart-line-meta{display:inline-flex;align-items:center;flex-wrap:wrap;gap:3px}
+.cart-unit-change{
+  width:auto;
+  height:auto;
+  padding:2px 7px;
+  border:1px solid #b9cfcb;
+  border-radius:6px;
+  background:#eff7f5;
+  color:var(--brand);
+  font-size:10px;
+  font-weight:800;
+  line-height:1.4;
+}
+.cart-unit-change:hover{border-color:var(--brand);background:var(--brand-2)}
+@media(max-width:500px){
+  .unit-picker-dialog{width:calc(100vw - 24px);padding:20px}
+  .unit-picker-option{min-height:64px;padding:12px}
+}

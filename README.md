@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Nusa Commerce UI v2.2.0
+# Kasir Nusa POS — Satuan Pintar v2.2.1
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -29,6 +29,10 @@ kapabilitas retail yang lebih lengkap tersedia di
 - Struk WhatsApp hanya tersedia untuk pelanggan yang memberi persetujuan dan
   hanya dibuka setelah kasir menekan tombol.
 - POS, tahan transaksi, pembayaran tunai/non-tunai/split, piutang, dan struk.
+- Produk dengan beberapa satuan membuka pilihan pcs/lusin/dus saat kartu
+  ditekan. Scan barcode satuan besar memilih satuan tersebut langsung; scan
+  barcode dasar membuka pilihan hanya bila satuan lain belum mempunyai
+  barcode. Satuan juga dapat diganti langsung dari keranjang.
 - Transaksi baru selalu dimulai sebagai pelanggan umum; member dipilih secara sadar.
 - Member baru dapat dibuat langsung dari halaman kasir tanpa meninggalkan keranjang.
 - Stok kosong dan jumlah melebihi stok diblokir pada kartu, scan, dan keranjang.
@@ -155,7 +159,7 @@ Jalankan:
 npm test
 ```
 
-Kandidat v2.2.0 memiliki 156 pengujian otomatis. Pengujian toko nyata tetap
+Kandidat v2.2.1 memiliki 161 pengujian otomatis. Pengujian toko nyata tetap
 harus mengikuti `GO-LIVE-CHECKLIST.md`; keputusan lulus pilot tidak menggantikan
 verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 

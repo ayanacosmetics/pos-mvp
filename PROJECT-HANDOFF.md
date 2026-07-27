@@ -45,6 +45,22 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat v2.2.1 siap deploy
+
+- **Satuan Pintar v2.2.1** memperjelas penjualan produk yang memiliki
+  pcs/lusin/dus/karton tanpa migrasi SQL.
+- Menekan kartu produk dengan beberapa satuan membuka dialog pilihan. Scan
+  barcode satuan besar langsung memilih satuan itu tanpa dialog.
+- Bila hanya barcode satuan dasar yang tersedia, scan barcode dasar membuka
+  pilihan seluruh satuan. Bila semua satuan memiliki barcode, setiap scan
+  langsung memilih satuan yang cocok.
+- Satuan baris transaksi dapat diganti dari keranjang. Sistem memeriksa stok
+  berdasarkan faktor isi, menggabungkan baris yang sama, lalu menghitung ulang
+  harga, promo, dan total.
+- Modul pemilihan satuan ikut cache offline `nusa-pos-shell-v57`. QA browser
+  desktop dan mobile 390 x 844 lulus tanpa overflow; 161/161 pengujian otomatis
+  lulus.
+
 ### Rilis v2.2 dikonfirmasi live
 
 - **Nusa Commerce UI v2.2.0** menyegarkan seluruh antarmuka tanpa migrasi SQL
