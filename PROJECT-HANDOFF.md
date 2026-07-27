@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat v2.2.2 siap deploy
+### Rilis v2.2.2 dikonfirmasi live
 
 - **Kas Tunai Cepat v2.2.2** menambahkan tombol Uang Pas langsung di keranjang
   dan keypad nominal pada dialog pembayaran tanpa migrasi SQL.
@@ -59,6 +59,11 @@ kode frontend, dokumentasi publik, atau chat.
   tombol keypad setinggi 52 px, dan dialog dapat digulir.
 - Modul keypad masuk cache offline `nusa-pos-shell-v58`; 164/164 pengujian
   otomatis lulus.
+- Commit `6c43f6c` didorong ke `origin/main`. Deployment Vercel
+  `dpl_VW8u6N8BEB6JCG3Z6zCPf67WLDko` berstatus Ready dan alias produksi aktif.
+- Verifikasi domain publik mengembalikan API `2.2.2-cloud`, identitas
+  `Kas Tunai Cepat · v2.2.2`, tombol Uang Pas, keypad, aset/cache `v58`, serta
+  modul `/payment-keypad.mjs` dengan HTTP 200.
 
 ### Rilis v2.2.1 dikonfirmasi live
 
