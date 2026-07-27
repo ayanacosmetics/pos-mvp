@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat v2.6.0 Desain Struk menunggu migrasi dan deployment
+### Rilis v2.6.0 Desain Struk dikonfirmasi live
 
 - Owner mendapat halaman `Sistem → Desain struk` dengan pratinjau langsung.
 - Logo dapat dipilih dari galeri atau URL, diperkecil otomatis, lalu digunakan
@@ -59,8 +59,13 @@ kode frontend, dokumentasi publik, atau chat.
 - Kandidat memakai API `2.6.0-cloud`, aset web `v77`, dan cache PWA `v77`.
 - Seluruh 200 pengujian otomatis lulus. Visual desktop 1440×1000 dan ponsel
   390×844 lulus tanpa overflow.
-- Jalankan migrasi
-  `supabase/migrations/202607280039_receipt_layout_settings.sql` sebelum deploy.
+- Migrasi `supabase/migrations/202607280039_receipt_layout_settings.sql`
+  telah berhasil dijalankan di produksi.
+- Commit fitur `fc3d2f2` sudah didorong ke `origin/main`.
+- Deployment Vercel `dpl_9aqbns6XVfuyVQUvbvhRapqvMLQ5` berstatus Ready dan
+  alias `kasir-nusa-pos.vercel.app` aktif.
+- Verifikasi publik mengembalikan API `2.6.0-cloud`, aset/cache `v77`, dan
+  halaman Desain Struk baru.
 
 ### Rilis v2.5.0 Tipe Pelanggan & Harga dikonfirmasi live
 
