@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat v2.3.2 siap deploy
+### Rilis v2.3.2 dikonfirmasi live
 
 - **Restok Mobile v2.3.2** memperbaiki pesan kegagalan penerimaan yang
   sebelumnya tertutup footer pada layar ponsel.
@@ -59,7 +59,13 @@ kode frontend, dokumentasi publik, atau chat.
   tumpang tindih, sedangkan penerimaan sukses kembali ke Dokumen dan
   menampilkan konfirmasi stok bertambah.
 - Tidak memerlukan migrasi SQL. Cache offline dinaikkan ke
-  `nusa-pos-shell-v61`; 174 pengujian otomatis ditargetkan lulus.
+  `nusa-pos-shell-v61`; 174/174 pengujian otomatis lulus.
+- Commit `c52f757` didorong ke `origin/main`. Deployment Vercel
+  `dpl_HfCsPjgXowkpNTzvL6SgZ4csPqNH` berstatus Ready dan alias produksi aktif.
+- Verifikasi domain publik mengembalikan API `2.3.2-cloud`, identitas
+  `Restok Mobile · v2.3.2`, alert penerimaan permanen, tombol footer
+  penerimaan, lapisan/offset toast mobile, aset `v61`, serta cache
+  `nusa-pos-shell-v61`.
 
 ### Rilis v2.3.1 dikonfirmasi live
 
