@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat v2.6.3 Header & Footer menunggu deployment
+### Rilis v2.6.3 Header & Footer dikonfirmasi live
 
 - Editor struk menyediakan keterangan header dan footer tambahan yang mendukung
   beberapa baris.
@@ -54,8 +54,13 @@ kode frontend, dokumentasi publik, atau chat.
 - Keterangan footer tambahan dicetak sebelum pesan penutup usaha/outlet, sehingga
   keduanya dapat dipakai bersama.
 - HTML, pratinjau, dan cetak thermal ESC/POS memakai konfigurasi yang sama.
-- Kandidat memakai API `2.6.3-cloud`, aset web `v80`, dan cache PWA `v80`.
+- Rilis memakai API `2.6.3-cloud`, aset web `v80`, dan cache PWA `v80`.
 - Seluruh 202 pengujian otomatis lulus. Tidak memerlukan migrasi SQL baru.
+- Commit fitur `da193bb` sudah didorong ke `origin/main`.
+- Deployment Vercel `dpl_9TQMUgUAtTvhmnkDYr5ceaVJPvcF` berstatus Ready dan
+  alias `kasir-nusa-pos.vercel.app` aktif.
+- Verifikasi publik menemukan kolom header, footer tambahan, label kontak, dan
+  cache PWA `v80`.
 
 ### Rilis v2.6.2 Kertas 58/80 dikonfirmasi live
 
