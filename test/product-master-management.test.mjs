@@ -21,7 +21,7 @@ test('direktori master memuat produk aktif dan nonaktif beserta semua satuan',as
     if(target.includes('/rest/v1/profiles?'))return responseOf([{user_id:ids.user,tenant_id:ids.tenant,display_name:'Owner',role:'OWNER',active:true}]);
     if(target.includes('/rest/v1/outlets?'))return responseOf([{id:ids.outlet,name:'Toko',active:true}]);
     if(target.includes('/rest/v1/stock_locations?'))return responseOf([{id:ids.location,outlet_id:ids.outlet,name:'Toko',kind:'STORE'}]);
-    if(target.includes('/rest/v1/products?'))return responseOf([{id:ids.product,sku:'KOS-001',name:'Lip Tint',category:'Kosmetik',brand:'Nusa',active:false,variant_group:'Velvet',variant_name:'Rose',minimum_stock:'6',track_expiry:true}]);
+    if(target.includes('/rest/v1/products?'))return responseOf([{id:ids.product,sku:'KOS-001',name:'Lip Tint',category:'Kosmetik',brand:'Nusa',image_url:'https://images.example/lip-tint.jpg',active:false,variant_group:'Velvet',variant_name:'Rose',minimum_stock:'6',track_expiry:true}]);
     if(target.includes('/rest/v1/product_units?'))return responseOf([{id:ids.unit,product_id:ids.product,name:'pcs',factor_to_base:'1',barcode:'8991'}]);
     if(target.includes('/rest/v1/price_rules?'))return responseOf([{id:'price',product_id:ids.product,customer_group_id:'retail',min_base_qty:'1',unit_price_base:'25000',priority:10}]);
     if(target.includes('/rest/v1/stock_balances?'))return responseOf([{product_id:ids.product,quantity:'4'}]);
@@ -32,6 +32,7 @@ test('direktori master memuat produk aktif dan nonaktif beserta semua satuan',as
     assert.equal(result.status,200);
     assert.equal(result.body.products[0].active,false);
     assert.equal(result.body.products[0].variantName,'Rose');
+    assert.equal(result.body.products[0].imageUrl,'https://images.example/lip-tint.jpg');
     assert.equal(result.body.products[0].units[0].factor,1);
     assert.equal(result.body.products[0].stockBase,4);
   }finally{
@@ -57,7 +58,7 @@ test('edit produk dan perubahan status memakai transaksi terproteksi',async()=>{
   try{
     const edited=await callApi('PUT',`products/${ids.product}`,{sku:'kos-001',name:'Lip Tint',category:'Kosmetik',retailPrice:25000,minimumStock:6,trackExpiry:true,units:[{id:ids.unit,name:'pcs',factor:1,barcode:'8991'},{name:'lusin',factor:12,barcode:'89912'}]});
     assert.equal(edited.status,200);
-    assert.ok(rpcCalls[0].target.endsWith('/rpc/save_product_v2'));
+    assert.ok(rpcCalls[0].target.endsWith('/rpc/save_product_v3'));
     assert.equal(rpcCalls[0].body.p_product.sku,'KOS-001');
     assert.equal(rpcCalls[0].body.p_product.units.length,2);
     const archived=await callApi('POST',`products/${ids.product}/status`,{active:false});

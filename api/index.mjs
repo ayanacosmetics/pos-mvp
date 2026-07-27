@@ -207,7 +207,7 @@ async function loadCatalog(tenantId, locationId, outletId = null) {
     outletId ? rest('outlet_price_overrides', `tenant_id=eq.${tenant}&outlet_id=eq.${encodeURIComponent(outletId)}&active=eq.true&select=*`).catch(()=>[]) : Promise.resolve([])
   ]);
   return products.map((product) => ({
-    id: product.id, sku: product.sku, name: product.name, category: product.category, brand: product.brand, active: product.active,
+    id: product.id, sku: product.sku, name: product.name, category: product.category, brand: product.brand, imageUrl:product.image_url, active: product.active,
     variantGroup: product.variant_group, variantName: product.variant_name, minimumStock: Number(product.minimum_stock ?? 0), trackExpiry: Boolean(product.track_expiry),
     stockBase: Number(balances.find((item) => item.product_id === product.id)?.quantity ?? 0),
     units: units.filter((item) => item.product_id === product.id).map((unit) => ({ id: unit.id, name: unit.name, factor: Number(unit.factor_to_base), barcode: unit.barcode })).sort((a,b)=>a.factor-b.factor),
@@ -257,7 +257,7 @@ async function loadManagedProducts(tenantId) {
     rest('stock_balances',`tenant_id=eq.${tenant}&select=product_id,quantity`)
   ]);
   return products.map((product)=>({
-    id:product.id,sku:product.sku,name:product.name,category:product.category,brand:product.brand,active:product.active,
+    id:product.id,sku:product.sku,name:product.name,category:product.category,brand:product.brand,imageUrl:product.image_url,active:product.active,
     variantGroup:product.variant_group,variantName:product.variant_name,minimumStock:Number(product.minimum_stock??0),trackExpiry:Boolean(product.track_expiry),
     stockBase:balances.filter((balance)=>balance.product_id===product.id).reduce((sum,balance)=>sum+Number(balance.quantity),0),
     units:units.filter((unit)=>unit.product_id===product.id).map((unit)=>({id:unit.id,name:unit.name,factor:Number(unit.factor_to_base),barcode:unit.barcode})).sort((a,b)=>a.factor-b.factor),
@@ -270,6 +270,7 @@ function normalizeProductInput(input,id=null) {
   const normalized={
     id:id??input.id??null,sku:String(input.sku??'').trim().toUpperCase(),name:String(input.name??'').trim(),
     category:String(input.category??'').trim()||'Lainnya',brand:String(input.brand??'').trim(),
+    imageUrl:String(input.imageUrl??'').trim(),
     variantGroup:String(input.variantGroup??'').trim(),variantName:String(input.variantName??'').trim(),
     minimumStock:Number(input.minimumStock??0),trackExpiry:Boolean(input.trackExpiry),
     retailPrice:Number(input.retailPrice),wholesalePrice:Number(input.wholesalePrice??0),
@@ -279,6 +280,12 @@ function normalizeProductInput(input,id=null) {
   if(!normalized.sku||!normalized.name)throw Object.assign(new Error('SKU dan nama produk wajib diisi'),{status:400});
   if(!(normalized.retailPrice>0))throw Object.assign(new Error('Harga ecer harus lebih dari nol'),{status:400});
   if(!(normalized.minimumStock>=0))throw Object.assign(new Error('Batas stok minimum tidak valid'),{status:400});
+  if(normalized.imageUrl){
+    let imageUrl;
+    try{imageUrl=new URL(normalized.imageUrl);}catch{throw Object.assign(new Error('URL foto produk tidak valid'),{status:400});}
+    if(!['http:','https:'].includes(imageUrl.protocol)||normalized.imageUrl.length>2000)throw Object.assign(new Error('URL foto produk harus memakai http atau https'),{status:400});
+    normalized.imageUrl=imageUrl.href;
+  }
   if(normalized.units.filter((unit)=>unit.factor===1).length!==1||normalized.units.some((unit)=>!unit.name||!(unit.factor>0)))throw Object.assign(new Error('Satuan harus memiliki tepat satu satuan dasar berisi 1'),{status:400});
   const names=new Set(),barcodes=new Set();
   for(const unit of normalized.units){
@@ -822,7 +829,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.4.5-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.4.6-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1414,7 +1421,7 @@ async function routeRequest(request, response, route) {
   if (request.method === 'POST' && route === 'products') {
     requirePermission(session, 'catalog.manage');
     const input = normalizeProductInput(bodyOf(request));
-    return send(response, 201, await rpc('save_product_v2', { p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_product: input }));
+    return send(response, 201, await rpc('save_product_v3', { p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_product: input }));
   }
 
   if (request.method === 'GET' && route === 'products/manage') {
@@ -1426,7 +1433,7 @@ async function routeRequest(request, response, route) {
     requirePermission(session, 'catalog.manage');
     const productId=route.split('/')[1];
     const input=normalizeProductInput(bodyOf(request),productId);
-    return send(response,200,await rpc('save_product_v2',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_product:input}));
+    return send(response,200,await rpc('save_product_v3',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_product:input}));
   }
 
   if (request.method === 'POST' && /^products\/[^/]+\/status$/.test(route)) {

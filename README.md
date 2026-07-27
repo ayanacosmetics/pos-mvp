@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Daftar Owner v2.4.5
+# Kasir Nusa POS — Daftar Barang Ringkas v2.4.6
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -23,7 +23,10 @@ kapabilitas retail yang lebih lengkap tersedia di
   melalui menu Pengguna setelah masuk.
 - Owner dapat mengganti konteks ke Owner aktif lain dalam usaha yang sama tanpa
   login ulang; pergantian diaudit dan berakhir saat logout.
-- Produk, varian, SKU, barcode, kategori, merek, dan status aktif.
+- Produk, varian, SKU, barcode, kategori, merek, foto, dan status aktif.
+- Daftar barang pada Kasir, Pilih Barang Restok, dan Daftar Stok memakai baris
+  kompak memanjang: foto di kiri, identitas di tengah, serta harga dan stok di
+  kanan. Barang tanpa foto memakai placeholder otomatis.
 - Satuan pcs, lusin, karton, serta konversi ke satuan dasar.
 - Harga ecer, harga pelanggan grosir, dan harga bertingkat berdasarkan jumlah.
 - Promo terversi, terjadwal, konsisten online/offline, simulasi, dan batas pemakaian.
@@ -179,6 +182,11 @@ deployment. Migrasi ini menyediakan pembuatan ruang usaha Owner secara atomik
 dan hanya dapat dijalankan service role. Jangan deploy halaman daftar Owner
 sebelum migrasi berhasil.
 
+Untuk rilis v2.4.6, jalankan satu file
+`supabase/migrations/202607270036_product_images.sql` sebelum deployment.
+Migrasi ini menambahkan URL foto produk dan transaksi penyimpanan produk v3.
+Jangan deploy source v2.4.6 sebelum migrasi berhasil.
+
 Klik dua kali `Deploy-Kasir-Nusa.cmd` dan tunggu sampai muncul tulisan **Deployment berhasil**.
 
 Rahasia Supabase hanya boleh tersimpan di pengaturan Environment Variables Vercel. Jangan menaruh `SUPABASE_SERVICE_ROLE_KEY` di browser, screenshot, chat, atau repository.
@@ -191,7 +199,7 @@ Jalankan:
 npm test
 ```
 
-Source saat ini memiliki 187 pengujian otomatis. Pengujian toko nyata tetap
+Source saat ini memiliki 190 pengujian otomatis. Pengujian toko nyata tetap
 harus mengikuti `GO-LIVE-CHECKLIST.md`; keputusan lulus pilot tidak menggantikan
 verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 

@@ -132,6 +132,29 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 }
 
+function productImageUrl(product) {
+  const value = String(product?.imageUrl ?? '').trim();
+  if (!value) return '';
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
+function productThumbnail(product) {
+  const imageUrl = productImageUrl(product);
+  const initial = String(product?.name ?? '?').trim().charAt(0).toLocaleUpperCase('id-ID') || '?';
+  return `<span class="product-thumb" aria-hidden="true"><span>${escapeHtml(initial)}</span>${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="" loading="lazy" decoding="async">` : ''}</span>`;
+}
+
+function bindProductImageFallbacks(container) {
+  container?.querySelectorAll('.product-thumb img').forEach((image) => {
+    image.addEventListener('error', () => image.remove(), { once: true });
+  });
+}
+
 function setLoginPortal(portal) {
   state.loginPortal = portal === 'STAFF' ? 'STAFF' : 'OWNER';
   sessionStorage.setItem('pos_login_portal', state.loginPortal);
@@ -335,8 +358,9 @@ function renderProducts(query = '') {
     const unit = sortedProductUnits(product)[0];
     const rule = product.priceRules.find((item) => item.customerGroupId === 'retail') ?? product.priceRules[0];
     const empty = Number(product.stockBase ?? 0) <= 0;
-    return `<article class="product-card-shell"><button class="product-card ${empty ? 'out-of-stock' : ''}" data-product="${product.id}" data-unit="${unit.id}" ${empty ? 'disabled' : ''}><span class="category">${escapeHtml(product.category)}</span><strong>${escapeHtml(product.name)}</strong><small>${empty ? 'STOK KOSONG' : `${money.format(rule?.unitPriceBase ?? 0)} · stok ${product.stockBase} pcs`}</small></button><button class="favorite-product ${favorites.has(product.id)?'active':''}" type="button" data-favorite-product="${product.id}" aria-label="${favorites.has(product.id)?'Hapus dari':'Tambahkan ke'} favorit" aria-pressed="${favorites.has(product.id)}">★</button></article>`;
+    return `<article class="product-card-shell"><button class="product-card ${empty ? 'out-of-stock' : ''}" data-product="${product.id}" data-unit="${unit.id}" ${empty ? 'disabled' : ''}>${productThumbnail(product)}<span class="product-list-copy"><span class="category">${escapeHtml(product.category)}</span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)}</small></span><span class="product-list-meta"><strong>${money.format(rule?.unitPriceBase ?? 0)}</strong><small class="${empty?'stock-empty':''}">${empty ? 'STOK KOSONG' : `Stok ${Number(product.stockBase).toLocaleString('id-ID')} pcs`}</small></span></button><button class="favorite-product ${favorites.has(product.id)?'active':''}" type="button" data-favorite-product="${product.id}" aria-label="${favorites.has(product.id)?'Hapus dari':'Tambahkan ke'} favorit" aria-pressed="${favorites.has(product.id)}">★</button></article>`;
   }).join('') || '<div class="empty-state compact">Tidak ada produk untuk filter ini.</div>';
+  bindProductImageFallbacks(el('product-grid'));
   document.querySelectorAll('.product-card').forEach((button) => button.addEventListener('click', () => choosePosProduct(button.dataset.product)));
   document.querySelectorAll('.favorite-product').forEach((button)=>button.addEventListener('click',()=>{
     const ids=favoriteProductIds();if(ids.has(button.dataset.favoriteProduct))ids.delete(button.dataset.favoriteProduct);else ids.add(button.dataset.favoriteProduct);
@@ -523,6 +547,7 @@ function openProductEditor(productId=null){
   el('product-dialog-title').textContent=product?'Ubah produk':'Tambah produk';
   el('new-sku').value=product?.sku??'';el('new-name').value=product?.name??'';
   el('new-category').value=product?.category??'';el('new-brand').value=product?.brand??'';
+  el('new-image-url').value=product?.imageUrl??'';
   el('new-variant-group').value=product?.variantGroup??'';el('new-variant-name').value=product?.variantName??'';
   el('new-min-stock').value=product?.minimumStock??0;el('new-track-expiry').checked=Boolean(product?.trackExpiry);
   el('new-retail-price').value=prices.retail;el('new-wholesale-price').value=prices.wholesale;
@@ -534,7 +559,7 @@ function openProductEditor(productId=null){
 function productPayload(){
   return {
     id:el('edit-product-id').value||null,sku:el('new-sku').value,name:el('new-name').value,category:el('new-category').value,
-    brand:el('new-brand').value,variantGroup:el('new-variant-group').value,variantName:el('new-variant-name').value,
+    brand:el('new-brand').value,imageUrl:el('new-image-url').value,variantGroup:el('new-variant-group').value,variantName:el('new-variant-name').value,
     minimumStock:Number(el('new-min-stock').value),trackExpiry:el('new-track-expiry').checked,
     retailPrice:Number(el('new-retail-price').value),wholesalePrice:Number(el('new-wholesale-price').value),
     tierQty:Number(el('new-tier-qty').value),tierPrice:Number(el('new-tier-price').value),units:state.productUnitsDraft
@@ -1790,6 +1815,7 @@ function renderRestockPlanning() {
     const price=product?retailPriceOf(product):Number(item.retailPrice??0);
     const selectedQty=state.restockSelection.get(item.productId);
     return `<button class="planning-compact-row ${selectedQty?'selected':''}" data-product-id="${escapeHtml(item.productId)}" type="button">
+      ${productThumbnail(product ?? {name:item.productName})}
       <span class="planning-compact-product"><strong>${escapeHtml(item.productName)}</strong><small>${escapeHtml(item.sku)}</small></span>
       <span class="planning-compact-fact"><small>Harga jual</small><strong>${money.format(price)}</strong></span>
       <span class="planning-compact-fact"><small>Stok</small><strong>${Number(item.stock).toLocaleString('id-ID')} pcs</strong></span>
@@ -1797,6 +1823,7 @@ function renderRestockPlanning() {
       <span class="planning-compact-arrow" aria-hidden="true">›</span>
     </button>`;
   }).join('') || '<div class="empty-state compact">Tidak ada barang yang sesuai pencarian atau filter.</div>';
+  bindProductImageFallbacks(el('restock-planning-list'));
   if(list.length>visible.length)el('restock-planning-list').insertAdjacentHTML('beforeend',`<div class="planning-load-more"><small>Menampilkan ${visible.length.toLocaleString('id-ID')} dari ${list.length.toLocaleString('id-ID')} barang</small><button class="button secondary" type="button" data-planning-load-more>Tampilkan 100 berikutnya</button></div>`);
   syncPlanningSelection();
 }
@@ -2354,9 +2381,11 @@ async function loadInventory() {
   const rows = state.products.map((product) => {
     const outlet = state.inventory.find((item) => item.location_id === storeLocation?.id && item.product_id === product.id);
     const warehouse = state.inventory.find((item) => item.location_id === warehouseLocation?.id && item.product_id === product.id);
-    return `<tr><td><strong>${product.name}</strong><br><small>${product.sku}</small></td><td>${outlet?.quantity ?? 0} pcs</td><td>${warehouse?.quantity ?? 0} pcs</td><td>${(outlet?.quantity ?? 0) + (warehouse?.quantity ?? 0)} pcs</td><td>${money.format(outlet?.avg_cost ?? 0)}</td></tr>`;
+    const outletQty=Number(outlet?.quantity??0),warehouseQty=Number(warehouse?.quantity??0);
+    return `<article class="inventory-product-row">${productThumbnail(product)}<div class="inventory-product-copy"><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)} · ${escapeHtml(product.category)}</small></div><div class="inventory-product-fact"><small>Toko</small><strong>${outletQty.toLocaleString('id-ID')} pcs</strong></div><div class="inventory-product-fact"><small>Gudang</small><strong>${warehouseQty.toLocaleString('id-ID')} pcs</strong></div><div class="inventory-product-fact inventory-total"><small>Total stok</small><strong>${(outletQty+warehouseQty).toLocaleString('id-ID')} pcs</strong></div><div class="inventory-product-fact inventory-cost"><small>Modal rata-rata</small><strong>${money.format(outlet?.avg_cost??0)}</strong></div></article>`;
   }).join('');
-  el('inventory-table').innerHTML = `<table><thead><tr><th>Produk</th><th>Toko Utama</th><th>Gudang Utama</th><th>Total</th><th>Modal rata-rata toko</th></tr></thead><tbody>${rows}</tbody></table>`;
+  el('inventory-table').innerHTML = `<div class="inventory-list-heading"><span>Produk</span><span>Toko</span><span>Gudang</span><span>Total</span><span>Modal</span></div><div class="inventory-product-list">${rows||'<div class="empty-state compact">Belum ada produk.</div>'}</div>`;
+  bindProductImageFallbacks(el('inventory-table'));
   el('count-fields').innerHTML = state.products.map((product) => {
     const balance = state.inventory.find((item) => item.location_id === storeLocation?.id && item.product_id === product.id);
     return `<label class="count-field"><span>${product.name}</span><input data-count-product="${product.id}" type="number" min="0" value="${balance?.quantity ?? 0}"></label>`;

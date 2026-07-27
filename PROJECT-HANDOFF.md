@@ -45,6 +45,25 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Paket v2.4.6 Daftar Barang Ringkas siap setelah migrasi
+
+- Katalog Kasir tidak lagi memakai kartu besar dua kolom. Produk menjadi baris
+  memanjang dengan foto/placeholder di kiri, kategori/nama/SKU di tengah, serta
+  harga dan stok di kanan. Favorit dan kondisi stok kosong tetap berfungsi.
+- Pilih Barang Restok memakai pola baris foto yang sama tanpa mengubah urutan
+  stok terendah, pemuatan bertahap 100 barang, pilihan jumlah, atau pembuatan PO.
+- Daftar Stok tidak lagi memakai tabel lebar. Setiap produk menampilkan foto,
+  identitas, stok toko, stok gudang, total, dan modal dalam baris responsif.
+- Editor Produk mempunyai URL foto HTTPS opsional. Gambar dimuat secara lazy;
+  foto kosong atau rusak kembali ke placeholder huruf produk.
+- Migrasi `202607270036_product_images.sql` menambah `products.image_url` dan
+  RPC atomik `save_product_v3`. API memvalidasi protokol dan panjang URL.
+- QA browser desktop 1440 x 1000 serta mobile 390 x 844 lulus untuk Kasir,
+  Restok, dan Stok tanpa overflow. Seluruh 190/190 pengujian otomatis lulus.
+  Cache PWA disiapkan ke `v70` dan API ke `2.4.6-cloud`.
+- **Wajib sebelum deploy:** jalankan migrasi
+  `supabase/migrations/202607270036_product_images.sql`.
+
 ### Rilis v2.4.5 Daftar Owner dikonfirmasi live
 
 - Halaman login kini mempunyai layar pendaftaran terpisah khusus Owner dengan

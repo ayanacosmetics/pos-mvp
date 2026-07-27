@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=69">
+  <link rel="stylesheet" href="/styles.css?v=70">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -167,7 +167,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Daftar Owner · v2.4.5</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Daftar Barang Ringkas · v2.4.6</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -416,7 +416,7 @@
           <div id="expiry-batch-list" class="expiry-batch-list"><div class="empty-state compact">Memuat kontrol kedaluwarsa...</div></div>
         </section>
         <div class="stock-workspace"><div class="surface"><p class="eyebrow">STOK OPNAME TOKO</p><p class="muted">Isi jumlah fisik. Selisih akan masuk jurnal dan audit log.</p><div id="count-fields" class="count-fields"></div><button id="count-button" class="button primary">Posting opname</button></div></div>
-        <div id="inventory-table" class="surface table-wrap"></div>
+        <div id="inventory-table" class="surface inventory-list-surface"></div>
         <div class="page-title ledger-title"><div><p class="eyebrow">JEJAK PERGERAKAN</p><h2>Jurnal stok terbaru</h2></div></div><div id="ledger-table" class="surface table-wrap"></div>
       </div></section>
 
@@ -817,7 +817,7 @@
   <dialog id="product-dialog"><form id="product-form" class="dialog-card product-editor">
     <div class="comparison-heading"><div><p id="product-dialog-eyebrow" class="eyebrow">PRODUK BARU</p><h2 id="product-dialog-title">Tambah produk</h2><p class="muted">Setiap varian mempunyai SKU, barcode, harga, dan stok sendiri.</p></div><button id="close-product-dialog" class="icon-button" type="button">×</button></div>
     <input id="edit-product-id" type="hidden">
-    <section class="product-editor-section"><p class="eyebrow">IDENTITAS BARANG</p><div class="form-grid compact"><label>SKU<input id="new-sku" required></label><label>Nama produk<input id="new-name" required></label><label>Kategori<input id="new-category" list="product-category-options" required></label><label>Merek<input id="new-brand" list="product-brand-options"></label><label>Kelompok varian<input id="new-variant-group" placeholder="Contoh: Lip Tint Velvet"></label><label>Nama varian<input id="new-variant-name" placeholder="Contoh: Rose 01"></label><label>Batas stok minimum<input id="new-min-stock" type="number" min="0" value="0"></label><label class="switch-row editor-switch"><input id="new-track-expiry" type="checkbox"><span><strong>Pantau batch & EXP</strong><small>Aktifkan untuk kosmetik atau barang kedaluwarsa.</small></span></label></div><datalist id="product-category-options"></datalist><datalist id="product-brand-options"></datalist></section>
+    <section class="product-editor-section"><p class="eyebrow">IDENTITAS BARANG</p><div class="form-grid compact"><label>SKU<input id="new-sku" required></label><label>Nama produk<input id="new-name" required></label><label>Kategori<input id="new-category" list="product-category-options" required></label><label>Merek<input id="new-brand" list="product-brand-options"></label><label class="product-image-field">URL foto produk<input id="new-image-url" type="url" maxlength="2000" placeholder="https://..."><small>Opsional. Gunakan tautan gambar HTTPS agar foto tampil di Kasir, Restok, dan Stok.</small></label><label>Kelompok varian<input id="new-variant-group" placeholder="Contoh: Lip Tint Velvet"></label><label>Nama varian<input id="new-variant-name" placeholder="Contoh: Rose 01"></label><label>Batas stok minimum<input id="new-min-stock" type="number" min="0" value="0"></label><label class="switch-row editor-switch"><input id="new-track-expiry" type="checkbox"><span><strong>Pantau batch & EXP</strong><small>Aktifkan untuk kosmetik atau barang kedaluwarsa.</small></span></label></div><datalist id="product-category-options"></datalist><datalist id="product-brand-options"></datalist></section>
     <section class="product-editor-section"><div class="product-editor-section-head"><div><p class="eyebrow">SATUAN & BARCODE</p><strong>Pcs, lusin, karton, atau satuan lainnya</strong></div><button id="add-product-unit" type="button" class="button secondary">Tambah satuan</button></div><div id="product-units-editor"></div><small class="muted">Harus ada tepat satu satuan dasar dengan isi 1.</small></section>
     <section class="product-editor-section"><p class="eyebrow">HARGA JUAL</p><div class="form-grid compact"><label>Harga ecer / pcs<input id="new-retail-price" type="number" min="1" required></label><label>Harga pelanggan grosir / pcs<input id="new-wholesale-price" type="number" min="0"></label><label>Minimal harga bertingkat (pcs)<input id="new-tier-qty" type="number" min="0"></label><label>Harga bertingkat / pcs<input id="new-tier-price" type="number" min="0"></label></div></section>
     <p id="product-error" class="error"></p><div class="button-row"><button id="cancel-product" type="button" class="button secondary">Batal</button><button id="save-product-button" type="submit" class="button primary">Simpan produk</button></div>
@@ -841,6 +841,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=69"></script>
+  <script type="module" src="/app.js?v=70"></script>
 </body>
 </html>

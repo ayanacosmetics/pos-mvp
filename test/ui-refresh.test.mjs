@@ -7,10 +7,10 @@ const css = await readFile(new URL('../apps/web/styles.css', import.meta.url), '
 const worker = await readFile(new URL('../apps/web/service-worker.js', import.meta.url), 'utf8');
 
 test('Nusa Commerce memakai identitas rilis dan aset shell terbaru', () => {
-  assert.match(html, /Daftar Owner · v2\.4\.5/);
-  assert.match(html, /styles\.css\?v=69/);
-  assert.match(html, /app\.js\?v=69/);
-  assert.match(worker, /nusa-pos-shell-v69/);
+  assert.match(html, /Daftar Barang Ringkas · v2\.4\.6/);
+  assert.match(html, /styles\.css\?v=70/);
+  assert.match(html, /app\.js\?v=70/);
+  assert.match(worker, /nusa-pos-shell-v70/);
 });
 
 test('login memiliki hierarki brand profesional tanpa aset eksternal', () => {
@@ -38,5 +38,5 @@ test('sistem desain mencakup shell, data, POS, fokus, dan gerak terbatas', () =>
   assert.match(css, /thead\{background:#f0f4f2\}/);
   assert.match(css, /\.pos-layout\{height:calc\(100dvh - 72px\)/);
   assert.match(css, /@media\(prefers-reduced-motion:reduce\)/);
-  assert.match(css, /@media\(max-width:760px\)[\s\S]*\.product-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css, /\.product-grid\{display:grid;grid-template-columns:minmax\(0,1fr\)!important/);
 });
