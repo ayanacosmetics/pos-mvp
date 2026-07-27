@@ -3117,9 +3117,11 @@ function renderSettings() {
   el('setting-device-name').value = registered?.name || posDevice.name;
   el('setting-device-outlet').value = registered?.outletId ?? state.activeOutletId;
   el('setting-device-paper').value = String(state.deviceSettings.paperWidth ?? 80);
+  el('setting-receipt-paper').value = String(state.deviceSettings.paperWidth ?? 80);
   el('setting-device-copies').value = String(state.deviceSettings.receiptCopies ?? 1);
   el('setting-device-auto-print').checked = Boolean(state.deviceSettings.autoPrint);
   renderPrinterStatus();
+  renderReceiptDesignPreview();
 }
 
 async function loadSettings() {
@@ -3298,10 +3300,17 @@ async function saveReceiptSettings(event) {
     const data=await request('/api/settings/receipt',{method:'PUT',body:JSON.stringify({
       logoUrl:el('setting-receipt-logo-url').value.trim(),layout:receiptLayoutFromControls()
     })});
+    const deviceData=await request('/api/settings/device',{method:'PUT',body:JSON.stringify({
+      id:posDevice.id,outletId:el('setting-device-outlet').value,name:el('setting-device-name').value.trim(),
+      platform:posDevice.platform,paperWidth:Number(el('setting-receipt-paper').value),
+      receiptCopies:Number(el('setting-device-copies').value),autoPrint:el('setting-device-auto-print').checked
+    })});
     state.business=data.business;
-    saveBootstrapCache({...JSON.parse(localStorage.getItem('pos_bootstrap_cache')??'{}'),business:state.business,session:state.session});
+    state.deviceSettings=deviceData.device;
+    el('setting-device-paper').value=String(deviceData.device.paperWidth);
+    saveBootstrapCache({...JSON.parse(localStorage.getItem('pos_bootstrap_cache')??'{}'),business:state.business,deviceSettings:state.deviceSettings,session:state.session});
     populateReceiptLayoutControls();
-    toast('Desain struk berhasil disimpan dan berlaku untuk seluruh kasir');
+    toast(`Desain disimpan; printer perangkat ini memakai kertas ${deviceData.device.paperWidth} mm`);
   }catch(error){el('receipt-settings-error').textContent=error.message;}finally{button.disabled=false;}
 }
 
@@ -5035,7 +5044,14 @@ el('location-settings-form').addEventListener('submit', saveLocationSettings);
 el('settings-location-list').addEventListener('click',(event)=>{const row=event.target.closest('.edit-setting-location');if(row)editLocationSetting(row.dataset.locationId);});
 el('device-settings-form').addEventListener('submit', saveDeviceSettings);
 el('setting-device-paper').addEventListener('change',()=>{
-  state.deviceSettings.paperWidth=Number(el('setting-device-paper').value);renderReceiptDesignPreview();
+  state.deviceSettings.paperWidth=Number(el('setting-device-paper').value);
+  el('setting-receipt-paper').value=el('setting-device-paper').value;
+  renderReceiptDesignPreview();
+});
+el('setting-receipt-paper').addEventListener('change',()=>{
+  state.deviceSettings.paperWidth=Number(el('setting-receipt-paper').value);
+  el('setting-device-paper').value=el('setting-receipt-paper').value;
+  renderReceiptDesignPreview();
 });
 el('connect-printer').addEventListener('click', connectReceiptPrinter);
 el('test-printer').addEventListener('click', testReceiptPrinter);

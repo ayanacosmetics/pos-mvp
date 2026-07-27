@@ -45,6 +45,17 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat v2.6.2 Kertas 58/80 menunggu deployment
+
+- Pilihan lebar kertas 58 mm dan 80 mm kini tersedia langsung pada halaman
+  `Sistem → Desain struk`, bukan hanya di pengaturan perangkat.
+- Pilihan memperbarui pratinjau seketika dan disimpan sebagai pengaturan
+  printer khusus perangkat yang sedang digunakan.
+- Pengaturan layout tetap berlaku ke seluruh kasir, sedangkan lebar kertas
+  tidak mengubah printer pada perangkat lain.
+- Kandidat memakai API `2.6.2-cloud`, aset web `v79`, dan cache PWA `v79`.
+- Seluruh 202 pengujian otomatis lulus. Tidak memerlukan migrasi SQL baru.
+
 ### Rilis v2.6.1 Foto Galeri dikonfirmasi live
 
 - Logo struk mengutamakan pilihan langsung dari galeri/kamera; URL dipindahkan

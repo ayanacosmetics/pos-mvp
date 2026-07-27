@@ -45,10 +45,13 @@ test('pengaturan desain struk tersedia, tervalidasi, dan disimpan per usaha', as
   assert.match(api, /normalizeReceiptLogo/);
   for (const id of [
     'receipt-settings-form','setting-receipt-logo-file','setting-receipt-logo-size',
-    'receipt-show-business','receipt-show-price-type','receipt-design-preview'
+    'setting-receipt-paper','receipt-show-business','receipt-show-price-type','receipt-design-preview'
   ]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(html,/id="setting-receipt-paper"[\s\S]*value="58"[\s\S]*value="80"/);
   assert.match(app, /receiptLogoFromFile/);
   assert.match(app, /buildReceiptMarkup/);
+  assert.match(app,/paperWidth:Number\(el\('setting-receipt-paper'\)\.value\)/);
+  assert.match(app,/el\('setting-device-paper'\)\.value=el\('setting-receipt-paper'\)\.value/);
 });
 
 test('layout thermal menyembunyikan informasi yang dimatikan dan memakai kepala khusus', () => {

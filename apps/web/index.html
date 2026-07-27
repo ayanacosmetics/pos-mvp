@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=78">
+  <link rel="stylesheet" href="/styles.css?v=79">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -169,7 +169,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Foto Galeri · v2.6.1</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Kertas 58/80 · v2.6.2</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -629,6 +629,7 @@
                   <label>Kerapatan<select id="setting-receipt-density"><option value="normal">Normal</option><option value="compact">Ringkas</option></select></label>
                   <label>Garis pemisah<select id="setting-receipt-separator"><option value="dashed">Putus-putus</option><option value="double">Garis ganda</option></select></label>
                   <label>Posisi penutup<select id="setting-receipt-footer-align"><option value="center">Tengah</option><option value="left">Kiri</option></select></label>
+                  <label>Lebar kertas perangkat ini<select id="setting-receipt-paper"><option value="58">58 mm</option><option value="80">80 mm</option></select><small>Disimpan khusus untuk printer pada perangkat ini.</small></label>
                 </div>
                 <button id="remove-receipt-logo" class="button secondary" type="button">Hapus logo</button>
               </section>
@@ -877,6 +878,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=78"></script>
+  <script type="module" src="/app.js?v=79"></script>
 </body>
 </html>

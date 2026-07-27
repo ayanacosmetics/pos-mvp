@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Foto Galeri v2.6.1
+# Kasir Nusa POS — Kertas Struk 58/80 v2.6.2
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -26,6 +26,8 @@ Produksi menggunakan:
 - Logo struk dan foto produk dapat dipilih langsung dari galeri atau kamera.
   Foto produk diperkecil otomatis dan disimpan di media storage agar katalog
   ribuan produk tidak terbebani data gambar mentah.
+- Lebar kertas 58 mm atau 80 mm dapat dipilih langsung dari editor desain
+  struk dan disimpan khusus untuk printer pada perangkat tersebut.
 - Owner mengatur hak akses setiap akun Staff/Admin melalui checklist fitur.
   Harga manual dan void hanya tersedia bagi akun yang diberi izin, tanpa
   membagikan atau memasukkan sandi Owner.
