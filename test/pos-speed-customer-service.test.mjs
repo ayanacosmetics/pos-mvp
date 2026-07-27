@@ -60,11 +60,18 @@ test('POS v1.21 menyediakan produk cepat, filter, shortcut, riwayat, cetak ulang
   assert.match(api,/complete_sale_v7/);
 });
 
-test('tampilan satu tangan menjaga akses keranjang dan aksi checkout pada mobile',async()=>{
-  const [,,,script,css]=await files();
+test('ponsel memisahkan katalog dan keranjang, sedangkan tablet tetap berdampingan',async()=>{
+  const [,,html,script,css]=await files();
+  assert.match(html,/id="mobile-cart-back"/);
+  assert.match(html,/aria-label="Buka halaman keranjang"/);
   assert.match(css,/\.mobile-cart-jump\{position:fixed/);
   assert.match(css,/\.cart-summary\{position:sticky/);
   assert.match(css,/@media\(max-width:760px\)/);
-  assert.match(script,/mobile-cart-jump'\)\.addEventListener\('click'/);
+  assert.match(css,/\.pos-layout:not\(\.mobile-cart-view\) \.cart-pane\{display:none\}/);
+  assert.match(css,/\.pos-layout\.mobile-cart-view \.catalog-pane\{display:none\}/);
+  assert.doesNotMatch(css,/@media\(max-width:900px\) and \(min-width:761px\)\{[^}]*mobile-cart-view/);
+  assert.match(script,/function setMobilePosView/);
+  assert.match(script,/mobile-cart-jump'\)\.addEventListener\('click',\(\)=>setMobilePosView\('cart'\)/);
+  assert.match(script,/mobile-cart-back'\)\.addEventListener\('click',\(\)=>setMobilePosView\('catalog'\)/);
   assert.match(script,/mobile-cart-count/);
 });

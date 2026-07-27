@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Daftar Barang Ringkas v2.4.6
+# Kasir Nusa POS — Keranjang Mobile v2.4.7
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -7,6 +7,8 @@ Produksi menggunakan:
 - Vercel untuk aplikasi web/PWA dan API.
 - Supabase untuk login, database PostgreSQL, transaksi atomik, dan audit.
 - Aplikasi Android native untuk kasir; PWA untuk owner di iOS dan backoffice.
+- Pada ponsel, katalog dan keranjang Kasir berada di layar terpisah; tablet dan
+  desktop tetap menampilkan keduanya berdampingan.
 
 Alamat produksi: <https://kasir-nusa-pos.vercel.app/>
 

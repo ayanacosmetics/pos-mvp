@@ -3712,6 +3712,16 @@ function handlePosShortcut(event){
 
 const mobileSidebarMedia = window.matchMedia('(max-width: 760px)');
 
+function setMobilePosView(view, { focus = true } = {}) {
+  const layout = document.querySelector('.pos-layout');
+  const showCart = mobileSidebarMedia.matches && view === 'cart';
+  layout.classList.toggle('mobile-cart-view', showCart);
+  el('mobile-cart-jump').setAttribute('aria-expanded', String(showCart));
+  if (!focus || !mobileSidebarMedia.matches) return;
+  window.scrollTo({ top:0 });
+  requestAnimationFrame(() => (showCart ? el('mobile-cart-back') : el('product-search')).focus());
+}
+
 function setSidebarOpen(requestedOpen, { restoreFocus = false } = {}) {
   const app = el('app-view');
   const sidebar = el('app-sidebar');
@@ -3730,6 +3740,7 @@ function setSidebarOpen(requestedOpen, { restoreFocus = false } = {}) {
 
 function syncSidebarMode() {
   setSidebarOpen(false);
+  if (!mobileSidebarMedia.matches) setMobilePosView('catalog', { focus:false });
   openNavGroup(state.activeNavGroup??'sales');
 }
 
@@ -4018,6 +4029,7 @@ function showPage(name) {
   if(item?.dataset.stockView)showStockView(item.dataset.stockView);
   if(item?.dataset.reportView)showReportView(item.dataset.reportView);
   if(item?.dataset.settingsView)showSettingsView(item.dataset.settingsView);
+  if(target==='pos')setMobilePosView('catalog',{focus:false});
   const group=item?.closest('[data-nav-panel]')?.dataset.navPanel;
   if(group)openNavGroup(group);
   localStorage.setItem('pos_active_page',name);
@@ -4235,7 +4247,8 @@ el('customer-search-results').addEventListener('click', (event) => {
 el('clear-pos-customer').addEventListener('click',()=>selectPosCustomer(''));
 el('new-pos-customer').addEventListener('click',()=>{el('pos-customer-dialog').close();openCustomerEditor(null,'pos');});
 el('clear-cart').addEventListener('click', async () => { state.cart = []; resetPosCustomer();el('sale-note').value='';invalidateSaleAuthorization(); await updateQuote(); });
-el('mobile-cart-jump').addEventListener('click',()=>document.querySelector('.cart-pane').scrollIntoView({behavior:'smooth',block:'start'}));
+el('mobile-cart-jump').addEventListener('click',()=>setMobilePosView('cart'));
+el('mobile-cart-back').addEventListener('click',()=>setMobilePosView('catalog'));
 el('open-pos-history').addEventListener('click',openPosHistory);
 el('close-pos-history').addEventListener('click',()=>el('pos-history-dialog').close());
 el('refresh-pos-history').addEventListener('click',()=>loadPosSales(el('pos-history-search').value));

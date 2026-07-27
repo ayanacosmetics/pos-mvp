@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=70">
+  <link rel="stylesheet" href="/styles.css?v=71">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -167,7 +167,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Daftar Barang Ringkas · v2.4.6</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Keranjang Mobile · v2.4.7</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -190,7 +190,8 @@
             <div class="pos-product-tools"><div id="pos-category-filters" class="pos-category-filters" aria-label="Filter kategori"></div><button id="favorite-filter" class="button secondary favorite-filter" type="button" aria-pressed="false">★ Favorit</button></div>
             <div id="product-grid" class="product-grid"></div>
           </div>
-          <aside class="cart-pane">
+          <aside class="cart-pane" aria-label="Keranjang transaksi">
+            <button id="mobile-cart-back" class="mobile-cart-back" type="button" aria-label="Kembali ke daftar barang"><span aria-hidden="true">←</span> Pilih barang</button>
             <div class="cart-heading"><div><p class="eyebrow">TRANSAKSI BARU</p><h2>Keranjang</h2></div><button id="clear-cart" class="icon-button" aria-label="Kosongkan keranjang">×</button></div>
             <div id="cart-lines" class="cart-lines"><div class="empty-state">Belum ada barang.<br><small>Scan barcode atau pilih produk.</small></div></div>
             <div class="cart-summary">
@@ -207,7 +208,7 @@
             </div>
           </aside>
         </div>
-        <button id="mobile-cart-jump" class="mobile-cart-jump" type="button" aria-label="Buka keranjang">Keranjang <span id="mobile-cart-count">0</span></button>
+        <button id="mobile-cart-jump" class="mobile-cart-jump" type="button" aria-label="Buka halaman keranjang" aria-expanded="false">Keranjang <span id="mobile-cart-count">0</span></button>
       </section>
 
       <section id="page-returns" class="page"><div class="content-width">
@@ -841,6 +842,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=70"></script>
+  <script type="module" src="/app.js?v=71"></script>
 </body>
 </html>

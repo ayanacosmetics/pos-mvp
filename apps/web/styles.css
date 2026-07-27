@@ -562,6 +562,7 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
 .cart-checkout-actions{gap:8px}
 .cart-checkout-actions .button.primary{flex:1.35}
 .adjustment-button{border:1px dashed #d5a367;background:#fffaf3;color:#88551e}
+.mobile-cart-back{display:none}
 
 /* Dialogs and feedback */
 .dialog{background:rgba(8,25,30,.62);backdrop-filter:blur(4px)}
@@ -610,7 +611,7 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
     min-width:158px;
     scroll-snap-align:start;
   }
-  .pos-layout{height:auto;display:block}
+  .pos-layout{height:auto;min-height:calc(100dvh - 64px);display:block}
   .catalog-pane{padding:20px 14px 36px}
   .catalog-pane .page-title{align-items:flex-start}
   .search-row{padding:8px;border-radius:10px;box-shadow:none}
@@ -618,9 +619,15 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
   .favorite-filter::after{font-size:15px}
   .product-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
   .product-card{min-height:132px;padding:13px}
-  .cart-pane{min-height:calc(100dvh - 64px);padding:22px 18px 0;border-left:0;border-top:1px solid var(--line)}
+  .pos-layout:not(.mobile-cart-view) .cart-pane{display:none}
+  .pos-layout.mobile-cart-view .catalog-pane{display:none}
+  .pos-layout.mobile-cart-view .cart-pane{display:flex}
+  .cart-pane{min-height:calc(100dvh - 64px);padding:14px 18px 0;border-left:0;border-top:0}
+  .mobile-cart-back{display:inline-flex;align-items:center;align-self:flex-start;gap:8px;margin:0 0 14px;padding:7px 0;border:0;background:transparent;color:var(--brand);font-size:12px;font-weight:850}
+  .mobile-cart-back span{font-size:18px;line-height:1}
   .cart-summary{margin:0 -18px;padding:16px 18px max(20px,env(safe-area-inset-bottom))}
   .mobile-cart-jump{right:14px;bottom:calc(14px + env(safe-area-inset-bottom));border-radius:10px;background:var(--brand);box-shadow:0 10px 26px rgba(14,89,87,.24)}
+  .pos-layout.mobile-cart-view + .mobile-cart-jump{display:none}
   th,td{padding-inline:11px}
 }
 @media(max-width:430px){

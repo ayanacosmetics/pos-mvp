@@ -45,6 +45,20 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Paket v2.4.7 Keranjang Mobile siap deploy
+
+- Pada ponsel sampai 760 px, katalog dan keranjang Kasir menjadi dua layar.
+  Tombol Keranjang tetap mengambang di katalog dan menampilkan jumlah barang.
+- Layar keranjang mempunyai tombol `Pilih barang` untuk kembali ke katalog.
+  Isi keranjang, member, promo, tahan transaksi, dan pembayaran tetap tersimpan
+  saat berpindah layar.
+- Tablet mulai 761 px dan desktop tetap memakai katalog serta keranjang
+  berdampingan.
+- QA browser lulus pada ponsel 390 x 844 dan tablet 800 x 1000 tanpa overflow.
+  Seluruh 190/190 pengujian otomatis lulus.
+- Tidak memerlukan migrasi SQL. API disiapkan ke `2.4.7-cloud`, aset web `v71`,
+  dan cache PWA `v71`.
+
 ### Rilis v2.4.6 Daftar Barang Ringkas dikonfirmasi live
 
 - Katalog Kasir tidak lagi memakai kartu besar dua kolom. Produk menjadi baris
