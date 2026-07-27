@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat v2.3.0 siap deploy
+### Rilis v2.3.0 dikonfirmasi live
 
 - **Restok Terpandu v2.3.0** mengubah penerimaan barang yang sebelumnya
   memanjang menjadi empat layar: Dokumen, Barang, Periksa, dan Histori.
@@ -57,7 +57,12 @@ kode frontend, dokumentasi publik, atau chat.
 - Desktop membatasi daftar panjang di panel. Pada mobile, indikator langkah
   dapat digeser mendatar dan tombol Kembali/Lanjut tetap terlihat di bawah.
 - Tidak memerlukan migrasi SQL. Cache offline dinaikkan ke
-  `nusa-pos-shell-v59`; 168 pengujian otomatis ditargetkan lulus.
+  `nusa-pos-shell-v59`; 168/168 pengujian otomatis lulus.
+- Commit `2571921` didorong ke `origin/main`. Deployment Vercel
+  `dpl_FYFFf6LmuNNWG66ejeP5fqjtUvnA` berstatus Ready dan alias produksi aktif.
+- Verifikasi domain publik mengembalikan API `2.3.0-cloud`, identitas
+  `Restok Terpandu · v2.3.0`, empat tombol dan empat panel langkah, aset
+  `v59`, serta cache `nusa-pos-shell-v59`.
 
 ### Rilis v2.2.2 dikonfirmasi live
 
