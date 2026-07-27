@@ -20,6 +20,15 @@ const webPrinter = await readFile(
 );
 const webApp = await readFile(new URL('../apps/web/app.js', import.meta.url), 'utf8');
 const webHtml = await readFile(new URL('../apps/web/index.html', import.meta.url), 'utf8');
+const androidStrings = await readFile(
+  new URL('../apps/android-cashier/app/src/main/res/values/strings.xml', import.meta.url),
+  'utf8',
+);
+const androidIcon = await readFile(
+  new URL('../apps/android-cashier/app/src/main/res/drawable/ic_launcher.xml', import.meta.url),
+  'utf8',
+);
+const pwaIcon = await readFile(new URL('../apps/web/icon-512.svg', import.meta.url), 'utf8');
 
 test('Android cashier app locks its WebView to the production POS and blocks unsafe file access', () => {
   assert.match(androidBuild, /applicationId\s+"app\.kasirnusa\.cashier"/);
@@ -64,10 +73,26 @@ test('scanner dipasangkan dari Bluetooth Android dan aplikasi tidak mengambil al
 });
 
 test('APK pembaruan mempertahankan printer SPP tetapi scanner hanya memakai HID', () => {
-  assert.match(androidBuild, /versionCode 3/);
-  assert.match(androidBuild, /versionName "1\.1\.1-test"/);
-  assert.match(activity, /KasirNusaAndroid\/1\.1\.1/);
+  assert.match(androidBuild, /versionCode 4/);
+  assert.match(androidBuild, /versionName "1\.2\.0"/);
+  assert.match(androidBuild, /release\s*\{[\s\S]*signingConfig signingConfigs\.debug/);
+  assert.match(activity, /KasirNusaAndroid\/1\.2\.0/);
   assert.doesNotMatch(activity, /SCANNER_MODE|scannerSocket|scannerReader/);
+});
+
+test('APK dan PWA memakai nama serta identitas visual Kasir Nusa POS yang konsisten', () => {
+  assert.match(androidStrings, /<string name="app_name">Kasir Nusa POS<\/string>/);
+  assert.match(manifest, /android:icon="@drawable\/ic_launcher"/);
+  assert.match(manifest, /android:roundIcon="@drawable\/ic_launcher"/);
+  for (const icon of [androidIcon, pwaIcon]) {
+    assert.match(icon, /#12383c/i);
+    assert.match(icon, /#fffaf2/i);
+    assert.match(icon, /#df7a45/i);
+  }
+  assert.match(webHtml, /Kasir Nusa POS/);
+  assert.match(webHtml, /brand-receipt/);
+  assert.doesNotMatch(webHtml, />\s*KN\s*</);
+  assert.doesNotMatch(`${androidStrings}\n${webHtml}`, /Kasir Nusa Kasir/);
 });
 
 test('Android startup never touches unavailable Web Serial and has a login watchdog', () => {

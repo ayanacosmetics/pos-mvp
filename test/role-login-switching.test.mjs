@@ -92,8 +92,8 @@ test('UI membedakan login dan hanya menampilkan Ganti Owner saat server mengizin
   assert.match(html,/data-login-portal="OWNER"/);
   assert.match(html,/data-login-portal="STAFF"/);
   assert.match(html,/id="switch-account"/);
-  assert.match(html,/styles\.css\?v=67/);
-  assert.match(html,/app\.js\?v=67/);
+  assert.match(html,/styles\.css\?v=68/);
+  assert.match(html,/app\.js\?v=68/);
   assert.doesNotMatch(html,/owner@demo\.local|owner123|kasir123/);
   assert.match(script,/!state\.session\.canSwitchOwners/);
   assert.match(script,/\/api\/owner-contexts\/switch/);

@@ -1,5 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Kasir Nusa">
-  <rect width="512" height="512" rx="112" fill="#174c4f"/>
-  <path d="M112 125h77v94l83-94h96L264 241l112 146h-99l-72-99-16 18v81h-77z" fill="#fffdf8"/>
-  <circle cx="381" cy="131" r="35" fill="#de7b45"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 192 192" role="img" aria-label="Kasir Nusa POS">
+  <rect width="192" height="192" rx="44" fill="#12383c"/>
+  <path d="M53 29h86c9 0 16 7 16 16v112l-15-10-15 10-15-10-15 10-15-10-15 10-15-10-13 10V45c0-9 7-16 16-16Z" fill="#fffaf2"/>
+  <path d="M65 118V72l62 46V72" fill="none" stroke="#174c4f" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="129" cy="132" r="7" fill="#df7a45"/>
 </svg>

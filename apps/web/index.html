@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=67">
+  <link rel="stylesheet" href="/styles.css?v=68">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
     <div class="session-card">
-      <div class="brand-mark">KN</div>
+      <div class="brand-mark" aria-label="Kasir Nusa POS"><svg viewBox="0 0 108 108" aria-hidden="true"><path class="brand-receipt" d="M30 16h48q9 0 9 9v64l-8-6-8 6-8-6-8 6-8-6-8 6-8-6-9 6V25q0-9 8-9Z"/><path class="brand-n" d="M38 67V40l34 27V40"/><circle class="brand-accent" cx="69" cy="75" r="4"/></svg></div>
       <div>
         <p class="eyebrow">KASIR NUSA</p>
         <strong>Memulihkan sesi kerja…</strong>
@@ -23,7 +23,7 @@
 
   <section id="login-view" class="login-view hidden">
     <aside class="login-showcase" aria-hidden="true">
-      <div class="login-showcase-brand"><span class="brand-mark">KN</span><span>Kasir Nusa</span></div>
+      <div class="login-showcase-brand"><span class="brand-mark"><svg viewBox="0 0 108 108" aria-hidden="true"><path class="brand-receipt" d="M30 16h48q9 0 9 9v64l-8-6-8 6-8-6-8 6-8-6-8 6-8-6-9 6V25q0-9 8-9Z"/><path class="brand-n" d="M38 67V40l34 27V40"/><circle class="brand-accent" cx="69" cy="75" r="4"/></svg></span><span>Kasir Nusa POS</span></div>
       <div class="login-showcase-copy">
         <p class="eyebrow">RETAIL OPERATIONS</p>
         <h2>Satu ruang kerja untuk menjalankan toko dengan tenang.</h2>
@@ -32,7 +32,7 @@
       <div class="login-showcase-status"><span></span><div><strong>Data usaha terlindungi</strong><small>Sesi aman dan sinkronisasi otomatis</small></div></div>
     </aside>
     <form id="login-form" class="login-card">
-      <div class="login-mobile-brand"><span class="brand-mark">KN</span><span>Kasir Nusa</span></div>
+      <div class="login-mobile-brand"><span class="brand-mark"><svg viewBox="0 0 108 108" aria-hidden="true"><path class="brand-receipt" d="M30 16h48q9 0 9 9v64l-8-6-8 6-8-6-8 6-8-6-8 6-8-6-9 6V25q0-9 8-9Z"/><path class="brand-n" d="M38 67V40l34 27V40"/><circle class="brand-accent" cx="69" cy="75" r="4"/></svg></span><span>Kasir Nusa POS</span></div>
       <p class="eyebrow">PORTAL AKUN</p>
       <h1 id="login-title">Masuk sebagai Owner</h1>
       <p id="login-description" class="muted">Kelola usaha, laporan, pengguna, harga, dan seluruh outlet.</p>
@@ -50,7 +50,7 @@
 
   <div id="app-view" class="app hidden">
     <aside id="app-sidebar" class="sidebar" aria-label="Menu utama">
-      <div class="brand"><span class="brand-mark small">KN</span><span>Kasir Nusa</span></div>
+      <div class="brand"><span class="brand-mark small"><svg viewBox="0 0 108 108" aria-hidden="true"><path class="brand-receipt" d="M30 16h48q9 0 9 9v64l-8-6-8 6-8-6-8 6-8-6-8 6-8-6-9 6V25q0-9 8-9Z"/><path class="brand-n" d="M38 67V40l34 27V40"/><circle class="brand-accent" cx="69" cy="75" r="4"/></svg></span><span>Kasir Nusa POS</span></div>
       <nav id="nav">
         <button data-nav-group="sales" class="nav-item active" aria-expanded="true"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h3M15.5 13h.01M8 16h3M15.5 16h.01"/></svg></span><span>Penjualan<small>Kasir, retur, shift</small></span><b>⌄</b></button>
         <div data-nav-panel="sales" class="feature-nav-panel active">
@@ -145,7 +145,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Scanner HID Stabil · v2.4.3</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Identitas Final · v2.4.4</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -819,6 +819,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=67"></script>
+  <script type="module" src="/app.js?v=68"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Scanner HID Stabil v2.4.3
+# Kasir Nusa POS — Identitas Final v2.4.4
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -181,21 +181,23 @@ Jalankan:
 npm test
 ```
 
-Source saat ini memiliki 183 pengujian otomatis. Pengujian toko nyata tetap
+Source saat ini memiliki 184 pengujian otomatis. Pengujian toko nyata tetap
 harus mengikuti `GO-LIVE-CHECKLIST.md`; keputusan lulus pilot tidak menggantikan
 verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 
 ## Aplikasi kasir Android
 
 Unduh dan instal pembaruan APK dari
-<https://kasir-nusa-pos.vercel.app/downloads/Kasir-Nusa-Kasir-1.1.1-test.apk>.
+<https://kasir-nusa-pos.vercel.app/downloads/Kasir-Nusa-POS-1.2.0.apk>.
 Printer dihubungkan dari halaman Perangkat. Scanner dipasangkan sebagai
 keyboard/HID melalui Pengaturan Bluetooth Android, bukan dari aplikasi. Setelah
 tersambung, barcode diteruskan otomatis ke halaman Kasir dan scanner sebaiknya
-mengirim Enter setelah barcode. APK v1.1.1 memiliki SHA-256
-`0050F9D6307D5CB05D764DF6E02228BB945911BF6A21085C2CC62941B8BF1595`
-dan ditandatangani sertifikat yang sama dengan APK sebelumnya, sehingga dapat
-dipasang sebagai pembaruan tanpa menghapus aplikasi atau sesi.
+mengirim Enter setelah barcode. APK stabil v1.2.0 bernama **Kasir Nusa POS**
+dan memiliki SHA-256
+`E95CBCB88B2FCBF77031D848EDB803FA82F5151EADA2E9E39C3B3D898DD4372C`.
+APK ditandatangani sertifikat yang sama dengan versi sebelumnya, sehingga dapat
+dipasang langsung sebagai pembaruan tanpa menghapus aplikasi atau sesi. Jangan
+hapus versi lama sebelum memasang pembaruan.
 
 ## Struktur
 

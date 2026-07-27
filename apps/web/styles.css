@@ -265,6 +265,7 @@ h3{font-size:15px;line-height:1.35}
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);
 }
 .brand-mark.small{border-radius:8px}
+.brand-mark svg{display:block;width:100%;height:100%}.brand-receipt{fill:#fffaf2}.brand-n{fill:none;stroke:#174c4f;stroke-width:7;stroke-linecap:round;stroke-linejoin:round}.brand-accent{fill:#df7a45}
 #nav{flex:1}
 .nav-item{
   grid-template-columns:32px minmax(0,1fr) 18px;

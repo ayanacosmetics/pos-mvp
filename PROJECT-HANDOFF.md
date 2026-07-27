@@ -45,6 +45,20 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.4.4 dan APK Kasir Nusa POS v1.2.0 siap deploy
+
+- Nama produk Android ditetapkan menjadi **Kasir Nusa POS**, termasuk label
+  launcher dan nama berkas APK. Package `app.kasirnusa.cashier` tetap
+  dipertahankan agar pembaruan dapat dipasang tanpa menghapus aplikasi atau sesi.
+- Logo baru berbentuk struk dengan huruf N dan aksen jingga dipakai konsisten
+  pada launcher Android, ikon PWA, pemulihan sesi, halaman login, dan sidebar.
+- APK stabil `Kasir-Nusa-POS-1.2.0.apk` memakai versionCode `4`, target SDK 35,
+  build release, serta sertifikat yang sama dengan versi uji sebelumnya.
+  SHA-256:
+  `E95CBCB88B2FCBF77031D848EDB803FA82F5151EADA2E9E39C3B3D898DD4372C`.
+- Cache PWA dinaikkan ke `v68`, API menjadi `2.4.4-cloud`, dan rilis tidak
+  memerlukan SQL baru.
+
 ### Rilis v2.4.3 dan APK kasir v1.1.1 dikonfirmasi live
 
 - **Scanner HID Stabil v2.4.3** mencabut pemilih scanner dari aplikasi, bridge

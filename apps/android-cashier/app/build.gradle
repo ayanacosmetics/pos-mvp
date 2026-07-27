@@ -10,8 +10,8 @@ android {
         applicationId "app.kasirnusa.cashier"
         minSdk 26
         targetSdk 35
-        versionCode 3
-        versionName "1.1.1-test"
+        versionCode 4
+        versionName "1.2.0"
         buildConfigField "String", "POS_ORIGIN", "\"https://kasir-nusa-pos.vercel.app\""
     }
 
@@ -21,6 +21,7 @@ android {
 
     buildTypes {
         release {
+            signingConfig signingConfigs.debug
             minifyEnabled false
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
