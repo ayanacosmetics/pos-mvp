@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Paket v2.4.11 Sinkronisasi Data siap deployment
+### Rilis v2.4.11 Sinkronisasi Data dikonfirmasi live
 
 - Tombol `Sinkronkan data` ditempatkan paling atas pada sidebar, tepat di bawah
   logo, dan tersedia bagi seluruh peran.
@@ -62,6 +62,11 @@ kode frontend, dokumentasi publik, atau chat.
 - Seluruh 193 pengujian otomatis lulus. Pemeriksaan visual tombol dan waktu
   sinkron lulus pada desktop 1365×900 serta drawer ponsel 390×844.
 - Tidak memerlukan migrasi SQL.
+- Commit fitur `10dd9c4` sudah didorong ke `origin/main`.
+- Deployment Vercel `dpl_4si5xP4TnqR7JA6a9UUA6Yxjz382` berstatus Ready dan
+  alias `kasir-nusa-pos.vercel.app` aktif.
+- Verifikasi publik mengembalikan API `2.4.11-cloud`, tombol serta logika waktu
+  sinkron, aset `v75`, dan cache PWA `v75`.
 
 ### Rilis v2.4.10 Kelola Staff dikonfirmasi live
 
