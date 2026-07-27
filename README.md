@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Restok Ringkas v2.4.0
+# Kasir Nusa POS — Scanner Langsung v2.4.1
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -181,25 +181,29 @@ Jalankan:
 npm test
 ```
 
-Source saat ini memiliki 178 pengujian otomatis. Pengujian toko nyata tetap
+Source saat ini memiliki 182 pengujian otomatis. Pengujian toko nyata tetap
 harus mengikuti `GO-LIVE-CHECKLIST.md`; keputusan lulus pilot tidak menggantikan
 verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 
 ## Aplikasi kasir Android
 
-Pasangkan printer WP58D dan scanner melalui Pengaturan Bluetooth Android.
-Unduh dan instal APK dari
-<https://kasir-nusa-pos.vercel.app/downloads/Kasir-Nusa-Kasir-1.0.0-test.apk>,
-masuk dengan akun kasir, lalu cetak struk. Saat pertama mencetak, pilih WP58D
-dari daftar perangkat yang sudah dipasangkan. Scanner Bluetooth harus berada
-pada mode HID dan mengirim Enter setelah barcode.
+Unduh dan instal pembaruan APK dari
+<https://kasir-nusa-pos.vercel.app/downloads/Kasir-Nusa-Kasir-1.1.0-test.apk>.
+Printer dihubungkan dari halaman Perangkat. Scanner dapat dihubungkan langsung
+dari tombol scanner di halaman Kasir; nyalakan mode pairing lalu pilih perangkat
+pada popup Android. Scanner SPP dibaca langsung oleh aplikasi, sedangkan scanner
+HID tetap bekerja otomatis dan sebaiknya mengirim Enter setelah barcode.
+APK v1.1.0 memiliki SHA-256
+`9E78D6794054FAAEFFB2BF8520EFA466EB68C539138A11061DC7995F8B049D97`
+dan ditandatangani sertifikat yang sama dengan APK v1.0.0, sehingga dapat
+dipasang sebagai pembaruan tanpa menghapus aplikasi atau sesi.
 
 ## Struktur
 
 ```text
 api/                  API produksi Vercel
 apps/web/             Antarmuka POS dan backoffice PWA
-apps/android-cashier/ Aplikasi kasir Android, printer SPP, dan scanner HID
+apps/android-cashier/ Aplikasi kasir Android, printer SPP, scanner SPP/HID
 apps/api/             Server demo lokal
 packages/domain/      Mesin harga, promo, akses, dan data contoh
 supabase/migrations/  Fondasi database produksi

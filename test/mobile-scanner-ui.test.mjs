@@ -9,7 +9,7 @@ const readUi = async () => Promise.all([
 
 test('tombol scanner barcode dan kamera memakai ikon persegi tanpa teks visual', async () => {
   const [html, css] = await readUi();
-  for (const id of ['scan-po-product', 'camera-po-product', 'scan-restock-product', 'camera-restock-product', 'scan-camera-pos']) {
+  for (const id of ['scan-po-product', 'camera-po-product', 'scan-restock-product', 'camera-restock-product', 'connect-scanner-pos', 'scan-camera-pos']) {
     const button = html.match(new RegExp(`<button id="${id}"[^>]*>([\\s\\S]*?)<\\/button>`))?.[0] ?? '';
     assert.match(button, /scan-icon-button/);
     assert.match(button, /aria-label="[^"]+"/);
@@ -20,7 +20,7 @@ test('tombol scanner barcode dan kamera memakai ikon persegi tanpa teks visual',
     const button = html.match(new RegExp(`<button id="${id}"[^>]*>([\\s\\S]*?)<\\/button>`))?.[0] ?? '';
     assert.match(button, /hardware-scan-button[^>]*aria-label="Aktifkan scanner barcode"/);
   }
-  assert.doesNotMatch(html, /Scanner Bluetooth|scanner Bluetooth|bluetooth-scan-button/);
+  assert.match(html, /id="connect-scanner-pos"[^>]*aria-label="Hubungkan scanner Bluetooth"/);
   assert.match(css, /\.scan-icon-button\{[^}]*width:44px!important;[^}]*height:44px/);
 });
 
@@ -57,7 +57,7 @@ test('kamera PWA memakai BarcodeDetector dengan fallback ZXing lokal dan kebijak
   assert.match(script, /NotAllowedError/);
   assert.match(script, /barcode-camera-dialog'\)\.addEventListener\('close', stopBarcodeCamera\)/);
   assert.match(script, /window\.addEventListener\('pagehide', stopBarcodeCamera\)/);
-  assert.match(worker, /nusa-pos-shell-v64/);
+  assert.match(worker, /nusa-pos-shell-v65/);
   assert.match(worker, /\/vendor\/zxing-browser\.min\.js/);
   const vercel = JSON.parse(vercelText);
   assert.ok(vercel.headers.some((entry) => entry.headers?.some((header) => header.key === 'Permissions-Policy' && header.value === 'camera=(self)')));

@@ -8,8 +8,14 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothSocket;
+import android.companion.AssociatedDevice;
+import android.companion.AssociationInfo;
+import android.companion.AssociationRequest;
+import android.companion.BluetoothDeviceFilter;
+import android.companion.CompanionDeviceManager;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.IntentSender;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -35,6 +41,7 @@ import android.widget.Toast;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -51,21 +58,31 @@ public final class MainActivity extends Activity {
     private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb");
     private static final int REQUEST_BLUETOOTH_CONNECT = 301;
     private static final int REQUEST_CAMERA = 302;
+    private static final int REQUEST_SCANNER_ASSOCIATION = 303;
     private static final String PREFS = "kasir_nusa_cashier";
     private static final String PRINTER_ADDRESS = "printer_address";
     private static final String PRINTER_NAME = "printer_name";
+    private static final String SCANNER_ADDRESS = "scanner_address";
+    private static final String SCANNER_NAME = "scanner_name";
+    private static final String SCANNER_MODE = "scanner_mode";
 
     private final ExecutorService printerExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService scannerExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService scannerReaderExecutor = Executors.newSingleThreadExecutor();
     private final Object socketLock = new Object();
+    private final Object scannerSocketLock = new Object();
     private final StringBuilder scannerBuffer = new StringBuilder();
     private WebView webView;
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothSocket printerSocket;
+    private BluetoothSocket scannerSocket;
     private SharedPreferences preferences;
     private String pendingBluetoothRequestId;
+    private String pendingScannerRequestId;
     private PermissionRequest pendingCameraRequest;
     private long scannerLastKeyAt;
     private long scannerStartedAt;
+    private volatile boolean scannerReaderActive;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -99,7 +116,7 @@ public final class MainActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setSupportMultipleWindows(false);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " KasirNusaAndroid/1.0.0");
+        settings.setUserAgentString(settings.getUserAgentString() + " KasirNusaAndroid/1.1.0");
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
@@ -213,6 +230,47 @@ public final class MainActivity extends Activity {
                 }
             });
         }
+
+        @JavascriptInterface
+        public boolean isScannerSelected() {
+            return !preferences.getString(SCANNER_ADDRESS, "").isEmpty();
+        }
+
+        @JavascriptInterface
+        public boolean isScannerConnected() {
+            if ("HID".equals(preferences.getString(SCANNER_MODE, ""))) return isScannerSelected();
+            synchronized (scannerSocketLock) {
+                return scannerSocket != null && scannerSocket.isConnected() && scannerReaderActive;
+            }
+        }
+
+        @JavascriptInterface
+        public String getScannerName() {
+            return preferences.getString(SCANNER_NAME, "");
+        }
+
+        @JavascriptInterface
+        public void connectScanner(String requestId) {
+            String address = preferences.getString(SCANNER_ADDRESS, "");
+            String mode = preferences.getString(SCANNER_MODE, "");
+            if (!address.isEmpty() && "SPP".equals(mode)) {
+                BluetoothDevice device = bluetoothAdapter.getRemoteDevice(address);
+                connectSelectedScanner(requestId, device);
+            } else {
+                runOnUiThread(() -> requestScannerSelection(requestId));
+            }
+        }
+
+        @JavascriptInterface
+        public void disconnectScanner(String requestId) {
+            closeScannerSocket();
+            preferences.edit()
+                    .remove(SCANNER_ADDRESS)
+                    .remove(SCANNER_NAME)
+                    .remove(SCANNER_MODE)
+                    .apply();
+            respondScanner(requestId, true, "Scanner diputuskan.");
+        }
     }
 
     private boolean hasBluetoothConnectPermission() {
@@ -235,6 +293,157 @@ public final class MainActivity extends Activity {
             return;
         }
         showBondedPrinterDialog(requestId);
+    }
+
+    private void requestScannerSelection(String requestId) {
+        if (bluetoothAdapter == null) {
+            respondScanner(requestId, false, "Perangkat Android ini tidak memiliki Bluetooth.");
+            return;
+        }
+        if (!bluetoothAdapter.isEnabled()) {
+            respondScanner(requestId, false, "Aktifkan Bluetooth, nyalakan scanner dalam mode pairing, lalu coba kembali.");
+            return;
+        }
+        CompanionDeviceManager manager = getSystemService(CompanionDeviceManager.class);
+        if (manager == null || !getPackageManager().hasSystemFeature(PackageManager.FEATURE_COMPANION_DEVICE_SETUP)) {
+            respondScanner(requestId, false, "Pemilih scanner Bluetooth tidak tersedia pada perangkat ini.");
+            return;
+        }
+        pendingScannerRequestId = requestId;
+        AssociationRequest pairingRequest = new AssociationRequest.Builder()
+                .addDeviceFilter(new BluetoothDeviceFilter.Builder().build())
+                .setSingleDevice(false)
+                .build();
+        CompanionDeviceManager.Callback callback = new CompanionDeviceManager.Callback() {
+            @Override
+            public void onAssociationPending(IntentSender chooserLauncher) {
+                launchScannerChooser(chooserLauncher);
+            }
+
+            @Override
+            @SuppressWarnings("deprecation")
+            public void onDeviceFound(IntentSender chooserLauncher) {
+                launchScannerChooser(chooserLauncher);
+            }
+
+            @Override
+            public void onFailure(CharSequence error) {
+                String id = pendingScannerRequestId;
+                pendingScannerRequestId = null;
+                if (id != null) respondScanner(id, false, error == null ? "Scanner Bluetooth tidak ditemukan." : error.toString());
+            }
+        };
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            manager.associate(pairingRequest, getMainExecutor(), callback);
+        } else {
+            manager.associate(pairingRequest, callback, null);
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void launchScannerChooser(IntentSender chooserLauncher) {
+        try {
+            startIntentSenderForResult(chooserLauncher, REQUEST_SCANNER_ASSOCIATION, null, 0, 0, 0);
+        } catch (IntentSender.SendIntentException error) {
+            String id = pendingScannerRequestId;
+            pendingScannerRequestId = null;
+            if (id != null) respondScanner(id, false, "Pemilih scanner gagal dibuka.");
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private void connectSelectedScanner(String requestId, BluetoothDevice device) {
+        String name = device.getName();
+        if (name == null || name.isBlank()) name = "Scanner Bluetooth";
+        String selectedName = name;
+        preferences.edit()
+                .putString(SCANNER_ADDRESS, device.getAddress())
+                .putString(SCANNER_NAME, selectedName)
+                .apply();
+        scannerExecutor.execute(() -> {
+            try {
+                connectScannerSocket(device);
+                preferences.edit().putString(SCANNER_MODE, "SPP").apply();
+                startScannerReader();
+                respondScanner(requestId, true, selectedName + " terhubung langsung.");
+                dispatchScannerStatus(true, selectedName + " siap memindai.");
+            } catch (Exception error) {
+                closeScannerSocket();
+                preferences.edit().putString(SCANNER_MODE, "HID").apply();
+                respondScanner(requestId, true, selectedName + " dipasangkan sebagai scanner HID. Scan langsung dari halaman Kasir.");
+                dispatchScannerStatus(true, selectedName + " siap dalam mode HID.");
+            }
+        });
+    }
+
+    @SuppressLint("MissingPermission")
+    private void connectScannerSocket(BluetoothDevice device) throws IOException {
+        closeScannerSocket();
+        BluetoothSocket candidate = null;
+        IOException firstError = null;
+        try {
+            candidate = device.createInsecureRfcommSocketToServiceRecord(SPP_UUID);
+            candidate.connect();
+        } catch (IOException insecureError) {
+            firstError = insecureError;
+            if (candidate != null) try { candidate.close(); } catch (IOException ignored) {}
+            candidate = null;
+        }
+        if (candidate == null) {
+            try {
+                candidate = device.createRfcommSocketToServiceRecord(SPP_UUID);
+                candidate.connect();
+            } catch (IOException secureError) {
+                if (candidate != null) try { candidate.close(); } catch (IOException ignored) {}
+                if (firstError != null) secureError.addSuppressed(firstError);
+                throw secureError;
+            }
+        }
+        synchronized (scannerSocketLock) {
+            scannerSocket = candidate;
+            scannerReaderActive = true;
+        }
+    }
+
+    private void startScannerReader() {
+        scannerReaderExecutor.execute(() -> {
+            StringBuilder barcode = new StringBuilder();
+            try {
+                BluetoothSocket socket;
+                synchronized (scannerSocketLock) { socket = scannerSocket; }
+                if (socket == null) return;
+                InputStream input = socket.getInputStream();
+                byte[] buffer = new byte[128];
+                while (scannerReaderActive) {
+                    int count = input.read(buffer);
+                    if (count < 0) break;
+                    for (int index = 0; index < count; index++) {
+                        int value = buffer[index] & 0xff;
+                        if (value == '\r' || value == '\n') {
+                            String result = barcode.toString().trim();
+                            barcode.setLength(0);
+                            if (result.length() >= 3) dispatchBarcode(result);
+                        } else if (value >= 32 && value < 127) {
+                            barcode.append((char) value);
+                        }
+                    }
+                }
+            } catch (IOException error) {
+                if (scannerReaderActive) dispatchScannerStatus(false, "Koneksi scanner terputus.");
+            } finally {
+                closeScannerSocket();
+            }
+        });
+    }
+
+    private void closeScannerSocket() {
+        synchronized (scannerSocketLock) {
+            scannerReaderActive = false;
+            if (scannerSocket != null) {
+                try { scannerSocket.close(); } catch (IOException ignored) {}
+                scannerSocket = null;
+            }
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -349,6 +558,20 @@ public final class MainActivity extends Activity {
         runOnUiThread(() -> webView.evaluateJavascript(script, null));
     }
 
+    private void respondScanner(String requestId, boolean success, String message) {
+        String script = "window.__kasirNusaNativeScannerResponse("
+                + JSONObject.quote(requestId) + ","
+                + success + ","
+                + JSONObject.quote(message) + ")";
+        runOnUiThread(() -> webView.evaluateJavascript(script, null));
+    }
+
+    private void dispatchScannerStatus(boolean connected, String message) {
+        String script = "window.dispatchEvent(new CustomEvent('kasirnusa:scanner-status',{detail:{connected:"
+                + connected + ",message:" + JSONObject.quote(message) + "}}))";
+        runOnUiThread(() -> webView.evaluateJavascript(script, null));
+    }
+
     private boolean isExternalScannerEvent(KeyEvent event) {
         InputDevice device = event.getDevice();
         return event.isFromSource(InputDevice.SOURCE_KEYBOARD)
@@ -396,6 +619,46 @@ public final class MainActivity extends Activity {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_SCANNER_ASSOCIATION) return;
+        String requestId = pendingScannerRequestId;
+        pendingScannerRequestId = null;
+        if (requestId == null) return;
+        if (resultCode != RESULT_OK || data == null) {
+            respondScanner(requestId, false, "Pemilihan scanner dibatalkan.");
+            return;
+        }
+        BluetoothDevice device = null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            AssociationInfo association = data.getParcelableExtra(
+                    CompanionDeviceManager.EXTRA_ASSOCIATION,
+                    AssociationInfo.class
+            );
+            if (association != null) {
+                AssociatedDevice associated = association.getAssociatedDevice();
+                if (associated != null) device = associated.getBluetoothDevice();
+                if (device == null && association.getDeviceMacAddress() != null) {
+                    device = bluetoothAdapter.getRemoteDevice(association.getDeviceMacAddress().toString());
+                }
+            }
+        }
+        if (device == null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                device = data.getParcelableExtra(CompanionDeviceManager.EXTRA_DEVICE, BluetoothDevice.class);
+            } else {
+                device = data.getParcelableExtra(CompanionDeviceManager.EXTRA_DEVICE);
+            }
+        }
+        if (device == null) {
+            respondScanner(requestId, false, "Perangkat yang dipilih bukan scanner Bluetooth Classic.");
+            return;
+        }
+        connectSelectedScanner(requestId, device);
+    }
+
+    @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
@@ -429,7 +692,10 @@ public final class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         closePrinterSocket();
+        closeScannerSocket();
         printerExecutor.shutdownNow();
+        scannerExecutor.shutdownNow();
+        scannerReaderExecutor.shutdownNow();
         if (webView != null) {
             webView.removeJavascriptInterface("KasirNusaAndroid");
             webView.destroy();
