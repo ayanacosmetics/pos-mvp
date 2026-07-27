@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat v2.2.1 siap deploy
+### Rilis v2.2.1 dikonfirmasi live
 
 - **Satuan Pintar v2.2.1** memperjelas penjualan produk yang memiliki
   pcs/lusin/dus/karton tanpa migrasi SQL.
@@ -60,6 +60,11 @@ kode frontend, dokumentasi publik, atau chat.
 - Modul pemilihan satuan ikut cache offline `nusa-pos-shell-v57`. QA browser
   desktop dan mobile 390 x 844 lulus tanpa overflow; 161/161 pengujian otomatis
   lulus.
+- Commit `b8bad34` didorong ke `origin/main`. Deployment Vercel
+  `dpl_2ACyiyfNj4XUKQi3wgujCRu11Ric` berstatus Ready dan alias produksi aktif.
+- Verifikasi domain publik mengembalikan API `2.2.1-cloud`, identitas
+  `Satuan Pintar · v2.2.1`, aset/cache `v57`, serta modul
+  `/pos-units.mjs` dengan HTTP 200.
 
 ### Rilis v2.2 dikonfirmasi live
 
