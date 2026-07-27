@@ -1024,3 +1024,4 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
   .inventory-cost{grid-column:2/4!important}
   .product-image-field{grid-column:auto}
 }
+.report-sales-layout{min-height:440px}

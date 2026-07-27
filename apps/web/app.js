@@ -278,7 +278,6 @@ async function applyBootstrap(data, { offline = false } = {}) {
   if (!offline && state.session.permissions.includes('catalog.manage')) await loadProductManagement();
   if (!offline && state.session.permissions.includes('promotion.manage')) await loadPromotionManagement();
   if (!offline && state.session.permissions.includes('pos.sell')) await loadHeldSales();
-  if (!offline && state.session.permissions.includes('pos.sell')) await loadPosSales();
   if (!offline && state.session.permissions.includes('pos.sell')) await loadCustomerAging();
   if (!offline && state.session.permissions.includes('sales.return')) await loadRecentReturns();
   if (!offline && state.session.permissions.includes('workforce.self')) { await loadWorkforceOverview(); await loadApprovals(); }
@@ -3198,6 +3197,10 @@ function applyReportPreset() {
   if (preset === 'CUSTOM') return;
   el('report-to').value = today;
   if (preset === 'TODAY') el('report-from').value = today;
+  if (preset === 'WEEK') {
+    const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
+    el('report-from').value = shiftReportDate(today, weekday === 0 ? -6 : 1-weekday);
+  }
   if (preset === '7D') el('report-from').value = shiftReportDate(today, -6);
   if (preset === '30D') el('report-from').value = shiftReportDate(today, -29);
   if (preset === 'MONTH') el('report-from').value = `${today.slice(0, 8)}01`;
@@ -3218,8 +3221,8 @@ function renderOperationalReport(audit) {
   const report = state.report;
   const metrics = report.metrics;
   el('report-cards').innerHTML = [
-    ['Penjualan bersih', money.format(metrics.netSales), ''],
-    ['Laba kotor', money.format(metrics.grossProfit), 'profit-metric'],
+    ['Pendapatan / penjualan bersih', money.format(metrics.netSales), ''],
+    ['Keuntungan / laba kotor', money.format(metrics.grossProfit), 'profit-metric'],
     ['Retur pelanggan', money.format(metrics.returnTotal), 'return-metric'],
     ['Transaksi', Number(metrics.transactionCount).toLocaleString('id-ID'), ''],
     ['Nilai persediaan', money.format(metrics.inventoryValue), ''],
@@ -3232,7 +3235,6 @@ function renderOperationalReport(audit) {
   el('best-products').innerHTML = report.products.filter((item) => Number(item.netQty) || Number(item.netRevenue) || Number(item.grossProfit)).slice(0, 10).map((item, index) => `<div class="report-item"><div><strong>${index + 1}. ${escapeHtml(item.productName)}</strong><small>${Number(item.netQty).toLocaleString('id-ID')} pcs bersih</small></div><div class="report-item-value"><strong>${money.format(item.netRevenue)}</strong><small>Laba ${money.format(item.grossProfit)}</small></div></div>`).join('') || '<div class="empty-state compact">Belum ada penjualan produk.</div>';
   el('outlet-performance').innerHTML = report.outlets.map((item) => `<div class="report-item"><div><strong>${escapeHtml(item.outletName)}</strong><small>${Number(item.transactionCount).toLocaleString('id-ID')} transaksi · retur ${money.format(item.returnTotal)}</small></div><div class="report-item-value"><strong>${money.format(item.netSales)}</strong><small>Laba ${money.format(item.grossProfit)}</small></div></div>`).join('') || '<div class="empty-state compact">Belum ada outlet.</div>';
   el('supplier-purchases').innerHTML = report.suppliers.slice(0, 10).map((item) => `<div class="report-item"><div><strong>${escapeHtml(item.supplierName)}</strong><small>${Number(item.receiptCount).toLocaleString('id-ID')} penerimaan · ${Number(item.units).toLocaleString('id-ID')} pcs${Number(item.returnCount)?` · ${Number(item.returnCount)} retur`:''}</small></div><div class="report-item-value"><strong>${money.format(item.netPurchaseValue??item.purchaseValue)}</strong>${Number(item.returnCredit)?`<small>Retur −${money.format(item.returnCredit)}</small>`:''}</div></div>`).join('') || '<div class="empty-state compact">Belum ada penerimaan pembelian.</div>';
-  el('recent-sales').innerHTML = reportTable(['Waktu', 'Struk', 'Kasir', 'Pembayaran', 'Bruto', 'Retur', 'Bersih'], report.recentSales.map((sale) => `<tr><td>${new Date(sale.occurredAt).toLocaleString('id-ID')}</td><td><strong>${escapeHtml(sale.receiptNo)}</strong></td><td>${escapeHtml(sale.cashierName)}</td><td>${escapeHtml(sale.paymentMethod)}</td><td>${money.format(sale.grossTotal)}</td><td class="${Number(sale.returnTotal) ? 'negative' : ''}">${money.format(sale.returnTotal)}</td><td><strong>${money.format(sale.netTotal)}</strong></td></tr>`));
   el('audit-logs').innerHTML = audit.logs.slice(0, 12).map((log) => `<div class="sale-row"><span><strong>${escapeHtml(log.action.replaceAll('_', ' '))}</strong><br><small>${escapeHtml(log.entity_type)} · ${new Date(log.occurred_at).toLocaleString('id-ID')}</small></span><small>${escapeHtml(log.actor_name ?? log.actor_id ?? 'Sistem')}</small></div>`).join('') || '<p class="muted">Belum ada aktivitas tercatat.</p>';
   el('report-status').textContent = `Periode ${new Date(`${report.period.from}T00:00:00`).toLocaleDateString('id-ID')}–${new Date(`${report.period.to}T00:00:00`).toLocaleDateString('id-ID')} · Margin kotor ${Number(metrics.grossMarginPercent).toLocaleString('id-ID', { maximumFractionDigits: 2 })}% · Dibuat ${new Date(report.generatedAt).toLocaleTimeString('id-ID')}`;
 }
@@ -3250,6 +3252,7 @@ async function loadReport() {
     const [report, audit] = await Promise.all([request(`/api/reports/summary?${params}`), request('/api/audit')]);
     state.report = report;
     renderOperationalReport(audit);
+    if(state.reportView==='sales')await loadPosSales('',{reportScope:true});
   } catch (error) {
     el('report-status').textContent = `Laporan belum dapat dimuat: ${error.message}`;
     toast(error.message);
@@ -3640,14 +3643,21 @@ async function completePayment(event) {
     await refreshCatalog();
     if (state.session.permissions.includes('inventory.manage')) await loadInventory();
     if (state.session.permissions.includes('report.view')) await loadReport();
-    await loadPosSales();
   }
 }
 
-async function loadPosSales(query='') {
+async function loadPosSales(query='',{reportScope=false}={}) {
   if(!navigator.onLine)return;
   try{
-    const data=await request(`/api/pos-sales${query?`?q=${encodeURIComponent(query)}`:''}`);
+    const params=new URLSearchParams();
+    if(query)params.set('q',query);
+    if(reportScope){
+      params.set('scope','report');
+      params.set('from',el('report-from').value);
+      params.set('to',el('report-to').value);
+      if(el('report-outlet').value)params.set('outletId',el('report-outlet').value);
+    }
+    const data=await request(`/api/pos-sales${params.size?`?${params}`:''}`);
     state.posSales=data.sales??[];
     if(state.selectedPosSaleId&&!state.posSales.some((sale)=>sale.id===state.selectedPosSaleId))state.selectedPosSaleId=null;
     renderPosSales();
@@ -3657,7 +3667,7 @@ async function loadPosSales(query='') {
 }
 
 function renderPosSales(){
-  el('pos-history-list').innerHTML=state.posSales.length?state.posSales.map((sale)=>`<button class="pos-history-row ${sale.id===state.selectedPosSaleId?'active':''}" type="button" data-pos-sale-id="${sale.id}"><span><strong>${escapeHtml(sale.receiptNo)}</strong><small>${new Date(sale.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(sale.customer?.name??'Pelanggan umum')}</small></span><strong>${money.format(sale.quote.grandTotal)}</strong><small>${escapeHtml(sale.cashier)}</small><span class="${sale.status==='VOIDED'?'void-label':''}">${sale.status==='VOIDED'?'VOID':'Selesai'}</span></button>`).join(''):'<div class="empty-state compact">Transaksi tidak ditemukan.</div>';
+  el('pos-history-list').innerHTML=state.posSales.length?state.posSales.map((sale)=>`<button class="pos-history-row ${sale.id===state.selectedPosSaleId?'active':''}" type="button" data-pos-sale-id="${sale.id}"><span><strong>${escapeHtml(sale.receiptNo)}</strong><small>${new Date(sale.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(sale.customer?.name??'Pelanggan umum')}</small></span><strong>${money.format(sale.quote.grandTotal)}</strong><small>${escapeHtml(sale.cashier)} · ${escapeHtml(sale.outletName??'Outlet')}</small><span class="${sale.status==='VOIDED'?'void-label':''}">${sale.status==='VOIDED'?'VOID':'Selesai'}</span></button>`).join(''):'<div class="empty-state compact">Transaksi tidak ditemukan pada periode ini.</div>';
   const selected=state.posSales.find((sale)=>sale.id===state.selectedPosSaleId);
   if(selected)renderPosSaleDetail(selected);
   else el('pos-history-detail').innerHTML='<div class="empty-state compact">Pilih transaksi untuk melihat detail.</div>';
@@ -3665,14 +3675,6 @@ function renderPosSales(){
 
 function renderPosSaleDetail(sale){
   el('pos-history-detail').innerHTML=`<div class="pos-history-detail-head"><div><p class="eyebrow">${sale.status==='VOIDED'?'TRANSAKSI VOID':'TRANSAKSI SELESAI'}</p><h2>${escapeHtml(sale.receiptNo)}</h2><small>${new Date(sale.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(sale.cashier)}</small></div><strong>${money.format(sale.quote.grandTotal)}</strong></div><div class="pos-history-facts"><div><span>Pelanggan</span><strong>${escapeHtml(sale.customer?.name??'Pelanggan umum')}</strong></div><div><span>Pembayaran</span><strong>${sale.payments.map((payment)=>escapeHtml(payment.method)).join(' + ')}</strong></div></div><div class="pos-history-lines">${sale.quote.lines.map((line)=>`<div><span>${escapeHtml(line.productName)}<small> · ${line.qty} ${escapeHtml(line.unitName)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div>${sale.notes?`<div class="sale-note-display"><strong>Catatan transaksi</strong><br>${escapeHtml(sale.notes)}</div>`:''}${sale.customer?.notes?`<div class="sale-note-display"><strong>Catatan pelanggan</strong><br>${escapeHtml(sale.customer.notes)}</div>`:''}${sale.status==='VOIDED'?`<div class="sale-note-display"><strong>Alasan void</strong><br>${escapeHtml(sale.voidReason)}</div>`:''}<div class="pos-history-actions"><button class="button primary reprint-pos-sale" type="button">Cetak ulang struk</button>${sale.status==='COMPLETED'?'<button class="button danger open-void-sale" type="button">Void transaksi</button>':''}</div>`;
-}
-
-async function openPosHistory(){
-  el('pos-history-search').value='';
-  state.selectedPosSaleId=null;
-  el('pos-history-dialog').showModal();
-  await loadPosSales();
-  el('pos-history-search').focus();
 }
 
 function openVoidSale(sale){
@@ -3691,7 +3693,7 @@ async function submitVoidSale(event){
   event.preventDefault();const button=el('confirm-void-sale');button.disabled=true;el('void-sale-error').textContent='';
   try{
     const result=await request(`/api/pos-sales/${el('void-sale-id').value}/void`,{method:'POST',body:JSON.stringify({reason:el('void-sale-reason').value,approverEmail:el('void-approver-email').value,approverPassword:el('void-approver-password').value})});
-    toast(`${result.receiptNo} berhasil di-void`);el('void-sale-dialog').close();await Promise.all([loadPosSales(el('pos-history-search').value),refreshCatalog(),refreshShift()]);
+    toast(`${result.receiptNo} berhasil di-void`);el('void-sale-dialog').close();await Promise.all([loadPosSales(el('pos-history-search').value,{reportScope:true}),refreshCatalog(),refreshShift()]);
     if(state.session.permissions.includes('report.view'))await loadReport();
   }catch(error){el('void-sale-error').textContent=error.message;}
   finally{button.disabled=false;}
@@ -3707,7 +3709,6 @@ function handlePosShortcut(event){
   if(event.key==='-'&&state.cart.length){event.preventDefault();changeQty(state.cart.length-1,-1);return;}
   if(event.key.toLowerCase()==='h'&&state.cart.length){event.preventDefault();holdCurrentCart();return;}
   if(event.key.toLowerCase()==='p'&&state.lastReceipt){event.preventDefault();renderReceipt(state.lastReceipt,state.lastReceipt.payments??state.paymentDraft);setTimeout(()=>printReceiptDirect(state.lastReceipt,state.lastReceipt.payments??state.paymentDraft),250);return;}
-  if(event.key.toLowerCase()==='r'){event.preventDefault();openPosHistory();}
 }
 
 const mobileSidebarMedia = window.matchMedia('(max-width: 760px)');
@@ -3769,18 +3770,29 @@ function showStockView(name='list'){
 function showReportView(name='summary'){
   const page=el('page-reports'),primary=page.querySelector('.report-grid.report-primary'),grids=[...page.querySelectorAll('.report-grid')],secondary=grids.find((grid)=>grid!==primary);
   const cards=el('report-cards'),daily=primary?.children[0],products=primary?.children[1],outlets=secondary?.children[0],purchases=secondary?.children[1];
-  const sales=el('recent-sales').closest('.surface'),audit=el('audit-logs').closest('.surface');
-  cards.classList.toggle('hidden',name!=='summary');
-  daily?.classList.toggle('hidden',name!=='summary');
+  const sales=el('report-sales-workspace'),audit=el('audit-logs').closest('.surface');
+  state.reportView=name;
+  const headings={
+    summary:['Kinerja usaha','Pendapatan bersih dan laba sudah memperhitungkan retur pada periode terpilih.'],
+    performance:['Kinerja produk & outlet','Bandingkan omzet, laba, jumlah terjual, dan kontribusi setiap outlet.'],
+    purchases:['Pembelian supplier','Pantau nilai penerimaan dan retur pembelian pada periode terpilih.'],
+    sales:['Riwayat & pendapatan','Lihat total pendapatan, keuntungan, tren harian, dan rincian setiap transaksi.'],
+    audit:['Jejak aktivitas','Tinjau aktivitas sensitif yang tercatat oleh sistem.']
+  };
+  el('report-page-title').textContent=headings[name]?.[0]??headings.summary[0];
+  el('report-page-description').textContent=headings[name]?.[1]??headings.summary[1];
+  cards.classList.toggle('hidden',!['summary','sales'].includes(name));
+  daily?.classList.toggle('hidden',!['summary','sales'].includes(name));
   products?.classList.toggle('hidden',name!=='performance');
   outlets?.classList.toggle('hidden',name!=='performance');
   purchases?.classList.toggle('hidden',name!=='purchases');
   sales.classList.toggle('hidden',name!=='sales');
   audit.classList.toggle('hidden',name!=='audit');
-  primary?.classList.toggle('hidden',!['summary','performance'].includes(name));
+  primary?.classList.toggle('hidden',!['summary','performance','sales'].includes(name));
   secondary?.classList.toggle('hidden',!['performance','purchases'].includes(name));
   if(primary)primary.style.gridTemplateColumns='1fr';
   if(secondary)secondary.style.gridTemplateColumns='1fr';
+  if(name==='sales'&&state.session)loadPosSales('',{reportScope:true});
 }
 
 function showSettingsView(name='business'){
@@ -4249,10 +4261,8 @@ el('new-pos-customer').addEventListener('click',()=>{el('pos-customer-dialog').c
 el('clear-cart').addEventListener('click', async () => { state.cart = []; resetPosCustomer();el('sale-note').value='';invalidateSaleAuthorization(); await updateQuote(); });
 el('mobile-cart-jump').addEventListener('click',()=>setMobilePosView('cart'));
 el('mobile-cart-back').addEventListener('click',()=>setMobilePosView('catalog'));
-el('open-pos-history').addEventListener('click',openPosHistory);
-el('close-pos-history').addEventListener('click',()=>el('pos-history-dialog').close());
-el('refresh-pos-history').addEventListener('click',()=>loadPosSales(el('pos-history-search').value));
-el('pos-history-search').addEventListener('input',(event)=>{clearTimeout(event.currentTarget.searchTimer);event.currentTarget.searchTimer=setTimeout(()=>loadPosSales(event.currentTarget.value),250);});
+el('refresh-pos-history').addEventListener('click',()=>loadPosSales(el('pos-history-search').value,{reportScope:true}));
+el('pos-history-search').addEventListener('input',(event)=>{clearTimeout(event.currentTarget.searchTimer);event.currentTarget.searchTimer=setTimeout(()=>loadPosSales(event.currentTarget.value,{reportScope:true}),250);});
 el('pos-history-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-pos-sale-id]');if(!row)return;state.selectedPosSaleId=row.dataset.posSaleId;renderPosSales();});
 el('pos-history-detail').addEventListener('click',(event)=>{
   const sale=state.posSales.find((item)=>item.id===state.selectedPosSaleId);if(!sale)return;

@@ -78,7 +78,7 @@ function requirePermission(request, response, permission) {
 }
 
 async function api(request, response, url) {
-  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '2.4.7-local', storage: 'sqlite' });
+  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '2.4.8-local', storage: 'sqlite' });
 
   if (request.method === 'POST' && url.pathname === '/api/login') {
     const input = await bodyOf(request);
@@ -183,9 +183,18 @@ async function api(request, response, url) {
   }
 
   if (request.method === 'GET' && url.pathname === '/api/pos-sales') {
-    if (!requirePermission(request,response,PERMISSIONS.POS_SELL)) return;
+    const reportScope=url.searchParams.get('scope')==='report';
+    if (!requirePermission(request,response,reportScope?PERMISSIONS.VIEW_REPORTS:PERMISSIONS.POS_SELL)) return;
     const query=String(url.searchParams.get('q')??'').trim().toLowerCase();
-    const sales=store.recentPosSales(50).filter((sale)=>!query||`${sale.receiptNo} ${sale.cashier} ${sale.customer?.name??''} ${sale.customer?.phone??''}`.toLowerCase().includes(query));
+    const from=url.searchParams.get('from'),to=url.searchParams.get('to');
+    if(reportScope&&(!/^\d{4}-\d{2}-\d{2}$/.test(from??'')||!/^\d{4}-\d{2}-\d{2}$/.test(to??'')||from>to)){
+      return json(response,400,{error:'Periode riwayat transaksi tidak valid'});
+    }
+    const sales=store.recentPosSales(reportScope?500:50).filter((sale)=>{
+      const date=String(sale.occurredAt??'').slice(0,10);
+      return (!reportScope||(date>=from&&date<=to))
+        &&(!query||`${sale.receiptNo} ${sale.cashier} ${sale.customer?.name??''} ${sale.customer?.phone??''}`.toLowerCase().includes(query));
+    });
     return json(response,200,{sales});
   }
 

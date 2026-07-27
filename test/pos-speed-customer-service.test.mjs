@@ -48,15 +48,22 @@ test('SQLite demo mengembalikan stok sekali dan menyimpan catatan saat void',()=
   assert.throws(()=>store.voidSale({saleId:lateSale.id,reason:'Terlambat dibatalkan',actorId:actor.id,approvedBy:actor.id}),/sebelum shift/);
 });
 
-test('POS v1.21 menyediakan produk cepat, filter, shortcut, riwayat, cetak ulang, dan catatan',async()=>{
+test('POS menyediakan produk cepat dan riwayat berpindah ke laporan transaksi',async()=>{
   const [,api,html,script]=await files();
-  for(const id of ['pos-category-filters','favorite-filter','open-shortcuts','open-pos-history','pos-history-search','sale-note','customer-service-note','mobile-cart-jump'])assert.match(html,new RegExp(`id="${id}"`));
+  for(const id of ['pos-category-filters','favorite-filter','open-shortcuts','report-sales-workspace','pos-history-search','pos-history-list','pos-history-detail','sale-note','customer-service-note','mobile-cart-jump'])assert.match(html,new RegExp(`id="${id}"`));
+  assert.doesNotMatch(html,/id="open-pos-history"/);
+  assert.match(html,/data-report-view="sales"[\s\S]*<span>Transaksi<\/span>/);
+  assert.match(html,/value="WEEK">Minggu ini/);
   assert.match(script,/pos_favorites:/);
   assert.match(script,/function handlePosShortcut/);
   assert.match(script,/event\.key==='F9'/);
   assert.match(script,/reprint-pos-sale/);
+  assert.match(script,/state\.reportView==='sales'/);
+  assert.match(script,/reportScope:true/);
   assert.match(script,/notes:el\('sale-note'\)\.value\.trim\(\)/);
   assert.match(api,/route === 'pos-sales'/);
+  assert.match(api,/reportScope\?'report\.view':'pos\.sell'/);
+  assert.match(api,/limit:reportScope\?500:50/);
   assert.match(api,/complete_sale_v7/);
 });
 

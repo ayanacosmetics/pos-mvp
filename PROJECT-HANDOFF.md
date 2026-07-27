@@ -45,6 +45,21 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Paket v2.4.8 Laporan Transaksi siap deploy
+
+- Tombol Riwayat di Kasir dihapus agar layar penjualan fokus pada transaksi
+  baru. Riwayat struk dipindahkan ke `Analitik → Transaksi`.
+- Halaman Transaksi menampilkan pendapatan/penjualan bersih, keuntungan/laba
+  kotor, retur, jumlah transaksi, nilai persediaan, pembelian, dan tren harian.
+- Periode tersedia untuk hari ini, minggu ini, 7 hari terakhir, bulan ini,
+  30 hari terakhir, dan rentang tanggal khusus serta dapat difilter per outlet.
+- Maksimal 500 transaksi terbaru pada periode dipilih dapat dicari dan ditekan
+  untuk melihat barang, pelanggan, outlet, pembayaran, cetak ulang, serta void.
+- Riwayat lintas outlet memakai hak akses `report.view`; endpoint memvalidasi
+  periode/outlet dan memecah pengambilan rincian menjadi kelompok aman.
+- Tidak memerlukan migrasi SQL. API disiapkan ke `2.4.8-cloud`, aset web `v72`,
+  dan cache PWA `v72`.
+
 ### Rilis v2.4.7 Keranjang Mobile dikonfirmasi live
 
 - Pada ponsel sampai 760 px, katalog dan keranjang Kasir menjadi dua layar.

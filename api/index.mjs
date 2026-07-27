@@ -479,17 +479,31 @@ async function loadReturnableSale(context, { saleId = null, receiptNo = null } =
   };
 }
 
-async function loadPosSales(context, query = '') {
-  const sales = await rest('sales', `tenant_id=eq.${context.tenantId}&outlet_id=eq.${context.outlet.id}&status=in.(COMPLETED,VOIDED)&select=*&order=occurred_at.desc&limit=50`);
+async function loadPosSales(context, query = '', { outletIds = [context.outlet.id], from = null, to = null, limit = 50 } = {}) {
+  const broadPeriod = from && to
+    ? `&occurred_at=gte.${encodeURIComponent(`${shiftIsoDate(from,-1)}T00:00:00Z`)}&occurred_at=lt.${encodeURIComponent(`${shiftIsoDate(to,2)}T00:00:00Z`)}`
+    : '';
+  let sales = await rest('sales', `tenant_id=eq.${context.tenantId}&outlet_id=${inFilter(outletIds)}&status=in.(COMPLETED,VOIDED)${broadPeriod}&select=*&order=occurred_at.desc&limit=${Math.min(500,Math.max(1,Number(limit)||50))}`);
+  if (from && to) {
+    const timezone = context.outlet.timezone ?? 'Asia/Makassar';
+    sales = sales.filter((sale) => {
+      const date = todayInTimeZone(new Date(sale.occurred_at), timezone);
+      return date >= from && date <= to;
+    });
+  }
   if (!sales.length) return [];
   const saleIds = sales.map((sale) => sale.id);
   const customerIds = [...new Set(sales.map((sale) => sale.customer_id).filter(Boolean))];
   const cashierIds = [...new Set(sales.map((sale) => sale.cashier_id).filter(Boolean))];
+  const byChunks=async(table,column,ids,tail)=>(await Promise.all(
+    Array.from({length:Math.ceil(ids.length/80)},(_,index)=>ids.slice(index*80,index*80+80))
+      .map((chunk)=>rest(table,`tenant_id=eq.${context.tenantId}&${column}=${inFilter(chunk)}&${tail}`))
+  )).flat();
   const [items,payments,customers,cashiers] = await Promise.all([
-    rest('sale_items', `tenant_id=eq.${context.tenantId}&sale_id=${inFilter(saleIds)}&select=*&order=id`),
-    rest('payments', `tenant_id=eq.${context.tenantId}&sale_id=${inFilter(saleIds)}&select=*&order=created_at`),
-    customerIds.length ? rest('customers', `tenant_id=eq.${context.tenantId}&id=${inFilter(customerIds)}&select=id,name,phone,notes`) : [],
-    cashierIds.length ? rest('profiles', `tenant_id=eq.${context.tenantId}&user_id=${inFilter(cashierIds)}&select=user_id,display_name`) : []
+    byChunks('sale_items','sale_id',saleIds,'select=*&order=id'),
+    byChunks('payments','sale_id',saleIds,'select=*&order=created_at'),
+    customerIds.length ? byChunks('customers','id',customerIds,'select=id,name,phone,notes') : [],
+    cashierIds.length ? byChunks('profiles','user_id',cashierIds,'select=user_id,display_name') : []
   ]);
   const adjustmentIds=[...new Set(items.flatMap((item)=>
     (item.promotion_snapshot??[])
@@ -497,7 +511,7 @@ async function loadPosSales(context, query = '') {
       .map((promotion)=>promotion.id)
   ))];
   const adjustments=adjustmentIds.length
-    ? await rest('sale_adjustment_authorizations',`tenant_id=eq.${context.tenantId}&id=${inFilter(adjustmentIds)}&select=id,adjustment_json,discount_amount`)
+    ? await byChunks('sale_adjustment_authorizations','id',adjustmentIds,'select=id,adjustment_json,discount_amount')
     : [];
   const normalized = String(query ?? '').trim().toLowerCase();
   return sales.map((sale) => {
@@ -522,7 +536,7 @@ async function loadPosSales(context, query = '') {
       : null;
     return {
       id:sale.id,receiptNo:sale.receipt_no,status:sale.status,occurredAt:sale.occurred_at,
-      cashier,outletName:context.outlet.name,customer,notes:sale.notes ?? '',
+      cashier,outletName:context.outlets.find((outlet)=>outlet.id===sale.outlet_id)?.name??context.outlet.name,customer,notes:sale.notes ?? '',
       voidReason:sale.void_reason ?? '',voidedAt:sale.voided_at ?? null,
       quote:{
         lines,subtotal:Number(sale.subtotal),discountTotal:Number(sale.discount_total),
@@ -829,7 +843,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.4.7-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.4.8-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2572,8 +2586,20 @@ async function routeRequest(request, response, route) {
   }
 
   if (request.method === 'GET' && route === 'pos-sales') {
-    requirePermission(session, 'pos.sell');
-    return send(response, 200, { sales: await loadPosSales(context, queryValue(request,'q') ?? '') });
+    const reportScope=queryValue(request,'scope')==='report';
+    requirePermission(session, reportScope?'report.view':'pos.sell');
+    const outletId=queryValue(request,'outletId');
+    const from=queryValue(request,'from'),to=queryValue(request,'to');
+    if(reportScope&&(!/^\d{4}-\d{2}-\d{2}$/.test(from??'')||!/^\d{4}-\d{2}-\d{2}$/.test(to??'')||from>to)){
+      throw Object.assign(new Error('Periode riwayat transaksi tidak valid'),{status:400});
+    }
+    if(outletId&&!context.outlets.some((outlet)=>outlet.id===outletId)){
+      throw Object.assign(new Error('Outlet riwayat transaksi tidak dapat diakses'),{status:403});
+    }
+    const outletIds=reportScope?(outletId?[outletId]:context.outlets.map((outlet)=>outlet.id)):[context.outlet.id];
+    return send(response, 200, { sales: await loadPosSales(context, queryValue(request,'q') ?? '', {
+      outletIds,from:reportScope?from:null,to:reportScope?to:null,limit:reportScope?500:50
+    }) });
   }
 
   if (request.method === 'POST' && /^pos-sales\/[^/]+\/void$/.test(route)) {
