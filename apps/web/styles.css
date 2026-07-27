@@ -828,6 +828,21 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
 
 /* Simple supplier restock flow */
 .planning-toolbar>div:first-child small,.document-toolbar>div:first-child small{display:block;margin-top:4px;color:var(--muted)}
+.planning-list-tools{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 20px;border-bottom:1px solid var(--line)}
+.planning-search{flex:1;max-width:440px;margin:0}.planning-search input{width:100%;padding-block:10px}
+.planning-list-tools .planning-needed-filter{margin:0;padding:0;border:0}
+.planning-compact-row{display:grid;grid-template-columns:minmax(220px,1fr) 140px 110px 140px 18px;align-items:center;gap:16px;width:100%;padding:13px 20px;border:0;border-bottom:1px solid var(--line);background:var(--surface);color:inherit;font:inherit;text-align:left;cursor:pointer;transition:background .15s ease,box-shadow .15s ease}
+.planning-compact-row:hover{background:#f6f8f5}.planning-compact-row:focus-visible{position:relative;z-index:1;outline:2px solid var(--brand);outline-offset:-2px}
+.planning-compact-row.selected{background:#edf7f2;box-shadow:inset 4px 0 0 var(--brand)}
+.planning-compact-product,.planning-compact-fact,.planning-compact-choice{display:grid;gap:3px;min-width:0}
+.planning-compact-product strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.planning-compact-product small,.planning-compact-fact small,.planning-compact-choice small{color:var(--muted);font-size:10px}
+.planning-compact-fact strong,.planning-compact-choice strong{font-size:13px}.planning-compact-choice{justify-items:start}.planning-compact-choice .status-badge{margin-bottom:2px}
+.planning-compact-arrow{color:var(--muted);font-size:22px;font-weight:800}.planning-load-more{display:flex;align-items:center;justify-content:center;gap:14px;padding:16px 20px}.planning-load-more small{color:var(--muted)}
+.planning-item-dialog{width:min(500px,92vw)}.planning-item-summary{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0 18px}
+.planning-item-summary>div{display:grid;gap:4px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--paper)}.planning-item-summary span{color:var(--muted);font-size:11px}.planning-item-summary strong{font-size:16px}
+.planning-item-quantity input{font-size:20px;font-weight:800}.planning-item-quantity small{color:var(--muted)}
+.planning-item-suggestion{display:grid;gap:3px;margin-top:12px;padding:12px 14px;border-radius:10px;background:#eef3ef}.planning-item-suggestion small{color:var(--muted)}
+.planning-item-tools{display:flex;gap:16px;margin:12px 0}.planning-item-tools .link-button{padding:0}
 .planning-order-quantity{display:grid;grid-template-columns:1fr auto;align-items:center;gap:3px 6px;margin:0}
 .planning-order-quantity span{grid-column:1/-1;color:var(--muted);font-size:11px}
 .planning-order-quantity input{width:88px;min-width:0}
@@ -868,6 +883,10 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
 .supplier-order-sheet footer>div{display:grid;gap:30px;text-align:center}
 
 @media(max-width:700px){
+  .planning-list-tools{display:grid;padding:12px 14px}.planning-search{max-width:none}.planning-list-tools .planning-needed-filter{font-size:11px}
+  .planning-compact-row{grid-template-columns:minmax(0,1fr) auto 14px;gap:9px 12px;padding:13px 14px}
+  .planning-compact-product{grid-column:1}.planning-compact-fact{grid-row:2}.planning-compact-fact:nth-of-type(2){grid-column:1}.planning-compact-fact:nth-of-type(3){grid-column:2}
+  .planning-compact-choice{grid-column:2;grid-row:1;justify-items:end}.planning-compact-arrow{grid-column:3;grid-row:1/3}.planning-load-more{flex-direction:column}
   .planning-row .planning-stock{display:grid}
   .planning-order-quantity{grid-column:2/3;grid-row:auto}
   .planning-actions{grid-column:2/4}

@@ -13,6 +13,8 @@ const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
 state.restockPlanning = { recommendations: [], settings: { approvalThreshold: 5000000, lookbackDays: 30 }, locationId: null };
+state.restockSelection = new Map();
+state.restockPlanningLimit = 100;
 state.restockWizardStep = 'document';
 const el = (id) => document.getElementById(id);
 const posDevice = deviceIdentity();
@@ -1699,6 +1701,8 @@ async function loadRestockPlanning() {
   el('restock-planning-list').innerHTML = '<div class="empty-state compact">Menghitung kebutuhan stok...</div>';
   try {
     state.restockPlanning = await request(`/api/restock-planning?${params}`);
+    const availableProducts=new Set(state.restockPlanning.recommendations.map((item)=>item.productId));
+    for(const productId of state.restockSelection.keys())if(!availableProducts.has(productId))state.restockSelection.delete(productId);
     el('planning-lookback-days').value = state.restockPlanning.settings.lookbackDays;
     el('planning-approval-threshold').value = state.restockPlanning.settings.approvalThreshold;
     const canConfigureApproval = ['OWNER','ADMIN'].includes(state.session.user.role);
@@ -1714,10 +1718,14 @@ async function loadRestockPlanning() {
 
 function renderRestockPlanning() {
   const neededOnly = el('planning-needed-only').checked;
+  const query = el('planning-product-search').value.trim().toLocaleLowerCase('id-ID');
   const all = state.restockPlanning.recommendations ?? [];
   const list = all
     .filter((item) => !neededOnly || Number(item.suggestedQty) > 0 || item.urgency === 'OUT_OF_STOCK')
+    .filter((item) => !query || `${item.productName} ${item.sku}`.toLocaleLowerCase('id-ID').includes(query))
     .sort((a,b) => Number(a.stock) - Number(b.stock) || String(a.productName).localeCompare(String(b.productName),'id'));
+  const visible = list.slice(0,state.restockPlanningLimit);
+  const productById=new Map(state.products.map((product)=>[product.id,product]));
   const count = (urgency) => all.filter((item) => item.urgency === urgency).length;
   const suggestedValue = all.reduce((sum,item)=>sum+(Number(item.suggestedQty)*Number(item.estimatedCost??0)),0);
   el('restock-planning-metrics').innerHTML = [
@@ -1725,31 +1733,69 @@ function renderRestockPlanning() {
     ['Unit disarankan',all.reduce((sum,item)=>sum+Number(item.suggestedQty),0).toLocaleString('id-ID')],
     ['Estimasi draft',money.format(suggestedValue)]
   ].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
-  el('restock-planning-list').innerHTML = list.map((item)=>{
+  el('restock-planning-list').innerHTML = visible.map((item)=>{
     const [urgencyLabel,urgencyClass]=planningUrgency[item.urgency]??[item.urgency,'draft'];
-    const orderQty=Number(item.suggestedQty)>0?Number(item.suggestedQty):1;
-    const supplierCopy=item.supplierName?`Saran: ${escapeHtml(item.supplierName)}`:'Supplier dipilih saat membuat pesanan';
-    return `<article class="planning-row ${item.urgency.toLowerCase().replaceAll('_','-')}" data-product-id="${escapeHtml(item.productId)}">
-      <input class="planning-select" type="checkbox" aria-label="Pilih ${escapeHtml(item.productName)}">
-      <div class="planning-product"><strong>${escapeHtml(item.productName)}</strong><small>${escapeHtml(item.sku)} · ${supplierCopy}</small><span class="status-badge ${urgencyClass}">${urgencyLabel}</span></div>
-      <div class="planning-fact planning-stock"><span>Stok sekarang</span><strong>${Number(item.stock).toLocaleString('id-ID')} pcs</strong><small>${Number(item.onOrder)>0?`${Number(item.onOrder).toLocaleString('id-ID')} pcs sedang dipesan`:'Belum ada pesanan aktif'}</small></div>
-      <div class="planning-fact"><span>Rata-rata jual</span><strong>${Number(item.averageDailySales).toLocaleString('id-ID')} pcs/hari</strong></div>
-      <div class="planning-fact planning-cover"><span>Ketahanan stok</span><strong>${item.daysOfCover===null?'-':`${item.daysOfCover} hari`}</strong><small>Target ${Number(item.targetStock).toLocaleString('id-ID')} pcs</small></div>
-      <label class="planning-order-quantity"><span>Jumlah pesan</span><input class="planning-order-qty" type="number" min="0.000001" step="any" value="${orderQty}"><small>pcs</small></label>
-      <div class="planning-actions"><button class="button secondary edit-restock-policy" type="button">Atur saran otomatis</button>${item.supplierId?'<button class="button secondary compare-planning-supplier" type="button">Cek harga</button>':''}</div>
-    </article>`;
-  }).join('') || '<div class="empty-state compact">Tidak ada barang yang sesuai filter. Stok berada di atas kebutuhan saat ini.</div>';
+    const product=productById.get(item.productId);
+    const price=product?retailPriceOf(product):Number(item.retailPrice??0);
+    const selectedQty=state.restockSelection.get(item.productId);
+    return `<button class="planning-compact-row ${selectedQty?'selected':''}" data-product-id="${escapeHtml(item.productId)}" type="button">
+      <span class="planning-compact-product"><strong>${escapeHtml(item.productName)}</strong><small>${escapeHtml(item.sku)}</small></span>
+      <span class="planning-compact-fact"><small>Harga jual</small><strong>${money.format(price)}</strong></span>
+      <span class="planning-compact-fact"><small>Stok</small><strong>${Number(item.stock).toLocaleString('id-ID')} pcs</strong></span>
+      <span class="planning-compact-choice">${selectedQty?`<small>Dipilih</small><strong>${Number(selectedQty).toLocaleString('id-ID')} pcs</strong>`:`<span class="status-badge ${urgencyClass}">${urgencyLabel}</span><strong>Pilih</strong>`}</span>
+      <span class="planning-compact-arrow" aria-hidden="true">›</span>
+    </button>`;
+  }).join('') || '<div class="empty-state compact">Tidak ada barang yang sesuai pencarian atau filter.</div>';
+  if(list.length>visible.length)el('restock-planning-list').insertAdjacentHTML('beforeend',`<div class="planning-load-more"><small>Menampilkan ${visible.length.toLocaleString('id-ID')} dari ${list.length.toLocaleString('id-ID')} barang</small><button class="button secondary" type="button" data-planning-load-more>Tampilkan 100 berikutnya</button></div>`);
   syncPlanningSelection();
 }
 
-function planningItemForRow(row) {
-  return state.restockPlanning.recommendations.find((item)=>item.productId===row.dataset.productId);
+function planningItem(productId) {
+  return state.restockPlanning.recommendations.find((item)=>item.productId===productId);
 }
 
 function syncPlanningSelection() {
-  const selected = [...document.querySelectorAll('.planning-select:checked')];
-  el('planning-selected-count').textContent = `${selected.length} barang dipilih`;
-  el('create-planning-draft').disabled = !selected.length || !el('planning-order-supplier').value;
+  el('planning-selected-count').textContent = `${state.restockSelection.size} barang dipilih`;
+  el('create-planning-draft').disabled = !state.restockSelection.size || !el('planning-order-supplier').value;
+}
+
+function openPlanningItem(productId) {
+  const item=planningItem(productId);
+  if(!item)return;
+  const product=state.products.find((entry)=>entry.id===productId);
+  const selectedQty=state.restockSelection.get(productId);
+  const suggestedQty=Number(item.suggestedQty)>0?Number(item.suggestedQty):1;
+  el('planning-item-product-id').value=productId;
+  el('planning-item-name').textContent=item.productName;
+  el('planning-item-sku').textContent=item.sku;
+  el('planning-item-price').textContent=money.format(product?retailPriceOf(product):Number(item.retailPrice??0));
+  el('planning-item-stock').textContent=`${Number(item.stock).toLocaleString('id-ID')} pcs`;
+  el('planning-item-qty').value=selectedQty??suggestedQty;
+  el('planning-item-suggestion').innerHTML=Number(item.suggestedQty)>0
+    ? `<strong>Saran sistem: ${Number(item.suggestedQty).toLocaleString('id-ID')} pcs</strong><small>${item.supplierName?`Supplier yang pernah dipakai: ${escapeHtml(item.supplierName)}`:'Supplier dipilih setelah barang terkumpul.'}</small>`
+    : '<strong>Belum perlu restok menurut sistem</strong><small>Anda tetap dapat menentukan jumlah secara manual.</small>';
+  el('planning-item-error').textContent='';
+  el('remove-planning-item').classList.toggle('hidden',!selectedQty);
+  el('save-planning-item').textContent=selectedQty?'Perbarui jumlah':'Pilih barang';
+  el('planning-item-compare').classList.toggle('hidden',!item.supplierId);
+  el('planning-item-dialog').showModal();
+  requestAnimationFrame(()=>{el('planning-item-qty').focus();el('planning-item-qty').select();});
+}
+
+function savePlanningItem(event) {
+  event.preventDefault();
+  const productId=el('planning-item-product-id').value;
+  const qty=Number(el('planning-item-qty').value);
+  if(!(qty>0)){el('planning-item-error').textContent='Jumlah pesanan harus lebih dari nol.';return;}
+  state.restockSelection.set(productId,qty);
+  el('planning-item-dialog').close();
+  renderRestockPlanning();
+}
+
+function removePlanningItem() {
+  state.restockSelection.delete(el('planning-item-product-id').value);
+  el('planning-item-dialog').close();
+  renderRestockPlanning();
 }
 
 function openRestockPolicy(productId) {
@@ -1794,10 +1840,7 @@ async function savePlanningSettings(event) {
 }
 
 async function createPlanningDraft() {
-  const selected=[...document.querySelectorAll('.planning-select:checked')].map((input)=>{
-    const row=input.closest('.planning-row');
-    return {...planningItemForRow(row),orderQty:Number(row.querySelector('.planning-order-qty').value)};
-  });
+  const selected=[...state.restockSelection.entries()].map(([productId,orderQty])=>({...planningItem(productId),orderQty}));
   if(selected.some((item)=>!(item.orderQty>0)))return toast('Jumlah pesanan setiap barang harus lebih dari nol.');
   const supplierId=el('planning-order-supplier').value;
   if(!supplierId)return toast('Pilih supplier tujuan pesanan.');
@@ -1815,6 +1858,7 @@ async function createPlanningDraft() {
       status=submitted.status??status;
     }
     toast(`${result.po_no} siap diproses · ${purchaseStatus[status]?.[0]??status}.`);
+    state.restockSelection.clear();
     await Promise.all([loadPurchaseOrders(),loadRestockPlanning()]);
     showPurchaseView('documents');
   }catch(error){toast(error.message);}
@@ -4190,17 +4234,22 @@ document.querySelectorAll('.purchase-tab').forEach((button) => button.addEventLi
   if(button.dataset.purchaseView==='planning')loadRestockPlanning();
 }));
 el('refresh-restock-planning').addEventListener('click',loadRestockPlanning);
-el('planning-location').addEventListener('change',loadRestockPlanning);
-el('planning-supplier-filter').addEventListener('change',loadRestockPlanning);
+el('planning-location').addEventListener('change',()=>{state.restockSelection.clear();state.restockPlanningLimit=100;loadRestockPlanning();});
+el('planning-supplier-filter').addEventListener('change',()=>{state.restockSelection.clear();state.restockPlanningLimit=100;loadRestockPlanning();});
 el('planning-order-supplier').addEventListener('change',syncPlanningSelection);
-el('planning-needed-only').addEventListener('change',renderRestockPlanning);
-el('restock-planning-list').addEventListener('change',(event)=>{if(event.target.classList.contains('planning-select'))syncPlanningSelection();});
+el('planning-needed-only').addEventListener('change',()=>{state.restockPlanningLimit=100;renderRestockPlanning();});
+el('planning-product-search').addEventListener('input',()=>{state.restockPlanningLimit=100;renderRestockPlanning();});
 el('restock-planning-list').addEventListener('click',(event)=>{
-  const row=event.target.closest('.planning-row');if(!row)return;
-  if(event.target.closest('.edit-restock-policy'))openRestockPolicy(row.dataset.productId);
-  if(event.target.closest('.compare-planning-supplier'))showSupplierComparison(row.dataset.productId);
+  if(event.target.closest('[data-planning-load-more]')){state.restockPlanningLimit+=100;renderRestockPlanning();return;}
+  const row=event.target.closest('.planning-compact-row');if(row)openPlanningItem(row.dataset.productId);
 });
 el('create-planning-draft').addEventListener('click',createPlanningDraft);
+el('planning-item-form').addEventListener('submit',savePlanningItem);
+el('close-planning-item').addEventListener('click',()=>el('planning-item-dialog').close());
+el('cancel-planning-item').addEventListener('click',()=>el('planning-item-dialog').close());
+el('remove-planning-item').addEventListener('click',removePlanningItem);
+el('planning-item-policy').addEventListener('click',()=>{const id=el('planning-item-product-id').value;el('planning-item-dialog').close();openRestockPolicy(id);});
+el('planning-item-compare').addEventListener('click',()=>{const id=el('planning-item-product-id').value;el('planning-item-dialog').close();showSupplierComparison(id);});
 el('purchase-planning-settings-form').addEventListener('submit',savePlanningSettings);
 el('restock-policy-form').addEventListener('submit',saveRestockPolicy);
 el('close-restock-policy').addEventListener('click',()=>el('restock-policy-dialog').close());

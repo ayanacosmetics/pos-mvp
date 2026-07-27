@@ -22,16 +22,34 @@ test('pilihan barang menampilkan seluruh produk dari stok paling sedikit', () =>
   assert.doesNotMatch(html, /id="planning-needed-only"[^>]*checked/);
   assert.match(app, /\.sort\(\(a,b\) => Number\(a\.stock\) - Number\(b\.stock\)/);
   assert.match(html, /Stok paling sedikit dahulu/);
-  assert.match(app, /class="planning-order-qty"/);
-  assert.match(app, /orderQty:Number\(row\.querySelector\('\.planning-order-qty'\)\.value\)/);
+  assert.match(app, /class="planning-compact-row/);
+  assert.match(app, /<small>Harga jual<\/small>/);
+  assert.match(app, /<small>Stok<\/small>/);
 });
 
-test('barang dapat dipilih langsung tanpa aturan supplier per produk', () => {
-  assert.match(app, /class="planning-select" type="checkbox" aria-label="Pilih/);
-  assert.doesNotMatch(app, /class="planning-select"[^>]*disabled/);
-  assert.match(app, /Supplier dipilih saat membuat pesanan/);
-  assert.match(app, /class="planning-order-qty"[^>]*value="\$\{orderQty\}"/);
-  assert.doesNotMatch(app, /class="planning-order-qty"[^>]*disabled/);
+test('jumlah restok diisi dalam popup setelah barang ditekan', () => {
+  for (const id of ['planning-item-dialog','planning-item-qty','save-planning-item','remove-planning-item']) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  assert.match(app, /function openPlanningItem/);
+  assert.match(app, /state\.restockSelection\.set\(productId,qty\)/);
+  assert.match(app, /state\.restockSelection\.delete/);
+  assert.doesNotMatch(app, /class="planning-select" type="checkbox"/);
+});
+
+test('daftar besar mempunyai pencarian dan dimuat bertahap', () => {
+  assert.match(html, /id="planning-product-search"/);
+  assert.match(app, /state\.restockPlanningLimit = 100/);
+  assert.match(app, /list\.slice\(0,state\.restockPlanningLimit\)/);
+  assert.match(app, /state\.restockPlanningLimit\+=100/);
+  assert.match(app, /item\.productName} \$\{item\.sku}/);
+});
+
+test('pilihan tersimpan ketika daftar dirender ulang', () => {
+  assert.match(app, /state\.restockSelection = new Map\(\)/);
+  assert.match(app, /state\.restockSelection\.get\(item\.productId\)/);
+  assert.match(app, /\[\.\.\.state\.restockSelection\.entries\(\)\]/);
+  assert.match(app, /state\.restockSelection\.clear\(\)/);
 });
 
 test('satu tombol membuat pesanan supplier dan mengajukannya untuk diproses', () => {

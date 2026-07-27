@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Pilih Langsung v2.3.4
+# Kasir Nusa POS — Restok Ringkas v2.4.0
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
