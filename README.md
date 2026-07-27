@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Kandidat Pilot & Hardening v2.0.0
+# Kasir Nusa POS — Pilot & Hardening v2.0.0
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 

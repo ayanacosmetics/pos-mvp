@@ -45,12 +45,11 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat berikutnya — belum live
+### Rilis v2.0 dikonfirmasi live
 
-- **Pilot Produksi dan Hardening v2.0.0** sudah selesai di source lokal dan
-  belum didorong/deploy.
-- Satu migrasi menunggu konfirmasi:
-  `supabase/migrations/202607270032_pilot_production_hardening.sql`.
+- **Pilot Produksi dan Hardening v2.0.0** live pada 27 Juli 2026.
+- Migrasi `supabase/migrations/202607270032_pilot_production_hardening.sql`
+  dikonfirmasi berhasil sebelum source didorong.
 - Lima halaman Owner terpisah tersedia di accordion Pilot: kesiapan, insiden,
   performa, pemulihan, dan SOP.
 - Pilot memiliki periode pelaksanaan, checklist 25 langkah, keputusan
@@ -61,8 +60,13 @@ kode frontend, dokumentasi publik, atau chat.
   maupun data pelanggan tidak disimpan.
 - Uji pemulihan mencatat bukti backup, checksum, dan langkah verifikasi; fitur
   ini sengaja tidak dapat menimpa database produksi.
-- 148/148 pengujian otomatis lulus. Source tidak boleh didorong atau
-  dideploy sebelum migrasi `032` dikonfirmasi berhasil.
+- Commit source `f3028ad` didorong ke `origin/main`; 148/148 pengujian
+  otomatis lulus.
+- Deployment Vercel `dpl_6mb7kSiEC8TiacDa4UvoaoiufzWx` berstatus Ready dan
+  alias `kasir-nusa-pos.vercel.app` aktif.
+- Verifikasi produksi mengembalikan API `2.0.0-cloud`, UI `v2.0.0`, lima
+  halaman Pilot, cache `nusa-pos-shell-v54`, dan route dashboard pilot
+  terlindungi sesi.
 
 ### Terakhir dikonfirmasi live
 
@@ -505,10 +509,10 @@ produksi selesai pada 27 Juli 2026.
 - dokumentasi staf, onboarding, dan SOP gangguan internet;
 - perbaikan temuan pilot sebelum ekspansi outlet.
 
-Status: kandidat source selesai dengan migrasi `032`, lima halaman Owner,
-checklist 25 langkah, insiden, telemetri minim data, bukti uji pemulihan,
-pengaman stok/idempotensi, dan 148 pengujian otomatis. Menunggu SQL berhasil
-sebelum push dan deployment; pelaksanaan pilot fisik tetap dilakukan di toko.
+Status: migrasi `032`, lima halaman Owner, checklist 25 langkah, insiden,
+telemetri minim data, bukti uji pemulihan, pengaman stok/idempotensi, 148
+pengujian otomatis, push, deployment, dan verifikasi produksi selesai pada
+27 Juli 2026. Pelaksanaan pilot fisik tetap dilakukan di toko.
 
 ### Fitur opsional, bukan prioritas otomatis
 
