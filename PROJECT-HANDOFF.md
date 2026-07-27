@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Rilis v2.4.2 siap diverifikasi dan deploy
+### Rilis v2.4.2 dikonfirmasi live
 
 - **Member Ringkas v2.4.2** menyisakan satu tombol Member pada halaman Kasir.
   Kolom pencarian dan tombol tambah member tidak lagi memenuhi area katalog.
@@ -55,6 +55,11 @@ kode frontend, dokumentasi publik, atau chat.
   pelanggan umum langsung menutup dialog dan memperbarui harga transaksi.
 - Cache PWA dinaikkan ke `v66`. Perubahan ini tidak memerlukan SQL atau pembaruan
   APK karena seluruhnya berada pada aplikasi web.
+- Seluruh 183/183 pengujian otomatis lulus. Commit `ceff82b` didorong ke
+  `origin/main`; deployment Vercel `dpl_HBLj6g8y1MPB86Z2QfZCEJDv4FJf`
+  berstatus Ready dan alias produksi aktif.
+- Verifikasi publik mengembalikan API `2.4.2-cloud`, identitas
+  `Member Ringkas · v2.4.2`, tombol/dialog member, serta aset/cache `v66`.
 
 ### Rilis v2.4.1 dan APK kasir v1.1.0 dikonfirmasi live
 
