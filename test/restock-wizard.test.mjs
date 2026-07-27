@@ -41,3 +41,12 @@ test('desktop membatasi daftar di panel dan mobile mempertahankan navigasi lanju
   assert.match(app, /steps\?\.scrollIntoView\(\{ behavior: 'smooth', block: 'start' \}\)/);
   assert.match(css, /scroll-margin-top:76px/);
 });
+
+test('pesan gagal penerimaan tidak tertutup aksi wizard pada mobile', () => {
+  assert.match(html, /id="restock-receive-error"[\s\S]*role="alert"/);
+  assert.match(app, /targetIndex === 2 \? 'Terima dan tambah stok'/);
+  assert.match(app, /state\.restockWizardStep === 'review'\) return receivePurchase\(\)/);
+  assert.match(app, /function showRestockReceiveError/);
+  assert.match(css, /\.toast\{z-index:100\}/);
+  assert.match(css, /bottom:calc\(82px \+ env\(safe-area-inset-bottom\)\)/);
+});

@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Restok Sederhana v2.3.1
+# Kasir Nusa POS — Restok Mobile v2.3.2
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -49,6 +49,9 @@ kapabilitas retail yang lebih lengkap tersedia di
 - Penerimaan restok memakai empat layar terpandu: Dokumen, Barang, Periksa,
   dan Histori. Tombol Kembali/Lanjut menjaga isian yang sudah dibuat serta
   memvalidasi faktur dan barang sebelum pengguna berpindah langkah.
+- Pada mobile, langkah Periksa menyediakan tombol Terima dan tambah stok di
+  footer. Pesan gagal tampil permanen di kartu dan sebagai toast di atas
+  footer sehingga tidak tertutup tombol navigasi.
 - Sidebar Restok menyatukan alur toko menjadi Pilih barang, Pesanan supplier,
   Terima barang, dan Retur supplier. Produk diurutkan dari stok paling sedikit;
   jumlah pesanan dapat diubah langsung, lalu surat pesanan dapat dicetak,
@@ -169,7 +172,7 @@ Jalankan:
 npm test
 ```
 
-Kandidat v2.3.1 memiliki 173 pengujian otomatis. Pengujian toko nyata tetap
+Kandidat v2.3.2 memiliki 174 pengujian otomatis. Pengujian toko nyata tetap
 harus mengikuti `GO-LIVE-CHECKLIST.md`; keputusan lulus pilot tidak menggantikan
 verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 

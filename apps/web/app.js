@@ -1660,7 +1660,7 @@ function setRestockWizardStep(step, { focus = true, validate = false } = {}) {
   el('restock-wizard-back').disabled = targetIndex === 0;
   const next = el('restock-wizard-next');
   next.classList.toggle('hidden', targetIndex === restockWizardSteps.length - 1);
-  next.textContent = targetIndex === 2 ? 'Lihat histori' : `Lanjut ke ${restockWizardLabels[restockWizardSteps[targetIndex + 1]] ?? ''}`;
+  next.textContent = targetIndex === 2 ? 'Terima dan tambah stok' : `Lanjut ke ${restockWizardLabels[restockWizardSteps[targetIndex + 1]] ?? ''}`;
   el('restock-wizard-progress').textContent = `Langkah ${targetIndex + 1} dari ${restockWizardSteps.length}`;
   if (focus) {
     const panel = document.querySelector(`[data-restock-step="${step}"]`);
@@ -1674,6 +1674,7 @@ function setRestockWizardStep(step, { focus = true, validate = false } = {}) {
 
 function moveRestockWizard(direction) {
   const index = restockWizardSteps.indexOf(state.restockWizardStep);
+  if (direction > 0 && state.restockWizardStep === 'review') return receivePurchase();
   const target = restockWizardSteps[index + direction];
   if (target) setRestockWizardStep(target, { validate: direction > 0 });
 }
@@ -2275,7 +2276,16 @@ async function postStockCount() {
   } catch (error) { toast(error.message); }
 }
 
+function showRestockReceiveError(message = '') {
+  const errorBox = el('restock-receive-error');
+  errorBox.textContent = message;
+  errorBox.classList.toggle('hidden', !message);
+  if (message) toast(message);
+}
+
 async function receivePurchase() {
+  if (state.restockReceiving) return;
+  showRestockReceiveError();
   const selectedSupplier = state.suppliers.find((supplier) => supplier.id === el('restock-supplier').value);
   let lines;
   try {
@@ -2292,13 +2302,13 @@ async function receivePurchase() {
       };
     });
   } catch (error) {
-    return toast(error.message);
+    return showRestockReceiveError(error.message);
   }
-  if (!selectedSupplier) return toast('Pilih atau tambahkan supplier terlebih dahulu.');
-  if (!el('restock-location').value) return toast('Pilih lokasi penerimaan.');
-  if (!el('restock-document').value.trim()) return toast('Nomor dokumen pembelian wajib diisi.');
-  if (!lines.length) return toast('Tambahkan minimal satu barang restok.');
-  if (lines.some((line) => !(line.baseQty > 0) || !(line.unitCost >= 0))) return toast('Periksa jumlah dan modal setiap barang.');
+  if (!selectedSupplier) return showRestockReceiveError('Pilih atau tambahkan supplier terlebih dahulu.');
+  if (!el('restock-location').value) return showRestockReceiveError('Pilih lokasi penerimaan.');
+  if (!el('restock-document').value.trim()) return showRestockReceiveError('Nomor dokumen pembelian wajib diisi.');
+  if (!lines.length) return showRestockReceiveError('Tambahkan minimal satu barang restok.');
+  if (lines.some((line) => !(line.baseQty > 0) || !(line.unitCost >= 0))) return showRestockReceiveError('Periksa jumlah dan modal setiap barang.');
   const payload = {
     documentNo: el('restock-document').value.trim(),
     supplierId: selectedSupplier.id,
@@ -2307,8 +2317,12 @@ async function receivePurchase() {
     items: lines
   };
   const button = el('receive-button');
+  const wizardButton = el('restock-wizard-next');
+  state.restockReceiving = true;
   button.disabled = true;
   button.textContent = 'Menyimpan restok...';
+  wizardButton.disabled = true;
+  wizardButton.textContent = 'Menyimpan restok...';
   try {
     const endpoint = state.activePurchaseOrder ? `/api/purchase-orders/${state.activePurchaseOrder.id}/receipts` : '/api/purchase-receipts';
     const receipt = await request(endpoint, { method: 'POST', headers: { 'idempotency-key': crypto.randomUUID() }, body: JSON.stringify(payload) });
@@ -2324,10 +2338,13 @@ async function receivePurchase() {
     }
     await renderRestock();
   } catch (error) {
-    toast(error.message);
+    showRestockReceiveError(error.message);
   } finally {
+    state.restockReceiving = false;
     button.disabled = false;
     button.textContent = 'Terima dan tambah stok';
+    wizardButton.disabled = false;
+    if (state.restockWizardStep === 'review') wizardButton.textContent = 'Terima dan tambah stok';
   }
 }
 

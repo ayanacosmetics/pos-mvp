@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=60">
+  <link rel="stylesheet" href="/styles.css?v=61">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -145,7 +145,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Restok Sederhana · v2.3.1</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Restok Mobile · v2.3.2</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -294,6 +294,7 @@
               <div class="surface restock-review">
                 <div class="restock-step-heading"><div><p class="eyebrow">LANGKAH 3 DARI 4</p><h2>Periksa sebelum menambah stok</h2><p class="muted">Kembali ke langkah Barang bila jumlah, modal, batch, atau EXP belum benar.</p></div></div>
                 <div id="restock-review-list" class="restock-review-list"></div>
+                <p id="restock-receive-error" class="restock-receive-error error hidden" role="alert"></p>
                 <div class="restock-actions"><div><small class="muted">Penerimaan yang sama tidak akan tercatat dua kali.</small><strong id="restock-total">Total modal Rp0</strong></div><button id="receive-button" class="button primary">Terima dan tambah stok</button></div>
               </div>
             </section>
@@ -815,6 +816,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=60"></script>
+  <script type="module" src="/app.js?v=61"></script>
 </body>
 </html>

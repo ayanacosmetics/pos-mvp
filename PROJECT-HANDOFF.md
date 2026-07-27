@@ -45,6 +45,22 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat v2.3.2 siap deploy
+
+- **Restok Mobile v2.3.2** memperbaiki pesan kegagalan penerimaan yang
+  sebelumnya tertutup footer pada layar ponsel.
+- Pada langkah Periksa, tombol footer kini menjalankan `Terima dan tambah
+  stok`, bukan membuka Histori. Histori tetap dapat dibuka melalui indikator
+  langkah atau tombol riwayat pada barang.
+- Pesan kegagalan disimpan sebagai alert di dalam kartu Periksa dan toast
+  diposisikan di atas footer dengan lapisan lebih tinggi. Tombol kartu dan
+  footer sama-sama dikunci selama penyimpanan untuk mencegah input ganda.
+- QA mobile 390 x 844 menguji kegagalan dan keberhasilan: pesan tidak
+  tumpang tindih, sedangkan penerimaan sukses kembali ke Dokumen dan
+  menampilkan konfirmasi stok bertambah.
+- Tidak memerlukan migrasi SQL. Cache offline dinaikkan ke
+  `nusa-pos-shell-v61`; 174 pengujian otomatis ditargetkan lulus.
+
 ### Rilis v2.3.1 dikonfirmasi live
 
 - **Restok Sederhana v2.3.1** memindahkan seluruh pembelian dari kelompok

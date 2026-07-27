@@ -19,8 +19,8 @@ test('versi kandidat final tampil pada API, aplikasi, dan cache PWA', async () =
     readFile(new URL('../apps/web/service-worker.js', import.meta.url), 'utf8'),
     readFile(new URL('../package.json', import.meta.url), 'utf8')
   ]);
-  assert.match(api, /2\.3\.1-cloud/);
-  assert.match(html, /Restok Sederhana · v2\.3\.1/);
-  assert.match(worker, /nusa-pos-shell-v60/);
-  assert.equal(JSON.parse(pkgText).version, '2.3.1');
+  assert.match(api, /2\.3\.2-cloud/);
+  assert.match(html, /Restok Mobile · v2\.3\.2/);
+  assert.match(worker, /nusa-pos-shell-v61/);
+  assert.equal(JSON.parse(pkgText).version, '2.3.2');
 });
