@@ -45,6 +45,25 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat v2.2 siap deploy
+
+- **Nusa Commerce UI v2.2.0** menyegarkan seluruh antarmuka tanpa migrasi SQL
+  dan tanpa mengubah kontrak data atau alur bisnis v2.1.
+- Login memakai layout profesional responsif; sidebar memakai ikon SVG
+  konsisten, active state yang jelas, serta accordion yang tetap berada di
+  sidebar sesuai keputusan produk.
+- POS memisahkan katalog dan checkout dengan lebih tegas. Form, tombol, metrik,
+  tabel, laporan, dialog, dan feedback memakai sistem warna, jarak, radius,
+  fokus keyboard, serta tipografi yang sama.
+- Mobile telah diperiksa pada viewport 390 x 844: tidak ada overflow horizontal,
+  drawer berada di atas backdrop, area klik tetap jelas, dan tombol Favorit
+  tidak meluap.
+- Tidak memakai font, gambar, atau library UI eksternal. Cache PWA naik ke
+  `nusa-pos-shell-v56`; API dan package naik ke `2.2.0`.
+- 156/156 pengujian otomatis lulus. Pengujian baru memeriksa identitas rilis,
+  aset offline, ikon navigasi, token desain, breakpoint, fokus, dan
+  `prefers-reduced-motion`.
+
 ### Rilis v2.1 dikonfirmasi live
 
 - **Akuntansi Inti v2.1.0** live pada 27 Juli 2026.

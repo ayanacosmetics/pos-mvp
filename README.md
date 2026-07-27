@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Akuntansi Inti v2.1.0
+# Kasir Nusa POS — Nusa Commerce UI v2.2.0
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -61,6 +61,10 @@ kapabilitas retail yang lebih lengkap tersedia di
 - Navigasi accordion: menekan kelompok di sidebar membuka daftar subfitur
   memanjang tepat di bawah kelompok tersebut, tanpa panel atau halaman menu
   tambahan.
+- Sistem desain Nusa Commerce menyatukan login, sidebar, POS, form, tabel,
+  laporan, dialog, dan tampilan mobile dalam hierarki visual profesional.
+  Ikon memakai SVG lokal, tidak ada font atau aset UI eksternal, dan seluruh
+  alur bisnis v2.1 tetap dipertahankan.
 - Pusat pilot khusus Owner dengan lima halaman terpisah: kesiapan, insiden,
   performa, pemulihan, dan SOP.
 - Checklist pilot 25 langkah, keputusan lanjut/tunda berbasis bukti, pemantauan
@@ -151,7 +155,7 @@ Jalankan:
 npm test
 ```
 
-Kandidat v2.1.0 memiliki 152 pengujian otomatis. Pengujian toko nyata tetap
+Kandidat v2.2.0 memiliki 156 pengujian otomatis. Pengujian toko nyata tetap
 harus mengikuti `GO-LIVE-CHECKLIST.md`; keputusan lulus pilot tidak menggantikan
 verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 

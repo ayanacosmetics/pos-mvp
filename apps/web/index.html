@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#174c4f">
+  <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=55">
+  <link rel="stylesheet" href="/styles.css?v=56">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -22,9 +22,18 @@
   </section>
 
   <section id="login-view" class="login-view hidden">
+    <aside class="login-showcase" aria-hidden="true">
+      <div class="login-showcase-brand"><span class="brand-mark">KN</span><span>Kasir Nusa</span></div>
+      <div class="login-showcase-copy">
+        <p class="eyebrow">RETAIL OPERATIONS</p>
+        <h2>Satu ruang kerja untuk menjalankan toko dengan tenang.</h2>
+        <p>Penjualan, stok, pelanggan, dan keuangan tersusun dalam satu alur kerja yang jelas.</p>
+      </div>
+      <div class="login-showcase-status"><span></span><div><strong>Data usaha terlindungi</strong><small>Sesi aman dan sinkronisasi otomatis</small></div></div>
+    </aside>
     <form id="login-form" class="login-card">
-      <div class="brand-mark">KN</div>
-      <p class="eyebrow">KASIR NUSA</p>
+      <div class="login-mobile-brand"><span class="brand-mark">KN</span><span>Kasir Nusa</span></div>
+      <p class="eyebrow">PORTAL AKUN</p>
       <h1 id="login-title">Masuk sebagai Owner</h1>
       <p id="login-description" class="muted">Kelola usaha, laporan, pengguna, harga, dan seluruh outlet.</p>
       <div class="login-role-switch" role="tablist" aria-label="Pilih jenis akun">
@@ -43,13 +52,13 @@
     <aside id="app-sidebar" class="sidebar" aria-label="Menu utama">
       <div class="brand"><span class="brand-mark small">KN</span><span>Kasir Nusa</span></div>
       <nav id="nav">
-        <button data-nav-group="sales" class="nav-item active" aria-expanded="true"><span>▦</span><span>Penjualan<small>Kasir, retur, shift</small></span><b>⌄</b></button>
+        <button data-nav-group="sales" class="nav-item active" aria-expanded="true"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h3M15.5 13h.01M8 16h3M15.5 16h.01"/></svg></span><span>Penjualan<small>Kasir, retur, shift</small></span><b>⌄</b></button>
         <div data-nav-panel="sales" class="feature-nav-panel active">
           <button data-page="pos" class="feature-nav-item active" data-permission="pos.sell"><span>Kasir</span><small>Transaksi penjualan baru</small></button>
           <button data-page="returns" class="feature-nav-item" data-permission="sales.return"><span>Retur penjualan</span><small>Pengembalian dan refund</small></button>
           <button data-page="shift" class="feature-nav-item" data-permission="pos.sell"><span>Shift kasir</span><small>Kas masuk, keluar, buka dan tutup</small></button>
         </div>
-        <button data-nav-group="inventory" class="nav-item" aria-expanded="false"><span>◇</span><span>Barang & Stok<small>Produk dan pembelian</small></span><b>›</b></button>
+        <button data-nav-group="inventory" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 8 8-4 8 4-8 4zM4 8v8l8 4 8-4V8M12 12v8"/></svg></span><span>Barang & Stok<small>Produk dan pembelian</small></span><b>›</b></button>
         <div data-nav-panel="inventory" class="feature-nav-panel">
           <button data-page="products" class="feature-nav-item" data-permission="catalog.manage"><span>Produk</span><small>Master, satuan, barcode, harga</small></button>
           <button data-page="stock-list" data-target-page="stock" data-stock-view="list" class="feature-nav-item" data-permission="inventory.manage"><span>Daftar stok</span><small>Saldo per lokasi</small></button>
@@ -62,7 +71,7 @@
           <button data-page="purchase-receipt" data-target-page="restock" data-purchase-view-target="receipt" class="feature-nav-item" data-permission="purchasing.receive"><span>Terima barang</span><small>Faktur dan penambahan stok</small></button>
           <button data-page="supplier-return" data-target-page="restock" data-purchase-view-target="supplier-return" class="feature-nav-item" data-permission="purchasing.receive"><span>Retur supplier</span><small>Nota retur dan kredit</small></button>
         </div>
-        <button data-nav-group="multioutlet" class="nav-item" aria-expanded="false"><span>⌘</span><span>Multi-outlet<small>Transfer dan kontrol cabang</small></span><b>›</b></button>
+        <button data-nav-group="multioutlet" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V8l4-4 4 4v12M12 11l4-4 4 4v9M7 13h2M15 14h2"/></svg></span><span>Multi-outlet<small>Transfer dan kontrol cabang</small></span><b>›</b></button>
         <div data-nav-panel="multioutlet" class="feature-nav-panel">
           <button data-page="outlet-transfer-request" class="feature-nav-item" data-permission="multioutlet.manage"><span>Permintaan transfer</span><small>Buat dokumen perpindahan stok</small></button>
           <button data-page="outlet-transfer-approval" class="feature-nav-item" data-permission="multioutlet.manage"><span>Persetujuan & kirim</span><small>Setujui lalu keluarkan barang</small></button>
@@ -72,17 +81,17 @@
           <button data-page="outlet-consolidation" class="feature-nav-item" data-permission="multioutlet.view"><span>Konsolidasi</span><small>Stok dan kinerja seluruh cabang</small></button>
           <button data-page="outlet-notifications" class="feature-nav-item" data-permission="multioutlet.view"><span>Notifikasi</span><small>Stok kritis dan aktivitas tidak biasa</small></button>
         </div>
-        <button data-nav-group="relations" class="nav-item" aria-expanded="false"><span>◎</span><span>Relasi<small>Pelanggan dan supplier</small></span><b>›</b></button>
+        <button data-nav-group="relations" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9.5 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM17 8h4M19 6v4"/></svg></span><span>Relasi<small>Pelanggan dan supplier</small></span><b>›</b></button>
         <div data-nav-panel="relations" class="feature-nav-panel">
           <button data-page="customers" class="feature-nav-item" data-permission="pos.sell"><span>Pelanggan</span><small>Member, piutang, CRM</small></button>
           <button data-page="suppliers" class="feature-nav-item" data-permission="purchasing.receive"><span>Supplier</span><small>Profil, hutang, pembayaran</small></button>
         </div>
-        <button data-nav-group="growth" class="nav-item" aria-expanded="false"><span>％</span><span>Pertumbuhan<small>Promo dan loyalitas</small></span><b>›</b></button>
+        <button data-nav-group="growth" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17 10 11l4 4 6-8M15 7h5v5"/></svg></span><span>Pertumbuhan<small>Promo dan loyalitas</small></span><b>›</b></button>
         <div data-nav-panel="growth" class="feature-nav-panel">
           <button data-page="promotions" class="feature-nav-item" data-permission="promotion.manage"><span>Promo</span><small>Aturan dan simulasi promo</small></button>
           <button data-page="loyalty" class="feature-nav-item" data-permission="promotion.manage"><span>Loyalitas</span><small>Poin, tier, voucher, segmentasi</small></button>
         </div>
-        <button data-nav-group="insights" class="nav-item" aria-expanded="false"><span>▥</span><span>Analitik<small>Laporan dan audit</small></span><b>›</b></button>
+        <button data-nav-group="insights" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg></span><span>Analitik<small>Laporan dan audit</small></span><b>›</b></button>
         <div data-nav-panel="insights" class="feature-nav-panel">
           <button data-page="reports-summary" data-target-page="reports" data-report-view="summary" class="feature-nav-item" data-permission="report.view"><span>Ringkasan</span><small>Omzet, laba, tren harian</small></button>
           <button data-page="reports-performance" data-target-page="reports" data-report-view="performance" class="feature-nav-item" data-permission="report.view"><span>Produk & outlet</span><small>Kinerja produk dan cabang</small></button>
@@ -91,7 +100,7 @@
           <button data-page="reports-audit" data-target-page="reports" data-report-view="audit" class="feature-nav-item" data-permission="audit.view"><span>Audit log</span><small>Aktivitas sensitif</small></button>
           <button data-page="sync-review" class="feature-nav-item" data-permission="audit.view"><span>Sinkronisasi</span><small>Konflik transaksi offline <b id="sync-review-nav-count" class="nav-count hidden">0</b></small></button>
         </div>
-        <button data-nav-group="finance" class="nav-item" aria-expanded="false"><span>Rp</span><span>Keuangan<small>Akuntansi dan analitik owner</small></span><b>›</b></button>
+        <button data-nav-group="finance" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18M5 7V5h14v2M5 7v11h14V7M8 11h8M8 15h5"/></svg></span><span>Keuangan<small>Akuntansi dan analitik owner</small></span><b>›</b></button>
         <div data-nav-panel="finance" class="feature-nav-panel">
           <button data-page="owner-profit-loss" class="feature-nav-item" data-permission="finance.owner"><span>Laba rugi</span><small>Penjualan, HPP, biaya, laba</small></button>
           <button data-page="owner-expenses" class="feature-nav-item" data-permission="finance.owner"><span>Biaya outlet</span><small>Kategori dan pengeluaran</small></button>
@@ -106,7 +115,7 @@
           <button data-page="accounting-balance-sheet" class="feature-nav-item" data-permission="finance.owner"><span>Neraca</span><small>Aset, kewajiban, dan modal</small></button>
           <button data-page="accounting-periods" class="feature-nav-item" data-permission="finance.owner"><span>Periode & tutup buku</span><small>Kunci periode yang sudah diperiksa</small></button>
         </div>
-        <button data-nav-group="workforce" class="nav-item" aria-expanded="false"><span>♙</span><span>Karyawan<small>Jadwal, target, approval</small></span><b>›</b></button>
+        <button data-nav-group="workforce" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM16 11l2 2 4-4"/></svg></span><span>Karyawan<small>Jadwal, target, approval</small></span><b>›</b></button>
         <div data-nav-panel="workforce" class="feature-nav-panel">
           <button data-page="workforce-schedule" class="feature-nav-item" data-permission="workforce.self"><span>Jadwal & absensi</span><small>Jam kerja dan kehadiran</small></button>
           <button data-page="workforce-targets" class="feature-nav-item" data-permission="workforce.self"><span>Target & komisi</span><small>Kinerja penjualan karyawan</small></button>
@@ -114,7 +123,7 @@
           <button data-page="workforce-activity" class="feature-nav-item" data-permission="workforce.manage"><span>Aktivitas</span><small>Jejak pengguna dan perangkat</small></button>
           <button data-page="workforce-reconciliation" class="feature-nav-item" data-permission="workforce.manage"><span>Rekonsiliasi shift</span><small>Selisih per pembayaran</small></button>
         </div>
-        <button data-nav-group="pilot" class="nav-item" aria-expanded="false"><span>✓</span><span>Pilot & Keamanan<small>UAT, insiden, pemulihan</small></span><b>›</b></button>
+        <button data-nav-group="pilot" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v5c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V6zM8 12l2.5 2.5L16 9"/></svg></span><span>Pilot & Keamanan<small>UAT, insiden, pemulihan</small></span><b>›</b></button>
         <div data-nav-panel="pilot" class="feature-nav-panel">
           <button data-page="pilot-readiness" class="feature-nav-item" data-permission="pilot.manage"><span>Kesiapan pilot</span><small>Periode dan checklist UAT</small></button>
           <button data-page="pilot-incidents" class="feature-nav-item" data-permission="pilot.manage"><span>Insiden produksi</span><small>Temuan, dampak, dan penyelesaian</small></button>
@@ -122,7 +131,7 @@
           <button data-page="pilot-recovery" class="feature-nav-item" data-permission="pilot.manage"><span>Latihan pemulihan</span><small>Bukti backup dan prosedur recovery</small></button>
           <button data-page="pilot-sop" class="feature-nav-item" data-permission="pilot.manage"><span>SOP gangguan</span><small>Internet, printer, scanner, sinkronisasi</small></button>
         </div>
-        <button data-nav-group="system" class="nav-item" aria-expanded="false"><span>⚙</span><span>Sistem<small>Data dan pengaturan</small></span><b>›</b></button>
+        <button data-nav-group="system" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg></span><span>Sistem<small>Data dan pengaturan</small></span><b>›</b></button>
         <div data-nav-panel="system" class="feature-nav-panel">
           <button data-page="imports" class="feature-nav-item" data-permission="audit.view"><span>Impor data</span><small>Masukkan data awal</small></button>
           <button data-page="backups" class="feature-nav-item" data-permission="identity.manage"><span>Backup</span><small>Snapshot dan verifikasi</small></button>
@@ -134,7 +143,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Akuntansi Inti · v2.1.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Nusa Commerce · v2.2.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -766,6 +775,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=55"></script>
+  <script type="module" src="/app.js?v=56"></script>
 </body>
 </html>
