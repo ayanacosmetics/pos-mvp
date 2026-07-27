@@ -45,6 +45,20 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat v2.3.0 siap deploy
+
+- **Restok Terpandu v2.3.0** mengubah penerimaan barang yang sebelumnya
+  memanjang menjadi empat layar: Dokumen, Barang, Periksa, dan Histori.
+- Tombol Kembali/Lanjut memvalidasi supplier, faktur, lokasi, jumlah, modal,
+  serta EXP sebelum maju. Isian tetap tersimpan ketika pengguna kembali.
+- Ringkasan akhir memperlihatkan dokumen, barang, konversi satuan, dan total
+  modal sebelum stok ditambahkan. Histori modal tidak lagi menumpuk di bawah
+  formulir.
+- Desktop membatasi daftar panjang di panel. Pada mobile, indikator langkah
+  dapat digeser mendatar dan tombol Kembali/Lanjut tetap terlihat di bawah.
+- Tidak memerlukan migrasi SQL. Cache offline dinaikkan ke
+  `nusa-pos-shell-v59`; 168 pengujian otomatis ditargetkan lulus.
+
 ### Rilis v2.2.2 dikonfirmasi live
 
 - **Kas Tunai Cepat v2.2.2** menambahkan tombol Uang Pas langsung di keranjang

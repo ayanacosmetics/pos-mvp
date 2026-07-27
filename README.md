@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Kas Tunai Cepat v2.2.2
+# Kasir Nusa POS — Restok Terpandu v2.3.0
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -46,6 +46,9 @@ kapabilitas retail yang lebih lengkap tersedia di
 - Pencarian pelanggan menurut nama/telepon serta pemilihan barang tanpa jeda.
 - Pelanggan, fasilitas kredit, umur piutang, pembayaran, dan retur kredit.
 - Supplier, Purchase Order, penerimaan/restok, hutang, dan pembayaran supplier.
+- Penerimaan restok memakai empat layar terpandu: Dokumen, Barang, Periksa,
+  dan Histori. Tombol Kembali/Lanjut menjaga isian yang sudah dibuat serta
+  memvalidasi faktur dan barang sebelum pengguna berpindah langkah.
 - Rencana restok memakai minimum, maksimum, safety stock, lead time, rata-rata
   penjualan, stok tersedia, dan sisa PO yang belum datang.
 - Draft PO dapat dibuat dari rekomendasi per supplier, dengan approval
@@ -162,7 +165,7 @@ Jalankan:
 npm test
 ```
 
-Kandidat v2.2.2 memiliki 164 pengujian otomatis. Pengujian toko nyata tetap
+Kandidat v2.3.0 memiliki 168 pengujian otomatis. Pengujian toko nyata tetap
 harus mengikuti `GO-LIVE-CHECKLIST.md`; keputusan lulus pilot tidak menggantikan
 verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 

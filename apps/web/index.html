@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=58">
+  <link rel="stylesheet" href="/styles.css?v=59">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -143,7 +143,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Kas Tunai Cepat · v2.2.2</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Restok Terpandu · v2.3.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -258,18 +258,50 @@
           </div>
 
           <div id="purchase-view-receipt" class="purchase-view hidden">
-            <div id="active-po-banner" class="active-po-banner hidden"></div>
-            <div class="form-grid"><label>Supplier<select id="restock-supplier"></select></label><label>Nomor faktur supplier<input id="restock-document" placeholder="Contoh: INV-2026-001"></label><label>Lokasi penerimaan<select id="restock-location"></select></label></div>
-            <div class="surface restock-surface">
-              <div class="purchase-product-picker">
-                <div class="purchase-product-search"><input id="restock-product-search" autocomplete="off" placeholder="Cari nama, SKU, atau scan barcode"><button id="search-restock-product" class="button secondary" type="button">Cari</button><button id="scan-restock-product" class="button secondary scan-icon-button hardware-scan-button" type="button" aria-label="Aktifkan scanner barcode" title="Scanner barcode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a2 2 0 0 1 2 2v8H4V5a2 2 0 0 1 2-2Z"/><path d="M7 6v4M10 6v4M13 6v4M17 6v4M8 13l-2 8h6l2-8"/></svg></button><button id="camera-restock-product" class="button secondary scan-icon-button camera-scan-button" type="button" aria-label="Scan barcode dengan kamera" title="Scan dengan kamera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5 10 3.5h4l1.5 2H19A2.5 2.5 0 0 1 21.5 8v9A2.5 2.5 0 0 1 19 19.5H5A2.5 2.5 0 0 1 2.5 17V8A2.5 2.5 0 0 1 5 5.5h3.5Z"/><circle cx="12" cy="12.5" r="4"/></svg></button></div>
-                <div id="restock-product-results" class="purchase-product-results"></div>
+            <nav class="restock-wizard-steps" aria-label="Tahapan penerimaan barang">
+              <button class="restock-wizard-step active" type="button" data-restock-step-target="document"><span>1</span><strong>Dokumen</strong><small>Supplier & faktur</small></button>
+              <button class="restock-wizard-step" type="button" data-restock-step-target="items"><span>2</span><strong>Barang</strong><small>Pilih & isi jumlah</small></button>
+              <button class="restock-wizard-step" type="button" data-restock-step-target="review"><span>3</span><strong>Periksa</strong><small>Total & konfirmasi</small></button>
+              <button class="restock-wizard-step" type="button" data-restock-step-target="history"><span>4</span><strong>Histori</strong><small>Modal sebelumnya</small></button>
+            </nav>
+
+            <section class="restock-wizard-panel" data-restock-step="document">
+              <div class="surface restock-step-card">
+                <div class="restock-step-heading"><div><p class="eyebrow">LANGKAH 1 DARI 4</p><h2>Identitas penerimaan</h2><p class="muted">Pilih sumber barang dan nomor faktur sebelum memasukkan produk.</p></div></div>
+                <div id="active-po-banner" class="active-po-banner hidden"></div>
+                <div class="form-grid"><label>Supplier<select id="restock-supplier"></select></label><label>Nomor faktur supplier<input id="restock-document" placeholder="Contoh: INV-2026-001"></label><label>Lokasi penerimaan<select id="restock-location"></select></label></div>
               </div>
-              <div id="restock-empty" class="empty-state compact">Belum ada barang. Pilih produk lalu tekan “Tambah barang”.</div>
-              <div id="restock-table" class="hidden"><div id="restock-body" class="restock-list"></div></div>
-              <div class="restock-actions"><div><small class="muted">Penerimaan yang sama tidak akan tercatat dua kali.</small><strong id="restock-total">Total modal Rp0</strong></div><button id="receive-button" class="button primary">Terima dan tambah stok</button></div>
-            </div>
-            <div id="restock-history" class="surface restock-history"><p class="eyebrow">HISTORI MODAL</p><p class="muted">Klik “Riwayat” pada barang untuk melihat modal per supplier dan batch.</p></div>
+            </section>
+
+            <section class="restock-wizard-panel hidden" data-restock-step="items">
+              <div class="surface restock-surface">
+                <div class="restock-step-heading"><div><p class="eyebrow">LANGKAH 2 DARI 4</p><h2>Barang yang datang</h2><p class="muted">Cari atau scan produk, lalu isi jumlah, satuan, modal, batch, dan EXP.</p></div></div>
+                <div class="purchase-product-picker">
+                  <div class="purchase-product-search"><input id="restock-product-search" autocomplete="off" placeholder="Cari nama, SKU, atau scan barcode"><button id="search-restock-product" class="button secondary" type="button">Cari</button><button id="scan-restock-product" class="button secondary scan-icon-button hardware-scan-button" type="button" aria-label="Aktifkan scanner barcode" title="Scanner barcode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a2 2 0 0 1 2 2v8H4V5a2 2 0 0 1 2-2Z"/><path d="M7 6v4M10 6v4M13 6v4M17 6v4M8 13l-2 8h6l2-8"/></svg></button><button id="camera-restock-product" class="button secondary scan-icon-button camera-scan-button" type="button" aria-label="Scan barcode dengan kamera" title="Scan dengan kamera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5 10 3.5h4l1.5 2H19A2.5 2.5 0 0 1 21.5 8v9A2.5 2.5 0 0 1 19 19.5H5A2.5 2.5 0 0 1 2.5 17V8A2.5 2.5 0 0 1 5 5.5h3.5Z"/><circle cx="12" cy="12.5" r="4"/></svg></button></div>
+                  <div id="restock-product-results" class="purchase-product-results"></div>
+                </div>
+                <div id="restock-empty" class="empty-state compact">Belum ada barang. Cari atau scan produk, lalu tekan “Tambah”.</div>
+                <div id="restock-table" class="hidden"><div id="restock-body" class="restock-list"></div></div>
+              </div>
+            </section>
+
+            <section class="restock-wizard-panel hidden" data-restock-step="review">
+              <div class="surface restock-review">
+                <div class="restock-step-heading"><div><p class="eyebrow">LANGKAH 3 DARI 4</p><h2>Periksa sebelum menambah stok</h2><p class="muted">Kembali ke langkah Barang bila jumlah, modal, batch, atau EXP belum benar.</p></div></div>
+                <div id="restock-review-list" class="restock-review-list"></div>
+                <div class="restock-actions"><div><small class="muted">Penerimaan yang sama tidak akan tercatat dua kali.</small><strong id="restock-total">Total modal Rp0</strong></div><button id="receive-button" class="button primary">Terima dan tambah stok</button></div>
+              </div>
+            </section>
+
+            <section class="restock-wizard-panel hidden" data-restock-step="history">
+              <div class="restock-step-heading"><div><p class="eyebrow">LANGKAH 4 DARI 4</p><h2>Histori modal</h2><p class="muted">Riwayat supplier dan batch ditampilkan tanpa menumpuk di bawah formulir.</p></div></div>
+              <div id="restock-history" class="surface restock-history"><p class="eyebrow">HISTORI MODAL</p><p class="muted">Klik “Riwayat” pada barang untuk melihat modal per supplier dan batch.</p></div>
+            </section>
+
+            <footer class="restock-wizard-actions">
+              <button id="restock-wizard-back" class="button secondary" type="button">Kembali</button>
+              <div><small id="restock-wizard-progress">Langkah 1 dari 4</small><button id="restock-wizard-next" class="button primary" type="button">Lanjut ke Barang</button></div>
+            </footer>
           </div>
 
           <div id="purchase-view-supplier-return" class="purchase-view hidden">
@@ -777,6 +809,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=58"></script>
+  <script type="module" src="/app.js?v=59"></script>
 </body>
 </html>

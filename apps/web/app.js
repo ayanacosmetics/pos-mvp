@@ -13,6 +13,7 @@ const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
 state.restockPlanning = { recommendations: [], settings: { approvalThreshold: 5000000, lookbackDays: 30 }, locationId: null };
+state.restockWizardStep = 'document';
 const el = (id) => document.getElementById(id);
 const posDevice = deviceIdentity();
 const roleLabels = { OWNER: 'Owner', ADMIN: 'Admin', MANAGER: 'Manajer Outlet', CASHIER: 'Kasir', PURCHASING: 'Pembelian', WAREHOUSE: 'Gudang' };
@@ -1578,6 +1579,7 @@ async function renderRestock() {
   el('restock-history').innerHTML = '<p class="eyebrow">HISTORI MODAL</p><p class="muted">Klik “Riwayat” pada barang untuk melihat modal per supplier dan batch.</p>';
   el('receive-button').disabled = !state.suppliers.length || !receivingLocations.length || !state.products.length;
   syncRestockVisibility();
+  setRestockWizardStep('document', { focus: false });
 }
 
 const purchaseStatus = {
@@ -1589,6 +1591,91 @@ function showPurchaseView(name) {
   document.querySelectorAll('.purchase-view').forEach((view) => view.classList.toggle('hidden', view.id !== `purchase-view-${name}`));
   document.querySelectorAll('.purchase-tab').forEach((button) => button.classList.toggle('active', button.dataset.purchaseView === name));
   document.querySelectorAll('[data-purchase-view-target]').forEach((button)=>button.classList.toggle('active',button.dataset.purchaseViewTarget===name));
+  if (name === 'receipt') setRestockWizardStep('document', { focus: false });
+}
+
+const restockWizardSteps = ['document','items','review','history'];
+const restockWizardLabels = {
+  document: 'Dokumen', items: 'Barang', review: 'Periksa', history: 'Histori'
+};
+
+function restockStepIsValid(step, { notify = true } = {}) {
+  if (step === 'document') {
+    if (!el('restock-supplier').value) { if (notify) toast('Pilih supplier terlebih dahulu.'); return false; }
+    if (!el('restock-document').value.trim()) { if (notify) toast('Isi nomor faktur sebelum melanjutkan.'); return false; }
+    if (!el('restock-location').value) { if (notify) toast('Pilih lokasi penerimaan.'); return false; }
+  }
+  if (step === 'items') {
+    const rows = [...document.querySelectorAll('.restock-line')];
+    if (!rows.length) { if (notify) toast('Tambahkan minimal satu barang sebelum melanjutkan.'); return false; }
+    const invalid = rows.some((row) => {
+      const qty = Number(row.querySelector('.restock-qty').value);
+      const cost = Number(row.querySelector('.restock-cost').value);
+      const expiry = row.querySelector('.restock-expiry').value.trim();
+      if (!(qty > 0) || !(cost >= 0)) return true;
+      if (expiry) try { parseExpiryDate(expiry); } catch { return true; }
+      return false;
+    });
+    if (invalid) { if (notify) toast('Periksa jumlah, modal, dan tanggal EXP setiap barang.'); return false; }
+  }
+  return true;
+}
+
+function renderRestockReview() {
+  const supplier = state.suppliers.find((item) => item.id === el('restock-supplier').value);
+  const location = state.locations.find((item) => item.id === el('restock-location').value);
+  const rows = [...document.querySelectorAll('.restock-line')];
+  const heading = `<div class="restock-review-document"><div><span>Supplier</span><strong>${escapeHtml(supplier?.name ?? '-')}</strong></div><div><span>Faktur</span><strong>${escapeHtml(el('restock-document').value.trim() || '-')}</strong></div><div><span>Lokasi</span><strong>${escapeHtml(location?.name ?? '-')}</strong></div></div>`;
+  const items = rows.map((row) => {
+    const product = state.products.find((item) => item.id === row.dataset.product);
+    const qty = Number(row.querySelector('.restock-qty').value);
+    const unit = row.querySelector('.restock-unit').selectedOptions[0]?.textContent ?? 'pcs';
+    const factor = Number(row.dataset.factor ?? 1);
+    const cost = Number(row.querySelector('.restock-cost').value);
+    const batch = row.querySelector('.restock-batch').value.trim();
+    const expiry = row.querySelector('.restock-expiry').value.trim();
+    return `<article class="restock-review-row"><div><strong>${escapeHtml(product?.name ?? row.dataset.product)}</strong><small>${qty.toLocaleString('id-ID')} ${escapeHtml(unit)} · ${Number(qty*factor).toLocaleString('id-ID')} pcs${batch?` · batch ${escapeHtml(batch)}`:''}${expiry?` · EXP ${escapeHtml(expiry)}`:''}</small></div><div><span>${money.format(cost)} / pcs</span><strong>${money.format(qty*factor*cost)}</strong></div></article>`;
+  }).join('');
+  el('restock-review-list').innerHTML = heading + items;
+  updateRestockTotal();
+}
+
+function setRestockWizardStep(step, { focus = true, validate = false } = {}) {
+  if (!restockWizardSteps.includes(step)) return;
+  const currentIndex = restockWizardSteps.indexOf(state.restockWizardStep);
+  const targetIndex = restockWizardSteps.indexOf(step);
+  if (validate && targetIndex > currentIndex && step !== 'history') {
+    const required = restockWizardSteps.slice(0, targetIndex);
+    if (required.some((requiredStep) => !restockStepIsValid(requiredStep))) return;
+  }
+  if (step === 'review') renderRestockReview();
+  state.restockWizardStep = step;
+  document.querySelectorAll('[data-restock-step]').forEach((panel) => panel.classList.toggle('hidden', panel.dataset.restockStep !== step));
+  document.querySelectorAll('[data-restock-step-target]').forEach((button) => {
+    const index = restockWizardSteps.indexOf(button.dataset.restockStepTarget);
+    button.classList.toggle('active', button.dataset.restockStepTarget === step);
+    button.classList.toggle('completed', index < targetIndex);
+    button.setAttribute('aria-current', button.dataset.restockStepTarget === step ? 'step' : 'false');
+  });
+  el('restock-wizard-back').disabled = targetIndex === 0;
+  const next = el('restock-wizard-next');
+  next.classList.toggle('hidden', targetIndex === restockWizardSteps.length - 1);
+  next.textContent = targetIndex === 2 ? 'Lihat histori' : `Lanjut ke ${restockWizardLabels[restockWizardSteps[targetIndex + 1]] ?? ''}`;
+  el('restock-wizard-progress').textContent = `Langkah ${targetIndex + 1} dari ${restockWizardSteps.length}`;
+  if (focus) {
+    const panel = document.querySelector(`[data-restock-step="${step}"]`);
+    const steps = document.querySelector('.restock-wizard-steps');
+    steps?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.querySelector(`[data-restock-step-target="${step}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    panel?.querySelector('h2')?.setAttribute('tabindex','-1');
+    panel?.querySelector('h2')?.focus({ preventScroll: true });
+  }
+}
+
+function moveRestockWizard(direction) {
+  const index = restockWizardSteps.indexOf(state.restockWizardStep);
+  const target = restockWizardSteps[index + direction];
+  if (target) setRestockWizardStep(target, { validate: direction > 0 });
 }
 
 const planningUrgency = {
@@ -2032,6 +2119,7 @@ function syncRestockVisibility() {
 async function showCostHistory(productId) {
   const product = state.products.find((item) => item.id === productId);
   const supplierId = el('restock-supplier').value;
+  setRestockWizardStep('history');
   el('restock-history').innerHTML = '<p class="eyebrow">HISTORI MODAL</p><p class="muted">Memuat histori...</p>';
   try {
     const data = await request(`/api/cost-history/${encodeURIComponent(productId)}${supplierId ? `?supplierId=${encodeURIComponent(supplierId)}` : ''}`);
@@ -4005,6 +4093,14 @@ el('restock-product-search').addEventListener('keydown', (event) => handlePurcha
 el('search-restock-product').addEventListener('click', () => renderPurchaseProductResults('restock', el('restock-product-search').value));
 el('scan-restock-product').addEventListener('click', () => activatePurchaseScanner('restock'));
 el('camera-restock-product').addEventListener('click', () => openBarcodeCamera('restock'));
+document.querySelectorAll('[data-restock-step-target]').forEach((button)=>button.addEventListener('click',()=>{
+  setRestockWizardStep(button.dataset.restockStepTarget,{validate:true});
+}));
+el('restock-wizard-back').addEventListener('click',()=>moveRestockWizard(-1));
+el('restock-wizard-next').addEventListener('click',()=>moveRestockWizard(1));
+el('restock-document').addEventListener('keydown',(event)=>{
+  if(event.key==='Enter'){event.preventDefault();setRestockWizardStep('items',{validate:true});}
+});
 document.querySelectorAll('.purchase-tab').forEach((button) => button.addEventListener('click', () => {
   showPurchaseView(button.dataset.purchaseView);
   if(button.dataset.purchaseView==='supplier-return')loadRecentSupplierReturns();

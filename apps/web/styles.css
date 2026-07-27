@@ -705,3 +705,120 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
   .cash-suggestions{grid-template-columns:1fr 1fr}
   .cash-key-grid button{min-height:52px}
 }
+
+/* Guided restock receipt */
+.restock-wizard-steps{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:0;
+  overflow:hidden;
+  margin-bottom:18px;
+  scroll-margin-top:76px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--surface);
+}
+.restock-wizard-step{
+  position:relative;
+  display:grid;
+  grid-template-columns:30px minmax(0,1fr);
+  grid-template-rows:auto auto;
+  align-items:center;
+  gap:1px 9px;
+  min-height:64px;
+  padding:10px 14px;
+  border:0;
+  border-right:1px solid var(--line);
+  background:transparent;
+  color:var(--muted);
+  text-align:left;
+}
+.restock-wizard-step:last-child{border-right:0}
+.restock-wizard-step>span{
+  grid-row:1/3;
+  display:grid;
+  width:28px;
+  height:28px;
+  place-items:center;
+  border:1px solid var(--line-strong);
+  border-radius:50%;
+  background:var(--surface-soft);
+  font-size:11px;
+  font-weight:800;
+}
+.restock-wizard-step strong{color:var(--ink);font-size:12px}
+.restock-wizard-step small{font-size:9px}
+.restock-wizard-step.completed>span{border-color:#8dbbb3;background:var(--brand-2);color:var(--brand)}
+.restock-wizard-step.active{background:#eef6f4}
+.restock-wizard-step.active::after{position:absolute;right:0;bottom:0;left:0;height:3px;background:var(--brand);content:""}
+.restock-wizard-step.active>span{border-color:var(--brand);background:var(--brand);color:#fff}
+.restock-wizard-panel{min-height:min(61vh,650px)}
+.restock-step-card,.restock-review{max-width:980px;margin:0 auto}
+.restock-step-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px}
+.restock-step-heading h2{margin:2px 0 5px}
+.restock-step-heading p:last-child{margin:0}
+.restock-wizard-panel .purchase-product-picker{margin-top:0}
+.restock-wizard-panel .purchase-product-results{max-height:210px}
+.restock-wizard-panel .restock-list{
+  max-height:calc(100dvh - 420px);
+  min-height:160px;
+  overflow:auto;
+  padding-right:5px;
+  scrollbar-color:#b7c5c2 transparent;
+}
+.restock-review-list{
+  display:grid;
+  max-height:calc(100dvh - 390px);
+  overflow:auto;
+  border:1px solid var(--line);
+  border-radius:10px;
+}
+.restock-review-document{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:1px;
+  border-bottom:1px solid var(--line);
+  background:var(--line);
+}
+.restock-review-document>div{display:grid;gap:4px;padding:13px;background:var(--surface-soft)}
+.restock-review-document span,.restock-review-row span{color:var(--muted);font-size:10px;font-weight:700}
+.restock-review-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px;border-bottom:1px solid var(--line)}
+.restock-review-row:last-child{border-bottom:0}
+.restock-review-row>div{display:grid;gap:3px}
+.restock-review-row>div:last-child{text-align:right}
+.restock-review-row small{color:var(--muted)}
+.restock-wizard-panel .restock-history{margin-top:0;max-height:calc(100dvh - 340px);overflow:auto}
+.restock-wizard-actions{
+  position:sticky;
+  z-index:4;
+  bottom:0;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  margin-top:18px;
+  padding:12px 0 max(12px,env(safe-area-inset-bottom));
+  border-top:1px solid var(--line);
+  background:rgba(243,245,243,.94);
+  backdrop-filter:blur(12px);
+}
+.restock-wizard-actions>div{display:flex;align-items:center;gap:12px}
+.restock-wizard-actions small{color:var(--muted);font-size:10px;font-weight:700}
+@media(max-width:760px){
+  .restock-wizard-steps{display:flex;overflow-x:auto;scroll-snap-type:x mandatory}
+  .restock-wizard-step{flex:0 0 145px;scroll-snap-align:start;padding:9px 10px}
+  .restock-wizard-panel{min-height:calc(100dvh - 290px)}
+  .restock-step-heading{display:block}
+  .restock-wizard-panel .restock-list{max-height:none;min-height:0;overflow:visible}
+  .restock-review-list{max-height:none}
+  .restock-review-document{grid-template-columns:1fr}
+  .restock-review-row{align-items:flex-start;display:grid}
+  .restock-review-row>div:last-child{text-align:left}
+  .restock-wizard-panel .restock-history{max-height:none}
+  .restock-wizard-actions{margin:14px -16px -42px;padding:11px 16px max(14px,env(safe-area-inset-bottom))}
+  .restock-wizard-actions>div{margin-left:auto}
+  .restock-wizard-actions small{display:none}
+}
+@media(max-width:430px){
+  .restock-wizard-actions .button{padding-inline:12px}
+}
