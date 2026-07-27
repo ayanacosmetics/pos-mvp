@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat v2.6.2 Kertas 58/80 menunggu deployment
+### Rilis v2.6.2 Kertas 58/80 dikonfirmasi live
 
 - Pilihan lebar kertas 58 mm dan 80 mm kini tersedia langsung pada halaman
   `Sistem → Desain struk`, bukan hanya di pengaturan perangkat.
@@ -53,8 +53,13 @@ kode frontend, dokumentasi publik, atau chat.
   printer khusus perangkat yang sedang digunakan.
 - Pengaturan layout tetap berlaku ke seluruh kasir, sedangkan lebar kertas
   tidak mengubah printer pada perangkat lain.
-- Kandidat memakai API `2.6.2-cloud`, aset web `v79`, dan cache PWA `v79`.
+- Rilis memakai API `2.6.2-cloud`, aset web `v79`, dan cache PWA `v79`.
 - Seluruh 202 pengujian otomatis lulus. Tidak memerlukan migrasi SQL baru.
+- Commit fitur `7c48d3d` sudah didorong ke `origin/main`.
+- Deployment Vercel `dpl_DBsSqNyd5ruh8iU3WrwPeSHV3KQH` berstatus Ready dan
+  alias `kasir-nusa-pos.vercel.app` aktif.
+- Verifikasi publik mengembalikan API `2.6.2-cloud`, aset/cache `v79`, serta
+  pilihan kertas 58 mm dan 80 mm pada editor struk.
 
 ### Rilis v2.6.1 Foto Galeri dikonfirmasi live
 
