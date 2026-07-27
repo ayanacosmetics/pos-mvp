@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Paket v2.4.5 Daftar Owner siap setelah migrasi
+### Rilis v2.4.5 Daftar Owner dikonfirmasi live
 
 - Halaman login kini mempunyai layar pendaftaran terpisah khusus Owner dengan
   nama Owner, nama usaha, email, kata sandi, dan konfirmasi kata sandi.
@@ -62,8 +62,11 @@ kode frontend, dokumentasi publik, atau chat.
 - QA visual desktop 1440 x 1000 dan mobile 390 x 844 lulus tanpa overflow.
   Seluruh 187/187 pengujian otomatis lulus. Cache PWA disiapkan ke `v69` dan API
   ke `2.4.5-cloud`.
-- **Wajib sebelum deploy:** jalankan migrasi
-  `supabase/migrations/202607270035_owner_self_registration.sql`.
+- Migrasi `202607270035_owner_self_registration.sql` sudah dikonfirmasi berhasil.
+  Commit `f575c3c` didorong ke `origin/main`; deployment Vercel
+  `dpl_9Ky2YEAhU1nrXzvWsUkZm3DeedVq` berstatus Ready dan alias produksi aktif.
+- Verifikasi publik mengembalikan API `2.4.5-cloud`, halaman daftar Owner,
+  validasi endpoint publik, aset `v69`, dan cache `nusa-pos-shell-v69`.
 
 ### Rilis v2.4.4 dan APK Kasir Nusa POS v1.2.0 dikonfirmasi live
 
