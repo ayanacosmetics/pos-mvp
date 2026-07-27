@@ -45,6 +45,28 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.4.0 dikonfirmasi live
+
+- **Restok Ringkas v2.4.0** mengganti kartu produk restok yang padat menjadi
+  daftar ringkas berisi nama/SKU, harga jual, jumlah stok, dan status pilihan.
+- Menekan satu baris membuka popup jumlah restok. Popup juga menampilkan saran
+  sistem, akses opsional ke aturan otomatis/perbandingan supplier, serta aksi
+  memperbarui atau menghapus pilihan.
+- Pilihan barang disimpan terpisah dari DOM sehingga tidak hilang saat daftar
+  dirender ulang. Lokasi atau filter supplier baru sengaja membersihkan pilihan
+  untuk mencegah PO membawa barang dari konteks lama.
+- Pencarian nama/SKU tersedia dan daftar hanya merender 100 barang per tahap.
+  Tombol berikutnya menambah 100 barang, sehingga katalog ribuan produk tidak
+  langsung membebani browser.
+- QA browser desktop 1440 x 1000 dan mobile 390 x 844 lulus, termasuk popup,
+  penyimpanan jumlah, dan pemeriksaan tanpa overflow horizontal. Seluruh
+  180/180 pengujian otomatis lulus. Rilis ini tidak memerlukan SQL.
+- Commit `15b3788` didorong ke `origin/main`. Deployment Vercel
+  `dpl_ERmHYdNPj2UY3WcquMCYyDkCHK6p` berstatus Ready dan alias produksi aktif.
+- Verifikasi domain publik mengembalikan API `2.4.0-cloud`, identitas
+  `Restok Ringkas · v2.4.0`, aset `v64`, popup pemilihan, pencarian, serta cache
+  `nusa-pos-shell-v64`.
+
 ### Rilis v2.3.4 dikonfirmasi live
 
 - **Pilih Langsung v2.3.4** menghapus kewajiban mengatur kebijakan/supplier
