@@ -45,6 +45,24 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat hotfix database v2.3.3 menunggu SQL
+
+- Produksi mengembalikan error `record "old" has no field "receipt_id"` ketika
+  pengguna menekan Terima dan tambah stok.
+- Akar masalah berada pada `sync_supplier_bill_trigger()` dari migrasi v1.16.
+  Satu ekspresi CASE mengakses `OLD.receipt_id` pada `purchase_receipts`,
+  sedangkan tabel itu memiliki `id`, bukan `receipt_id`.
+- Migrasi
+  `supabase/migrations/202607270034_supplier_bill_trigger_receipt_id_fix.sql`
+  mengganti fungsi secara idempoten. Pemilihan ID kini memakai `to_jsonb`
+  berdasarkan `TG_TABLE_NAME`, sehingga tidak pernah mengakses field yang
+  tidak tersedia.
+- Trigger penerimaan, item penerimaan, retur supplier, dan sinkronisasi hutang
+  tetap dipertahankan. Tidak ada tabel atau data transaksi yang dihapus.
+- 177/177 pengujian otomatis lulus. Supabase CLI lokal tidak memiliki access
+  token/proyek tertaut, sehingga SQL harus dijalankan melalui SQL Editor
+  sebelum penerimaan produksi diuji ulang.
+
 ### Rilis v2.3.2 dikonfirmasi live
 
 - **Restok Mobile v2.3.2** memperbaiki pesan kegagalan penerimaan yang

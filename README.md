@@ -160,6 +160,11 @@ transaksi operasional, buku besar, neraca saldo, dan neraca. Setelah live,
 Owner perlu membuat jurnal saldo awal untuk modal/persediaan yang berasal dari
 masa sebelum Kasir Nusa. Jangan deploy source v2.1 sebelum migrasi berhasil.
 
+Untuk hotfix penerimaan v2.3.3, jalankan satu file
+`supabase/migrations/202607270034_supplier_bill_trigger_receipt_id_fix.sql`.
+Migrasi ini mengganti trigger hutang supplier yang salah membaca
+`OLD.receipt_id` ketika penerimaan barang diproses.
+
 Klik dua kali `Deploy-Kasir-Nusa.cmd` dan tunggu sampai muncul tulisan **Deployment berhasil**.
 
 Rahasia Supabase hanya boleh tersimpan di pengaturan Environment Variables Vercel. Jangan menaruh `SUPABASE_SERVICE_ROLE_KEY` di browser, screenshot, chat, atau repository.
@@ -172,7 +177,7 @@ Jalankan:
 npm test
 ```
 
-Kandidat v2.3.2 memiliki 174 pengujian otomatis. Pengujian toko nyata tetap
+Source saat ini memiliki 177 pengujian otomatis. Pengujian toko nyata tetap
 harus mengikuti `GO-LIVE-CHECKLIST.md`; keputusan lulus pilot tidak menggantikan
 verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 
