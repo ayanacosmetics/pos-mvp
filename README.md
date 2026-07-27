@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Identitas Final v2.4.4
+# Kasir Nusa POS — Daftar Owner v2.4.5
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -17,6 +17,10 @@ kapabilitas retail yang lebih lengkap tersedia di
 ## Cakupan kandidat final
 
 - Login persisten, peran kerja, hak akses, dan penempatan outlet.
+- Halaman login menyediakan pendaftaran mandiri khusus Owner. Pendaftaran
+  membuat ruang usaha, outlet utama, toko, gudang, pelanggan umum, kategori
+  biaya, serta akun akuntansi dasar. Akun Staff tetap hanya dibuat oleh Owner
+  melalui menu Pengguna setelah masuk.
 - Owner dapat mengganti konteks ke Owner aktif lain dalam usaha yang sama tanpa
   login ulang; pergantian diaudit dan berakhir saat logout.
 - Produk, varian, SKU, barcode, kategori, merek, dan status aktif.
@@ -169,6 +173,12 @@ Untuk hotfix penerimaan v2.3.3, jalankan satu file
 Migrasi ini mengganti trigger hutang supplier yang salah membaca
 `OLD.receipt_id` ketika penerimaan barang diproses.
 
+Untuk rilis v2.4.5, jalankan satu file
+`supabase/migrations/202607270035_owner_self_registration.sql` sebelum
+deployment. Migrasi ini menyediakan pembuatan ruang usaha Owner secara atomik
+dan hanya dapat dijalankan service role. Jangan deploy halaman daftar Owner
+sebelum migrasi berhasil.
+
 Klik dua kali `Deploy-Kasir-Nusa.cmd` dan tunggu sampai muncul tulisan **Deployment berhasil**.
 
 Rahasia Supabase hanya boleh tersimpan di pengaturan Environment Variables Vercel. Jangan menaruh `SUPABASE_SERVICE_ROLE_KEY` di browser, screenshot, chat, atau repository.
@@ -181,7 +191,7 @@ Jalankan:
 npm test
 ```
 
-Source saat ini memiliki 184 pengujian otomatis. Pengujian toko nyata tetap
+Source saat ini memiliki 187 pengujian otomatis. Pengujian toko nyata tetap
 harus mengikuti `GO-LIVE-CHECKLIST.md`; keputusan lulus pilot tidak menggantikan
 verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 

@@ -822,7 +822,85 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.4.4-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.4.5-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+  }
+
+  if (request.method === 'POST' && route === 'register-owner') {
+    const input = bodyOf(request);
+    const ownerName = String(input.ownerName ?? '').trim().replace(/\s+/g, ' ');
+    const businessName = String(input.businessName ?? '').trim().replace(/\s+/g, ' ');
+    const email = String(input.email ?? '').trim().toLowerCase();
+    const password = String(input.password ?? '');
+    if (ownerName.length < 2 || ownerName.length > 100) {
+      const error = new Error('Nama Owner harus berisi 2 sampai 100 karakter');
+      error.status = 400;
+      throw error;
+    }
+    if (businessName.length < 2 || businessName.length > 120) {
+      const error = new Error('Nama usaha harus berisi 2 sampai 120 karakter');
+      error.status = 400;
+      throw error;
+    }
+    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      const error = new Error('Alamat email Owner tidak valid');
+      error.status = 400;
+      throw error;
+    }
+    if (password.length < 8 || password.length > 128) {
+      const error = new Error('Kata sandi harus berisi 8 sampai 128 karakter');
+      error.status = 400;
+      throw error;
+    }
+    const config = env();
+    let auth;
+    try {
+      auth = await supabase('/auth/v1/signup', {
+        method: 'POST',
+        token: config.anon,
+        body: { email, password, data: { display_name: ownerName, business_name: businessName } }
+      });
+    } catch (error) {
+      if (/already (registered|been registered)|user.*exists/i.test(error.message)) {
+        error.message = 'Email sudah terdaftar. Silakan masuk sebagai Owner.';
+        error.status = 409;
+      }
+      throw error;
+    }
+    const createdIdentity = !Array.isArray(auth.user?.identities) || auth.user.identities.length > 0;
+    if (!auth.user?.id || !createdIdentity) {
+      const error = new Error('Email sudah terdaftar. Silakan masuk sebagai Owner.');
+      error.status = 409;
+      throw error;
+    }
+    try {
+      await rpc('register_owner_workspace_v1', {
+        p_user_id: auth.user.id,
+        p_display_name: ownerName,
+        p_business_name: businessName,
+        p_email: email
+      });
+    } catch (error) {
+      await supabase(`/auth/v1/admin/users/${auth.user.id}`, {
+        method: 'DELETE',
+        token: config.service
+      }).catch(() => {});
+      throw error;
+    }
+    const profile = await profileFor(auth.user.id);
+    if (!profile?.active || profile.role !== 'OWNER') {
+      const error = new Error('Ruang usaha gagal diaktifkan');
+      error.status = 500;
+      throw error;
+    }
+    if (auth.access_token && auth.refresh_token) {
+      setRefreshCookie(response, auth.refresh_token);
+      return send(response, 201, { ...authPayload(auth, profile), registered: true });
+    }
+    return send(response, 201, {
+      registered: true,
+      requiresEmailConfirmation: true,
+      email
+    });
   }
 
   if (request.method === 'POST' && route === 'login') {

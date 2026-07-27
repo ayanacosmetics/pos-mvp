@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=68">
+  <link rel="stylesheet" href="/styles.css?v=69">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -31,21 +31,43 @@
       </div>
       <div class="login-showcase-status"><span></span><div><strong>Data usaha terlindungi</strong><small>Sesi aman dan sinkronisasi otomatis</small></div></div>
     </aside>
-    <form id="login-form" class="login-card">
+    <section class="login-card" aria-label="Akses akun Kasir Nusa POS">
       <div class="login-mobile-brand"><span class="brand-mark"><svg viewBox="0 0 108 108" aria-hidden="true"><path class="brand-receipt" d="M30 16h48q9 0 9 9v64l-8-6-8 6-8-6-8 6-8-6-8 6-8-6-9 6V25q0-9 8-9Z"/><path class="brand-n" d="M38 67V40l34 27V40"/><circle class="brand-accent" cx="69" cy="75" r="4"/></svg></span><span>Kasir Nusa POS</span></div>
-      <p class="eyebrow">PORTAL AKUN</p>
-      <h1 id="login-title">Masuk sebagai Owner</h1>
-      <p id="login-description" class="muted">Kelola usaha, laporan, pengguna, harga, dan seluruh outlet.</p>
-      <div class="login-role-switch" role="tablist" aria-label="Pilih jenis akun">
-        <button class="login-role-option active" type="button" role="tab" data-login-portal="OWNER" aria-selected="true">Owner</button>
-        <button class="login-role-option" type="button" role="tab" data-login-portal="STAFF" aria-selected="false">Staff</button>
-      </div>
-      <label>Email akun <span id="login-role-label">Owner</span><input id="email" type="email" autocomplete="username" required></label>
-      <label>Kata sandi<input id="password" type="password" autocomplete="current-password" required></label>
-      <p id="login-error" class="error" role="alert"></p>
-      <button class="button primary full" type="submit">Masuk sebagai Owner</button>
-      <small id="login-help" class="login-help">Gunakan akun Owner aktif pada usaha Anda.</small>
-    </form>
+      <form id="login-form" class="auth-form">
+        <p class="eyebrow">PORTAL AKUN</p>
+        <h1 id="login-title">Masuk sebagai Owner</h1>
+        <p id="login-description" class="muted">Kelola usaha, laporan, pengguna, harga, dan seluruh outlet.</p>
+        <div class="login-role-switch" role="tablist" aria-label="Pilih jenis akun">
+          <button class="login-role-option active" type="button" role="tab" data-login-portal="OWNER" aria-selected="true">Owner</button>
+          <button class="login-role-option" type="button" role="tab" data-login-portal="STAFF" aria-selected="false">Staff</button>
+        </div>
+        <label>Email akun <span id="login-role-label">Owner</span><input id="email" type="email" autocomplete="username" maxlength="254" required></label>
+        <label>Kata sandi<input id="password" type="password" autocomplete="current-password" required></label>
+        <p id="login-error" class="error" role="alert"></p>
+        <button class="button primary full" type="submit">Masuk sebagai Owner</button>
+        <button id="open-owner-registration" class="auth-secondary-action" type="button">Belum punya akun? <strong>Daftar sebagai Owner</strong></button>
+        <small id="login-help" class="login-help">Gunakan akun Owner aktif pada usaha Anda.</small>
+      </form>
+      <form id="register-owner-form" class="auth-form hidden">
+        <button id="back-to-login" class="auth-back-button" type="button" aria-label="Kembali ke halaman masuk">← Kembali masuk</button>
+        <p class="eyebrow">AKUN OWNER BARU</p>
+        <h1>Mulai usaha Anda</h1>
+        <p class="muted">Buat ruang kerja toko. Akun Staff ditambahkan kemudian oleh Owner dari menu Pengguna.</p>
+        <div class="register-field-grid">
+          <label>Nama lengkap Owner<input id="register-owner-name" autocomplete="name" maxlength="100" required></label>
+          <label>Nama toko atau usaha<input id="register-business-name" autocomplete="organization" maxlength="120" required></label>
+        </div>
+        <label>Email Owner<input id="register-owner-email" type="email" autocomplete="username" maxlength="254" required></label>
+        <div class="register-field-grid">
+          <label>Kata sandi<input id="register-owner-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required><small>Minimal 8 karakter.</small></label>
+          <label>Ulangi kata sandi<input id="register-owner-password-confirmation" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
+        </div>
+        <p id="register-owner-error" class="error" role="alert"></p>
+        <p id="register-owner-success" class="auth-success hidden" role="status"></p>
+        <button class="button primary full" type="submit">Buat akun Owner</button>
+        <small class="login-help">Satu akun Owner membuat satu ruang usaha dan outlet utama. Tidak ada pendaftaran mandiri untuk Staff.</small>
+      </form>
+    </section>
   </section>
 
   <div id="app-view" class="app hidden">
@@ -145,7 +167,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Identitas Final · v2.4.4</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Daftar Owner · v2.4.5</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -819,6 +841,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=68"></script>
+  <script type="module" src="/app.js?v=69"></script>
 </body>
 </html>

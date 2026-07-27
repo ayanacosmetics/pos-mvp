@@ -45,6 +45,26 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Paket v2.4.5 Daftar Owner siap setelah migrasi
+
+- Halaman login kini mempunyai layar pendaftaran terpisah khusus Owner dengan
+  nama Owner, nama usaha, email, kata sandi, dan konfirmasi kata sandi.
+- Tombol daftar hanya muncul pada portal Owner. Staff tetap tidak dapat
+  mendaftar mandiri dan harus dibuat Owner melalui menu Pengguna.
+- Endpoint `POST /api/register-owner` memakai Supabase Auth signup, mendukung
+  konfigurasi konfirmasi email, lalu membuat seluruh ruang usaha secara atomik.
+  Jika workspace gagal, user Auth baru dibersihkan agar tidak menjadi akun
+  yatim.
+- Migrasi `202607270035_owner_self_registration.sql` membuat tenant, profil
+  Owner, outlet utama, lokasi toko/gudang, pelanggan umum, pengaturan restok,
+  kategori biaya, akun akuntansi dasar, dan audit awal. RPC hanya dapat
+  dijalankan service role.
+- QA visual desktop 1440 x 1000 dan mobile 390 x 844 lulus tanpa overflow.
+  Seluruh 187/187 pengujian otomatis lulus. Cache PWA disiapkan ke `v69` dan API
+  ke `2.4.5-cloud`.
+- **Wajib sebelum deploy:** jalankan migrasi
+  `supabase/migrations/202607270035_owner_self_registration.sql`.
+
 ### Rilis v2.4.4 dan APK Kasir Nusa POS v1.2.0 dikonfirmasi live
 
 - Nama produk Android ditetapkan menjadi **Kasir Nusa POS**, termasuk label

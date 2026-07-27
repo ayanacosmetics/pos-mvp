@@ -114,7 +114,7 @@ async function request(path, options = {}, allowRefresh = true) {
   if(response.status>=500)reportClientTelemetry('HTTP_ERROR',path,{statusCode:response.status,durationMs});
   else if(durationMs>=2500)reportClientTelemetry('SLOW_REQUEST',path,{statusCode:response.status,durationMs});
   const data = await response.json().catch(() => ({}));
-  if (response.status === 401 && allowRefresh && !['/api/login','/api/refresh'].includes(path) && state.refreshToken) {
+  if (response.status === 401 && allowRefresh && !['/api/login','/api/register-owner','/api/refresh'].includes(path) && state.refreshToken) {
     try { await refreshSession(); return request(path, options, false); }
     catch (error) { if ([401,403].includes(error.status)) clearAuth(); throw error; }
   }
@@ -145,6 +145,7 @@ function setLoginPortal(portal) {
     ? 'Gunakan akun Owner aktif pada usaha Anda.'
     : 'Hak akses Staff mengikuti peran dan outlet yang diberikan Owner.';
   el('login-form').querySelector('button[type="submit"]').textContent = owner ? 'Masuk sebagai Owner' : 'Masuk sebagai Staff';
+  el('open-owner-registration').classList.toggle('hidden', !owner);
   document.querySelectorAll('[data-login-portal]').forEach((button) => {
     const active = button.dataset.loginPortal === state.loginPortal;
     button.classList.toggle('active', active);
@@ -158,6 +159,36 @@ async function login(email, password, portal) {
   storeAuth(data);
   sessionStorage.setItem('pos_login_portal', portal);
   await bootstrap({ reportError: true });
+}
+
+function setAuthView(view) {
+  const registering = view === 'register';
+  el('login-form').classList.toggle('hidden', registering);
+  el('register-owner-form').classList.toggle('hidden', !registering);
+  el('register-owner-error').textContent = '';
+  el('register-owner-success').textContent = '';
+  el('register-owner-success').classList.add('hidden');
+  el('register-owner-form').querySelector('button[type="submit"]').classList.remove('hidden');
+  if (registering) {
+    setLoginPortal('OWNER');
+    el('register-owner-email').value = el('email').value.trim();
+    requestAnimationFrame(() => el('register-owner-name').focus());
+  } else {
+    requestAnimationFrame(() => el('email').focus());
+  }
+}
+
+async function registerOwner(input) {
+  const data = await request('/api/register-owner', {
+    method: 'POST',
+    body: JSON.stringify(input)
+  });
+  if (data.token) {
+    storeAuth(data);
+    sessionStorage.setItem('pos_login_portal', 'OWNER');
+    await bootstrap({ reportError: true });
+  }
+  return data;
 }
 
 function saveBootstrapCache(data) {
@@ -4001,6 +4032,11 @@ document.querySelectorAll('[data-login-portal]').forEach((button) => button.addE
   setLoginPortal(button.dataset.loginPortal);
   el('email').focus();
 }));
+el('open-owner-registration').addEventListener('click', () => setAuthView('register'));
+el('back-to-login').addEventListener('click', () => {
+  el('email').value = el('register-owner-email').value.trim();
+  setAuthView('login');
+});
 el('login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const button = event.currentTarget.querySelector('button[type="submit"]');
@@ -4014,6 +4050,39 @@ el('login-form').addEventListener('submit', async (event) => {
   } finally {
     button.disabled = false;
     button.textContent = state.loginPortal === 'OWNER' ? 'Masuk sebagai Owner' : 'Masuk sebagai Staff';
+  }
+});
+el('register-owner-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('button[type="submit"]');
+  const password = el('register-owner-password').value;
+  const confirmation = el('register-owner-password-confirmation').value;
+  el('register-owner-error').textContent = '';
+  el('register-owner-success').classList.add('hidden');
+  if (password !== confirmation) {
+    el('register-owner-error').textContent = 'Ulangi kata sandi harus sama.';
+    return;
+  }
+  button.disabled = true;
+  button.textContent = 'Menyiapkan ruang usaha...';
+  try {
+    const data = await registerOwner({
+      ownerName: el('register-owner-name').value.trim(),
+      businessName: el('register-business-name').value.trim(),
+      email: el('register-owner-email').value.trim(),
+      password
+    });
+    if (data.requiresEmailConfirmation) {
+      el('register-owner-success').textContent = 'Akun dan ruang usaha berhasil dibuat. Periksa email untuk mengaktifkan akun, lalu kembali masuk sebagai Owner.';
+      el('register-owner-success').classList.remove('hidden');
+      button.classList.add('hidden');
+    }
+  } catch (error) {
+    el('register-owner-error').textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Buat akun Owner';
   }
 });
 
