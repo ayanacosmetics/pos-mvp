@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Paket v2.4.6 Daftar Barang Ringkas siap setelah migrasi
+### Rilis v2.4.6 Daftar Barang Ringkas dikonfirmasi live
 
 - Katalog Kasir tidak lagi memakai kartu besar dua kolom. Produk menjadi baris
   memanjang dengan foto/placeholder di kiri, kategori/nama/SKU di tengah, serta
@@ -61,8 +61,13 @@ kode frontend, dokumentasi publik, atau chat.
 - QA browser desktop 1440 x 1000 serta mobile 390 x 844 lulus untuk Kasir,
   Restok, dan Stok tanpa overflow. Seluruh 190/190 pengujian otomatis lulus.
   Cache PWA disiapkan ke `v70` dan API ke `2.4.6-cloud`.
-- **Wajib sebelum deploy:** jalankan migrasi
-  `supabase/migrations/202607270036_product_images.sql`.
+- Migrasi `supabase/migrations/202607270036_product_images.sql` telah
+  dikonfirmasi berhasil.
+- Commit fitur `46bd29f` sudah didorong ke `origin/main`.
+- Deployment Vercel `dpl_AH8v859da3mgfhR3iSqVpSSrkDBh` berstatus Ready dan
+  alias `kasir-nusa-pos.vercel.app` aktif.
+- Verifikasi publik mengembalikan API `2.4.6-cloud`, aset daftar/foto produk
+  `v70`, dan cache PWA `v70`.
 
 ### Rilis v2.4.5 Daftar Owner dikonfirmasi live
 
