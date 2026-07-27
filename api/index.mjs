@@ -41,7 +41,7 @@ function normalizedAssignablePermissions(value,role) {
 
 const BACKUP_TABLES = [
   'tenants','profiles','outlets','stock_locations','user_outlets',
-  'customers','loyalty_settings','customer_tiers','customer_point_entries','vouchers','voucher_redemptions','customer_account_entries','customer_payment_receipts','customer_payment_allocations','suppliers','supplier_bills','supplier_payable_entries','supplier_payment_receipts','supplier_payment_allocations','products','product_units','price_rules','promotions','promotion_versions','promotion_redemptions',
+  'customer_price_groups','customers','loyalty_settings','customer_tiers','customer_point_entries','vouchers','voucher_redemptions','customer_account_entries','customer_payment_receipts','customer_payment_allocations','suppliers','supplier_bills','supplier_payable_entries','supplier_payment_receipts','supplier_payment_allocations','products','product_units','price_rules','promotions','promotion_versions','promotion_redemptions',
   'shifts','cash_movements','shift_reconciliations','sales','sale_items','payments','parked_sales','sale_adjustment_authorizations',
   'employee_schedules','attendance_records','employee_targets','approval_policies','approval_requests',
   'backup_exports','pilot_runs','pilot_check_results','production_incidents','recovery_drills',
@@ -259,6 +259,14 @@ async function loadCustomerAccounts(tenantId) {
   });
 }
 
+async function loadCustomerPriceGroups(tenantId) {
+  const rows = await rest('customer_price_groups', `tenant_id=eq.${encodeURIComponent(tenantId)}&active=eq.true&select=id,name,is_default,active,sort_order&order=sort_order,name`);
+  return rows.map((group) => ({
+    id:group.id,name:group.name,isDefault:Boolean(group.is_default),
+    active:group.active!==false,sortOrder:Number(group.sort_order??100)
+  }));
+}
+
 async function loadSupplierAccounts(tenantId){
   const tenant=encodeURIComponent(tenantId),today=new Date().toISOString().slice(0,10);
   const [suppliers,bills]=await Promise.all([
@@ -291,18 +299,30 @@ async function loadManagedProducts(tenantId) {
 
 function normalizeProductInput(input,id=null) {
   const units=Array.isArray(input.units)&&input.units.length?input.units:[{name:input.unitName||'pcs',factor:1,barcode:input.barcode||null}];
+  const rawPrices=Array.isArray(input.prices)&&input.prices.length?input.prices:[
+    {customerGroupId:'retail',unitPriceBase:input.retailPrice},
+    ...(Number(input.wholesalePrice)>0?[{customerGroupId:'wholesale',unitPriceBase:input.wholesalePrice}]:[])
+  ];
+  const prices=rawPrices.map((price)=>({customerGroupId:String(price.customerGroupId??'').trim(),unitPriceBase:Number(price.unitPriceBase)}));
+  const retailPrice=prices.find((price)=>price.customerGroupId==='retail')?.unitPriceBase;
   const normalized={
     id:id??input.id??null,sku:String(input.sku??'').trim().toUpperCase(),name:String(input.name??'').trim(),
     category:String(input.category??'').trim()||'Lainnya',brand:String(input.brand??'').trim(),
     imageUrl:String(input.imageUrl??'').trim(),
     variantGroup:String(input.variantGroup??'').trim(),variantName:String(input.variantName??'').trim(),
     minimumStock:Number(input.minimumStock??0),trackExpiry:Boolean(input.trackExpiry),
-    retailPrice:Number(input.retailPrice),wholesalePrice:Number(input.wholesalePrice??0),
-    tierQty:Number(input.tierQty??0),tierPrice:Number(input.tierPrice??0),
+    retailPrice:Number(retailPrice),wholesalePrice:Number(prices.find((price)=>price.customerGroupId==='wholesale')?.unitPriceBase??0),
+    tierQty:Number(input.tierQty??0),tierPrice:Number(input.tierPrice??0),prices,
     units:units.map((unit)=>({id:unit.id??null,name:String(unit.name??'').trim(),factor:Number(unit.factor),barcode:String(unit.barcode??'').trim()}))
   };
   if(!normalized.sku||!normalized.name)throw Object.assign(new Error('SKU dan nama produk wajib diisi'),{status:400});
-  if(!(normalized.retailPrice>0))throw Object.assign(new Error('Harga ecer harus lebih dari nol'),{status:400});
+  if(!(normalized.retailPrice>0))throw Object.assign(new Error('Harga umum harus lebih dari nol'),{status:400});
+  const priceGroups=new Set();
+  for(const price of normalized.prices){
+    if(!/^[a-z0-9][a-z0-9_-]{1,39}$/.test(price.customerGroupId)||!(price.unitPriceBase>0))throw Object.assign(new Error('Tipe dan nominal harga produk tidak valid'),{status:400});
+    if(priceGroups.has(price.customerGroupId))throw Object.assign(new Error('Tipe harga produk tercatat dua kali'),{status:400});
+    priceGroups.add(price.customerGroupId);
+  }
   if(!(normalized.minimumStock>=0))throw Object.assign(new Error('Batas stok minimum tidak valid'),{status:400});
   if(normalized.imageUrl){
     let imageUrl;
@@ -526,7 +546,7 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
   const [items,payments,customers,cashiers] = await Promise.all([
     byChunks('sale_items','sale_id',saleIds,'select=*&order=id'),
     byChunks('payments','sale_id',saleIds,'select=*&order=created_at'),
-    customerIds.length ? byChunks('customers','id',customerIds,'select=id,name,phone,notes') : [],
+    customerIds.length ? byChunks('customers','id',customerIds,'select=id,name,phone,notes,group_id') : [],
     cashierIds.length ? byChunks('profiles','user_id',cashierIds,'select=user_id,display_name') : []
   ]);
   const adjustmentIds=[...new Set(items.flatMap((item)=>
@@ -560,7 +580,8 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
       : null;
     return {
       id:sale.id,receiptNo:sale.receipt_no,status:sale.status,occurredAt:sale.occurred_at,
-      cashier,outletName:context.outlets.find((outlet)=>outlet.id===sale.outlet_id)?.name??context.outlet.name,customer,notes:sale.notes ?? '',
+      cashier,outletName:context.outlets.find((outlet)=>outlet.id===sale.outlet_id)?.name??context.outlet.name,customer,
+      customerGroupId:sale.customer_group_id??customer?.group_id??'retail',notes:sale.notes ?? '',
       voidReason:sale.void_reason ?? '',voidedAt:sale.voided_at ?? null,
       quote:{
         lines,subtotal:Number(sale.subtotal),discountTotal:Number(sale.discount_total),
@@ -770,6 +791,21 @@ async function baseSaleQuote(context, input) {
   });
 }
 
+async function resolveSaleCustomerGroup(context, input) {
+  if (!input.customerId) return 'retail';
+  const rows = await rest('customers', `tenant_id=eq.${encodeURIComponent(context.tenantId)}&id=eq.${encodeURIComponent(input.customerId)}&active=eq.true&select=group_id&limit=1`);
+  if (!rows[0]) {
+    const error = new Error('Pelanggan tidak ditemukan atau sudah nonaktif');
+    error.status = 422;
+    throw error;
+  }
+  return rows[0].group_id || 'retail';
+}
+
+async function normalizeSaleCustomer(context, input) {
+  return { ...input, customerGroupId: await resolveSaleCustomerGroup(context, input) };
+}
+
 async function voucherSaleQuote(context, input, quote) {
   const code=String(input.voucherCode??'').trim();
   if(!code)return quote;
@@ -845,7 +881,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.4.11-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.5.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1064,9 +1100,9 @@ async function routeRequest(request, response, route) {
 
   if (request.method === 'GET' && route === 'bootstrap') {
     const deviceId = request.headers['x-device-id'];
-    const [products, promotions, customers, suppliers, shifts, tenants, devices] = await Promise.all([
+    const [products, promotions, customerGroups, customers, suppliers, shifts, tenants, devices] = await Promise.all([
       loadCatalog(context.tenantId, context.storeLocation?.id, context.outlet.id), loadPromotions(context.tenantId, context.outlet.id),
-      loadCustomerAccounts(context.tenantId),
+      loadCustomerPriceGroups(context.tenantId), loadCustomerAccounts(context.tenantId),
       session.permissions.includes('purchasing.receive') ? loadSupplierAccounts(context.tenantId) : [],
       rest('shifts', `tenant_id=eq.${context.tenantId}&outlet_id=eq.${context.outlet.id}&cashier_id=eq.${session.authUser.id}&status=eq.OPEN&select=*&limit=1`),
       rest('tenants', `id=eq.${context.tenantId}&select=*`),
@@ -1083,7 +1119,7 @@ async function routeRequest(request, response, route) {
       },
       outlets: context.outlets, activeOutletId: context.outlet.id, locations: context.locations,
       business: businessPayload(tenants[0]), deviceSettings: devicePayload(devices[0], deviceId),
-      customerGroups: [{ id: 'retail', name: 'Eceran' }, { id: 'wholesale', name: 'Grosir' }], customers, suppliers, products, promotions,
+      customerGroups, customers, suppliers, products, promotions,
       currentShift: await shiftDetail(context.tenantId, shifts[0]), syncCursor: new Date().toISOString()
     });
   }
@@ -1230,7 +1266,7 @@ async function routeRequest(request, response, route) {
     requirePermission(session, 'pos.sell');
     requirePermission(session, 'sale.adjust');
     if (!context.outlet?.id) { const error = new Error('Outlet aktif tidak ditemukan'); error.status = 409; throw error; }
-    const input = bodyOf(request);
+    const input = await normalizeSaleCustomer(context, bodyOf(request));
     if (!Array.isArray(input.lines) || !input.lines.length) { const error = new Error('Keranjang masih kosong'); error.status = 400; throw error; }
     const adjustment = normalizeSaleAdjustment(input.adjustment);
     const fingerprint = saleAdjustmentFingerprint(input.lines, input.customerGroupId, adjustment);
@@ -1262,7 +1298,7 @@ async function routeRequest(request, response, route) {
 
   if (request.method === 'POST' && route === 'quote') {
     requirePermission(session, 'pos.sell');
-    const input = bodyOf(request);
+    const input = await normalizeSaleCustomer(context, bodyOf(request));
     let quote = await baseSaleQuote(context, input);
     if (input.authorization) {
       const verified = await verifySaleAuthorization(context, session, input);
@@ -1277,7 +1313,7 @@ async function routeRequest(request, response, route) {
 
   if (request.method === 'POST' && route === 'sales') {
     requirePermission(session, 'pos.sell');
-    const input = bodyOf(request);
+    const input = await normalizeSaleCustomer(context, bodyOf(request));
     const key = request.headers['idempotency-key'];
     if (!key) { const error = new Error('Idempotency-Key wajib diisi'); error.status = 400; throw error; }
     let quote = await baseSaleQuote(context, { ...input, at: new Date().toISOString() });
@@ -1309,7 +1345,7 @@ async function routeRequest(request, response, route) {
       result = await rpc('complete_sale_v7', saleCommand);
     }
     const tenants = await rest('tenants', `id=eq.${context.tenantId}&select=*`);
-    return send(response, 201, { ...result, occurredAt: new Date().toISOString(), cashier: session.profile.display_name, outletName:context.outlet.name, outlet:context.outlet, business:businessPayload(tenants[0]), quote });
+    return send(response, 201, { ...result, occurredAt: new Date().toISOString(), cashier: session.profile.display_name, customerGroupId:input.customerGroupId, outletName:context.outlet.name, outlet:context.outlet, business:businessPayload(tenants[0]), quote });
   }
 
   if(request.method==='GET'&&route==='held-sales'){
@@ -1320,7 +1356,7 @@ async function routeRequest(request, response, route) {
 
   if(request.method==='POST'&&route==='held-sales'){
     requirePermission(session,'pos.sell');
-    const input=bodyOf(request);
+    const input=await normalizeSaleCustomer(context,bodyOf(request));
     if(!Array.isArray(input.lines)||!input.lines.length){const error=new Error('Keranjang kosong');error.status=400;throw error;}
     const quote=quoteBasket({lines:input.lines,customerGroupId:input.customerGroupId,products:await loadCatalog(context.tenantId,context.storeLocation?.id,context.outlet.id),promotions:await loadPromotions(context.tenantId,context.outlet.id),at:new Date()});
     const rows=await rest('parked_sales','',{method:'POST',prefer:'return=representation',body:{
@@ -1354,16 +1390,17 @@ async function routeRequest(request, response, route) {
         if (!command.key || !command.occurredAt || !command.payload?.lines?.length) throw new Error('Format transaksi offline tidak lengkap');
         const at = new Date(command.occurredAt);
         if (!Number.isFinite(at.getTime())) throw new Error('Waktu transaksi offline tidak valid');
-        const quote = quoteBasket({ lines: command.payload.lines, customerGroupId: command.payload.customerGroupId, products, promotions, at });
+        const payload=await normalizeSaleCustomer(context,command.payload);
+        const quote = quoteBasket({ lines: payload.lines, customerGroupId: payload.customerGroupId, products, promotions, at });
         const result = await rpc('process_sync_sale', {
           p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_device_id: input.device.id,
           p_outlet_id: outletId, p_device_name: input.device.name ?? 'Perangkat POS', p_platform: input.device.platform ?? null,
-          p_idempotency_key: command.key, p_occurred_at: command.occurredAt, p_payload: command.payload,
+          p_idempotency_key: command.key, p_occurred_at: command.occurredAt, p_payload: payload,
           p_expected_total: Number(command.expectedTotal), p_quote: quote
         });
-        if (result.status === 'APPLIED' && result.result?.id && command.payload?.notes) {
+        if (result.status === 'APPLIED' && result.result?.id && payload.notes) {
           await rest('sales', `tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(result.result.id)}`, {
-            method:'PATCH',body:{notes:String(command.payload.notes).trim().slice(0,500)}
+            method:'PATCH',body:{notes:String(payload.notes).trim().slice(0,500)}
           });
         }
         results.push(result);
@@ -1418,7 +1455,7 @@ async function routeRequest(request, response, route) {
   if (request.method === 'POST' && route === 'products') {
     requirePermission(session, 'catalog.manage');
     const input = normalizeProductInput(bodyOf(request));
-    return send(response, 201, await rpc('save_product_v3', { p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_product: input }));
+    return send(response, 201, await rpc('save_product_v4', { p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_product: input }));
   }
 
   if (request.method === 'GET' && route === 'products/manage') {
@@ -1430,7 +1467,7 @@ async function routeRequest(request, response, route) {
     requirePermission(session, 'catalog.manage');
     const productId=route.split('/')[1];
     const input=normalizeProductInput(bodyOf(request),productId);
-    return send(response,200,await rpc('save_product_v3',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_product:input}));
+    return send(response,200,await rpc('save_product_v4',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_product:input}));
   }
 
   if (request.method === 'POST' && /^products\/[^/]+\/status$/.test(route)) {
@@ -1640,12 +1677,29 @@ async function routeRequest(request, response, route) {
     return send(response,result.duplicate?200:201,result);
   }
 
+  if (request.method === 'POST' && route === 'customer-groups') {
+    requirePermission(session,'catalog.manage');
+    if(!['OWNER','ADMIN'].includes(session.profile.role))throw Object.assign(new Error('Hanya Owner atau Admin yang dapat menambah tipe pelanggan'),{status:403});
+    const input=bodyOf(request),name=String(input.name??'').trim().replace(/\s+/g,' ');
+    if(name.length<2||name.length>50)throw Object.assign(new Error('Nama tipe pelanggan harus berisi 2 sampai 50 karakter'),{status:400});
+    const baseId=name.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,36);
+    if(baseId.length<2||baseId==='retail')throw Object.assign(new Error('Nama tipe pelanggan tidak dapat digunakan'),{status:400});
+    const existing=await rest('customer_price_groups',`tenant_id=eq.${encodeURIComponent(context.tenantId)}&select=id,sort_order`);
+    if(existing.some((group)=>String(group.id).toLowerCase()===baseId))throw Object.assign(new Error('Tipe pelanggan dengan nama tersebut sudah ada'),{status:409});
+    const sortOrder=Math.max(0,...existing.map((group)=>Number(group.sort_order??0)))+10;
+    const rows=await rest('customer_price_groups','',{method:'POST',prefer:'return=representation',body:{
+      tenant_id:context.tenantId,id:baseId,name,is_default:false,active:true,sort_order:sortOrder
+    }});
+    await rest('audit_logs','',{method:'POST',body:{tenant_id:context.tenantId,actor_id:session.authUser.id,action:'CUSTOMER_PRICE_GROUP_CREATED',entity_type:'customer_price_group',entity_id:null,details_json:{id:baseId,name}}});
+    return send(response,201,{id:rows[0].id,name:rows[0].name,isDefault:false,active:true,sortOrder});
+  }
+
   if (request.method === 'POST' && route === 'customers') {
     requirePermission(session, 'pos.sell');
     const input = bodyOf(request);
     const customer=await rpc('save_customer_profile',{
       p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_customer_id:null,p_name:input.name,
-      p_phone:input.phone??'',p_email:input.email??'',p_address:input.address??'',p_group_id:input.groupId==='wholesale'?'wholesale':'retail',
+      p_phone:input.phone??'',p_email:input.email??'',p_address:input.address??'',p_group_id:String(input.groupId??'retail'),
       p_credit_enabled:Boolean(input.creditEnabled),p_credit_limit:Number(input.creditLimit??0),p_credit_days:Number(input.creditDays??0),
       p_notes:input.notes??'',p_active:true
     });
@@ -1659,7 +1713,7 @@ async function routeRequest(request, response, route) {
     const input=bodyOf(request),customerId=route.split('/')[1];
     const customer=await rpc('save_customer_profile',{
       p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_customer_id:customerId,p_name:input.name,
-      p_phone:input.phone??'',p_email:input.email??'',p_address:input.address??'',p_group_id:input.groupId==='wholesale'?'wholesale':'retail',
+      p_phone:input.phone??'',p_email:input.email??'',p_address:input.address??'',p_group_id:String(input.groupId??'retail'),
       p_credit_enabled:Boolean(input.creditEnabled),p_credit_limit:Number(input.creditLimit??0),p_credit_days:Number(input.creditDays??0),
       p_notes:input.notes??'',p_active:input.active!==false
     });

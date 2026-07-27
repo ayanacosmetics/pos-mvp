@@ -58,7 +58,7 @@ test('edit produk dan perubahan status memakai transaksi terproteksi',async()=>{
   try{
     const edited=await callApi('PUT',`products/${ids.product}`,{sku:'kos-001',name:'Lip Tint',category:'Kosmetik',retailPrice:25000,minimumStock:6,trackExpiry:true,units:[{id:ids.unit,name:'pcs',factor:1,barcode:'8991'},{name:'lusin',factor:12,barcode:'89912'}]});
     assert.equal(edited.status,200);
-    assert.ok(rpcCalls[0].target.endsWith('/rpc/save_product_v3'));
+    assert.ok(rpcCalls[0].target.endsWith('/rpc/save_product_v4'));
     assert.equal(rpcCalls[0].body.p_product.sku,'KOS-001');
     assert.equal(rpcCalls[0].body.p_product.units.length,2);
     const archived=await callApi('POST',`products/${ids.product}/status`,{active:false});

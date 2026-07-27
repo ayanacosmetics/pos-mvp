@@ -198,9 +198,14 @@ export class PosStore {
     const id = crypto.randomUUID();
     const unitId = `${id}-pcs`;
     const units = [{ id: unitId, name: input.unitName?.trim() || 'pcs', factor: 1, barcode: input.barcode?.trim() || null }];
+    const customerPrices=Array.isArray(input.prices)&&input.prices.length?input.prices:[
+      {customerGroupId:'retail',unitPriceBase:input.retailPrice},
+      ...(input.wholesalePrice>0?[{customerGroupId:'wholesale',unitPriceBase:input.wholesalePrice}]:[])
+    ];
     const priceRules = [
-      { id: `${id}-retail`, customerGroupId: 'retail', minBaseQty: 1, unitPriceBase: Number(input.retailPrice) },
-      ...(input.wholesalePrice > 0 ? [{ id: `${id}-wholesale`, customerGroupId: 'wholesale', minBaseQty: 1, unitPriceBase: Number(input.wholesalePrice) }] : []),
+      ...customerPrices.filter((price)=>price.customerGroupId&&Number(price.unitPriceBase)>0).map((price)=>({
+        id:`${id}-${price.customerGroupId}`,customerGroupId:price.customerGroupId,minBaseQty:1,unitPriceBase:Number(price.unitPriceBase)
+      })),
       ...(input.tierQty > 1 && input.tierPrice > 0 ? [{ id: `${id}-tier`, customerGroupId: null, minBaseQty: Number(input.tierQty), unitPriceBase: Number(input.tierPrice) }] : [])
     ];
     this.transaction(() => {

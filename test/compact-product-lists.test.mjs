@@ -43,6 +43,6 @@ test('migrasi foto produk menyimpan URL tervalidasi melalui transaksi produk v3'
   assert.match(sql, /v_result:=public\.save_product_v2/);
   assert.match(sql, /grant execute on function public\.save_product_v3[\s\S]*to service_role/);
   assert.match(api, /imageUrl:product\.image_url/);
-  assert.match(api, /rpc\('save_product_v3'/);
+  assert.match(api, /rpc\('save_product_v4'/);
   assert.match(api, /URL foto produk harus memakai http atau https/);
 });

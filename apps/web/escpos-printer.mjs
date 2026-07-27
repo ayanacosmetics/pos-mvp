@@ -98,6 +98,9 @@ export function buildEscPosReceipt(receipt, payments = [], settings = {}, contex
   const business = receipt.business ?? context.business ?? {};
   const outlet = receipt.outlet ?? context.outlet ?? {};
   const customer = receipt.customer ?? context.customer;
+  const groupId = receipt.customerGroupId ?? customer?.group_id ?? 'retail';
+  const groupName = context.customerGroups?.find((group) => group.id === groupId)?.name ?? groupId;
+  const priceLabel = groupId === 'retail' ? '' : `Harga ${groupName}`;
   const footer = outlet.receipt_footer || business.receiptFooter || 'Terima kasih telah berbelanja.';
   const address = outlet.address || business.address;
   const phone = outlet.phone || business.phone;
@@ -112,10 +115,11 @@ export function buildEscPosReceipt(receipt, payments = [], settings = {}, contex
   if (receipt.status === 'VOIDED') bytes.push(...lineBytes('VOID / DIBATALKAN'));
   bytes.push(ESC, 0x61, 0x00, ...lineBytes(rule(width)));
   bytes.push(...lineBytes(columns('Kasir', receipt.cashier || '-', width)));
-  bytes.push(...lineBytes(columns('Pelanggan', customer?.name || 'Pelanggan umum', width)));
+  if (customer?.name) bytes.push(...lineBytes(columns('Pelanggan', customer.name, width)));
   bytes.push(...lineBytes(rule(width)));
   for (const line of quote.lines) {
     for (const row of wrap(line.productName, width)) bytes.push(...lineBytes(row));
+    if (priceLabel) bytes.push(...lineBytes(priceLabel));
     bytes.push(...lineBytes(columns(`${line.qty} ${line.unitName} x ${rupiah(line.customerUnitPrice)}`, rupiah(line.total), width)));
   }
   bytes.push(...lineBytes(rule(width)));
@@ -203,7 +207,7 @@ export async function printEscPosTest(settings, context = {}) {
     business: context.business,
     outlet: context.outlet,
     outletName: context.outlet?.name,
-    customer: { name: 'Pelanggan umum' },
+    customer: null,
     quote: {
       lines: [{ productName: 'Tes cetak Bluetooth', qty: 1, unitName: 'pcs', customerUnitPrice: 1000, total: 1000 }],
       subtotal: 1000,

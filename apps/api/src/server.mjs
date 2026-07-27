@@ -18,6 +18,7 @@ const saleAuthorizations = new Map();
 const port = Number(process.env.PORT ?? 4173);
 let localBusiness = { id:'tenant-demo', name:'Kasir Nusa Demo', legalName:'', phone:'', email:'', address:'', taxId:'', currency:'IDR', receiptFooter:'Terima kasih telah berbelanja.', logoUrl:'' };
 let localOutletSettings = outlets.map((outlet) => ({ ...outlet, code:outlet.code ?? 'UTM', timezone:'Asia/Makassar', active:true, receipt_prefix:outlet.code ?? 'UTM', phone:'', address:'', receipt_footer:'' }));
+let localCustomerGroups = customerGroups.map((group,index)=>({...group,isDefault:group.id==='retail',active:true,sortOrder:index*10}));
 let localLocations = [
   { id: 'outlet-utama', outlet_id: 'outlet-utama', code: 'TOKO', name: 'Toko Utama', kind: 'STORE', active:true },
   { id: 'gudang-utama', outlet_id: 'outlet-utama', code: 'GDG', name: 'Gudang Utama', kind: 'WAREHOUSE', active:true }
@@ -78,7 +79,7 @@ function requirePermission(request, response, permission) {
 }
 
 async function api(request, response, url) {
-  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '2.4.11-local', storage: 'sqlite' });
+  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '2.5.0-local', storage: 'sqlite' });
 
   if (request.method === 'POST' && url.pathname === '/api/login') {
     const input = await bodyOf(request);
@@ -96,7 +97,7 @@ async function api(request, response, url) {
     const balances = store.inventory().filter((item) => item.location_id === 'outlet-utama');
     const catalog = store.catalog().map(({ priceRules, ...product }) => ({ ...product, stockBase: balances.find((item) => item.product_id === product.id)?.quantity ?? 0, priceRules: can(session, PERMISSIONS.POS_SELL) ? priceRules : [] }));
     const accessibleOutlets = localOutletSettings.filter((outlet) => outlet.active && session.user.outletIds.includes(outlet.id));
-    return json(response, 200, { session, business:localBusiness, deviceSettings:{ id:request.headers['x-device-id'],paperWidth:80,autoPrint:false,receiptCopies:1 }, outlets: accessibleOutlets, activeOutletId:accessibleOutlets[0]?.id, locations:localLocations.filter((location)=>location.active), customerGroups, customers: store.customers(), suppliers: can(session, PERMISSIONS.RECEIVE_PURCHASE) ? store.suppliers() : [], products: catalog, promotions: store.promotions(), currentShift: store.currentShift(session.user.id), syncCursor: Date.now().toString() });
+    return json(response, 200, { session, business:localBusiness, deviceSettings:{ id:request.headers['x-device-id'],paperWidth:80,autoPrint:false,receiptCopies:1 }, outlets: accessibleOutlets, activeOutletId:accessibleOutlets[0]?.id, locations:localLocations.filter((location)=>location.active), customerGroups:localCustomerGroups, customers: store.customers(), suppliers: can(session, PERMISSIONS.RECEIVE_PURCHASE) ? store.suppliers() : [], products: catalog, promotions: store.promotions(), currentShift: store.currentShift(session.user.id), syncCursor: Date.now().toString() });
   }
 
   if (request.method === 'GET' && url.pathname === '/api/settings') {
@@ -264,6 +265,17 @@ async function api(request, response, url) {
     const session = requirePermission(request, response, PERMISSIONS.RECEIVE_PURCHASE);
     if (!session) return;
     return json(response, 201, store.createSupplier(await bodyOf(request), session.user.id));
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/customer-groups') {
+    const session=requirePermission(request,response,PERMISSIONS.MANAGE_PRODUCTS);if(!session)return;
+    const input=await bodyOf(request),name=String(input.name??'').trim().replace(/\s+/g,' ');
+    const id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,36);
+    if(name.length<2||id.length<2)return json(response,400,{error:'Nama tipe pelanggan tidak valid'});
+    if(localCustomerGroups.some((group)=>group.id===id))return json(response,409,{error:'Tipe pelanggan sudah ada'});
+    const group={id,name,isDefault:false,active:true,sortOrder:localCustomerGroups.length*10};
+    localCustomerGroups.push(group);
+    return json(response,201,group);
   }
 
   if(request.method==='GET'&&url.pathname==='/api/workforce/overview'){

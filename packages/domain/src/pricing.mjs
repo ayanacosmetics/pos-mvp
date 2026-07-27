@@ -28,9 +28,14 @@ function isActive(promo, at) {
 }
 
 export function selectPriceRule(product, customerGroupId, baseQty) {
-  const eligible = product.priceRules.filter((rule) =>
+  let eligible = product.priceRules.filter((rule) =>
     baseQty >= rule.minBaseQty && (rule.customerGroupId === null || rule.customerGroupId === customerGroupId)
   );
+  if (!eligible.length && customerGroupId !== 'retail') {
+    eligible = product.priceRules.filter((rule) =>
+      baseQty >= rule.minBaseQty && (rule.customerGroupId === null || rule.customerGroupId === 'retail')
+    );
+  }
   if (!eligible.length) throw new Error(`Harga tidak ditemukan untuk ${product.name}`);
   return eligible.sort((a, b) => {
     const specificity = Number(Boolean(b.customerGroupId)) - Number(Boolean(a.customerGroupId));

@@ -5,6 +5,7 @@ export const outlets = [
 
 export const customerGroups = [
   { id: 'retail', name: 'Eceran' },
+  { id: 'member', name: 'Member' },
   { id: 'wholesale', name: 'Grosir' }
 ];
 

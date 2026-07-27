@@ -45,6 +45,28 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat v2.5.0 Tipe Pelanggan & Harga menunggu migrasi SQL
+
+- Tipe pelanggan kini merupakan master dinamis milik tenant. Data awal
+  menyediakan Umum, Member, dan Grosir; Owner/Admin dapat menambah tipe lain.
+- Satu master yang sama dipakai oleh profil pelanggan, harga produk, promo, dan
+  harga khusus outlet. Produk tanpa harga khusus aman memakai harga umum.
+- Server menentukan tipe harga dari profil pelanggan, sehingga permintaan
+  kasir tidak dapat memilih tipe harga yang berbeda secara manual.
+- Form produk menampilkan harga dinamis untuk setiap tipe pelanggan. Harga
+  khusus boleh dikosongkan agar memakai harga umum.
+- Daftar pelanggan tidak menampilkan badge untuk pelanggan umum; tipe
+  non-umum ditampilkan dengan nama dinamis.
+- Struk umum tidak mencetak baris pelanggan. Pelanggan terdaftar hanya
+  mencetak nama, bukan tipe; label `Harga <tipe>` dicetak pada setiap barang
+  untuk tipe non-umum.
+- Kandidat memakai API `2.5.0-cloud`, aset web `v76`, dan cache PWA `v76`.
+- Seluruh 197 pengujian otomatis lulus. Pemeriksaan visual halaman dan dialog
+  tipe pelanggan lulus pada desktop 1365×900.
+- Wajib menjalankan
+  `supabase/migrations/202607270038_dynamic_customer_price_groups.sql`
+  sebelum deployment produksi.
+
 ### Rilis v2.4.11 Sinkronisasi Data dikonfirmasi live
 
 - Tombol `Sinkronkan data` ditempatkan paling atas pada sidebar, tepat di bawah

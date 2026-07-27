@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Sinkronisasi Data v2.4.11
+# Kasir Nusa POS — Tipe Pelanggan & Harga v2.5.0
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -12,6 +12,14 @@ Produksi menggunakan:
 - Tombol Sinkronkan Data berada di bagian paling atas sidebar. Tombol mengambil
   ulang perubahan dari perangkat lain dan menampilkan tanggal serta waktu
   sinkron terakhir untuk akun dan outlet aktif.
+- Owner dapat membuat tipe pelanggan seperti Member, Grosir, atau Reseller.
+  Tipe tersebut otomatis menjadi pilihan harga pada setiap produk dan pilihan
+  tipe pada data pelanggan; harga umum dipakai sebagai fallback jika harga
+  khusus produk belum diisi.
+- Struk pelanggan umum tidak mencetak identitas pelanggan. Struk pelanggan
+  terdaftar hanya mencetak nama pelanggan, sedangkan tipe harga non-umum
+  dicetak pada setiap baris barang sebagai `Harga Member`, `Harga Grosir`, dan
+  seterusnya.
 - Owner mengatur hak akses setiap akun Staff/Admin melalui checklist fitur.
   Harga manual dan void hanya tersedia bagi akun yang diberi izin, tanpa
   membagikan atau memasukkan sandi Owner.

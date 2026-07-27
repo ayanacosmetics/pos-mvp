@@ -40,7 +40,7 @@ test('kasir menampilkan satu tombol Member dan memindahkan daftar serta tambah m
   assert.match(dialog, /id="customer-search-results"/);
   assert.match(dialog, /id="new-pos-customer"/);
   assert.match(script, /function openPosCustomerPicker/);
-  assert.match(script, /pos-member-label.*customer\?\.name.*Member/);
+  assert.match(script, /pos-member-label.*customer\?\.name.*Pelanggan/);
 });
 
 test('PO dan restok menyediakan cari, scan, stok kosong teratas, serta baris instan', async () => {

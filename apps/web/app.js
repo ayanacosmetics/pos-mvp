@@ -8,7 +8,7 @@ import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, uni
 import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -264,6 +264,7 @@ async function applyBootstrap(data, { offline = false } = {}) {
   state.outlets = data.outlets ?? [];
   state.activeOutletId = data.activeOutletId ?? state.outlets[0]?.id ?? null;
   state.products = data.products;
+  state.customerGroups = data.customerGroups?.length ? data.customerGroups : [{id:'retail',name:'Umum',isDefault:true}];
   state.promotions = data.promotions;
   state.customers = data.customers;
   state.suppliers = data.suppliers;
@@ -284,6 +285,7 @@ async function applyBootstrap(data, { offline = false } = {}) {
   renderProducts();
   renderProductTable();
   renderRestock();
+  renderCustomerGroupControls();
   renderRelations();
   renderPromotionEditorOptions();
   renderPromotionList();
@@ -336,6 +338,7 @@ async function refreshCatalog() {
   const data = await request('/api/bootstrap');
   saveBootstrapCache(data);
   state.products = data.products;
+  state.customerGroups = data.customerGroups?.length ? data.customerGroups : state.customerGroups;
   state.business = data.business ?? state.business;
   state.deviceSettings = { ...state.deviceSettings, ...(data.deviceSettings ?? {}) };
   state.outlets = data.outlets ?? state.outlets;
@@ -348,6 +351,7 @@ async function refreshCatalog() {
   renderOutletSwitcher();
   renderProducts(el('product-search').value);
   renderProductTable();
+  renderCustomerGroupControls();
   renderRelations();
   renderPromotionEditorOptions();
   renderPromotionList();
@@ -477,10 +481,39 @@ async function loadProductManagement() {
   renderProductTable();
 }
 
+function customerGroup(groupId) {
+  return state.customerGroups.find((group)=>group.id===groupId)??null;
+}
+
+function customerGroupName(groupId) {
+  return groupId==='retail'?'Umum':customerGroup(groupId)?.name??groupId;
+}
+
+function customCustomerGroups() {
+  return state.customerGroups.filter((group)=>group.id!=='retail'&&group.active!==false);
+}
+
+function setGroupSelectOptions(id,{includeAny=false}={}) {
+  const select=el(id);if(!select)return;
+  const previous=select.value;
+  select.innerHTML=`${includeAny?'<option value="ANY">Semua pelanggan</option>':''}${state.customerGroups.map((group)=>`<option value="${escapeHtml(group.id)}">${escapeHtml(group.id==='retail'?'Umum':group.name)}</option>`).join('')}`;
+  if([...select.options].some((option)=>option.value===previous))select.value=previous;
+}
+
+function renderCustomerGroupControls() {
+  setGroupSelectOptions('customer-group');
+  setGroupSelectOptions('customer-new-group');
+  setGroupSelectOptions('outlet-price-group');
+  setGroupSelectOptions('promo-customer-group',{includeAny:true});
+  if(el('manage-customer-groups'))el('manage-customer-groups').classList.toggle('hidden',!['OWNER','ADMIN'].includes(state.session?.user?.role));
+}
+
 function productPrices(product) {
+  const byGroup=Object.fromEntries(state.customerGroups.map((group)=>[
+    group.id,product.priceRules.find((rule)=>rule.customerGroupId===group.id&&rule.minBaseQty===1)?.unitPriceBase??0
+  ]));
   return {
-    retail:product.priceRules.find((rule)=>rule.customerGroupId==='retail'&&rule.minBaseQty===1)?.unitPriceBase??0,
-    wholesale:product.priceRules.find((rule)=>rule.customerGroupId==='wholesale'&&rule.minBaseQty===1)?.unitPriceBase??0,
+    retail:byGroup.retail??0,byGroup,
     tierQty:product.priceRules.find((rule)=>!rule.customerGroupId&&rule.minBaseQty>1)?.minBaseQty??0,
     tierPrice:product.priceRules.find((rule)=>!rule.customerGroupId&&rule.minBaseQty>1)?.unitPriceBase??0
   };
@@ -504,13 +537,14 @@ function renderProductTable() {
   el('product-table').innerHTML=list.length?`<table class="product-admin-table"><thead><tr><th>SKU & status</th><th>Produk</th><th>Satuan & barcode</th><th>Harga</th><th>Stok</th><th>Aksi</th></tr></thead><tbody>${list.map((product)=>{
     const prices=productPrices(product);
     const variant=[product.variantGroup,product.variantName].filter(Boolean).join(' · ');
-    return `<tr data-product-id="${product.id}"><td><strong>${escapeHtml(product.sku)}</strong><br><span class="badge ${product.active?'ok':'danger'}">${product.active?'Aktif':'Nonaktif'}</span></td><td><strong>${escapeHtml(product.name)}</strong>${variant?`<br><small>Varian: ${escapeHtml(variant)}</small>`:''}<br><small>${escapeHtml(product.brand??'Tanpa merek')} · ${escapeHtml(product.category)}</small></td><td>${product.units.map((unit)=>`<span class="product-unit-pill">${escapeHtml(unit.name)} · isi ${unit.factor}${unit.barcode?` · ${escapeHtml(unit.barcode)}`:''}</span>`).join('')}</td><td><strong>${money.format(prices.retail)}</strong><br><small>Grosir ${money.format(prices.wholesale||prices.retail)}</small></td><td><strong>${product.stockBase} pcs</strong><br><small>Minimum ${product.minimumStock||0}</small></td><td><div class="product-actions"><button class="button secondary edit-product" type="button">Edit</button><button class="button ${product.active?'danger-button':'secondary'} toggle-product" type="button" data-active="${!product.active}">${product.active?'Nonaktifkan':'Aktifkan'}</button></div></td></tr>`;
+    const customPrices=customCustomerGroups().filter((group)=>prices.byGroup[group.id]>0).map((group)=>`${escapeHtml(group.name)} ${money.format(prices.byGroup[group.id])}`).join(' · ');
+    return `<tr data-product-id="${product.id}"><td><strong>${escapeHtml(product.sku)}</strong><br><span class="badge ${product.active?'ok':'danger'}">${product.active?'Aktif':'Nonaktif'}</span></td><td><strong>${escapeHtml(product.name)}</strong>${variant?`<br><small>Varian: ${escapeHtml(variant)}</small>`:''}<br><small>${escapeHtml(product.brand??'Tanpa merek')} · ${escapeHtml(product.category)}</small></td><td>${product.units.map((unit)=>`<span class="product-unit-pill">${escapeHtml(unit.name)} · isi ${unit.factor}${unit.barcode?` · ${escapeHtml(unit.barcode)}`:''}</span>`).join('')}</td><td><strong>${money.format(prices.retail)}</strong>${customPrices?`<br><small>${customPrices}</small>`:''}</td><td><strong>${product.stockBase} pcs</strong><br><small>Minimum ${product.minimumStock||0}</small></td><td><div class="product-actions"><button class="button secondary edit-product" type="button">Edit</button><button class="button ${product.active?'danger-button':'secondary'} toggle-product" type="button" data-active="${!product.active}">${product.active?'Nonaktifkan':'Aktifkan'}</button></div></td></tr>`;
   }).join('')}</tbody></table>`:'<div class="empty-state compact">Tidak ada produk yang cocok dengan filter.</div>';
 }
 
 function renderRelations() {
   const selectedId=el('customer-select').value;
-  el('customer-select').innerHTML = '<option value="" data-group="retail">Pelanggan umum / Non-member</option>' + state.customers.map((customer) => `<option value="${customer.id}" data-group="${customer.group_id}">${customer.name} · ${customer.group_id === 'wholesale' ? 'Grosir' : 'Eceran'}${customer.account_balance>0?` · piutang ${money.format(customer.account_balance)}`:''}</option>`).join('');
+  el('customer-select').innerHTML = '<option value="" data-group="retail">Pelanggan umum</option>' + state.customers.map((customer) => `<option value="${customer.id}" data-group="${customer.group_id}">${customer.name}${customer.group_id!=='retail'?` · ${customerGroupName(customer.group_id)}`:''}${customer.account_balance>0?` · piutang ${money.format(customer.account_balance)}`:''}</option>`).join('');
   if(state.customers.some((customer)=>customer.id===selectedId))el('customer-select').value=selectedId;
   else el('customer-select').value='';
   const query=(el('customer-account-search')?.value??'').trim().toLowerCase();
@@ -519,11 +553,12 @@ function renderRelations() {
   const overdue=state.customers.reduce((sum,customer)=>sum+Number(customer.overdue_balance??0),0);
   el('customer-account-metrics').innerHTML=[['Pelanggan aktif',state.customers.length],['Total piutang',money.format(totalBalance)],['Sudah jatuh tempo',money.format(overdue)],['Fasilitas kredit',state.customers.filter((customer)=>customer.credit_enabled).length]].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
   const crm=state.crmDashboard?.metrics;
-  el('crm-metrics').innerHTML=crm?[['Member bertransaksi',crm.active],['Member tidak aktif',crm.inactive],['Nilai pelanggan',money.format(crm.lifetimeValue)],['Poin beredar',Number(crm.pointsOutstanding).toLocaleString('id-ID')]].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join(''):'';
+  el('crm-metrics').innerHTML=crm?[['Pelanggan bertransaksi',crm.active],['Pelanggan tidak aktif',crm.inactive],['Nilai pelanggan',money.format(crm.lifetimeValue)],['Poin beredar',Number(crm.pointsOutstanding).toLocaleString('id-ID')]].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join(''):'';
   el('customer-list').innerHTML=customers.length?customers.map((customer)=>{
     const balance=Number(customer.account_balance??0),overdueBalance=Number(customer.overdue_balance??0);
     const tier=state.loyalty.tiers.find((item)=>item.id===customer.tier_id);
-    return `<article class="customer-account-card" data-customer-id="${escapeHtml(customer.id)}"><div><div class="customer-account-name"><strong>${escapeHtml(customer.name)}</strong><span class="badge ${customer.group_id==='wholesale'?'warning':'ok'}">${customer.group_id==='wholesale'?'Grosir':'Eceran'}</span>${tier?`<span class="badge info">${escapeHtml(tier.name)}</span>`:''}${customer.credit_enabled?'<span class="badge info">Kredit aktif</span>':''}</div><small>${escapeHtml(customer.code)} · ${escapeHtml(customer.phone??'tanpa telepon')} · ${Number(customer.loyalty_points??0).toLocaleString('id-ID')} poin</small><br><small>Nilai transaksi ${money.format(customer.lifetime_spend??0)}${customer.last_purchase_at?` · terakhir ${new Date(customer.last_purchase_at).toLocaleDateString('id-ID')}`:' · belum bertransaksi'}</small></div><div class="customer-account-balance ${overdueBalance>0?'overdue':''}"><span>Saldo piutang</span><strong>${money.format(balance)}</strong><small>${overdueBalance>0?`${money.format(overdueBalance)} jatuh tempo`:`Sisa plafon ${money.format(customer.available_credit??0)}`}</small></div><div class="customer-account-actions"><button class="button secondary customer-statement" type="button">Lihat rekening</button>${['OWNER','ADMIN'].includes(state.session.user.role)?'<button class="button secondary edit-customer" type="button">Edit</button>':''}</div></article>`;
+    const groupBadge=customer.group_id!=='retail'?`<span class="badge warning">${escapeHtml(customerGroupName(customer.group_id))}</span>`:'';
+    return `<article class="customer-account-card" data-customer-id="${escapeHtml(customer.id)}"><div><div class="customer-account-name"><strong>${escapeHtml(customer.name)}</strong>${groupBadge}${tier?`<span class="badge info">${escapeHtml(tier.name)}</span>`:''}${customer.credit_enabled?'<span class="badge info">Kredit aktif</span>':''}</div><small>${escapeHtml(customer.code)} · ${escapeHtml(customer.phone??'tanpa telepon')} · ${Number(customer.loyalty_points??0).toLocaleString('id-ID')} poin</small><br><small>Nilai transaksi ${money.format(customer.lifetime_spend??0)}${customer.last_purchase_at?` · terakhir ${new Date(customer.last_purchase_at).toLocaleDateString('id-ID')}`:' · belum bertransaksi'}</small></div><div class="customer-account-balance ${overdueBalance>0?'overdue':''}"><span>Saldo piutang</span><strong>${money.format(balance)}</strong><small>${overdueBalance>0?`${money.format(overdueBalance)} jatuh tempo`:`Sisa plafon ${money.format(customer.available_credit??0)}`}</small></div><div class="customer-account-actions"><button class="button secondary customer-statement" type="button">Lihat rekening</button>${['OWNER','ADMIN'].includes(state.session.user.role)?'<button class="button secondary edit-customer" type="button">Edit</button>':''}</div></article>`;
   }).join(''):'<div class="empty-state compact">Pelanggan tidak ditemukan.</div>';
   const canSeeSuppliers = state.session.permissions.includes('purchasing.receive');
   el('supplier-panel').classList.toggle('hidden', !canSeeSuppliers);
@@ -542,8 +577,8 @@ function syncCustomerSearchLabel() {
   if (el('customer-search') && document.activeElement !== el('customer-search')) {
     el('customer-search').value = customer?.name ?? '';
   }
-  if (el('pos-member-label')) el('pos-member-label').textContent = customer?.name ?? 'Member';
-  if (el('pos-member-status')) el('pos-member-status').textContent = customer ? 'Member dipilih' : 'Pelanggan umum';
+  if (el('pos-member-label')) el('pos-member-label').textContent = customer?.name ?? 'Pelanggan';
+  if (el('pos-member-status')) el('pos-member-status').textContent = customer ? 'Pelanggan dipilih' : 'Pelanggan umum';
   if (el('open-pos-customer')) {
     el('open-pos-customer').classList.toggle('member-selected', Boolean(customer));
     el('open-pos-customer').title = customer?.name ?? 'Pelanggan';
@@ -570,8 +605,8 @@ function matchingCustomers(query = '') {
 function renderCustomerSearchResults(query = '') {
   const panel = el('customer-search-results');
   const customers = matchingCustomers(query);
-  panel.innerHTML = `<button type="button" class="customer-search-option general-customer-option" data-customer-id=""><span><strong>Pelanggan umum</strong><small>Transaksi tanpa member</small></span><span class="badge neutral">UMUM</span></button>` + (customers.map((customer) => `<button type="button" class="customer-search-option" data-customer-id="${escapeHtml(customer.id)}"><span><strong>${escapeHtml(customer.name)}</strong><small>${escapeHtml(customer.code ?? '')} · ${escapeHtml(customer.phone ?? 'tanpa telepon')}</small></span><span class="badge ${customer.group_id === 'wholesale' ? 'warning' : 'ok'}">${customer.group_id === 'wholesale' ? 'Grosir' : 'Eceran'}</span></button>`).join('')
-    || '<div class="empty-state compact">Member tidak ditemukan. Gunakan tombol + Member untuk mendaftarkan pelanggan.</div>');
+  panel.innerHTML = `<button type="button" class="customer-search-option general-customer-option" data-customer-id=""><span><strong>Pelanggan umum</strong><small>Transaksi tanpa data pelanggan</small></span><span class="badge neutral">UMUM</span></button>` + (customers.map((customer) => `<button type="button" class="customer-search-option" data-customer-id="${escapeHtml(customer.id)}"><span><strong>${escapeHtml(customer.name)}</strong><small>${escapeHtml(customer.code ?? '')} · ${escapeHtml(customer.phone ?? 'tanpa telepon')}</small></span>${customer.group_id!=='retail'?`<span class="badge warning">${escapeHtml(customerGroupName(customer.group_id))}</span>`:''}</button>`).join('')
+    || '<div class="empty-state compact">Pelanggan tidak ditemukan. Gunakan tombol tambah pelanggan.</div>');
   panel.classList.remove('hidden');
 }
 
@@ -639,7 +674,7 @@ function renderProductUnitEditor(){
 
 function openProductEditor(productId=null){
   const product=productId?state.managedProducts.find((item)=>item.id===productId):null;
-  const prices=product?productPrices(product):{retail:'',wholesale:'',tierQty:'',tierPrice:''};
+  const prices=product?productPrices(product):{retail:'',byGroup:{},tierQty:'',tierPrice:''};
   el('product-form').reset();el('product-error').textContent='';
   el('edit-product-id').value=product?.id??'';
   el('product-dialog-eyebrow').textContent=product?'EDIT PRODUK':'PRODUK BARU';
@@ -649,18 +684,25 @@ function openProductEditor(productId=null){
   el('new-image-url').value=product?.imageUrl??'';
   el('new-variant-group').value=product?.variantGroup??'';el('new-variant-name').value=product?.variantName??'';
   el('new-min-stock').value=product?.minimumStock??0;el('new-track-expiry').checked=Boolean(product?.trackExpiry);
-  el('new-retail-price').value=prices.retail;el('new-wholesale-price').value=prices.wholesale;
+  el('new-retail-price').value=prices.retail;
+  el('product-customer-prices').innerHTML=customCustomerGroups().map((group)=>`<label>Harga ${escapeHtml(group.name)} / pcs<input class="customer-price-input" data-group-id="${escapeHtml(group.id)}" type="number" min="1" value="${prices.byGroup[group.id]||''}" placeholder="Gunakan harga umum"></label>`).join('');
   el('new-tier-qty').value=prices.tierQty;el('new-tier-price').value=prices.tierPrice;
   state.productUnitsDraft=product?product.units.map((unit)=>({...unit})):[{id:null,name:'pcs',factor:1,barcode:''}];
   renderProductUnitEditor();el('product-dialog').showModal();
 }
 
 function productPayload(){
+  const prices=[
+    {customerGroupId:'retail',unitPriceBase:Number(el('new-retail-price').value)},
+    ...[...document.querySelectorAll('.customer-price-input')].filter((input)=>Number(input.value)>0).map((input)=>({
+      customerGroupId:input.dataset.groupId,unitPriceBase:Number(input.value)
+    }))
+  ];
   return {
     id:el('edit-product-id').value||null,sku:el('new-sku').value,name:el('new-name').value,category:el('new-category').value,
     brand:el('new-brand').value,imageUrl:el('new-image-url').value,variantGroup:el('new-variant-group').value,variantName:el('new-variant-name').value,
     minimumStock:Number(el('new-min-stock').value),trackExpiry:el('new-track-expiry').checked,
-    retailPrice:Number(el('new-retail-price').value),wholesalePrice:Number(el('new-wholesale-price').value),
+    retailPrice:Number(el('new-retail-price').value),prices,
     tierQty:Number(el('new-tier-qty').value),tierPrice:Number(el('new-tier-price').value),units:state.productUnitsDraft
   };
 }
@@ -689,7 +731,7 @@ function openCustomerEditor(customerId=null,source='relations'){
   const customer=customerId?state.customers.find((item)=>item.id===customerId):null;
   state.customerEditorSource=source;
   el('customer-form').reset();el('customer-form-error').textContent='';el('edit-customer-id').value=customer?.id??'';
-  el('customer-dialog-title').textContent=customer?'Ubah pelanggan':source==='pos'?'Tambah member dari kasir':'Tambah pelanggan';
+  el('customer-dialog-title').textContent=customer?'Ubah pelanggan':source==='pos'?'Tambah pelanggan dari kasir':'Tambah pelanggan';
   el('customer-name').value=customer?.name??'';el('customer-phone').value=customer?.phone??'';
   el('customer-phone').required=source==='pos';
   el('customer-email').value=customer?.email??'';el('customer-address').value=customer?.address??'';
@@ -1049,6 +1091,29 @@ async function loadPromotionManagement(){
     state.promotionVersions=data.promotions??[];state.loyalty=loyalty;renderPromotionList();renderLoyalty();
   }
   catch(error){toast(error.message);}
+}
+
+function renderCustomerGroupList() {
+  el('customer-group-list').innerHTML=state.customerGroups.map((group)=>`<div class="relation-item"><span><strong>${escapeHtml(group.id==='retail'?'Umum':group.name)}</strong><br><small>${group.id==='retail'?'Harga dasar untuk pelanggan umum':'Tersedia sebagai tipe pelanggan dan harga produk'}</small></span>${group.id==='retail'?'<span class="badge neutral">BAWAAN</span>':'<span class="badge ok">AKTIF</span>'}</div>`).join('');
+}
+
+function openCustomerGroupDialog() {
+  renderCustomerGroupList();
+  el('customer-group-form').reset();
+  el('customer-group-error').textContent='';
+  el('customer-group-dialog').showModal();
+}
+
+async function saveCustomerGroup(event) {
+  event.preventDefault();
+  const button=event.currentTarget.querySelector('[type="submit"]');button.disabled=true;
+  try{
+    const group=await request('/api/customer-groups',{method:'POST',body:JSON.stringify({name:el('customer-group-name').value})});
+    toast(`Tipe ${group.name} berhasil ditambahkan`);
+    await refreshCatalog();
+    renderCustomerGroupList();
+    el('customer-group-name').value='';
+  }catch(error){el('customer-group-error').textContent=error.message;}finally{button.disabled=false;}
 }
 
 function renderLoyalty(){
@@ -2803,6 +2868,7 @@ function printerContext() {
     business: state.business,
     outlet: state.outlets.find((item) => item.id === state.activeOutletId) ?? {},
     customer: state.lastReceipt?.customer,
+    customerGroups: state.customerGroups,
     cashier: state.session?.user?.displayName ?? state.session?.user?.name ?? 'Kasir Nusa'
   };
 }
@@ -3706,6 +3772,8 @@ function openPaymentDialog(){
 
 function renderReceipt(receipt,payments){
   const customer=receipt.customer??state.customers.find((item)=>item.id===el('customer-select').value);
+  const groupId=receipt.customerGroupId??customer?.group_id??'retail';
+  const priceLabel=groupId==='retail'?'':`Harga ${customerGroupName(groupId)}`;
   const lines=receipt.quote?.lines??[];
   const change=Number(receipt.change??0);
   const business=receipt.business??state.business;
@@ -3714,7 +3782,7 @@ function renderReceipt(receipt,payments){
   const phone=outlet.phone||business.phone;
   const footer=outlet.receipt_footer||business.receiptFooter||'Terima kasih telah berbelanja.';
   const customerView=customerReceiptView(receipt.quote),receiptDiscount=Number(customerView.discountTotal);
-  const body=`<div class="receipt-head"><strong>${escapeHtml(business.name??'Kasir Nusa')}</strong><span>${escapeHtml(receipt.outletName??outlet.name??'Outlet')}</span>${address?`<small>${escapeHtml(address)}</small>`:''}${phone?`<small>Tel. ${escapeHtml(phone)}</small>`:''}<small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small><b>${escapeHtml(receipt.receiptNo)}</b>${receipt.status==='VOIDED'?'<b>VOID / DIBATALKAN</b>':''}</div><div class="receipt-meta"><span>Kasir</span><strong>${escapeHtml(receipt.cashier)}</strong><span>Pelanggan</span><strong>${escapeHtml(customer?.name??'Pelanggan umum')}</strong></div><div class="receipt-lines">${customerView.lines.map((line)=>`<div><span><strong>${escapeHtml(line.productName)}</strong><small>${line.qty} ${escapeHtml(line.unitName)} × ${money.format(line.customerUnitPrice)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div><div class="receipt-totals"><div><span>Subtotal</span><strong>${money.format(customerView.subtotal)}</strong></div>${Math.abs(receiptDiscount)>0.01?`<div><span>Promo & diskon</span><strong>${receiptDiscount<0?'+':'−'}${money.format(Math.abs(receiptDiscount))}</strong></div>`:''}<div class="receipt-grand"><span>Total</span><strong>${money.format(customerView.grandTotal)}</strong></div>${payments.map((payment)=>`<div><span>${payment.method}${payment.method==='CASH'&&payment.tendered?` · diterima ${money.format(payment.tendered)}`:''}</span><strong>${money.format(payment.amount)}</strong></div>`).join('')}${change?`<div><span>Kembalian</span><strong>${money.format(change)}</strong></div>`:''}</div>${receipt.notes?`<p class="receipt-thanks"><strong>Catatan:</strong> ${escapeHtml(receipt.notes)}</p>`:''}<p class="receipt-thanks">${escapeHtml(footer)}</p>`;
+  const body=`<div class="receipt-head"><strong>${escapeHtml(business.name??'Kasir Nusa')}</strong><span>${escapeHtml(receipt.outletName??outlet.name??'Outlet')}</span>${address?`<small>${escapeHtml(address)}</small>`:''}${phone?`<small>Tel. ${escapeHtml(phone)}</small>`:''}<small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small><b>${escapeHtml(receipt.receiptNo)}</b>${receipt.status==='VOIDED'?'<b>VOID / DIBATALKAN</b>':''}</div><div class="receipt-meta"><span>Kasir</span><strong>${escapeHtml(receipt.cashier)}</strong>${customer?`<span>Pelanggan</span><strong>${escapeHtml(customer.name)}</strong>`:''}</div><div class="receipt-lines">${customerView.lines.map((line)=>`<div><span><strong>${escapeHtml(line.productName)}</strong>${priceLabel?`<small>${escapeHtml(priceLabel)}</small>`:''}<small>${line.qty} ${escapeHtml(line.unitName)} × ${money.format(line.customerUnitPrice)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div><div class="receipt-totals"><div><span>Subtotal</span><strong>${money.format(customerView.subtotal)}</strong></div>${Math.abs(receiptDiscount)>0.01?`<div><span>Promo & diskon</span><strong>${receiptDiscount<0?'+':'−'}${money.format(Math.abs(receiptDiscount))}</strong></div>`:''}<div class="receipt-grand"><span>Total</span><strong>${money.format(customerView.grandTotal)}</strong></div>${payments.map((payment)=>`<div><span>${payment.method}${payment.method==='CASH'&&payment.tendered?` · diterima ${money.format(payment.tendered)}`:''}</span><strong>${money.format(payment.amount)}</strong></div>`).join('')}${change?`<div><span>Kembalian</span><strong>${money.format(change)}</strong></div>`:''}</div>${receipt.notes?`<p class="receipt-thanks"><strong>Catatan:</strong> ${escapeHtml(receipt.notes)}</p>`:''}<p class="receipt-thanks">${escapeHtml(footer)}</p>`;
   const copies=Math.max(1,Math.min(3,Number(state.deviceSettings.receiptCopies??1)));
   const pointsMarkup=Number(receipt.pointsEarned)>0?`<p class="receipt-thanks">Poin +${Number(receipt.pointsEarned)} · saldo ${Number(receipt.pointsBalance)}${receipt.tierName?` · ${escapeHtml(receipt.tierName)}`:''}</p>`:'';
   el('receipt-content').innerHTML=Array.from({length:copies},(_,index)=>`<section class="receipt-copy">${body}${pointsMarkup}${copies>1?`<small class="receipt-copy-label">Salinan ${index+1} dari ${copies}</small>`:''}</section>`).join('');
@@ -3731,7 +3799,8 @@ function renderReceipt(receipt,payments){
 function shareReceiptWhatsApp(){
   const receipt=state.lastReceipt,customer=receipt?.customer;
   if(!receipt||!customer?.phone||!customer.whatsapp_consent)return toast('Pelanggan belum memberi izin WhatsApp.');
-  const lines=(receipt.quote?.lines??[]).map((line)=>`${line.qty} ${line.unitName} ${line.productName}: ${money.format(line.total)}`).join('\n');
+  const groupId=receipt.customerGroupId??customer.group_id??'retail',priceLabel=groupId==='retail'?'':` [Harga ${customerGroupName(groupId)}]`;
+  const lines=(receipt.quote?.lines??[]).map((line)=>`${line.qty} ${line.unitName} ${line.productName}${priceLabel}: ${money.format(line.total)}`).join('\n');
   const text=`${receipt.business?.name??state.business.name}\nStruk ${receipt.receiptNo}\n${lines}\nTotal: ${money.format(receipt.quote?.grandTotal??0)}\nTerima kasih.`;
   let digits=String(customer.phone).replace(/\D/g,'');if(digits.startsWith('0'))digits=`62${digits.slice(1)}`;
   window.open(`https://wa.me/${digits}?text=${encodeURIComponent(text)}`,'_blank','noopener,noreferrer');
@@ -3958,7 +4027,7 @@ function renderMultiOutletTransfers(){
 
 function renderOutletPricing(){
   const rows=state.multioutlet.pricing.overrides;
-  el('outlet-price-list').innerHTML=`<table><thead><tr><th>Outlet</th><th>Produk</th><th>Kelompok</th><th>Minimal</th><th>Harga</th><th>Status</th></tr></thead><tbody>${rows.map((item)=>`<tr><td>${escapeHtml(state.outlets.find((outlet)=>outlet.id===item.outlet_id)?.name??'-')}</td><td>${escapeHtml(state.products.find((product)=>product.id===item.product_id)?.name??'-')}</td><td>${item.customer_group_id==='wholesale'?'Grosir':'Eceran'}</td><td>${Number(item.min_base_qty)} pcs</td><td>${money.format(item.unit_price_base)}</td><td>${item.active?'Aktif':'Nonaktif'}</td></tr>`).join('')||'<tr><td colspan="6">Belum ada harga khusus outlet.</td></tr>'}</tbody></table>`;
+  el('outlet-price-list').innerHTML=`<table><thead><tr><th>Outlet</th><th>Produk</th><th>Tipe pelanggan</th><th>Minimal</th><th>Harga</th><th>Status</th></tr></thead><tbody>${rows.map((item)=>`<tr><td>${escapeHtml(state.outlets.find((outlet)=>outlet.id===item.outlet_id)?.name??'-')}</td><td>${escapeHtml(state.products.find((product)=>product.id===item.product_id)?.name??'-')}</td><td>${escapeHtml(customerGroupName(item.customer_group_id))}</td><td>${Number(item.min_base_qty)} pcs</td><td>${money.format(item.unit_price_base)}</td><td>${item.active?'Aktif':'Nonaktif'}</td></tr>`).join('')||'<tr><td colspan="6">Belum ada harga khusus outlet.</td></tr>'}</tbody></table>`;
 }
 
 function renderOutletPromotions(){
@@ -4785,6 +4854,10 @@ el('new-customer').addEventListener('click',()=>openCustomerEditor());
 el('customer-form').addEventListener('submit',saveCustomer);
 el('close-customer-dialog').addEventListener('click',()=>el('customer-dialog').close());
 el('cancel-customer-dialog').addEventListener('click',()=>el('customer-dialog').close());
+el('manage-customer-groups').addEventListener('click',openCustomerGroupDialog);
+el('customer-group-form').addEventListener('submit',saveCustomerGroup);
+el('close-customer-group-dialog').addEventListener('click',()=>el('customer-group-dialog').close());
+el('cancel-customer-group-dialog').addEventListener('click',()=>el('customer-group-dialog').close());
 el('customer-credit-enabled').addEventListener('change',()=>el('customer-credit-fields').classList.toggle('hidden',!el('customer-credit-enabled').checked));
 el('customer-account-search').addEventListener('input',renderRelations);
 el('customer-list').addEventListener('click',(event)=>{
