@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat v2.2 siap deploy
+### Rilis v2.2 dikonfirmasi live
 
 - **Nusa Commerce UI v2.2.0** menyegarkan seluruh antarmuka tanpa migrasi SQL
   dan tanpa mengubah kontrak data atau alur bisnis v2.1.
@@ -63,6 +63,13 @@ kode frontend, dokumentasi publik, atau chat.
 - 156/156 pengujian otomatis lulus. Pengujian baru memeriksa identitas rilis,
   aset offline, ikon navigasi, token desain, breakpoint, fokus, dan
   `prefers-reduced-motion`.
+- Commit `5f6ddc7` didorong ke `origin/main`. Deployment Vercel
+  `dpl_Gky9YdjL2LzHXJgaU4RbN17CKPiS` berstatus Ready dan alias
+  `kasir-nusa-pos.vercel.app` aktif.
+- Verifikasi produksi mengembalikan API `2.2.0-cloud`, database Supabase, UI
+  `Nusa Commerce · v2.2.0`, aset `v56`, cache `nusa-pos-shell-v56`, tanpa
+  overflow horizontal pada login desktop, dan route Akuntansi tanpa sesi tetap
+  ditolak dengan HTTP 401.
 
 ### Rilis v2.1 dikonfirmasi live
 
