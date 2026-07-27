@@ -45,6 +45,20 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Paket v2.4.10 Kelola Staff siap deployment
+
+- Menu `Pengguna` diganti menjadi `Kelola Staff`.
+- Halaman utama hanya menampilkan ringkasan dan daftar Staff/Admin; akun Owner
+  tidak dicampur ke dalam direktori staff.
+- Form pembuatan akun tidak lagi memenuhi halaman. Tombol `+ Tambah staff`
+  membuka dialog berisi data login, peran, checklist izin, dan outlet.
+- Pembuatan maupun perubahan staff tidak menawarkan peran Owner. Owner baru
+  tetap dibuat melalui alur pendaftaran Owner yang terpisah.
+- Kandidat memakai API `2.4.10-cloud`, aset web `v74`, dan cache PWA `v74`.
+- Seluruh 192 pengujian otomatis lulus. Pemeriksaan visual daftar dan dialog
+  lulus pada desktop 1365×900 serta ponsel 390×844 tanpa overflow horizontal.
+- Tidak memerlukan migrasi SQL.
+
 ### Rilis v2.4.9 Hak Akses Akun dikonfirmasi live
 
 - Menu Pengguna kini menyediakan checklist hak akses per akun Staff/Admin,

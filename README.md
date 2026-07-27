@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Hak Akses Akun v2.4.9
+# Kasir Nusa POS — Kelola Staff v2.4.10
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -28,7 +28,7 @@ kapabilitas retail yang lebih lengkap tersedia di
 - Halaman login menyediakan pendaftaran mandiri khusus Owner. Pendaftaran
   membuat ruang usaha, outlet utama, toko, gudang, pelanggan umum, kategori
   biaya, serta akun akuntansi dasar. Akun Staff tetap hanya dibuat oleh Owner
-  melalui menu Pengguna setelah masuk.
+  melalui menu Kelola Staff setelah masuk.
 - Owner dapat mengganti konteks ke Owner aktif lain dalam usaha yang sama tanpa
   login ulang; pergantian diaudit dan berakhir saat logout.
 - Produk, varian, SKU, barcode, kategori, merek, foto, dan status aktif.

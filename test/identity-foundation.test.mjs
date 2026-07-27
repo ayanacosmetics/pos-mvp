@@ -85,6 +85,9 @@ test('backoffice menyediakan pengelolaan user, peran, outlet, dan status akun', 
   ]);
   assert.match(html, /data-page="users"[^>]+data-permission="identity\.manage"/);
   assert.match(html, /id="create-user-form"/);
+  assert.match(html, /data-page="users"[\s\S]*?<span>Kelola Staff<\/span>/);
+  assert.match(html, /id="open-create-user"[^>]*>\+ Tambah staff<\/button>/);
+  assert.match(html, /id="user-list"[\s\S]*id="create-user-dialog"[\s\S]*id="create-user-form"/);
   assert.match(html, /id="new-user-outlets"/);
   assert.match(html, /id="new-user-permissions"/);
   assert.match(html, /id="edit-user-permissions"/);
@@ -92,5 +95,7 @@ test('backoffice menyediakan pengelolaan user, peran, outlet, dan status akun', 
   assert.match(script, /request\('\/api\/users'/);
   assert.match(script, /method: 'PATCH'/);
   assert.match(script, /selectedPermissions/);
+  assert.match(script, /function openCreateUserDialog\(\)/);
+  assert.match(script, /user\.role !== 'OWNER'/);
   assert.match(script, /user\.id === state\.session\.user\.id/);
 });

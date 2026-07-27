@@ -2572,12 +2572,13 @@ function selectedPermissions(containerId,role){
 }
 
 function renderUserMetrics() {
-  const active = state.users.filter((user) => user.active);
+  const staff = state.users.filter((user) => user.role !== 'OWNER');
+  const active = staff.filter((user) => user.active);
   const metrics = [
-    ['Pengguna aktif', active.length],
+    ['Staff aktif', active.length],
     ['Kasir', active.filter((user) => user.role === 'CASHIER').length],
     ['Pembelian & gudang', active.filter((user) => ['PURCHASING', 'WAREHOUSE'].includes(user.role)).length],
-    ['Owner & admin', active.filter((user) => ['OWNER', 'ADMIN'].includes(user.role)).length]
+    ['Admin & manajer', active.filter((user) => ['ADMIN', 'MANAGER'].includes(user.role)).length]
   ];
   el('user-metrics').innerHTML = metrics.map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
 }
@@ -2586,20 +2587,20 @@ function renderUsers() {
   const query = el('user-search').value.trim().toLowerCase();
   const status = el('user-status-filter').value;
   const outletsById = new Map(state.outlets.map((outlet) => [outlet.id, outlet.name]));
-  const users = state.users.filter((user) => {
+  const users = state.users.filter((user) => user.role !== 'OWNER').filter((user) => {
     const matchesQuery = !query || `${user.displayName} ${user.email ?? ''} ${roleLabels[user.role] ?? user.role}`.toLowerCase().includes(query);
     const matchesStatus = status === 'ALL' || (status === 'ACTIVE' ? user.active : !user.active);
     return matchesQuery && matchesStatus;
   });
   el('user-list').innerHTML = users.map((user) => {
-    const outletNames = user.role === 'OWNER' ? ['Semua outlet'] : user.outletIds.map((id) => outletsById.get(id)).filter(Boolean);
-    const accessCount=user.role==='OWNER'?'Semua akses':`${user.permissions?.length??0} akses`;
+    const outletNames = user.outletIds.map((id) => outletsById.get(id)).filter(Boolean);
+    const accessCount=`${user.permissions?.length??0} akses`;
     return `<div class="user-row" data-user-id="${escapeHtml(user.id)}"><div class="user-person"><strong>${escapeHtml(user.displayName)}</strong><small>${escapeHtml(user.email ?? 'Email tidak tersedia')}</small></div><span class="role-badge ${user.active ? '' : 'inactive'}">${user.active ? escapeHtml(roleLabels[user.role] ?? user.role) : 'NONAKTIF'}</span><div class="user-outlet-list">${escapeHtml(outletNames.join(', ') || 'Belum ditempatkan')}<small>${accessCount}</small></div><button class="button secondary edit-user" type="button">Atur akses</button></div>`;
-  }).join('') || '<div class="empty-state compact">Tidak ada pengguna yang sesuai filter.</div>';
+  }).join('') || '<div class="empty-state compact">Belum ada staff yang sesuai filter.</div>';
 }
 
 async function loadUsers() {
-  el('user-list').innerHTML = '<div class="empty-state compact">Memuat pengguna...</div>';
+  el('user-list').innerHTML = '<div class="empty-state compact">Memuat staff...</div>';
   try {
     const data = await request('/api/users');
     state.users = data.users ?? [];
@@ -2612,6 +2613,16 @@ async function loadUsers() {
     el('user-list').innerHTML = `<div class="empty-state compact"><strong>Data pengguna belum dapat dimuat</strong><small>${escapeHtml(error.message)}</small></div>`;
     toast(error.message);
   }
+}
+
+function openCreateUserDialog() {
+  el('create-user-form').reset();
+  el('new-user-role').value = 'CASHIER';
+  el('create-user-error').textContent = '';
+  renderOutletOptions('new-user-outlets', state.outlets[0] ? [state.outlets[0].id] : [], 'CASHIER');
+  renderPermissionOptions('new-user-permissions', permissionDefaults.CASHIER, 'CASHIER');
+  el('create-user-dialog').showModal();
+  requestAnimationFrame(() => el('new-user-name').focus());
 }
 
 async function createUser(event) {
@@ -2630,10 +2641,11 @@ async function createUser(event) {
     }) });
     el('create-user-form').reset();
     el('new-user-role').value = 'CASHIER';
-    toast('Akun pengguna berhasil dibuat');
+    el('create-user-dialog').close();
+    toast('Akun staff berhasil dibuat');
     await loadUsers();
   } catch (error) { el('create-user-error').textContent = error.message; }
-  finally { button.disabled = false; button.textContent = 'Buat akun pengguna'; }
+  finally { button.disabled = false; button.textContent = 'Buat akun staff'; }
 }
 
 function openUserEditor(userId) {
@@ -4630,7 +4642,10 @@ el('accounting-period-list').addEventListener('click',async(event)=>{
   }catch(error){toast(error.message);}
 });
 el('refresh-users').addEventListener('click', loadUsers);
+el('open-create-user').addEventListener('click', openCreateUserDialog);
 el('create-user-form').addEventListener('submit', createUser);
+el('close-create-user').addEventListener('click', () => el('create-user-dialog').close());
+el('cancel-create-user').addEventListener('click', () => el('create-user-dialog').close());
 el('user-search').addEventListener('input', renderUsers);
 el('user-status-filter').addEventListener('change', renderUsers);
 el('new-user-role').addEventListener('change', () => {const role=el('new-user-role').value;renderOutletOptions('new-user-outlets', selectedOutletIds('new-user-outlets', 'CASHIER'),role);renderPermissionOptions('new-user-permissions',permissionDefaults[role],role);});
