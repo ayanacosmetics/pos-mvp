@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat v2.5.0 Tipe Pelanggan & Harga menunggu migrasi SQL
+### Rilis v2.5.0 Tipe Pelanggan & Harga dikonfirmasi live
 
 - Tipe pelanggan kini merupakan master dinamis milik tenant. Data awal
   menyediakan Umum, Member, dan Grosir; Owner/Admin dapat menambah tipe lain.
@@ -63,9 +63,14 @@ kode frontend, dokumentasi publik, atau chat.
 - Kandidat memakai API `2.5.0-cloud`, aset web `v76`, dan cache PWA `v76`.
 - Seluruh 197 pengujian otomatis lulus. Pemeriksaan visual halaman dan dialog
   tipe pelanggan lulus pada desktop 1365×900.
-- Wajib menjalankan
+- Migrasi
   `supabase/migrations/202607270038_dynamic_customer_price_groups.sql`
-  sebelum deployment produksi.
+  telah berhasil dijalankan di produksi.
+- Commit fitur `cd0b379` sudah didorong ke `origin/main`.
+- Deployment Vercel `dpl_7UkCQzgmS3kZd1wJPprajFTQFeTg` berstatus Ready dan
+  alias `kasir-nusa-pos.vercel.app` aktif.
+- Verifikasi publik mengembalikan API `2.5.0-cloud`, aset `v76`, cache PWA
+  `v76`, label rilis, serta dialog tipe pelanggan baru.
 
 ### Rilis v2.4.11 Sinkronisasi Data dikonfirmasi live
 
