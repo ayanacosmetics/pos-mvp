@@ -5,9 +5,10 @@ import { clearStoredAuth, isAuthStorageEvent, loadAuth, saveAuth } from './auth-
 import { customerReceiptView } from './receipt.mjs';
 import { disconnectBluetoothPrinter, printEscPosReceipt, printEscPosTest, printerConnected, printerSelected, restoreGrantedPrinter, selectBluetoothPrinter, supportsBluetoothClassicPrinting } from './escpos-printer.mjs';
 import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, unitFitsStock } from './pos-units.mjs';
+import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -1237,7 +1238,7 @@ function renderCart() {
   el('mobile-cart-count').textContent=state.cart.reduce((sum,line)=>sum+Number(line.qty??0),0);
   if (!state.quote) {
     el('cart-lines').innerHTML = '<div class="empty-state">Belum ada barang.<br><small>Scan barcode atau pilih produk.</small></div>';
-    el('subtotal').textContent = money.format(0); el('discount').textContent = `−${money.format(0)}`; el('price-adjustment-summary').classList.add('hidden'); el('grand-total').textContent = money.format(0); el('pay-button').disabled = true; el('hold-cart').disabled = true;
+    el('subtotal').textContent = money.format(0); el('discount').textContent = `−${money.format(0)}`; el('price-adjustment-summary').classList.add('hidden'); el('grand-total').textContent = money.format(0); el('pay-button').disabled = true; el('exact-cash-button').disabled = true; el('hold-cart').disabled = true;
     renderSaleAuthorizationStatus();
     el('voucher-status').textContent='';el('remove-voucher').classList.add('hidden');
     return;
@@ -1260,7 +1261,7 @@ function renderCart() {
   el('discount').textContent = `${Number(receiptView.discountTotal) < 0 ? '+' : '−'}${money.format(Math.abs(receiptView.discountTotal))}`;
   el('price-adjustment-summary').classList.toggle('hidden',!internalAmount);
   el('price-adjustment').textContent=`${Number(internalAmount)<0?'+':'−'}${money.format(Math.abs(internalAmount))}`;
-  el('grand-total').textContent = money.format(state.quote.grandTotal); el('pay-button').disabled = !state.currentShift; el('hold-cart').disabled = false;
+  el('grand-total').textContent = money.format(state.quote.grandTotal); el('pay-button').disabled = !state.currentShift; el('exact-cash-button').disabled = !state.currentShift; el('hold-cart').disabled = false;
   el('voucher-status').textContent=state.quote.voucher?`${state.quote.voucher.code}: hemat ${money.format(state.quote.voucher.discount)}`:(state.voucherCode?'Memverifikasi voucher...':'');
   el('remove-voucher').classList.toggle('hidden',!state.voucherCode);
   renderSaleAuthorizationStatus();
@@ -3237,14 +3238,47 @@ function updatePaymentSummary(){
   el('confirm-payment').disabled=totals.remaining>0.01||Math.abs(totals.allocated-state.quote.grandTotal)>0.01||state.paymentDraft.some((payment)=>payment.method==='CASH'&&Number(payment.tendered)<Number(payment.amount));
 }
 
+function activeCashPayment() {
+  if (state.paymentDraft[state.paymentKeypadIndex]?.method === 'CASH') {
+    return { payment: state.paymentDraft[state.paymentKeypadIndex], index: state.paymentKeypadIndex };
+  }
+  const index = state.paymentDraft.findIndex((payment) => payment.method === 'CASH');
+  if (index < 0) return null;
+  state.paymentKeypadIndex = index;
+  return { payment: state.paymentDraft[index], index };
+}
+
+function renderCashKeypad() {
+  const active = activeCashPayment();
+  el('cash-keypad').classList.toggle('hidden', !active);
+  if (!active) return;
+  el('cash-keypad-value').textContent = money.format(active.payment.tendered ?? 0);
+  el('cash-suggestions').innerHTML = suggestedCashAmounts(active.payment.amount).map((amount, index) =>
+    `<button type="button" data-cash-amount="${amount}" class="${index === 0 ? 'exact' : ''}">${index === 0 ? 'Uang pas' : money.format(amount)}</button>`
+  ).join('');
+}
+
+function setCashTendered(value, { fresh = false } = {}) {
+  const active = activeCashPayment();
+  if (!active) return;
+  active.payment.tendered = Math.max(0, Number(value) || 0);
+  state.paymentKeypadFresh = fresh;
+  const input = document.querySelector(`.payment-line[data-index="${active.index}"] .payment-line-tendered`);
+  if (input) input.value = active.payment.tendered;
+  el('cash-keypad-value').textContent = money.format(active.payment.tendered);
+  updatePaymentSummary();
+}
+
 function renderPaymentLines(){
   el('payment-lines').innerHTML=state.paymentDraft.map((payment,index)=>`<div class="payment-line" data-index="${index}"><label>Metode<select class="payment-line-method">${paymentMethodOptions(payment.method)}</select></label><label>Jumlah<input class="payment-line-amount" type="number" min="1" value="${payment.amount||''}" required></label><label class="payment-tendered ${payment.method==='CASH'?'':'hidden'}">Uang diterima<input class="payment-line-tendered" type="number" min="0" value="${payment.tendered??payment.amount??''}"></label><label class="payment-reference ${payment.method==='CASH'?'hidden':''}">Referensi (opsional)<input class="payment-line-reference" value="${escapeHtml(payment.reference??'')}" placeholder="Nomor QRIS/transfer"></label><button class="icon-button remove-payment-line" type="button" ${state.paymentDraft.length===1?'disabled':''}>×</button></div>`).join('');
   updatePaymentSummary();
+  renderCashKeypad();
   el('add-payment-line').classList.toggle('hidden',el('payment-mode').value!=='SPLIT'||state.paymentDraft.length>=4);
 }
 
 function openPaymentDialog(){
   state.paymentDraft=[{method:'CASH',amount:state.quote.grandTotal,tendered:state.quote.grandTotal,reference:''}];
+  state.paymentKeypadIndex=0;state.paymentKeypadFresh=true;
   el('payment-mode').value='SINGLE';el('payment-total').textContent=money.format(state.quote.grandTotal);el('payment-error').textContent='';
   renderPaymentLines();el('payment-dialog').showModal();
 }
@@ -3906,6 +3940,7 @@ el('unit-picker-options').addEventListener('click', async (event) => {
 el('close-unit-picker').addEventListener('click',()=>el('unit-picker-dialog').close());
 el('unit-picker-dialog').addEventListener('close',()=>{state.unitPicker=null;});
 el('pay-button').addEventListener('click',openPaymentDialog);
+el('exact-cash-button').addEventListener('click',openPaymentDialog);
 el('apply-voucher').addEventListener('click',applyVoucherCode);
 el('voucher-code').addEventListener('keydown',(event)=>{if(event.key==='Enter'){event.preventDefault();applyVoucherCode();}});
 el('remove-voucher').addEventListener('click',async()=>{state.voucherCode='';el('voucher-code').value='';await updateQuote();});
@@ -3918,17 +3953,31 @@ el('payment-mode').addEventListener('change',()=>{
 });
 el('add-payment-line').addEventListener('click',()=>{if(state.paymentDraft.length<4){state.paymentDraft.push({method:'QRIS',amount:0,tendered:null,reference:''});renderPaymentLines();}});
 el('payment-lines').addEventListener('input',(event)=>{
-  const row=event.target.closest('.payment-line');if(!row)return;const payment=state.paymentDraft[Number(row.dataset.index)];
-  if(event.target.classList.contains('payment-line-amount'))payment.amount=Number(event.target.value);
-  if(event.target.classList.contains('payment-line-tendered'))payment.tendered=Number(event.target.value);
+  const row=event.target.closest('.payment-line');if(!row)return;const index=Number(row.dataset.index),payment=state.paymentDraft[index];
+  if(event.target.classList.contains('payment-line-amount')){payment.amount=Number(event.target.value);renderCashKeypad();}
+  if(event.target.classList.contains('payment-line-tendered')){payment.tendered=Number(event.target.value);state.paymentKeypadIndex=index;state.paymentKeypadFresh=false;renderCashKeypad();}
   if(event.target.classList.contains('payment-line-reference'))payment.reference=event.target.value;
   updatePaymentSummary();
 });
-el('payment-lines').addEventListener('change',(event)=>{
-  if(!event.target.classList.contains('payment-line-method'))return;const row=event.target.closest('.payment-line'),payment=state.paymentDraft[Number(row.dataset.index)];
-  payment.method=event.target.value;if(payment.method==='CASH')payment.tendered=payment.amount;renderPaymentLines();
+el('payment-lines').addEventListener('focusin',(event)=>{
+  if(!event.target.classList.contains('payment-line-tendered'))return;
+  state.paymentKeypadIndex=Number(event.target.closest('.payment-line').dataset.index);state.paymentKeypadFresh=true;renderCashKeypad();
 });
-el('payment-lines').addEventListener('click',(event)=>{const button=event.target.closest('.remove-payment-line');if(!button)return;state.paymentDraft.splice(Number(button.closest('.payment-line').dataset.index),1);renderPaymentLines();});
+el('payment-lines').addEventListener('change',(event)=>{
+  if(!event.target.classList.contains('payment-line-method'))return;const row=event.target.closest('.payment-line'),index=Number(row.dataset.index),payment=state.paymentDraft[index];
+  payment.method=event.target.value;if(payment.method==='CASH'){payment.tendered=payment.amount;state.paymentKeypadIndex=index;state.paymentKeypadFresh=true;}renderPaymentLines();
+});
+el('payment-lines').addEventListener('click',(event)=>{const button=event.target.closest('.remove-payment-line');if(!button)return;state.paymentDraft.splice(Number(button.closest('.payment-line').dataset.index),1);state.paymentKeypadIndex=0;renderPaymentLines();});
+el('cash-keypad').addEventListener('click',(event)=>{
+  const amountButton=event.target.closest('[data-cash-amount]');
+  if(amountButton)return setCashTendered(Number(amountButton.dataset.cashAmount),{fresh:true});
+  const keyButton=event.target.closest('[data-cash-key]');
+  if(!keyButton)return;
+  const active=activeCashPayment();if(!active)return;
+  const key=keyButton.dataset.cashKey;
+  const replace=state.paymentKeypadFresh&&/^\d/.test(key);
+  setCashTendered(appendMoneyKey(replace?0:active.payment.tendered,key),{fresh:false});
+});
 el('hold-cart').addEventListener('click',holdCurrentCart);
 el('open-held-sales').addEventListener('click',async()=>{await loadHeldSales();el('held-sales-dialog').showModal();});
 el('close-held-sales').addEventListener('click',()=>el('held-sales-dialog').close());

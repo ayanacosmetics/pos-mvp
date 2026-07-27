@@ -45,6 +45,21 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat v2.2.2 siap deploy
+
+- **Kas Tunai Cepat v2.2.2** menambahkan tombol Uang Pas langsung di keranjang
+  dan keypad nominal pada dialog pembayaran tanpa migrasi SQL.
+- Keypad mendukung angka 0–9, `000`, hapus satu angka, bersihkan seluruh
+  nominal, serta saran Uang Pas dan pecahan pembulatan praktis.
+- Nominal di bawah total mengunci tombol penyelesaian. Nominal di atas total
+  langsung menampilkan kembalian; transaksi tetap membutuhkan konfirmasi
+  `Selesaikan transaksi` untuk mencegah salah tekan.
+- Alur nyata diuji pada total Rp38.000: input Rp5.000 ditolak, sedangkan
+  Rp50.000 menghasilkan kembalian Rp12.000. Mobile 390 x 844 tidak overflow,
+  tombol keypad setinggi 52 px, dan dialog dapat digulir.
+- Modul keypad masuk cache offline `nusa-pos-shell-v58`; 164/164 pengujian
+  otomatis lulus.
+
 ### Rilis v2.2.1 dikonfirmasi live
 
 - **Satuan Pintar v2.2.1** memperjelas penjualan produk yang memiliki

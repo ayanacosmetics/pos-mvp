@@ -651,3 +651,57 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
   .unit-picker-dialog{width:calc(100vw - 24px);padding:20px}
   .unit-picker-option{min-height:64px;padding:12px}
 }
+
+/* Fast cash checkout */
+.cart-checkout-actions{grid-template-columns:auto auto auto minmax(90px,1fr)}
+.exact-cash-button{
+  border:1px solid #9bc5bd;
+  background:#e6f4f1;
+  color:var(--brand);
+}
+.exact-cash-button:hover:not(:disabled){border-color:var(--brand);background:#d7ece8}
+.cash-keypad{
+  display:grid;
+  gap:12px;
+  margin-top:14px;
+  padding:14px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--surface-soft);
+}
+.cash-keypad-heading{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.cash-keypad-heading>div{display:grid;gap:2px}
+.cash-keypad-heading .eyebrow{margin:0}
+.cash-keypad-heading strong{color:var(--ink-strong);font-size:23px;font-variant-numeric:tabular-nums;letter-spacing:-.035em}
+.cash-keypad-heading .link-button{color:var(--danger);text-decoration:none}
+.cash-suggestions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.cash-suggestions button{
+  min-height:38px;
+  padding:7px;
+  border:1px solid var(--line-strong);
+  border-radius:8px;
+  background:var(--surface);
+  color:var(--ink);
+  font-size:10px;
+  font-weight:750;
+}
+.cash-suggestions button.exact{border-color:#8dbcb4;background:var(--brand-2);color:var(--brand)}
+.cash-key-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.cash-key-grid button{
+  min-height:48px;
+  border:1px solid var(--line-strong);
+  border-radius:9px;
+  background:var(--surface);
+  color:var(--ink-strong);
+  font-size:17px;
+  font-weight:750;
+  box-shadow:0 1px 2px rgba(14,37,43,.03);
+}
+.cash-key-grid button:hover{border-color:#9fb6b2;background:#f4f8f7}
+.cash-key-grid button:active{transform:translateY(1px);background:var(--brand-2)}
+@media(max-width:650px){
+  .cart-checkout-actions{grid-template-columns:1fr 1fr}
+  .cart-checkout-actions #pay-button{grid-column:auto}
+  .cash-suggestions{grid-template-columns:1fr 1fr}
+  .cash-key-grid button{min-height:52px}
+}
