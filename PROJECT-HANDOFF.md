@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat v2.3.3 — SQL dikonfirmasi, aplikasi siap deploy
+### Rilis v2.3.3 dikonfirmasi live
 
 - Produksi mengembalikan error `record "old" has no field "receipt_id"` ketika
   pengguna menekan Terima dan tambah stok.
@@ -61,6 +61,12 @@ kode frontend, dokumentasi publik, atau chat.
   tetap dipertahankan. Tidak ada tabel atau data transaksi yang dihapus.
 - Pengguna mengonfirmasi SQL berhasil dijalankan di Supabase pada 27 Juli
   2026. Source hotfix memiliki 177/177 pengujian otomatis lulus.
+- Commit migrasi `e4a9d8b` dan commit rilis `2a71967` didorong ke
+  `origin/main`. Deployment Vercel `dpl_9pG1zSpqMC6BhZ8FKgLLbJAGoos2`
+  berstatus Ready dan alias produksi aktif.
+- Verifikasi domain publik mengembalikan API `2.3.3-cloud`, identitas
+  `Restok Stabil · v2.3.3`, aset `v62`, serta cache
+  `nusa-pos-shell-v62`.
 
 ### Rilis v2.3.2 dikonfirmasi live
 
