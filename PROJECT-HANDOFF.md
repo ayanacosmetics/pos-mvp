@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Rilis v2.4.3 dan APK kasir v1.1.1 siap deploy
+### Rilis v2.4.3 dan APK kasir v1.1.1 dikonfirmasi live
 
 - **Scanner HID Stabil v2.4.3** mencabut pemilih scanner dari aplikasi, bridge
   scanner langsung, Companion Device Pairing, serta koneksi SPP khusus scanner.
@@ -62,6 +62,11 @@ kode frontend, dokumentasi publik, atau chat.
   `0050F9D6307D5CB05D764DF6E02228BB945911BF6A21085C2CC62941B8BF1595`.
 - Kompilasi Gradle `assembleDebug` dan seluruh 183/183 pengujian otomatis lulus.
   Cache PWA dinaikkan ke `v67`. Rilis ini tidak memerlukan SQL.
+- Commit `36e3b40` didorong ke `origin/main`. Deployment Vercel
+  `dpl_Gdsb9qGK5hKZXKuXyDHx6EPo6Ffc` berstatus Ready dan alias produksi aktif.
+- Verifikasi publik mengembalikan API `2.4.3-cloud`, identitas
+  `Scanner HID Stabil · v2.4.3`, ikon pelanggan, aset/cache `v67`, tanpa kontrol
+  scanner langsung, serta APK produksi dengan checksum yang benar.
 
 ### Rilis v2.4.2 dikonfirmasi live
 
