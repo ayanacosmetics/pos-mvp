@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=66">
+  <link rel="stylesheet" href="/styles.css?v=67">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -145,7 +145,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Member Ringkas · v2.4.2</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Scanner HID Stabil · v2.4.3</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -160,8 +160,7 @@
           <div class="catalog-pane">
             <div class="page-title"><div><p id="top-shift" class="eyebrow">SHIFT BELUM DIBUKA</p><h1>Kasir</h1></div><div class="pos-heading-actions"><button id="open-shortcuts" class="button secondary compact-button" type="button" title="Shortcut keyboard">⌨</button><button id="open-pos-history" class="button secondary" type="button">Riwayat</button><button id="sync-button" class="button secondary">Sinkronkan <span id="queue-count">0</span></button></div></div>
             <div class="search-row">
-              <div class="product-search-wrap"><div class="product-search-control"><input id="product-search" placeholder="Scan barcode atau cari nama produk"><button id="connect-scanner-pos" class="button secondary scan-icon-button hidden" type="button" aria-label="Hubungkan scanner Bluetooth" title="Hubungkan scanner Bluetooth"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a2 2 0 0 1 2 2v8H4V5a2 2 0 0 1 2-2Z"/><path d="M7 6v4M10 6v4M13 6v4M17 6v4M8 13l-2 8h6l2-8"/></svg></button><button id="scan-camera-pos" class="button secondary scan-icon-button camera-scan-button" type="button" aria-label="Scan barcode dengan kamera" title="Scan dengan kamera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5 10 3.5h4l1.5 2H19A2.5 2.5 0 0 1 21.5 8v9A2.5 2.5 0 0 1 19 19.5H5A2.5 2.5 0 0 1 2.5 17V8A2.5 2.5 0 0 1 5 5.5h3.5Z"/><circle cx="12" cy="12.5" r="4"/></svg></button></div><small id="pos-scanner-status" class="pos-scanner-status hidden"></small></div>
-              <button id="open-pos-customer" class="button secondary pos-member-button" type="button"><span id="pos-member-label">Member</span><small id="pos-member-status">Pelanggan umum</small></button>
+              <div class="product-search-wrap"><div class="product-search-control"><input id="product-search" placeholder="Scan barcode atau cari nama produk"><button id="open-pos-customer" class="button secondary scan-icon-button pos-member-button" type="button" aria-label="Pilih atau tambah pelanggan" title="Pelanggan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 20v-1.5A3.5 3.5 0 0 0 10.5 15h-5A3.5 3.5 0 0 0 2 18.5V20M8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM18 8v8M14 12h8"/></svg><span id="pos-member-label" class="sr-only">Member</span><small id="pos-member-status" class="sr-only">Pelanggan umum</small></button><button id="scan-camera-pos" class="button secondary scan-icon-button camera-scan-button" type="button" aria-label="Scan barcode dengan kamera" title="Scan dengan kamera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5 10 3.5h4l1.5 2H19A2.5 2.5 0 0 1 21.5 8v9A2.5 2.5 0 0 1 19 19.5H5A2.5 2.5 0 0 1 2.5 17V8A2.5 2.5 0 0 1 5 5.5h3.5Z"/><circle cx="12" cy="12.5" r="4"/></svg></button></div></div>
               <select id="customer-select" class="hidden" aria-hidden="true"><option value="">Pelanggan umum</option></select>
               <select id="customer-group" class="hidden"><option value="retail">Eceran</option><option value="wholesale">Grosir</option></select>
             </div>
@@ -661,10 +660,7 @@
             <div><span id="printer-status-dot" class="printer-status-dot"></span><strong id="printer-status">Memeriksa dukungan printer...</strong><small id="printer-status-help">Bluetooth Classic memakai Web Serial tanpa aplikasi berbayar.</small></div>
             <div class="printer-actions"><button id="connect-printer" class="button secondary" type="button">Hubungkan printer</button><button id="test-printer" class="button primary" type="button" disabled>Tes cetak</button><button id="disconnect-printer" class="link-button hidden" type="button">Putuskan</button></div>
           </section>
-          <section id="scanner-connection-card" class="printer-connection-card hidden">
-            <div><span id="scanner-status-dot" class="printer-status-dot"></span><strong id="scanner-status">Memeriksa scanner...</strong><small id="scanner-status-help">Hubungkan scanner langsung dari aplikasi kasir Android.</small></div>
-            <div class="printer-actions"><button id="connect-scanner" class="button secondary" type="button">Hubungkan scanner</button><button id="test-scanner" class="button primary" type="button" disabled>Tes scan</button><button id="disconnect-scanner" class="link-button hidden" type="button">Putuskan</button></div>
-          </section>
+          <div class="pwa-install-row scanner-hid-note"><div><strong>Scanner Bluetooth</strong><small>Pasangkan sebagai keyboard/HID dari Pengaturan Bluetooth Android. Setelah tersambung, scanner langsung bekerja di halaman Kasir tanpa tombol koneksi.</small></div></div>
           <div class="pwa-install-row"><div><strong>Pasang sebagai aplikasi</strong><small id="install-app-status">Dapat dipasang di Android atau Windows dari browser yang mendukung.</small></div><button id="install-app" class="button secondary" type="button">Pasang aplikasi</button></div>
           <p id="device-settings-error" class="error"></p><button class="button primary" type="submit">Simpan perangkat ini</button>
         </form>
@@ -823,6 +819,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=66"></script>
+  <script type="module" src="/app.js?v=67"></script>
 </body>
 </html>

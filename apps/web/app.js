@@ -6,7 +6,6 @@ import { customerReceiptView } from './receipt.mjs';
 import { disconnectBluetoothPrinter, printEscPosReceipt, printEscPosTest, printerConnected, printerSelected, restoreGrantedPrinter, selectBluetoothPrinter, supportsBluetoothClassicPrinting } from './escpos-printer.mjs';
 import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, unitFitsStock } from './pos-units.mjs';
 import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
-import { connectBluetoothScanner, disconnectBluetoothScanner, scannerConnected, scannerName, scannerSelected, supportsDirectScannerConnection } from './bluetooth-scanner.mjs';
 
 const storedAuth = loadAuth();
 const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
@@ -30,8 +29,6 @@ let barcodeCameraTarget = null;
 let barcodeCameraControls = null;
 let barcodeCameraCompleting = false;
 let lastTelemetryAt = 0;
-let scannerTestTimer = null;
-let scannerTestActive = false;
 
 function storeAuth(data) {
   const auth = saveAuth(data, state);
@@ -393,6 +390,11 @@ function syncCustomerSearchLabel() {
   }
   if (el('pos-member-label')) el('pos-member-label').textContent = customer?.name ?? 'Member';
   if (el('pos-member-status')) el('pos-member-status').textContent = customer ? 'Member dipilih' : 'Pelanggan umum';
+  if (el('open-pos-customer')) {
+    el('open-pos-customer').classList.toggle('member-selected', Boolean(customer));
+    el('open-pos-customer').title = customer?.name ?? 'Pelanggan';
+    el('open-pos-customer').setAttribute('aria-label', customer ? `Pelanggan: ${customer.name}` : 'Pilih atau tambah pelanggan');
+  }
   el('clear-pos-customer')?.classList.toggle('hidden', !customer);
   const notePanel=el('customer-service-note');
   const note=String(customer?.notes??'').trim();
@@ -1535,72 +1537,11 @@ async function startNativeBarcodeDetection(video) {
 async function handleNativeScannerBarcode(value) {
   const barcode = String(value ?? '').trim();
   if (!barcode) return;
-  if(scannerTestActive){
-    scannerTestActive=false;
-    clearTimeout(scannerTestTimer);
-    renderScannerStatus(`Tes berhasil · barcode ${barcode}`);
-    toast(`Scanner berhasil membaca ${barcode}.`);
-    return;
-  }
   if (!el('page-pos').classList.contains('active')) return toast('Buka halaman Kasir sebelum memindai barang.');
   const exact = barcodeMatch(barcode);
   if (!exact) return toast(`Barcode ${barcode} belum terdaftar pada produk.`);
   await addScannedProduct(exact.product, exact.unit);
   el('product-search').value = '';
-}
-
-function renderScannerStatus(message='') {
-  const supported=supportsDirectScannerConnection();
-  const connected=scannerConnected();
-  const selected=scannerSelected();
-  const name=scannerName();
-  el('connect-scanner-pos')?.parentElement.classList.toggle('scanner-enabled',supported);
-  for(const id of ['connect-scanner-pos','scanner-connection-card'])el(id)?.classList.toggle('hidden',!supported);
-  if(!supported)return;
-  const status=message||(connected?(name?`${name} siap digunakan`:'Scanner siap digunakan'):selected?(name?`${name} tersimpan`:'Scanner tersimpan'):'Belum ada scanner yang dipilih');
-  el('pos-scanner-status').textContent=status;
-  el('pos-scanner-status').classList.remove('hidden');
-  el('scanner-status').textContent=status;
-  el('scanner-status-help').textContent=connected?'Scan barcode langsung dari halaman Kasir.':'Tekan Hubungkan, nyalakan mode pairing, lalu pilih scanner pada popup Android.';
-  el('scanner-status-dot').className=`printer-status-dot ${connected?'ready':selected?'warning':'error'}`;
-  el('connect-scanner').textContent=selected?'Sambungkan ulang':'Hubungkan scanner';
-  el('test-scanner').disabled=!selected;
-  el('disconnect-scanner').classList.toggle('hidden',!selected);
-}
-
-async function connectSalesScanner() {
-  const buttons=[el('connect-scanner-pos'),el('connect-scanner')].filter(Boolean);
-  buttons.forEach((button)=>{button.disabled=true;});
-  renderScannerStatus('Mencari scanner Bluetooth...');
-  try{
-    const message=await connectBluetoothScanner();
-    renderScannerStatus(message);
-    toast(message);
-  }catch(error){
-    renderScannerStatus(error.message);
-    toast(error.message);
-  }finally{
-    buttons.forEach((button)=>{button.disabled=false;});
-  }
-}
-
-function testSalesScanner() {
-  if(!scannerSelected())return toast('Hubungkan scanner terlebih dahulu.');
-  scannerTestActive=true;
-  clearTimeout(scannerTestTimer);
-  renderScannerStatus('Tes aktif · scan satu barcode sekarang');
-  toast('Scan satu barcode. Barang tidak akan masuk ke keranjang saat tes.');
-  scannerTestTimer=setTimeout(()=>{scannerTestActive=false;renderScannerStatus('Tes berakhir · barcode belum diterima');},15000);
-}
-
-async function disconnectSalesScanner() {
-  try{
-    await disconnectBluetoothScanner();
-    scannerTestActive=false;
-    clearTimeout(scannerTestTimer);
-    renderScannerStatus('Scanner diputuskan.');
-    toast('Scanner diputuskan.');
-  }catch(error){toast(error.message);}
 }
 
 async function startZxingBarcodeDetection(video) {
@@ -4173,7 +4114,6 @@ el('product-search').addEventListener('keydown', (event) => {
 el('pos-category-filters').addEventListener('click',(event)=>{const button=event.target.closest('[data-category]');if(!button)return;state.posCategoryFilter=button.dataset.category;renderProducts(el('product-search').value);});
 el('favorite-filter').addEventListener('click',()=>{state.favoriteOnly=!state.favoriteOnly;renderProducts(el('product-search').value);});
 el('scan-camera-pos').addEventListener('click', () => openBarcodeCamera('pos'));
-el('connect-scanner-pos').addEventListener('click',connectSalesScanner);
 el('close-barcode-camera').addEventListener('click', stopBarcodeCamera);
 el('cancel-barcode-camera').addEventListener('click', stopBarcodeCamera);
 el('barcode-camera-dialog').addEventListener('close', stopBarcodeCamera);
@@ -4591,9 +4531,6 @@ el('device-settings-form').addEventListener('submit', saveDeviceSettings);
 el('connect-printer').addEventListener('click', connectReceiptPrinter);
 el('test-printer').addEventListener('click', testReceiptPrinter);
 el('disconnect-printer').addEventListener('click', disconnectReceiptPrinter);
-el('connect-scanner').addEventListener('click',connectSalesScanner);
-el('test-scanner').addEventListener('click',testSalesScanner);
-el('disconnect-scanner').addEventListener('click',disconnectSalesScanner);
 el('new-customer').addEventListener('click',()=>openCustomerEditor());
 el('customer-form').addEventListener('submit',saveCustomer);
 el('close-customer-dialog').addEventListener('click',()=>el('customer-dialog').close());
@@ -4674,8 +4611,6 @@ window.addEventListener('appinstalled', () => {
   toast('Kasir Nusa berhasil dipasang di perangkat ini.');
 });
 window.addEventListener('kasirnusa:barcode', (event) => handleNativeScannerBarcode(event.detail?.value));
-window.addEventListener('kasirnusa:scanner-status',(event)=>renderScannerStatus(event.detail?.message??''));
-renderScannerStatus();
 updateInstallAppControl();
 restoreGrantedPrinter().then(()=>renderPrinterStatus()).catch(()=>renderPrinterStatus('Izin printer perlu dipilih ulang'));
 if (typeof navigator !== 'undefined' && navigator.serial) {

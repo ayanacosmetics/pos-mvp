@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Member Ringkas v2.4.2
+# Kasir Nusa POS — Scanner HID Stabil v2.4.3
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -181,21 +181,20 @@ Jalankan:
 npm test
 ```
 
-Source saat ini memiliki 182 pengujian otomatis. Pengujian toko nyata tetap
+Source saat ini memiliki 183 pengujian otomatis. Pengujian toko nyata tetap
 harus mengikuti `GO-LIVE-CHECKLIST.md`; keputusan lulus pilot tidak menggantikan
 verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 
 ## Aplikasi kasir Android
 
 Unduh dan instal pembaruan APK dari
-<https://kasir-nusa-pos.vercel.app/downloads/Kasir-Nusa-Kasir-1.1.0-test.apk>.
-Printer dihubungkan dari halaman Perangkat. Scanner dapat dihubungkan langsung
-dari tombol scanner di halaman Kasir; nyalakan mode pairing lalu pilih perangkat
-pada popup Android. Scanner SPP dibaca langsung oleh aplikasi, sedangkan scanner
-HID tetap bekerja otomatis dan sebaiknya mengirim Enter setelah barcode.
-APK v1.1.0 memiliki SHA-256
-`9E78D6794054FAAEFFB2BF8520EFA466EB68C539138A11061DC7995F8B049D97`
-dan ditandatangani sertifikat yang sama dengan APK v1.0.0, sehingga dapat
+<https://kasir-nusa-pos.vercel.app/downloads/Kasir-Nusa-Kasir-1.1.1-test.apk>.
+Printer dihubungkan dari halaman Perangkat. Scanner dipasangkan sebagai
+keyboard/HID melalui Pengaturan Bluetooth Android, bukan dari aplikasi. Setelah
+tersambung, barcode diteruskan otomatis ke halaman Kasir dan scanner sebaiknya
+mengirim Enter setelah barcode. APK v1.1.1 memiliki SHA-256
+`0050F9D6307D5CB05D764DF6E02228BB945911BF6A21085C2CC62941B8BF1595`
+dan ditandatangani sertifikat yang sama dengan APK sebelumnya, sehingga dapat
 dipasang sebagai pembaruan tanpa menghapus aplikasi atau sesi.
 
 ## Struktur
@@ -203,7 +202,7 @@ dipasang sebagai pembaruan tanpa menghapus aplikasi atau sesi.
 ```text
 api/                  API produksi Vercel
 apps/web/             Antarmuka POS dan backoffice PWA
-apps/android-cashier/ Aplikasi kasir Android, printer SPP, scanner SPP/HID
+apps/android-cashier/ Aplikasi kasir Android, printer SPP, scanner HID
 apps/api/             Server demo lokal
 packages/domain/      Mesin harga, promo, akses, dan data contoh
 supabase/migrations/  Fondasi database produksi

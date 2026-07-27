@@ -45,6 +45,24 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.4.3 dan APK kasir v1.1.1 siap deploy
+
+- **Scanner HID Stabil v2.4.3** mencabut pemilih scanner dari aplikasi, bridge
+  scanner langsung, Companion Device Pairing, serta koneksi SPP khusus scanner.
+  Printer Bluetooth Classic SPP tetap berfungsi seperti sebelumnya.
+- Scanner kembali ke alur yang sudah terbukti: pasangkan sebagai keyboard/HID
+  melalui Pengaturan Bluetooth Android, lalu barcode diteruskan otomatis oleh
+  APK ke halaman Kasir saat scanner mengirim Enter.
+- Tombol scanner langsung di samping pencarian produk diganti tombol pelanggan
+  berbentuk ikon orang dengan tanda tambah. Tombol membuka dialog daftar,
+  pencarian, pilihan, dan tambah member.
+- APK `Kasir-Nusa-Kasir-1.1.1-test.apk` memakai versionCode `3`, target SDK 35,
+  dan sertifikat yang sama dengan APK sebelumnya sehingga dapat dipasang sebagai
+  pembaruan tanpa menghapus sesi. SHA-256:
+  `0050F9D6307D5CB05D764DF6E02228BB945911BF6A21085C2CC62941B8BF1595`.
+- Kompilasi Gradle `assembleDebug` dan seluruh 183/183 pengujian otomatis lulus.
+  Cache PWA dinaikkan ke `v67`. Rilis ini tidak memerlukan SQL.
+
 ### Rilis v2.4.2 dikonfirmasi live
 
 - **Member Ringkas v2.4.2** menyisakan satu tombol Member pada halaman Kasir.
