@@ -6,7 +6,7 @@ import { customerReceiptView } from './receipt.mjs';
 import { disconnectBluetoothPrinter, printEscPosReceipt, printEscPosTest, printerConnected, printerSelected, restoreGrantedPrinter, selectBluetoothPrinter, supportsBluetoothClassicPrinting } from './escpos-printer.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -3459,6 +3459,103 @@ async function advanceTransfer(id,action){
   }catch(error){toast(error.message);}
 }
 
+const accountingPages=new Set([
+  'accounting-accounts','accounting-journals','accounting-ledger',
+  'accounting-trial-balance','accounting-balance-sheet','accounting-periods'
+]);
+
+const accountingTypeLabels={ASSET:'Aset',LIABILITY:'Kewajiban',EQUITY:'Modal',REVENUE:'Pendapatan',EXPENSE:'Biaya'};
+
+function initializeAccountingDates(){
+  const today=storeDateToday();
+  if(!el('accounting-from').value)el('accounting-from').value=`${today.slice(0,4)}-01-01`;
+  if(!el('accounting-to').value)el('accounting-to').value=today;
+  if(!el('manual-journal-date').value)el('manual-journal-date').value=today;
+  if(!el('accounting-period-start').value)el('accounting-period-start').value=`${today.slice(0,8)}01`;
+  if(!el('accounting-period-end').value)el('accounting-period-end').value=today;
+}
+
+function accountingBalanceDisplay(item){
+  const raw=Number(item.ending??0);
+  const amount=item.normalBalance==='CREDIT'?-raw:raw;
+  return `${money.format(Math.abs(amount))}${amount<0?' (berlawanan)':''}`;
+}
+
+function renderManualJournalLines(){
+  const accounts=(state.accounting?.accounts??[]).filter((item)=>item.allow_manual);
+  const options=accounts.map((item)=>`<option value="${item.id}">${escapeHtml(item.code)} · ${escapeHtml(item.name)}</option>`).join('');
+  const outletOptions=`<option value="">Tanpa outlet</option>${state.outlets.map((item)=>`<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('')}`;
+  el('manual-journal-lines').innerHTML=state.manualJournalLines.map((line,index)=>`<article class="manual-journal-line" data-journal-line="${index}"><select class="manual-line-account">${options}</select><select class="manual-line-outlet">${outletOptions}</select><input class="manual-line-memo" maxlength="240" placeholder="Memo baris"><input class="manual-line-debit" type="number" min="0" step="1" placeholder="Debit" value="${line.debit||''}"><input class="manual-line-credit" type="number" min="0" step="1" placeholder="Kredit" value="${line.credit||''}"><button type="button" class="link-button remove-manual-line" ${state.manualJournalLines.length<=2?'disabled':''}>Hapus</button></article>`).join('');
+  state.manualJournalLines.forEach((line,index)=>{
+    const row=el('manual-journal-lines').querySelector(`[data-journal-line="${index}"]`);
+    if(accounts.some((item)=>item.id===line.accountId))row.querySelector('.manual-line-account').value=line.accountId;
+    if(state.outlets.some((item)=>item.id===line.outletId))row.querySelector('.manual-line-outlet').value=line.outletId;
+    row.querySelector('.manual-line-memo').value=line.memo??'';
+  });
+  updateManualJournalTotals();
+}
+
+function updateManualJournalTotals(){
+  const debit=state.manualJournalLines.reduce((sum,item)=>sum+Number(item.debit||0),0);
+  const credit=state.manualJournalLines.reduce((sum,item)=>sum+Number(item.credit||0),0);
+  el('manual-journal-debit').textContent=money.format(debit);
+  el('manual-journal-credit').textContent=money.format(credit);
+  el('manual-journal-debit').classList.toggle('negative',debit!==credit);
+  el('manual-journal-credit').classList.toggle('negative',debit!==credit);
+}
+
+function renderAccounting(){
+  const data=state.accounting;if(!data)return;
+  const accounts=data.accounts??[],trial=data.trialBalance??[],entries=data.entries??[];
+  const typeCounts=Object.fromEntries(['ASSET','LIABILITY','EQUITY','REVENUE','EXPENSE'].map((type)=>[type,accounts.filter((item)=>item.account_type===type).length]));
+  el('accounting-account-metrics').innerHTML=Object.entries(typeCounts).map(([type,count])=>`<article><span>${accountingTypeLabels[type]}</span><strong>${count}</strong></article>`).join('');
+  el('accounting-account-list').innerHTML=`<table><thead><tr><th>Kode</th><th>Nama akun</th><th>Kelompok</th><th>Saldo normal</th><th>Input manual</th></tr></thead><tbody>${accounts.map((item)=>`<tr><td><strong>${escapeHtml(item.code)}</strong></td><td>${escapeHtml(item.name)}${item.system_key?`<br><small>${escapeHtml(item.system_key)}</small>`:''}</td><td>${accountingTypeLabels[item.account_type]??item.account_type}</td><td>${item.normal_balance==='DEBIT'?'Debit':'Kredit'}</td><td>${item.allow_manual?'Boleh':'Otomatis'}</td></tr>`).join('')}</tbody></table>`;
+  el('accounting-journal-list').innerHTML=`<table><thead><tr><th>Tanggal</th><th>Nomor</th><th>Keterangan</th><th>Sumber</th><th>Debit</th><th>Kredit</th><th></th></tr></thead><tbody>${entries.map((item)=>`<tr class="${item.status==='REVERSED'?'voided-row':''}"><td>${new Date(`${item.entryDate}T00:00:00`).toLocaleDateString('id-ID')}</td><td><strong>${escapeHtml(item.entryNo)}</strong><br><small>${escapeHtml(item.status)}</small></td><td>${escapeHtml(item.description)}</td><td>${escapeHtml(item.sourceType.replaceAll('_',' '))}</td><td>${money.format(item.debit)}</td><td>${money.format(item.credit)}</td><td>${item.sourceType==='MANUAL'&&item.status==='POSTED'?`<button type="button" class="link-button reverse-manual-journal" data-entry-id="${item.id}">Balik</button>`:''}</td></tr>`).join('')||'<tr><td colspan="7">Belum ada jurnal pada periode ini.</td></tr>'}</tbody></table>`;
+  const selectedAccount=el('accounting-ledger-account').value;
+  el('accounting-ledger-account').innerHTML=accounts.map((item)=>`<option value="${item.id}">${escapeHtml(item.code)} · ${escapeHtml(item.name)}</option>`).join('');
+  if(accounts.some((item)=>item.id===selectedAccount))el('accounting-ledger-account').value=selectedAccount;
+  let running=0;
+  el('accounting-ledger-list').innerHTML=`<table><thead><tr><th>Tanggal</th><th>Nomor</th><th>Keterangan</th><th>Debit</th><th>Kredit</th><th>Saldo debit</th></tr></thead><tbody>${(data.ledger??[]).map((item)=>{running+=Number(item.debit)-Number(item.credit);return`<tr><td>${new Date(`${item.entryDate}T00:00:00`).toLocaleDateString('id-ID')}</td><td>${escapeHtml(item.entryNo)}</td><td>${escapeHtml(item.description)}${item.memo?`<br><small>${escapeHtml(item.memo)}</small>`:''}</td><td>${money.format(item.debit)}</td><td>${money.format(item.credit)}</td><td>${money.format(running)}</td></tr>`;}).join('')||'<tr><td colspan="6">Pilih akun untuk menampilkan buku besar.</td></tr>'}</tbody></table>`;
+  const totalDebit=trial.reduce((sum,item)=>sum+Number(item.debit),0),totalCredit=trial.reduce((sum,item)=>sum+Number(item.credit),0);
+  el('accounting-trial-metrics').innerHTML=[['Total debit',money.format(totalDebit)],['Total kredit',money.format(totalCredit)],['Selisih',money.format(Math.abs(totalDebit-totalCredit))],['Status',Math.abs(totalDebit-totalCredit)<1?'Seimbang':'Perlu diperiksa']].map(([label,value])=>`<article><span>${label}</span><strong>${value}</strong></article>`).join('');
+  el('accounting-trial-list').innerHTML=`<table><thead><tr><th>Kode</th><th>Akun</th><th>Saldo awal (D-K)</th><th>Debit</th><th>Kredit</th><th>Saldo akhir</th></tr></thead><tbody>${trial.map((item)=>`<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td>${money.format(item.opening)}</td><td>${money.format(item.debit)}</td><td>${money.format(item.credit)}</td><td><strong>${accountingBalanceDisplay(item)}</strong></td></tr>`).join('')}</tbody><tfoot><tr><th colspan="3">Total periode</th><th>${money.format(totalDebit)}</th><th>${money.format(totalCredit)}</th><th>${money.format(Math.abs(totalDebit-totalCredit))}</th></tr></tfoot></table>`;
+  const balance=data.balanceSheet??{},netIncome=Number(balance.revenue??0)-Number(balance.expenses??0),rightSide=Number(balance.liabilities??0)+Number(balance.equity??0)+netIncome,difference=Number(balance.assets??0)-rightSide;
+  el('accounting-balance-metrics').innerHTML=[['Aset',money.format(balance.assets??0)],['Kewajiban',money.format(balance.liabilities??0)],['Modal',money.format(balance.equity??0)],['Laba berjalan',money.format(netIncome)],['Selisih neraca',money.format(Math.abs(difference))]].map(([label,value])=>`<article><span>${label}</span><strong>${value}</strong></article>`).join('');
+  el('accounting-balance-list').innerHTML=`<table><thead><tr><th>Kelompok</th><th>Kode</th><th>Akun</th><th>Saldo</th></tr></thead><tbody>${trial.filter((item)=>['ASSET','LIABILITY','EQUITY'].includes(item.type)&&Math.abs(Number(item.ending))>=0.01).map((item)=>`<tr><td>${accountingTypeLabels[item.type]}</td><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td>${accountingBalanceDisplay(item)}</td></tr>`).join('')}<tr><td>Modal</td><td>-</td><td><strong>Laba berjalan</strong></td><td><strong>${money.format(netIncome)}</strong></td></tr></tbody><tfoot><tr><th colspan="3">Aset − (kewajiban + modal + laba)</th><th>${money.format(difference)}</th></tr></tfoot></table>`;
+  el('accounting-period-list').innerHTML=(data.periods??[]).map((item)=>`<article class="accounting-period-row"><div><strong>${escapeHtml(item.name)}</strong><small>${new Date(`${item.starts_on}T00:00:00`).toLocaleDateString('id-ID')} – ${new Date(`${item.ends_on}T00:00:00`).toLocaleDateString('id-ID')}</small></div><span class="pill">${item.status==='CLOSED'?'Ditutup':'Terbuka'}</span>${item.status==='OPEN'?`<button type="button" class="button primary close-accounting-period" data-period-id="${item.id}">Tutup buku</button>`:''}</article>`).join('')||'<div class="empty-state">Belum ada periode akuntansi.</div>';
+  if(!state.manualJournalLines.length)state.manualJournalLines=[{accountId:accounts.find((item)=>item.system_key==='CASH')?.id,debit:0,credit:0},{accountId:accounts.find((item)=>item.system_key==='OWNER_EQUITY')?.id,debit:0,credit:0}];
+  renderManualJournalLines();
+  el('accounting-status').textContent=`Periode ${data.period.from}–${data.period.to} · ${entries.length} jurnal · dibuat ${new Date(data.generatedAt).toLocaleString('id-ID')}`;
+}
+
+async function loadAccounting({sync=false,accountId}={}){
+  initializeAccountingDates();
+  el('accounting-status').textContent=sync?'Menyinkronkan transaksi ke jurnal...':'Memuat pembukuan...';
+  try{
+    if(sync)await request('/api/accounting/sync',{method:'POST',body:'{}'});
+    const params=new URLSearchParams({from:el('accounting-from').value,to:el('accounting-to').value});
+    const selected=accountId===undefined?el('accounting-ledger-account').value:accountId;
+    if(selected)params.set('accountId',selected);
+    state.accounting=await request(`/api/accounting/dashboard?${params}`);
+    renderAccounting();
+  }catch(error){el('accounting-status').textContent=`Pembukuan belum dapat dimuat: ${error.message}`;throw error;}
+}
+
+async function postManualJournal(event){
+  event.preventDefault();
+  const debit=state.manualJournalLines.reduce((sum,item)=>sum+Number(item.debit||0),0);
+  const credit=state.manualJournalLines.reduce((sum,item)=>sum+Number(item.credit||0),0);
+  if(debit<=0||Math.abs(debit-credit)>=1)return toast('Total debit dan kredit harus sama dan lebih dari nol.');
+  try{
+    await request('/api/accounting/journals',{method:'POST',body:JSON.stringify({
+      entryDate:el('manual-journal-date').value,description:el('manual-journal-description').value,
+      lines:state.manualJournalLines
+    })});
+    state.manualJournalLines=[];event.currentTarget.reset();el('manual-journal-date').value=storeDateToday();
+    toast('Jurnal manual berhasil diposting');await loadAccounting();
+  }catch(error){toast(error.message);}
+}
+
 const pilotPages=new Set(['pilot-readiness','pilot-incidents','pilot-performance','pilot-recovery','pilot-sop']);
 
 function pilotStatusLabel(status){
@@ -3525,6 +3622,7 @@ function showPage(name) {
   if(group)openNavGroup(group);
   localStorage.setItem('pos_active_page',name);
   if(multioutletPages.has(name))loadMultiOutletWorkspace().catch((error)=>toast(error.message));
+  if(accountingPages.has(name))loadAccounting({sync:!state.accounting}).catch((error)=>toast(error.message));
   if(pilotPages.has(name)&&name!=='pilot-sop')loadPilotDashboard().catch((error)=>toast(error.message));
 }
 
@@ -3934,6 +4032,56 @@ el('owner-expense-list').addEventListener('click',voidExpense);
 el('owner-product-search').addEventListener('input',renderOwnerProductHealth);
 el('owner-product-status').addEventListener('change',renderOwnerProductHealth);
 el('export-accountant-csv').addEventListener('click',exportAccountantCsv);
+document.querySelectorAll('[data-refresh-accounting]').forEach((button)=>button.addEventListener('click',()=>loadAccounting({sync:true}).catch((error)=>toast(error.message))));
+el('apply-accounting-filter').addEventListener('click',()=>loadAccounting().catch((error)=>toast(error.message)));
+el('apply-accounting-ledger').addEventListener('click',()=>loadAccounting({accountId:el('accounting-ledger-account').value}).catch((error)=>toast(error.message)));
+el('add-manual-journal-line').addEventListener('click',()=>{
+  const accountId=state.accounting?.accounts?.find((item)=>item.allow_manual)?.id;
+  state.manualJournalLines.push({accountId,outletId:null,memo:'',debit:0,credit:0});renderManualJournalLines();
+});
+el('manual-journal-lines').addEventListener('input',(event)=>{
+  const row=event.target.closest('[data-journal-line]');if(!row)return;
+  const line=state.manualJournalLines[Number(row.dataset.journalLine)];
+  if(event.target.classList.contains('manual-line-memo'))line.memo=event.target.value;
+  if(event.target.classList.contains('manual-line-debit')){line.debit=Number(event.target.value||0);if(line.debit>0){line.credit=0;row.querySelector('.manual-line-credit').value='';}}
+  if(event.target.classList.contains('manual-line-credit')){line.credit=Number(event.target.value||0);if(line.credit>0){line.debit=0;row.querySelector('.manual-line-debit').value='';}}
+  updateManualJournalTotals();
+});
+el('manual-journal-lines').addEventListener('change',(event)=>{
+  const row=event.target.closest('[data-journal-line]');if(!row)return;
+  const line=state.manualJournalLines[Number(row.dataset.journalLine)];
+  if(event.target.classList.contains('manual-line-account'))line.accountId=event.target.value;
+  if(event.target.classList.contains('manual-line-outlet'))line.outletId=event.target.value||null;
+});
+el('manual-journal-lines').addEventListener('click',(event)=>{
+  const button=event.target.closest('.remove-manual-line');if(!button||state.manualJournalLines.length<=2)return;
+  state.manualJournalLines.splice(Number(button.closest('[data-journal-line]').dataset.journalLine),1);renderManualJournalLines();
+});
+el('manual-journal-form').addEventListener('submit',postManualJournal);
+el('accounting-journal-list').addEventListener('click',async(event)=>{
+  const button=event.target.closest('.reverse-manual-journal');if(!button)return;
+  const reason=prompt('Alasan pembalikan jurnal:')?.trim();if(!reason)return;
+  try{await request(`/api/accounting/journals/${button.dataset.entryId}/reverse`,{method:'POST',body:JSON.stringify({reason})});toast('Jurnal berhasil dibalik');await loadAccounting();}
+  catch(error){toast(error.message);}
+});
+el('accounting-period-form').addEventListener('submit',async(event)=>{
+  event.preventDefault();
+  try{
+    await request('/api/accounting/periods',{method:'POST',body:JSON.stringify({
+      name:el('accounting-period-name').value,startsOn:el('accounting-period-start').value,endsOn:el('accounting-period-end').value
+    })});
+    event.currentTarget.reset();initializeAccountingDates();toast('Periode akuntansi dibuat');await loadAccounting();
+  }catch(error){toast(error.message);}
+});
+el('accounting-period-list').addEventListener('click',async(event)=>{
+  const button=event.target.closest('.close-accounting-period');if(!button)return;
+  if(!confirm('Tutup periode ini? Jurnal manual bertanggal dalam periode tidak dapat ditambahkan lagi.'))return;
+  try{
+    await request('/api/accounting/sync',{method:'POST',body:'{}'});
+    await request(`/api/accounting/periods/${button.dataset.periodId}/close`,{method:'POST',body:'{}'});
+    toast('Periode berhasil ditutup');await loadAccounting();
+  }catch(error){toast(error.message);}
+});
 el('refresh-users').addEventListener('click', loadUsers);
 el('create-user-form').addEventListener('submit', createUser);
 el('user-search').addEventListener('input', renderUsers);

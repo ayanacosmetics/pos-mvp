@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Pilot & Hardening v2.0.0
+# Kasir Nusa POS — Kandidat Akuntansi Inti v2.1.0
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -66,6 +66,12 @@ kapabilitas retail yang lebih lengkap tersedia di
 - Checklist pilot 25 langkah, keputusan lanjut/tunda berbasis bukti, pemantauan
   error/performa tanpa isi transaksi, serta pencatatan uji pemulihan backup
   tanpa menimpa data produksi.
+- Akuntansi debit-kredit khusus Owner dengan daftar akun, jurnal umum, buku
+  besar, neraca saldo, neraca, dan periode/tutup buku pada halaman terpisah.
+- Penjualan, void, retur pelanggan, penerimaan pembelian, pembayaran
+  hutang/piutang, retur supplier, serta biaya outlet disinkronkan ke jurnal
+  secara idempoten. Jurnal manual wajib seimbang dan pembatalan memakai jurnal
+  pembalik tanpa menghapus histori.
 - Promo dan Loyalitas, serta Pelanggan dan Supplier, memiliki halaman terpisah;
   rincian Stok, Pembelian, Laporan, dan Pengaturan juga dipisahkan sebagai
   tujuan navigasi masing-masing.
@@ -126,6 +132,13 @@ deployment. Migrasi ini menambahkan periode dan checklist pilot, insiden,
 telemetri operasional yang minim data, bukti uji pemulihan, serta pemeriksaan
 pengaman stok/idempotensi. Jangan deploy source v2.0 sebelum migrasi berhasil.
 
+Untuk kandidat v2.1, jalankan satu file
+`supabase/migrations/202607270033_core_accounting.sql` sebelum deployment.
+Migrasi ini menambahkan daftar akun, periode, jurnal berimbang, sinkronisasi
+transaksi operasional, buku besar, neraca saldo, dan neraca. Setelah live,
+Owner perlu membuat jurnal saldo awal untuk modal/persediaan yang berasal dari
+masa sebelum Kasir Nusa. Jangan deploy source v2.1 sebelum migrasi berhasil.
+
 Klik dua kali `Deploy-Kasir-Nusa.cmd` dan tunggu sampai muncul tulisan **Deployment berhasil**.
 
 Rahasia Supabase hanya boleh tersimpan di pengaturan Environment Variables Vercel. Jangan menaruh `SUPABASE_SERVICE_ROLE_KEY` di browser, screenshot, chat, atau repository.
@@ -138,7 +151,7 @@ Jalankan:
 npm test
 ```
 
-Kandidat v2.0.0 memiliki 148 pengujian otomatis. Pengujian toko nyata tetap
+Kandidat v2.1.0 memiliki 152 pengujian otomatis. Pengujian toko nyata tetap
 harus mengikuti `GO-LIVE-CHECKLIST.md`; keputusan lulus pilot tidak menggantikan
 verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#174c4f">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=54">
+  <link rel="stylesheet" href="/styles.css?v=55">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -99,6 +99,12 @@
           <button data-page="owner-aging" class="feature-nav-item" data-permission="finance.owner"><span>Aging hutang/piutang</span><small>Tagihan yang perlu ditindaklanjuti</small></button>
           <button data-page="owner-product-analytics" class="feature-nav-item" data-permission="finance.owner"><span>Kesehatan produk</span><small>Cepat, lambat, margin, dead stock</small></button>
           <button data-page="owner-accountant-export" class="feature-nav-item" data-permission="finance.owner"><span>Ekspor akuntan</span><small>Data siap olah dalam CSV</small></button>
+          <button data-page="accounting-accounts" class="feature-nav-item" data-permission="finance.owner"><span>Daftar akun</span><small>Kode akun dan kelompok pembukuan</small></button>
+          <button data-page="accounting-journals" class="feature-nav-item" data-permission="finance.owner"><span>Jurnal umum</span><small>Posting otomatis dan jurnal manual</small></button>
+          <button data-page="accounting-ledger" class="feature-nav-item" data-permission="finance.owner"><span>Buku besar</span><small>Mutasi per akun</small></button>
+          <button data-page="accounting-trial-balance" class="feature-nav-item" data-permission="finance.owner"><span>Neraca saldo</span><small>Saldo awal, debit, kredit, akhir</small></button>
+          <button data-page="accounting-balance-sheet" class="feature-nav-item" data-permission="finance.owner"><span>Neraca</span><small>Aset, kewajiban, dan modal</small></button>
+          <button data-page="accounting-periods" class="feature-nav-item" data-permission="finance.owner"><span>Periode & tutup buku</span><small>Kunci periode yang sudah diperiksa</small></button>
         </div>
         <button data-nav-group="workforce" class="nav-item" aria-expanded="false"><span>♙</span><span>Karyawan<small>Jadwal, target, approval</small></span><b>›</b></button>
         <div data-nav-panel="workforce" class="feature-nav-panel">
@@ -128,7 +134,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Pilot & Hardening · v2.0.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Akuntansi Inti · v2.1.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -433,6 +439,49 @@
         <section class="surface accountant-export-card"><div><strong>Data mengikuti periode dan outlet pada halaman Laba rugi.</strong><p id="accountant-export-summary" class="muted"></p></div><button id="export-accountant-csv" class="button primary" type="button">Unduh paket CSV</button></section>
       </div></section>
 
+      <section id="page-accounting-accounts" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">AKUNTANSI INTI</p><h1>Daftar akun</h1><p class="muted">Akun sistem menjaga pencatatan penjualan, stok, hutang, piutang, dan biaya tetap konsisten.</p></div><button class="button secondary" data-refresh-accounting>Sinkronkan</button></div>
+        <div id="accounting-account-metrics" class="report-cards"></div>
+        <section class="surface report-wide-section"><div id="accounting-account-list" class="table-wrap"><div class="empty-state compact">Memuat daftar akun...</div></div></section>
+      </div></section>
+
+      <section id="page-accounting-journals" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">PEMBUKUAN DEBIT-KREDIT</p><h1>Jurnal umum</h1><p class="muted">Transaksi operasional dibukukan otomatis dan jurnal manual wajib seimbang.</p></div><button class="button secondary" data-refresh-accounting>Sinkronkan transaksi</button></div>
+        <div class="surface accounting-filter"><label>Dari<input id="accounting-from" type="date"></label><label>Sampai<input id="accounting-to" type="date"></label><button id="apply-accounting-filter" class="button primary">Tampilkan</button></div>
+        <p id="accounting-status" class="report-status muted">Memuat pembukuan...</p>
+        <form id="manual-journal-form" class="surface accounting-journal-form">
+          <div class="settings-section-head"><div><p class="eyebrow">JURNAL MANUAL</p><h2>Catat modal atau penyesuaian</h2></div><button id="add-manual-journal-line" class="button secondary" type="button">Tambah baris</button></div>
+          <div class="form-grid compact"><label>Tanggal<input id="manual-journal-date" type="date" required></label><label>Keterangan<input id="manual-journal-description" minlength="3" maxlength="240" required placeholder="Contoh: setoran modal awal"></label></div>
+          <div id="manual-journal-lines" class="manual-journal-lines"></div>
+          <div class="accounting-journal-total"><span>Debit <strong id="manual-journal-debit">Rp0</strong></span><span>Kredit <strong id="manual-journal-credit">Rp0</strong></span><button class="button primary" type="submit">Posting jurnal</button></div>
+        </form>
+        <section class="surface report-wide-section"><div class="report-section-heading"><div><p class="eyebrow">RIWAYAT</p><h2>Jurnal periode terpilih</h2></div></div><div id="accounting-journal-list" class="table-wrap"></div></section>
+      </div></section>
+
+      <section id="page-accounting-ledger" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">MUTASI AKUN</p><h1>Buku besar</h1><p class="muted">Telusuri debit dan kredit pada satu akun dalam periode laporan.</p></div><button class="button secondary" data-refresh-accounting>Muat ulang</button></div>
+        <div class="surface accounting-filter"><label>Akun<select id="accounting-ledger-account"></select></label><button id="apply-accounting-ledger" class="button primary">Tampilkan akun</button></div>
+        <section class="surface report-wide-section"><div id="accounting-ledger-list" class="table-wrap"></div></section>
+      </div></section>
+
+      <section id="page-accounting-trial-balance" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">PENGUJIAN SALDO</p><h1>Neraca saldo</h1><p class="muted">Total debit dan kredit harus sama sebelum periode ditutup.</p></div><button class="button secondary" data-refresh-accounting>Muat ulang</button></div>
+        <div id="accounting-trial-metrics" class="report-cards"></div>
+        <section class="surface report-wide-section"><div id="accounting-trial-list" class="table-wrap"></div></section>
+      </div></section>
+
+      <section id="page-accounting-balance-sheet" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">POSISI KEUANGAN</p><h1>Neraca</h1><p class="muted">Aset dibandingkan dengan kewajiban, modal, dan laba berjalan.</p></div><button class="button secondary" data-refresh-accounting>Muat ulang</button></div>
+        <div id="accounting-balance-metrics" class="report-cards"></div>
+        <section class="surface report-wide-section"><div id="accounting-balance-list" class="table-wrap"></div></section>
+      </div></section>
+
+      <section id="page-accounting-periods" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">KONTROL PEMBUKUAN</p><h1>Periode dan tutup buku</h1><p class="muted">Penutupan mencegah jurnal manual baru masuk ke periode yang sudah diperiksa.</p></div><button class="button secondary" data-refresh-accounting>Muat ulang</button></div>
+        <form id="accounting-period-form" class="surface accounting-period-form"><div class="form-grid compact"><label>Nama periode<input id="accounting-period-name" required placeholder="Contoh: Juli 2026"></label><label>Mulai<input id="accounting-period-start" type="date" required></label><label>Selesai<input id="accounting-period-end" type="date" required></label></div><button class="button primary" type="submit">Buat periode</button></form>
+        <section class="surface report-wide-section"><div id="accounting-period-list"></div></section>
+      </div></section>
+
       <section id="page-pilot-readiness" class="page"><div class="content-width">
         <div class="page-title"><div><p class="eyebrow">PILOT PRODUKSI</p><h1>Kesiapan satu outlet</h1><p class="muted">Simpan bukti uji sebelum menambah kasir atau outlet.</p></div><button class="button secondary" data-refresh-pilot>Muat ulang</button></div>
         <div id="pilot-summary" class="report-cards"></div>
@@ -717,6 +766,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=54"></script>
+  <script type="module" src="/app.js?v=55"></script>
 </body>
 </html>

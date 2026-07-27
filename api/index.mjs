@@ -4,6 +4,7 @@ import { summarizeExpiryBatches, todayInTimeZone } from '../packages/domain/src/
 import { applySaleAdjustment, normalizeSaleAdjustment, saleAdjustmentFingerprintPayload } from '../packages/domain/src/sale-adjustment.mjs';
 import { applyVoucher } from '../packages/domain/src/loyalty.mjs';
 import { calculateEmployeeCommission } from '../packages/domain/src/employee-operations.mjs';
+import { validateJournalLines } from '../packages/domain/src/ledger.mjs';
 
 const PERMISSIONS = {
   OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner','multioutlet.view','multioutlet.manage','pilot.manage'],
@@ -20,7 +21,7 @@ const BACKUP_TABLES = [
   'shifts','cash_movements','shift_reconciliations','sales','sale_items','payments','parked_sales','sale_adjustment_authorizations',
   'employee_schedules','attendance_records','employee_targets','approval_policies','approval_requests',
   'backup_exports','pilot_runs','pilot_check_results','production_incidents','recovery_drills',
-  'expense_categories','outlet_expenses',
+  'expense_categories','outlet_expenses','chart_of_accounts','accounting_periods','journal_entries','journal_lines',
   'purchase_planning_settings','restock_policies','purchase_orders','purchase_order_items','purchase_receipts','purchase_receipt_items','supplier_returns','supplier_return_items',
   'stock_balances','stock_ledger','inventory_batches','inventory_batch_movements',
   'stock_transfers','stock_transfer_items','transfer_requests','transfer_request_items','transfer_request_batches','outlet_price_overrides','promotion_outlets','operational_notifications','stock_counts','stock_count_items',
@@ -821,7 +822,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.0.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.1.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'login') {
@@ -2609,6 +2610,83 @@ async function routeRequest(request, response, route) {
     return send(response,200,await rpc('void_outlet_expense',{
       p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_expense_id:expenseId,
       p_reason:String(input.reason??'').trim()
+    }));
+  }
+
+  if(request.method==='POST'&&route==='accounting/sync'){
+    requirePermission(session,'finance.owner');
+    return send(response,200,await rpc('sync_accounting_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id
+    }));
+  }
+
+  if(request.method==='GET'&&route==='accounting/dashboard'){
+    requirePermission(session,'finance.owner');
+    const timezone=context.outlet.timezone??'Asia/Makassar';
+    const today=todayInTimeZone(new Date(),timezone);
+    const from=queryValue(request,'from')??`${today.slice(0,4)}-01-01`;
+    const to=queryValue(request,'to')??today;
+    const accountId=queryValue(request,'accountId');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to){
+      throw Object.assign(new Error('Periode akuntansi tidak valid'),{status:400});
+    }
+    if(accountId&&!/^[0-9a-f-]{36}$/i.test(accountId)){
+      throw Object.assign(new Error('Akun buku besar tidak valid'),{status:400});
+    }
+    return send(response,200,await rpc('report_core_accounting_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_from:from,p_to:to,p_account_id:accountId||null
+    }));
+  }
+
+  if(request.method==='POST'&&route==='accounting/journals'){
+    requirePermission(session,'finance.owner');
+    const input=bodyOf(request),lines=Array.isArray(input.lines)?input.lines:[];
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(input.entryDate??''))){
+      throw Object.assign(new Error('Tanggal jurnal tidak valid'),{status:400});
+    }
+    if(String(input.description??'').trim().length<3||String(input.description??'').trim().length>240){
+      throw Object.assign(new Error('Keterangan jurnal harus 3â€“240 karakter'),{status:400});
+    }
+    let validated;
+    try{validated=validateJournalLines(lines);}catch(error){error.status=400;throw error;}
+    const normalized=validated.lines.map((line)=>{
+      if(!/^[0-9a-f-]{36}$/i.test(String(line.accountId??'')))throw Object.assign(new Error('Akun jurnal tidak valid'),{status:400});
+      if(line.outletId&&!context.outlets.some((outlet)=>outlet.id===line.outletId)){
+        throw Object.assign(new Error('Outlet jurnal tidak dapat diakses'),{status:403});
+      }
+      return{accountId:line.accountId,outletId:line.outletId||null,memo:String(line.memo??'').trim(),debit:line.debit,credit:line.credit};
+    });
+    return send(response,201,await rpc('post_manual_journal_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_entry_date:input.entryDate,
+      p_description:String(input.description).trim(),p_lines:normalized
+    }));
+  }
+
+  if(request.method==='POST'&&/^accounting\/journals\/[^/]+\/reverse$/.test(route)){
+    requirePermission(session,'finance.owner');
+    const input=bodyOf(request),entryId=route.split('/')[2];
+    return send(response,200,await rpc('reverse_manual_journal_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_entry_id:entryId,
+      p_reason:String(input.reason??'').trim()
+    }));
+  }
+
+  if(request.method==='POST'&&route==='accounting/periods'){
+    requirePermission(session,'finance.owner');
+    const input=bodyOf(request);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(input.startsOn??''))||!/^\d{4}-\d{2}-\d{2}$/.test(String(input.endsOn??''))){
+      throw Object.assign(new Error('Tanggal periode tidak valid'),{status:400});
+    }
+    return send(response,201,await rpc('save_accounting_period_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_name:String(input.name??'').trim(),
+      p_starts_on:input.startsOn,p_ends_on:input.endsOn
+    }));
+  }
+
+  if(request.method==='POST'&&/^accounting\/periods\/[^/]+\/close$/.test(route)){
+    requirePermission(session,'finance.owner');
+    return send(response,200,await rpc('close_accounting_period_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_period_id:route.split('/')[2]
     }));
   }
 
