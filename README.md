@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Paket Multi-outlet v1.27.0
+# Kasir Nusa POS — Kandidat Pilot & Hardening v2.0.0
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -61,6 +61,11 @@ kapabilitas retail yang lebih lengkap tersedia di
 - Navigasi accordion: menekan kelompok di sidebar membuka daftar subfitur
   memanjang tepat di bawah kelompok tersebut, tanpa panel atau halaman menu
   tambahan.
+- Pusat pilot khusus Owner dengan lima halaman terpisah: kesiapan, insiden,
+  performa, pemulihan, dan SOP.
+- Checklist pilot 25 langkah, keputusan lanjut/tunda berbasis bukti, pemantauan
+  error/performa tanpa isi transaksi, serta pencatatan uji pemulihan backup
+  tanpa menimpa data produksi.
 - Promo dan Loyalitas, serta Pelanggan dan Supplier, memiliki halaman terpisah;
   rincian Stok, Pembelian, Laporan, dan Pengaturan juga dipisahkan sebagai
   tujuan navigasi masing-masing.
@@ -115,6 +120,12 @@ deployment. Migrasi ini menambahkan workflow transfer bertahap, harga dan
 cakupan promo outlet, role Manajer Outlet, serta notifikasi operasional.
 Jangan deploy source v1.27 sebelum migrasi berhasil.
 
+Untuk kandidat v2.0, jalankan satu file
+`supabase/migrations/202607270032_pilot_production_hardening.sql` sebelum
+deployment. Migrasi ini menambahkan periode dan checklist pilot, insiden,
+telemetri operasional yang minim data, bukti uji pemulihan, serta pemeriksaan
+pengaman stok/idempotensi. Jangan deploy source v2.0 sebelum migrasi berhasil.
+
 Klik dua kali `Deploy-Kasir-Nusa.cmd` dan tunggu sampai muncul tulisan **Deployment berhasil**.
 
 Rahasia Supabase hanya boleh tersimpan di pengaturan Environment Variables Vercel. Jangan menaruh `SUPABASE_SERVICE_ROLE_KEY` di browser, screenshot, chat, atau repository.
@@ -127,7 +138,9 @@ Jalankan:
 npm test
 ```
 
-Kandidat v1.27.0 memiliki 144 pengujian otomatis. Pengujian toko nyata tetap harus mengikuti `GO-LIVE-CHECKLIST.md`.
+Kandidat v2.0.0 memiliki 148 pengujian otomatis. Pengujian toko nyata tetap
+harus mengikuti `GO-LIVE-CHECKLIST.md`; keputusan lulus pilot tidak menggantikan
+verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 
 ## Aplikasi kasir Android
 

@@ -6,7 +6,7 @@ import { customerReceiptView } from './receipt.mjs';
 import { disconnectBluetoothPrinter, printEscPosReceipt, printEscPosTest, printerConnected, printerSelected, restoreGrantedPrinter, selectBluetoothPrinter, supportsBluetoothClassicPrinting } from './escpos-printer.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]} };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -23,6 +23,7 @@ let barcodeCameraTimer = null;
 let barcodeCameraTarget = null;
 let barcodeCameraControls = null;
 let barcodeCameraCompleting = false;
+let lastTelemetryAt = 0;
 
 function storeAuth(data) {
   const auth = saveAuth(data, state);
@@ -74,7 +75,22 @@ async function refreshSession(allowStorageRecovery = true) {
   return refreshPromise;
 }
 
+function reportClientTelemetry(eventType,path,{statusCode=null,durationMs=null}={}){
+  if(!state.token||path==='/api/pilot/telemetry')return;
+  const now=Date.now();
+  if(eventType==='NETWORK_ERROR'&&now-lastTelemetryAt<10000)return;
+  lastTelemetryAt=now;
+  const headers={'content-type':'application/json',authorization:`Bearer ${state.token}`,'x-device-id':posDevice.id};
+  if(state.ownerContextId)headers['x-owner-context-id']=state.ownerContextId;
+  if(state.activeOutletId)headers['x-outlet-id']=state.activeOutletId;
+  fetch('/api/pilot/telemetry',{method:'POST',headers,body:JSON.stringify({
+    eventType,endpoint:path.split('?')[0],statusCode,durationMs,
+    online:navigator.onLine,platform:navigator.userAgent.slice(0,80)
+  })}).catch(()=>{});
+}
+
 async function request(path, options = {}, allowRefresh = true) {
+  const started=globalThis.performance?.now?.()??Date.now();
   const headers = { 'content-type': 'application/json', ...(options.headers ?? {}) };
   if (state.token) headers.authorization = `Bearer ${state.token}`;
   if (state.ownerContextId) headers['x-owner-context-id'] = state.ownerContextId;
@@ -84,10 +100,14 @@ async function request(path, options = {}, allowRefresh = true) {
   try {
     response = await fetch(path, { ...options, headers });
   } catch {
+    reportClientTelemetry('NETWORK_ERROR',path,{durationMs:Math.round((globalThis.performance?.now?.()??Date.now())-started)});
     const error = new Error(navigator.onLine ? 'Server belum dapat dihubungi. Coba lagi beberapa saat.' : 'Perangkat sedang offline. Periksa koneksi internet.');
     error.code = 'NETWORK_ERROR';
     throw error;
   }
+  const durationMs=Math.round((globalThis.performance?.now?.()??Date.now())-started);
+  if(response.status>=500)reportClientTelemetry('HTTP_ERROR',path,{statusCode:response.status,durationMs});
+  else if(durationMs>=2500)reportClientTelemetry('SLOW_REQUEST',path,{statusCode:response.status,durationMs});
   const data = await response.json().catch(() => ({}));
   if (response.status === 401 && allowRefresh && !['/api/login','/api/refresh'].includes(path) && state.refreshToken) {
     try { await refreshSession(); return request(path, options, false); }
@@ -3439,6 +3459,59 @@ async function advanceTransfer(id,action){
   }catch(error){toast(error.message);}
 }
 
+const pilotPages=new Set(['pilot-readiness','pilot-incidents','pilot-performance','pilot-recovery','pilot-sop']);
+
+function pilotStatusLabel(status){
+  return {DRAFT:'Draft',ACTIVE:'Berjalan',PASSED:'Lulus',NEEDS_REVISION:'Perlu revisi',CANCELLED:'Dibatalkan',
+    PENDING:'Belum diuji',FAILED:'Gagal',NOT_APPLICABLE:'Tidak berlaku'}[status]??status;
+}
+
+function renderPilotDashboard(){
+  const data=state.pilot;if(!data)return;
+  const run=data.activeRun,checks=data.checks??[],passed=checks.filter((item)=>['PASSED','NOT_APPLICABLE'].includes(item.status)).length;
+  const failed=checks.filter((item)=>item.status==='FAILED').length,pending=checks.filter((item)=>item.status==='PENDING').length;
+  el('pilot-summary').innerHTML=[
+    ['Status',run?pilotStatusLabel(run.status):'Belum dimulai'],['Checklist',run?`${passed}/${checks.length}`:'0'],
+    ['Gagal',failed],['Insiden terbuka',(data.incidents??[]).filter((item)=>!['RESOLVED','CLOSED'].includes(item.status)).length],
+    ['Kesehatan',data.health?.status??'-']
+  ].map(([label,value])=>`<article><span>${label}</span><strong>${value}</strong></article>`).join('');
+  el('pilot-run-form').classList.toggle('hidden',run?.status==='ACTIVE');
+  el('pilot-active-workspace').classList.toggle('hidden',run?.status!=='ACTIVE');
+  const safety=data.safety??{};
+  el('pilot-safety-title').textContent=safety.ready?'Kontrol transaksi siap':'Kontrol transaksi perlu perhatian';
+  el('pilot-safety-list').innerHTML=[
+    ['Stok negatif',Number(safety.negativeStock??0)===0],['Idempotensi penjualan',safety.saleIdempotency],
+    ['Idempotensi jurnal stok',safety.ledgerIdempotency],['Transaksi penjualan atomik',safety.atomicSaleRpc]
+  ].map(([label,ok])=>`<span class="badge ${ok?'ok':'danger'}">${ok?'✓':'!'} ${label}</span>`).join('');
+  const groups=[...new Set(checks.map((item)=>item.category))];
+  el('pilot-checklist').innerHTML=groups.map((group)=>`<section class="surface pilot-check-group"><div class="settings-section-head"><div><p class="eyebrow">${escapeHtml(group.replaceAll('_',' '))}</p><h2>${checks.filter((item)=>item.category===group&&['PASSED','NOT_APPLICABLE'].includes(item.status)).length}/${checks.filter((item)=>item.category===group).length} selesai</h2></div></div>${checks.filter((item)=>item.category===group).map((item)=>`<article class="pilot-check-row" data-pilot-check="${item.id}"><div><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.check_code)}</small></div><select class="pilot-check-status"><option value="PENDING" ${item.status==='PENDING'?'selected':''}>Belum diuji</option><option value="PASSED" ${item.status==='PASSED'?'selected':''}>Lulus</option><option value="FAILED" ${item.status==='FAILED'?'selected':''}>Gagal</option><option value="NOT_APPLICABLE" ${item.status==='NOT_APPLICABLE'?'selected':''}>Tidak berlaku</option></select><input class="pilot-check-evidence" value="${escapeHtml(item.evidence_note??'')}" maxlength="500" placeholder="Bukti/catatan"><button class="button secondary save-pilot-check" type="button">Simpan</button></article>`).join('')}</section>`).join('');
+  const blockingIncidents=(data.incidents??[]).some((item)=>['HIGH','CRITICAL'].includes(item.severity)&&!['RESOLVED','CLOSED'].includes(item.status));
+  el('pilot-pass').disabled=pending>0||failed>0||blockingIncidents||!data.safety?.ready||data.health?.status==='CRITICAL';
+  const outletOptions=state.outlets.map((item)=>`<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('');
+  el('pilot-outlet').innerHTML=outletOptions;
+  el('incident-outlet').innerHTML=`<option value="">Seluruh sistem</option>${outletOptions}`;
+  el('recovery-backup').innerHTML=(data.backups??[]).map((item)=>`<option value="${item.id}">${escapeHtml(item.file_name)} · ${Number(item.total_rows).toLocaleString('id-ID')} baris</option>`).join('')||'<option value="">Belum ada backup selesai</option>';
+
+  el('pilot-incident-list').innerHTML=(data.incidents??[]).map((item)=>`<article class="surface multioutlet-card incident-${item.severity.toLowerCase()}"><div class="multioutlet-card-heading"><div><strong>${escapeHtml(item.title)}</strong><small>${new Date(item.reported_at).toLocaleString('id-ID')} · ${escapeHtml(item.category)}</small></div><span class="pill">${item.severity} · ${item.status}</span></div><p>${escapeHtml(item.description)}</p>${!['RESOLVED','CLOSED'].includes(item.status)?`<div class="pilot-incident-resolution"><input data-incident-resolution="${item.id}" maxlength="500" placeholder="Catatan penyelesaian"><button type="button" class="button primary resolve-pilot-incident" data-incident-id="${item.id}">Selesaikan</button></div>`:`<p class="muted">${escapeHtml(item.resolution_note??'Sudah diselesaikan')}</p>`}</article>`).join('')||'<div class="empty-state">Belum ada insiden produksi.</div>';
+  const telemetry=data.telemetry??{};
+  el('pilot-performance-metrics').innerHTML=[['Event 7 hari',telemetry.total??0],['Error',telemetry.errors??0],['Permintaan lambat',telemetry.slowRequests??0],['P95 event',`${telemetry.p95DurationMs??0} ms`]].map(([label,value])=>`<article><span>${label}</span><strong>${value}</strong></article>`).join('');
+  el('pilot-performance-list').innerHTML=`<table><thead><tr><th>Endpoint</th><th>Event</th><th>Error</th><th>Durasi maksimum</th><th>Terakhir</th></tr></thead><tbody>${(telemetry.endpoints??[]).map((item)=>`<tr><td><code>${escapeHtml(item.endpoint)}</code></td><td>${item.events}</td><td>${item.errors}</td><td>${item.maxDurationMs} ms</td><td>${item.lastSeenAt?new Date(item.lastSeenAt).toLocaleString('id-ID'):'-'}</td></tr>`).join('')||'<tr><td colspan="5">Belum ada error atau permintaan lambat.</td></tr>'}</tbody></table>`;
+  el('recovery-drill-list').innerHTML=(data.drills??[]).map((item)=>`<article class="surface multioutlet-card"><div class="multioutlet-card-heading"><div><strong>Latihan ${item.result==='PASSED'?'lulus':'gagal'}</strong><small>${new Date(item.performed_at).toLocaleString('id-ID')} · ${Number(item.row_count).toLocaleString('id-ID')} baris</small></div><span class="pill">${item.result}</span></div><p>Checksum ${item.checksum_verified?'terverifikasi':'belum'} · prosedur ${item.procedure_reviewed?'ditinjau':'belum ditinjau'}</p>${item.notes?`<p class="muted">${escapeHtml(item.notes)}</p>`:''}</article>`).join('')||'<div class="empty-state">Belum ada latihan pemulihan.</div>';
+}
+
+async function loadPilotDashboard(){
+  state.pilot=await request('/api/pilot/dashboard');
+  renderPilotDashboard();
+}
+
+async function decidePilot(decision){
+  if(!state.pilot?.activeRun)return;
+  try{
+    await request(`/api/pilot/runs/${state.pilot.activeRun.id}/decide`,{method:'POST',body:JSON.stringify({decision})});
+    toast(decision==='PASSED'?'Pilot dinyatakan lulus':'Pilot ditandai perlu revisi');await loadPilotDashboard();
+  }catch(error){toast(error.message);}
+}
+
 function showPage(name) {
   const item=document.querySelector(`.feature-nav-item[data-page="${name}"]`);
   const target=item?.dataset.targetPage??name;
@@ -3452,6 +3525,7 @@ function showPage(name) {
   if(group)openNavGroup(group);
   localStorage.setItem('pos_active_page',name);
   if(multioutletPages.has(name))loadMultiOutletWorkspace().catch((error)=>toast(error.message));
+  if(pilotPages.has(name)&&name!=='pilot-sop')loadPilotDashboard().catch((error)=>toast(error.message));
 }
 
 function openNavGroup(group,{toggle=false}={}){
@@ -3785,6 +3859,69 @@ document.addEventListener('click',async(event)=>{
     }catch(error){toast(error.message);}
   }
 });
+const pilotToday=new Date(),pilotEnd=new Date(Date.now()+7*86400000);
+el('pilot-start').value=pilotToday.toISOString().slice(0,10);
+el('pilot-end').value=pilotEnd.toISOString().slice(0,10);
+document.querySelectorAll('[data-refresh-pilot]').forEach((button)=>button.addEventListener('click',()=>loadPilotDashboard().catch((error)=>toast(error.message))));
+el('pilot-run-form').addEventListener('submit',async(event)=>{
+  event.preventDefault();
+  try{
+    await request('/api/pilot/runs',{method:'POST',body:JSON.stringify({
+      name:el('pilot-name').value,outletId:el('pilot-outlet').value,
+      plannedStart:el('pilot-start').value,plannedEnd:el('pilot-end').value,notes:el('pilot-notes').value
+    })});
+    toast('Periode pilot dimulai');await loadPilotDashboard();
+  }catch(error){toast(error.message);}
+});
+el('pilot-checklist').addEventListener('click',async(event)=>{
+  const button=event.target.closest('.save-pilot-check');if(!button)return;
+  const row=button.closest('[data-pilot-check]');
+  try{
+    await request(`/api/pilot/checks/${row.dataset.pilotCheck}`,{method:'PATCH',body:JSON.stringify({
+      status:row.querySelector('.pilot-check-status').value,evidence:row.querySelector('.pilot-check-evidence').value
+    })});
+    toast('Hasil uji disimpan');await loadPilotDashboard();
+  }catch(error){toast(error.message);}
+});
+el('pilot-needs-revision').addEventListener('click',()=>decidePilot('NEEDS_REVISION'));
+el('pilot-pass').addEventListener('click',()=>decidePilot('PASSED'));
+el('pilot-incident-form').addEventListener('submit',async(event)=>{
+  event.preventDefault();
+  try{
+    await request('/api/pilot/incidents',{method:'POST',body:JSON.stringify({
+      outletId:el('incident-outlet').value||null,pilotRunId:state.pilot?.activeRun?.status==='ACTIVE'?state.pilot.activeRun.id:null,
+      category:el('incident-category').value,severity:el('incident-severity').value,title:el('incident-title').value,
+      description:el('incident-description').value,reproductionSteps:el('incident-steps').value,
+      expectedResult:el('incident-expected').value,actualResult:el('incident-actual').value
+    })});
+    event.currentTarget.reset();toast('Insiden produksi dicatat');await loadPilotDashboard();
+  }catch(error){toast(error.message);}
+});
+el('pilot-incident-list').addEventListener('click',async(event)=>{
+  const button=event.target.closest('.resolve-pilot-incident');if(!button)return;
+  const note=document.querySelector(`[data-incident-resolution="${button.dataset.incidentId}"]`).value.trim();
+  if(note.length<3)return toast('Isi catatan penyelesaian minimal 3 karakter.');
+  try{
+    await request(`/api/pilot/incidents/${button.dataset.incidentId}`,{method:'PATCH',body:JSON.stringify({status:'RESOLVED',resolutionNote:note})});
+    toast('Insiden ditandai selesai');await loadPilotDashboard();
+  }catch(error){toast(error.message);}
+});
+el('recovery-drill-form').addEventListener('submit',async(event)=>{
+  event.preventDefault();
+  if(!el('recovery-checksum').checked||!el('recovery-procedure').checked)return toast('Verifikasi checksum dan tinjau prosedur terlebih dahulu.');
+  try{
+    await request('/api/pilot/recovery-drills',{method:'POST',body:JSON.stringify({
+      backupExportId:el('recovery-backup').value,result:'PASSED',checksumVerified:true,procedureReviewed:true,notes:el('recovery-notes').value
+    })});
+    event.currentTarget.reset();toast('Latihan pemulihan dicatat');await loadPilotDashboard();
+  }catch(error){toast(error.message);}
+});
+el('purge-telemetry').addEventListener('click',async()=>{
+  try{
+    const result=await request('/api/pilot/telemetry/purge',{method:'POST',body:JSON.stringify({retentionDays:30})});
+    toast(`${result.deleted??0} event lama dibersihkan`);await loadPilotDashboard();
+  }catch(error){toast(error.message);}
+});
 el('refresh-report').addEventListener('click', loadReport);
 el('apply-report-filter').addEventListener('click', loadReport);
 el('report-preset').addEventListener('change', applyReportPreset);
@@ -3902,6 +4039,8 @@ el('approval-policy-form').addEventListener('submit',saveApprovalPolicy);
 el('approval-request-list').addEventListener('click',decideApproval);
 el('refresh-workforce-activity').addEventListener('click',loadWorkforceActivity);
 el('refresh-reconciliations').addEventListener('click',loadWorkforceReconciliations);
+window.addEventListener('error',()=>reportClientTelemetry('CLIENT_ERROR','/api/client/runtime'));
+window.addEventListener('unhandledrejection',()=>reportClientTelemetry('CLIENT_ERROR','/api/client/runtime'));
 window.addEventListener('online', () => { el('network-dot').classList.remove('offline'); el('network-status').textContent = 'Online'; syncQueue(); });
 window.addEventListener('offline', () => { el('network-dot').classList.add('offline'); el('network-status').textContent = 'Offline'; });
 window.addEventListener('storage', (event) => {

@@ -14,7 +14,8 @@ export const PERMISSIONS = Object.freeze({
   MANAGE_APPROVALS: 'approval.manage',
   OWNER_FINANCE: 'finance.owner',
   VIEW_MULTI_OUTLET: 'multioutlet.view',
-  MANAGE_MULTI_OUTLET: 'multioutlet.manage'
+  MANAGE_MULTI_OUTLET: 'multioutlet.manage',
+  MANAGE_PILOT: 'pilot.manage'
 });
 
 export const ROLE_PERMISSIONS = Object.freeze({

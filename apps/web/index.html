@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#174c4f">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=53">
+  <link rel="stylesheet" href="/styles.css?v=54">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -108,6 +108,14 @@
           <button data-page="workforce-activity" class="feature-nav-item" data-permission="workforce.manage"><span>Aktivitas</span><small>Jejak pengguna dan perangkat</small></button>
           <button data-page="workforce-reconciliation" class="feature-nav-item" data-permission="workforce.manage"><span>Rekonsiliasi shift</span><small>Selisih per pembayaran</small></button>
         </div>
+        <button data-nav-group="pilot" class="nav-item" aria-expanded="false"><span>✓</span><span>Pilot & Keamanan<small>UAT, insiden, pemulihan</small></span><b>›</b></button>
+        <div data-nav-panel="pilot" class="feature-nav-panel">
+          <button data-page="pilot-readiness" class="feature-nav-item" data-permission="pilot.manage"><span>Kesiapan pilot</span><small>Periode dan checklist UAT</small></button>
+          <button data-page="pilot-incidents" class="feature-nav-item" data-permission="pilot.manage"><span>Insiden produksi</span><small>Temuan, dampak, dan penyelesaian</small></button>
+          <button data-page="pilot-performance" class="feature-nav-item" data-permission="pilot.manage"><span>Error & performa</span><small>Permintaan lambat dan kegagalan</small></button>
+          <button data-page="pilot-recovery" class="feature-nav-item" data-permission="pilot.manage"><span>Latihan pemulihan</span><small>Bukti backup dan prosedur recovery</small></button>
+          <button data-page="pilot-sop" class="feature-nav-item" data-permission="pilot.manage"><span>SOP gangguan</span><small>Internet, printer, scanner, sinkronisasi</small></button>
+        </div>
         <button data-nav-group="system" class="nav-item" aria-expanded="false"><span>⚙</span><span>Sistem<small>Data dan pengaturan</small></span><b>›</b></button>
         <div data-nav-panel="system" class="feature-nav-panel">
           <button data-page="imports" class="feature-nav-item" data-permission="audit.view"><span>Impor data</span><small>Masukkan data awal</small></button>
@@ -120,7 +128,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Paket Multi-outlet · v1.27.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Pilot & Hardening · v2.0.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -425,6 +433,34 @@
         <section class="surface accountant-export-card"><div><strong>Data mengikuti periode dan outlet pada halaman Laba rugi.</strong><p id="accountant-export-summary" class="muted"></p></div><button id="export-accountant-csv" class="button primary" type="button">Unduh paket CSV</button></section>
       </div></section>
 
+      <section id="page-pilot-readiness" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">PILOT PRODUKSI</p><h1>Kesiapan satu outlet</h1><p class="muted">Simpan bukti uji sebelum menambah kasir atau outlet.</p></div><button class="button secondary" data-refresh-pilot>Muat ulang</button></div>
+        <div id="pilot-summary" class="report-cards"></div>
+        <form id="pilot-run-form" class="surface pilot-form"><p class="eyebrow">MULAI PERIODE PILOT</p><div class="form-grid compact"><label>Nama pilot<input id="pilot-name" value="Pilot Outlet Pertama" required></label><label>Outlet<select id="pilot-outlet" required></select></label><label>Mulai<input id="pilot-start" type="date" required></label><label>Selesai<input id="pilot-end" type="date" required></label></div><label>Catatan<input id="pilot-notes" maxlength="500" placeholder="Target, kasir, dan jam operasional"></label><button class="button primary" type="submit">Mulai pilot</button></form>
+        <section id="pilot-active-workspace" class="hidden"><div class="surface pilot-safety"><div><p class="eyebrow">KONTROL TRANSAKSI</p><h2 id="pilot-safety-title">Memeriksa...</h2></div><div id="pilot-safety-list"></div></div><div id="pilot-checklist" class="pilot-checklist"></div><div class="surface pilot-decision"><div><strong>Keputusan akhir pilot</strong><p class="muted">Lulus hanya tersedia setelah tidak ada item tertunda atau gagal.</p></div><div class="button-row"><button id="pilot-needs-revision" class="button secondary" type="button">Perlu revisi</button><button id="pilot-pass" class="button primary" type="button">Lulus pilot</button></div></div></section>
+      </div></section>
+
+      <section id="page-pilot-incidents" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">TEMUAN PILOT</p><h1>Insiden produksi</h1><p class="muted">Catat langkah kejadian dan dampaknya tanpa memasukkan kata sandi atau data kartu.</p></div><button class="button secondary" data-refresh-pilot>Muat ulang</button></div>
+        <form id="pilot-incident-form" class="surface pilot-form"><div class="form-grid compact"><label>Outlet<select id="incident-outlet"><option value="">Seluruh sistem</option></select></label><label>Kategori<select id="incident-category"><option value="POS">POS</option><option value="PAYMENT">Pembayaran</option><option value="STOCK">Stok</option><option value="SYNC">Sinkronisasi</option><option value="PRINTER">Printer</option><option value="SCANNER">Scanner</option><option value="PERFORMANCE">Performa</option><option value="DATA">Data</option><option value="OTHER">Lainnya</option></select></label><label>Keparahan<select id="incident-severity"><option value="MEDIUM">Sedang</option><option value="LOW">Rendah</option><option value="HIGH">Tinggi</option><option value="CRITICAL">Kritis</option></select></label><label>Judul<input id="incident-title" minlength="3" maxlength="120" required></label></div><label>Deskripsi<textarea id="incident-description" minlength="5" maxlength="1000" required></textarea></label><label>Langkah kejadian<textarea id="incident-steps" maxlength="1500"></textarea></label><div class="form-grid compact"><label>Hasil yang diharapkan<textarea id="incident-expected" maxlength="1000"></textarea></label><label>Hasil aktual<textarea id="incident-actual" maxlength="1000"></textarea></label></div><button class="button primary" type="submit">Catat insiden</button></form>
+        <div id="pilot-incident-list" class="multioutlet-list"></div>
+      </div></section>
+
+      <section id="page-pilot-performance" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">OBSERVABILITY</p><h1>Error & performa 7 hari</h1><p class="muted">Hanya endpoint, durasi, status, perangkat, dan kondisi online yang dicatat—tanpa isi transaksi.</p></div><div class="button-row"><button id="purge-telemetry" class="button secondary" type="button">Bersihkan &gt;30 hari</button><button class="button secondary" data-refresh-pilot>Muat ulang</button></div></div>
+        <div id="pilot-performance-metrics" class="report-cards"></div><div id="pilot-performance-list" class="surface table-wrap"></div>
+      </div></section>
+
+      <section id="page-pilot-recovery" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">DISASTER RECOVERY</p><h1>Latihan pemulihan</h1><p class="muted">Latihan tidak menimpa produksi. Verifikasi file, tinjau prosedur, lalu simpan bukti.</p></div><button class="button secondary" data-refresh-pilot>Muat ulang</button></div>
+        <form id="recovery-drill-form" class="surface pilot-form"><label>Backup yang diuji<select id="recovery-backup" required></select></label><label class="switch-row"><input id="recovery-checksum" type="checkbox"><span><strong>Checksum file berhasil diverifikasi</strong><small>Gunakan Pusat Backup untuk memeriksa file JSON.</small></span></label><label class="switch-row"><input id="recovery-procedure" type="checkbox"><span><strong>Prosedur pemulihan sudah ditinjau</strong><small>Pastikan penanggung jawab dan urutan pemulihan dipahami.</small></span></label><label>Catatan latihan<textarea id="recovery-notes" maxlength="1000"></textarea></label><button class="button primary" type="submit">Catat latihan lulus</button></form><div id="recovery-drill-list" class="multioutlet-list"></div>
+      </div></section>
+
+      <section id="page-pilot-sop" class="page"><div class="content-width">
+        <div class="page-title"><div><p class="eyebrow">PANDUAN STAF</p><h1>SOP saat terjadi gangguan</h1><p class="muted">Ikuti urutan ini agar transaksi dan stok tidak digandakan.</p></div></div>
+        <div class="sop-grid"><article class="surface"><span class="sop-number">1</span><h2>Internet putus</h2><ol><li>Jangan logout atau hapus data aplikasi.</li><li>Lanjutkan transaksi offline setelah katalog pernah termuat.</li><li>Catat nomor transaksi dan jangan input ulang di perangkat lain.</li><li>Saat online, buka Sinkronisasi dan tunggu sampai antrean selesai.</li></ol></article><article class="surface"><span class="sop-number">2</span><h2>Printer gagal</h2><ol><li>Transaksi tetap sah bila pembayaran sudah berhasil.</li><li>Periksa printer menyala dan sudah dipasangkan.</li><li>Gunakan Riwayat Struk untuk cetak ulang.</li><li>Jangan membuat transaksi kedua hanya untuk mencetak.</li></ol></article><article class="surface"><span class="sop-number">3</span><h2>Scanner tidak membaca</h2><ol><li>Pastikan mode scanner HID dan mengirim Enter.</li><li>Fokuskan kursor ke pencarian barcode.</li><li>Gunakan kamera atau cari nama produk sebagai cadangan.</li><li>Laporkan barcode salah melalui Insiden Produksi.</li></ol></article><article class="surface"><span class="sop-number">4</span><h2>Data atau total meragukan</h2><ol><li>Hentikan transaksi berikutnya pada perangkat tersebut.</li><li>Jangan mengedit database atau menghapus aplikasi.</li><li>Catat layar, waktu, kasir, dan langkah kejadian.</li><li>Owner periksa Kesehatan Sistem dan buat insiden.</li></ol></article></div>
+      </div></section>
+
       <section id="page-sync-review" class="page"><div class="content-width">
         <div class="page-title"><div><p class="eyebrow">KONTROL TRANSAKSI OFFLINE</p><h1>Peninjauan sinkronisasi</h1><p class="muted">Putuskan transaksi yang harganya berubah ketika perangkat kembali online.</p></div><button id="refresh-sync-review" class="button secondary">Muat ulang</button></div>
         <div class="sync-guidance surface"><div class="sync-guidance-icon">!</div><div><strong>Pelanggan mungkin sudah membayar.</strong><p>Utamakan total yang tercatat di kasir jika sesuai struk pelanggan. Pilihan harga terbaru dapat menimbulkan selisih kas dan harus digunakan dengan sadar.</p></div></div>
@@ -681,6 +717,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=53"></script>
+  <script type="module" src="/app.js?v=54"></script>
 </body>
 </html>

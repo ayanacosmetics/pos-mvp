@@ -6,7 +6,7 @@ import { applyVoucher } from '../packages/domain/src/loyalty.mjs';
 import { calculateEmployeeCommission } from '../packages/domain/src/employee-operations.mjs';
 
 const PERMISSIONS = {
-  OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner','multioutlet.view','multioutlet.manage'],
+  OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner','multioutlet.view','multioutlet.manage','pilot.manage'],
   ADMIN: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage'],
   MANAGER: ['pos.sell','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage'],
   CASHIER: ['pos.sell','workforce.self'],
@@ -19,6 +19,7 @@ const BACKUP_TABLES = [
   'customers','loyalty_settings','customer_tiers','customer_point_entries','vouchers','voucher_redemptions','customer_account_entries','customer_payment_receipts','customer_payment_allocations','suppliers','supplier_bills','supplier_payable_entries','supplier_payment_receipts','supplier_payment_allocations','products','product_units','price_rules','promotions','promotion_versions','promotion_redemptions',
   'shifts','cash_movements','shift_reconciliations','sales','sale_items','payments','parked_sales','sale_adjustment_authorizations',
   'employee_schedules','attendance_records','employee_targets','approval_policies','approval_requests',
+  'backup_exports','pilot_runs','pilot_check_results','production_incidents','recovery_drills',
   'expense_categories','outlet_expenses',
   'purchase_planning_settings','restock_policies','purchase_orders','purchase_order_items','purchase_receipts','purchase_receipt_items','supplier_returns','supplier_return_items',
   'stock_balances','stock_ledger','inventory_batches','inventory_batch_movements',
@@ -820,7 +821,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '1.27.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.0.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'login') {
@@ -1743,6 +1744,137 @@ async function routeRequest(request, response, route) {
       p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_request_id:requestId,
       p_decision:input.decision,p_note:String(input.note??'').trim().slice(0,240)
     }));
+  }
+
+  if(request.method==='GET'&&route==='pilot/dashboard'){
+    requirePermission(session,'pilot.manage');
+    const since=encodeURIComponent(new Date(Date.now()-7*86400000).toISOString());
+    const [runs,incidents,telemetry,drills,backups,health,safety]=await Promise.all([
+      rest('pilot_runs',`tenant_id=eq.${context.tenantId}&select=*&order=created_at.desc&limit=20`),
+      rest('production_incidents',`tenant_id=eq.${context.tenantId}&select=*&order=reported_at.desc&limit=100`),
+      rest('production_telemetry',`tenant_id=eq.${context.tenantId}&occurred_at=gte.${since}&select=*&order=occurred_at.desc&limit=1000`),
+      rest('recovery_drills',`tenant_id=eq.${context.tenantId}&select=*&order=performed_at.desc&limit=20`),
+      rest('backup_exports',`tenant_id=eq.${context.tenantId}&status=eq.COMPLETED&select=*&order=created_at.desc&limit=20`),
+      rpc('operational_health_check',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id}),
+      rpc('pilot_safety_readiness_v1',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id})
+    ]);
+    const activeRun=runs.find((item)=>item.status==='ACTIVE')??runs[0]??null;
+    const checks=activeRun?await rest('pilot_check_results',`tenant_id=eq.${context.tenantId}&pilot_run_id=eq.${activeRun.id}&select=*&order=category,check_code`):[];
+    const durations=telemetry.map((item)=>Number(item.duration_ms)).filter(Number.isFinite).sort((a,b)=>a-b);
+    const p95=durations.length?durations[Math.min(durations.length-1,Math.ceil(durations.length*.95)-1)]:0;
+    const endpointMetrics=[...new Set(telemetry.map((item)=>item.endpoint))].map((endpoint)=>{
+      const rows=telemetry.filter((item)=>item.endpoint===endpoint),timings=rows.map((item)=>Number(item.duration_ms)).filter(Number.isFinite);
+      return {endpoint,events:rows.length,errors:rows.filter((item)=>item.event_type!=='SLOW_REQUEST').length,
+        maxDurationMs:timings.length?Math.max(...timings):0,lastSeenAt:rows[0]?.occurred_at??null};
+    }).sort((a,b)=>b.events-a.events);
+    return send(response,200,{runs,activeRun,checks,incidents,drills,backups,health,safety,
+      telemetry:{total:telemetry.length,errors:telemetry.filter((item)=>item.event_type!=='SLOW_REQUEST').length,
+        slowRequests:telemetry.filter((item)=>item.event_type==='SLOW_REQUEST').length,p95DurationMs:p95,endpoints:endpointMetrics}});
+  }
+
+  if(request.method==='POST'&&route==='pilot/runs'){
+    requirePermission(session,'pilot.manage');
+    const input=bodyOf(request);
+    if(!context.outlets.some((item)=>item.id===input.outletId))throw Object.assign(new Error('Outlet pilot tidak dapat diakses'),{status:403});
+    return send(response,201,await rpc('start_pilot_run_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_outlet_id:input.outletId,
+      p_name:String(input.name??'').trim(),p_start:input.plannedStart,p_end:input.plannedEnd,
+      p_notes:String(input.notes??'').trim()||null
+    }));
+  }
+
+  if(request.method==='PATCH'&&/^pilot\/checks\/[^/]+$/.test(route)){
+    requirePermission(session,'pilot.manage');
+    const input=bodyOf(request),checkId=route.split('/')[2];
+    return send(response,200,await rpc('update_pilot_check_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_check_id:checkId,
+      p_status:input.status,p_evidence:String(input.evidence??'').trim()
+    }));
+  }
+
+  if(request.method==='POST'&&/^pilot\/runs\/[^/]+\/decide$/.test(route)){
+    requirePermission(session,'pilot.manage');
+    const input=bodyOf(request),pilotId=route.split('/')[2];
+    return send(response,200,await rpc('decide_pilot_run_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_pilot_id:pilotId,
+      p_decision:input.decision,p_notes:String(input.notes??'').trim()
+    }));
+  }
+
+  if(request.method==='POST'&&route==='pilot/incidents'){
+    requirePermission(session,'pilot.manage');
+    const input=bodyOf(request),outletId=input.outletId||null;
+    if(outletId&&!context.outlets.some((item)=>item.id===outletId))throw Object.assign(new Error('Outlet insiden tidak dapat diakses'),{status:403});
+    const title=String(input.title??'').trim(),description=String(input.description??'').trim();
+    const category=String(input.category??'OTHER').toUpperCase(),severity=String(input.severity??'MEDIUM').toUpperCase();
+    if(title.length<3||description.length<5||!['POS','PAYMENT','STOCK','SYNC','PRINTER','SCANNER','PERFORMANCE','DATA','OTHER'].includes(category)||!['LOW','MEDIUM','HIGH','CRITICAL'].includes(severity))
+      throw Object.assign(new Error('Data insiden belum lengkap atau tidak valid'),{status:400});
+    const rows=await rest('production_incidents','',{method:'POST',prefer:'return=representation',body:{
+      tenant_id:context.tenantId,outlet_id:outletId,pilot_run_id:input.pilotRunId||null,category,severity,
+      title:title.slice(0,120),description:description.slice(0,1000),
+      reproduction_steps:String(input.reproductionSteps??'').trim().slice(0,1500)||null,
+      expected_result:String(input.expectedResult??'').trim().slice(0,1000)||null,
+      actual_result:String(input.actualResult??'').trim().slice(0,1000)||null,reported_by:session.authUser.id
+    }});
+    await rest('audit_logs','',{method:'POST',body:{tenant_id:context.tenantId,actor_id:session.authUser.id,
+      action:'PRODUCTION_INCIDENT_REPORTED',entity_type:'production_incident',entity_id:rows[0].id,
+      details_json:{category,severity,title:title.slice(0,120),deviceId:request.headers['x-device-id']||null}}});
+    return send(response,201,rows[0]);
+  }
+
+  if(request.method==='PATCH'&&/^pilot\/incidents\/[^/]+$/.test(route)){
+    requirePermission(session,'pilot.manage');
+    const input=bodyOf(request),incidentId=route.split('/')[2],status=String(input.status??'').toUpperCase();
+    if(!['OPEN','INVESTIGATING','RESOLVED','CLOSED'].includes(status))throw Object.assign(new Error('Status insiden tidak valid'),{status:400});
+    const body={status,resolution_note:String(input.resolutionNote??'').trim().slice(0,1500)||null,
+      ...(status==='RESOLVED'||status==='CLOSED'?{resolved_by:session.authUser.id,resolved_at:new Date().toISOString()}:{})};
+    const rows=await rest('production_incidents',`tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(incidentId)}`,{method:'PATCH',prefer:'return=representation',body});
+    if(!rows[0])throw Object.assign(new Error('Insiden tidak ditemukan'),{status:404});
+    return send(response,200,rows[0]);
+  }
+
+  if(request.method==='POST'&&route==='pilot/recovery-drills'){
+    requirePermission(session,'pilot.manage');
+    const input=bodyOf(request);
+    const backups=await rest('backup_exports',`tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(input.backupExportId??'')}&status=eq.COMPLETED&select=*&limit=1`);
+    if(!backups[0])throw Object.assign(new Error('Backup terverifikasi tidak ditemukan'),{status:404});
+    const checksumVerified=Boolean(input.checksumVerified),procedureReviewed=Boolean(input.procedureReviewed);
+    const result=checksumVerified&&procedureReviewed&&input.result==='PASSED'?'PASSED':'FAILED';
+    const rows=await rest('recovery_drills','',{method:'POST',prefer:'return=representation',body:{
+      tenant_id:context.tenantId,backup_export_id:backups[0].id,result,checksum_verified:checksumVerified,
+      procedure_reviewed:procedureReviewed,row_count:Number(backups[0].total_rows??0),
+      notes:String(input.notes??'').trim().slice(0,1000)||null,performed_by:session.authUser.id
+    }});
+    await rest('audit_logs','',{method:'POST',body:{tenant_id:context.tenantId,actor_id:session.authUser.id,
+      action:'RECOVERY_DRILL_RECORDED',entity_type:'recovery_drill',entity_id:rows[0].id,
+      details_json:{backupExportId:backups[0].id,result,checksumVerified,procedureReviewed}}});
+    return send(response,201,rows[0]);
+  }
+
+  if(request.method==='POST'&&route==='pilot/telemetry'){
+    const input=bodyOf(request),eventType=String(input.eventType??'').toUpperCase();
+    if(!['SLOW_REQUEST','HTTP_ERROR','NETWORK_ERROR','CLIENT_ERROR'].includes(eventType))
+      throw Object.assign(new Error('Jenis telemetri tidak valid'),{status:400});
+    const rawEndpoint=String(input.endpoint??'').split('?')[0].slice(0,160);
+    const endpoint=rawEndpoint.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/ig,':id').replace(/\/\d+(?=\/|$)/g,'/:id');
+    if(!endpoint.startsWith('/api/')||endpoint==='/api/pilot/telemetry')throw Object.assign(new Error('Endpoint telemetri tidak valid'),{status:400});
+    const statusCode=input.statusCode==null?null:Number(input.statusCode),duration=input.durationMs==null?null:Math.max(0,Math.round(Number(input.durationMs)));
+    await rest('production_telemetry','',{method:'POST',prefer:'return=minimal',body:{
+      tenant_id:context.tenantId,outlet_id:context.outlet?.id??null,user_id:session.authUser.id,
+      device_id:/^[0-9a-f-]{36}$/i.test(String(request.headers['x-device-id']??''))?request.headers['x-device-id']:null,
+      event_type:eventType,endpoint,status_code:Number.isFinite(statusCode)?statusCode:null,
+      duration_ms:Number.isFinite(duration)?Math.min(duration,600000):null,
+      detail_json:{online:input.online!==false,platform:String(input.platform??'').slice(0,80)}
+    }});
+    return send(response,202,{accepted:true});
+  }
+
+  if(request.method==='POST'&&route==='pilot/telemetry/purge'){
+    requirePermission(session,'pilot.manage');
+    const input=bodyOf(request);
+    return send(response,200,{deleted:await rpc('purge_old_telemetry_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_retention_days:Number(input.retentionDays??30)
+    })});
   }
 
   if(request.method==='POST'&&route==='approvals/policies'){
