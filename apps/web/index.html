@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=62">
+  <link rel="stylesheet" href="/styles.css?v=63">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -145,7 +145,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Restok Stabil · v2.3.3</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Pilih Langsung · v2.3.4</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -224,7 +224,7 @@
                 <div class="document-toolbar planning-toolbar"><div><p class="eyebrow">LANGKAH 1</p><h2>Pilih barang untuk dipesan</h2><small>Produk otomatis diurutkan dari stok paling sedikit.</small></div><div><select id="planning-location" aria-label="Lokasi rencana restok"></select><select id="planning-supplier-filter" aria-label="Filter supplier"><option value="">Semua supplier</option></select><button id="refresh-restock-planning" class="button secondary" type="button">Muat ulang</button></div></div>
                 <label class="planning-needed-filter"><input id="planning-needed-only" type="checkbox"> Hanya tampilkan barang yang disarankan sistem</label>
                 <div id="restock-planning-list"><div class="empty-state compact">Memuat rekomendasi restok...</div></div>
-                <div class="planning-draft-actions"><span><strong id="planning-selected-count">0 barang dipilih</strong><small>Satu surat pesanan dibuat untuk satu supplier.</small></span><button id="create-planning-draft" class="button primary" type="button" disabled>Buat pesanan supplier</button></div>
+                <div class="planning-draft-actions"><span><strong id="planning-selected-count">0 barang dipilih</strong><small>Centang barang, isi jumlah, lalu pilih supplier tujuan.</small></span><label>Supplier tujuan<select id="planning-order-supplier" aria-label="Supplier tujuan pesanan"><option value="">Pilih supplier</option></select></label><button id="create-planning-draft" class="button primary" type="button" disabled>Buat pesanan supplier</button></div>
               </div>
               <details class="surface planning-settings planning-advanced">
                 <summary>Pengaturan lanjutan</summary>
@@ -816,6 +816,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=62"></script>
+  <script type="module" src="/app.js?v=63"></script>
 </body>
 </html>

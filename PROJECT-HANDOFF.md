@@ -45,6 +45,20 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat v2.3.4 siap deploy
+
+- **Pilih Langsung v2.3.4** menghapus kewajiban mengatur kebijakan/supplier
+  utama per produk sebelum barang dapat dicentang pada rencana restok.
+- Semua produk dan input jumlah selalu aktif. Keterangan supplier pada baris
+  hanya menjadi saran otomatis, bukan pengunci pemilihan.
+- Supplier tujuan dipilih satu kali di bagian bawah untuk seluruh surat
+  pesanan. Bila usaha hanya memiliki satu supplier, pilihan diisi otomatis;
+  bila lebih dari satu, pengguna memilih sebelum tombol pembuatan aktif.
+- QA mobile 390 x 844 pada barang tanpa aturan berhasil membuat pesanan 7 pcs
+  kepada supplier yang dipilih, tanpa overflow atau error JavaScript.
+- Tidak memerlukan migrasi SQL. Cache offline dinaikkan ke
+  `nusa-pos-shell-v63`; 178 pengujian otomatis ditargetkan lulus.
+
 ### Rilis v2.3.3 dikonfirmasi live
 
 - Produksi mengembalikan error `record "old" has no field "receipt_id"` ketika

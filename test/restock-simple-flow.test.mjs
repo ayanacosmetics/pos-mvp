@@ -26,11 +26,21 @@ test('pilihan barang menampilkan seluruh produk dari stok paling sedikit', () =>
   assert.match(app, /orderQty:Number\(row\.querySelector\('\.planning-order-qty'\)\.value\)/);
 });
 
+test('barang dapat dipilih langsung tanpa aturan supplier per produk', () => {
+  assert.match(app, /class="planning-select" type="checkbox" aria-label="Pilih/);
+  assert.doesNotMatch(app, /class="planning-select"[^>]*disabled/);
+  assert.match(app, /Supplier dipilih saat membuat pesanan/);
+  assert.match(app, /class="planning-order-qty"[^>]*value="\$\{orderQty\}"/);
+  assert.doesNotMatch(app, /class="planning-order-qty"[^>]*disabled/);
+});
+
 test('satu tombol membuat pesanan supplier dan mengajukannya untuk diproses', () => {
   assert.match(html, /id="create-planning-draft"[\s\S]*Buat pesanan supplier/);
+  assert.match(html, /id="planning-order-supplier"/);
   assert.match(app, /purchase-orders\/\$\{result\.id\}\/submit/);
   assert.match(app, /baseQty:item\.orderQty/);
-  assert.match(app, /Pilih barang dari satu supplier untuk setiap surat pesanan/);
+  assert.match(app, /Pilih supplier tujuan pesanan/);
+  assert.match(app, /supplierId,locationId/);
 });
 
 test('surat pesanan dapat dicetak atau dibagikan dan bukan bukti bayar', () => {

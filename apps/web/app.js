@@ -1572,6 +1572,12 @@ async function renderRestock() {
   const currentPlanningSupplier = el('planning-supplier-filter').value;
   el('planning-supplier-filter').innerHTML = '<option value="">Semua supplier</option>' + state.suppliers.map((supplier) => `<option value="${escapeHtml(supplier.id)}">${escapeHtml(supplier.name)}</option>`).join('');
   el('planning-supplier-filter').value = currentPlanningSupplier;
+  const orderSupplier = el('planning-order-supplier');
+  const currentOrderSupplier = orderSupplier.value;
+  orderSupplier.innerHTML = '<option value="">Pilih supplier</option>' + state.suppliers.map((supplier) => `<option value="${escapeHtml(supplier.id)}">${escapeHtml(supplier.name)}</option>`).join('');
+  orderSupplier.value = state.suppliers.some((supplier)=>supplier.id===currentOrderSupplier)
+    ? currentOrderSupplier
+    : state.suppliers.length===1 ? state.suppliers[0].id : '';
   el('restock-policy-supplier').innerHTML = el('restock-supplier').innerHTML;
   renderPurchaseProductResults('restock');
   renderPurchaseProductResults('po');
@@ -1721,17 +1727,16 @@ function renderRestockPlanning() {
   ].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
   el('restock-planning-list').innerHTML = list.map((item)=>{
     const [urgencyLabel,urgencyClass]=planningUrgency[item.urgency]??[item.urgency,'draft'];
-    const selectable=Boolean(item.supplierId);
     const orderQty=Number(item.suggestedQty)>0?Number(item.suggestedQty):1;
-    const supplierCopy=item.supplierName?escapeHtml(item.supplierName):'<span class="planning-unconfigured">Supplier belum diatur</span>';
+    const supplierCopy=item.supplierName?`Saran: ${escapeHtml(item.supplierName)}`:'Supplier dipilih saat membuat pesanan';
     return `<article class="planning-row ${item.urgency.toLowerCase().replaceAll('_','-')}" data-product-id="${escapeHtml(item.productId)}">
-      <input class="planning-select" type="checkbox" aria-label="Pilih ${escapeHtml(item.productName)}" ${selectable?'':'disabled'}>
+      <input class="planning-select" type="checkbox" aria-label="Pilih ${escapeHtml(item.productName)}">
       <div class="planning-product"><strong>${escapeHtml(item.productName)}</strong><small>${escapeHtml(item.sku)} · ${supplierCopy}</small><span class="status-badge ${urgencyClass}">${urgencyLabel}</span></div>
       <div class="planning-fact planning-stock"><span>Stok sekarang</span><strong>${Number(item.stock).toLocaleString('id-ID')} pcs</strong><small>${Number(item.onOrder)>0?`${Number(item.onOrder).toLocaleString('id-ID')} pcs sedang dipesan`:'Belum ada pesanan aktif'}</small></div>
       <div class="planning-fact"><span>Rata-rata jual</span><strong>${Number(item.averageDailySales).toLocaleString('id-ID')} pcs/hari</strong></div>
       <div class="planning-fact planning-cover"><span>Ketahanan stok</span><strong>${item.daysOfCover===null?'-':`${item.daysOfCover} hari`}</strong><small>Target ${Number(item.targetStock).toLocaleString('id-ID')} pcs</small></div>
-      <label class="planning-order-quantity"><span>Jumlah pesan</span><input class="planning-order-qty" type="number" min="0.000001" step="any" value="${orderQty}" ${selectable?'':'disabled'}><small>pcs</small></label>
-      <div class="planning-actions"><button class="button secondary edit-restock-policy" type="button">${item.supplierId?'Ubah aturan':'Pilih supplier'}</button>${item.supplierId?'<button class="button secondary compare-planning-supplier" type="button">Cek harga</button>':''}</div>
+      <label class="planning-order-quantity"><span>Jumlah pesan</span><input class="planning-order-qty" type="number" min="0.000001" step="any" value="${orderQty}"><small>pcs</small></label>
+      <div class="planning-actions"><button class="button secondary edit-restock-policy" type="button">Atur saran otomatis</button>${item.supplierId?'<button class="button secondary compare-planning-supplier" type="button">Cek harga</button>':''}</div>
     </article>`;
   }).join('') || '<div class="empty-state compact">Tidak ada barang yang sesuai filter. Stok berada di atas kebutuhan saat ini.</div>';
   syncPlanningSelection();
@@ -1744,7 +1749,7 @@ function planningItemForRow(row) {
 function syncPlanningSelection() {
   const selected = [...document.querySelectorAll('.planning-select:checked')];
   el('planning-selected-count').textContent = `${selected.length} barang dipilih`;
-  el('create-planning-draft').disabled = !selected.length;
+  el('create-planning-draft').disabled = !selected.length || !el('planning-order-supplier').value;
 }
 
 function openRestockPolicy(productId) {
@@ -1794,14 +1799,14 @@ async function createPlanningDraft() {
     return {...planningItemForRow(row),orderQty:Number(row.querySelector('.planning-order-qty').value)};
   });
   if(selected.some((item)=>!(item.orderQty>0)))return toast('Jumlah pesanan setiap barang harus lebih dari nol.');
-  const supplierIds=[...new Set(selected.map((item)=>item.supplierId).filter(Boolean))];
-  if(supplierIds.length!==1)return toast('Pilih barang dari satu supplier untuk setiap surat pesanan.');
+  const supplierId=el('planning-order-supplier').value;
+  if(!supplierId)return toast('Pilih supplier tujuan pesanan.');
   const maxLead=Math.max(...selected.map((item)=>Number(item.leadTimeDays??0)));
   const expected=new Date();expected.setDate(expected.getDate()+maxLead);
   const button=el('create-planning-draft');button.disabled=true;button.textContent='Membuat pesanan...';
   try{
     const result=await request('/api/restock-planning/draft',{method:'POST',body:JSON.stringify({
-      supplierId:supplierIds[0],locationId:el('planning-location').value,expectedOn:expected.toISOString().slice(0,10),
+      supplierId,locationId:el('planning-location').value,expectedOn:expected.toISOString().slice(0,10),
       items:selected.map((item)=>({productId:item.productId,baseQty:item.orderQty,unitCost:Number(item.estimatedCost??0)}))
     })});
     let status='DRAFT';
@@ -4187,6 +4192,7 @@ document.querySelectorAll('.purchase-tab').forEach((button) => button.addEventLi
 el('refresh-restock-planning').addEventListener('click',loadRestockPlanning);
 el('planning-location').addEventListener('change',loadRestockPlanning);
 el('planning-supplier-filter').addEventListener('change',loadRestockPlanning);
+el('planning-order-supplier').addEventListener('change',syncPlanningSelection);
 el('planning-needed-only').addEventListener('change',renderRestockPlanning);
 el('restock-planning-list').addEventListener('change',(event)=>{if(event.target.classList.contains('planning-select'))syncPlanningSelection();});
 el('restock-planning-list').addEventListener('click',(event)=>{

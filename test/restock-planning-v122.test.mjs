@@ -42,7 +42,7 @@ test('UI v1.22 menyediakan filter, kebijakan restok, draft rekomendasi, dan tamp
   ]) assert.match(html, new RegExp(`id="${id}"`));
   assert.match(script, /function loadRestockPlanning/);
   assert.match(script, /function createPlanningDraft/);
-  assert.match(script, /Pilih barang dari satu supplier/);
+  assert.match(script, /Pilih supplier tujuan pesanan/);
   assert.match(css, /\.planning-layout/);
   assert.match(css, /@media\(max-width:700px\).*\.planning-row/);
 });

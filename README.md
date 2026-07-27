@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Restok Stabil v2.3.3
+# Kasir Nusa POS — Pilih Langsung v2.3.4
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -56,6 +56,10 @@ kapabilitas retail yang lebih lengkap tersedia di
   Terima barang, dan Retur supplier. Produk diurutkan dari stok paling sedikit;
   jumlah pesanan dapat diubah langsung, lalu surat pesanan dapat dicetak,
   disimpan sebagai PDF, atau dibagikan dengan penanda bukan bukti pembayaran.
+- Semua produk dapat langsung dicentang tanpa mengatur kebijakan restok atau
+  supplier utama terlebih dahulu. Supplier tujuan dipilih satu kali untuk
+  seluruh surat pesanan; bila hanya ada satu supplier, sistem memilihnya
+  otomatis.
 - Rencana restok memakai minimum, maksimum, safety stock, lead time, rata-rata
   penjualan, stok tersedia, dan sisa PO yang belum datang.
 - Draft PO dapat dibuat dari rekomendasi per supplier, dengan approval
@@ -177,7 +181,7 @@ Jalankan:
 npm test
 ```
 
-Source saat ini memiliki 177 pengujian otomatis. Pengujian toko nyata tetap
+Source saat ini memiliki 178 pengujian otomatis. Pengujian toko nyata tetap
 harus mengikuti `GO-LIVE-CHECKLIST.md`; keputusan lulus pilot tidak menggantikan
 verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 

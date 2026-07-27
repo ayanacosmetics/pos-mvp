@@ -832,6 +832,8 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
 .planning-order-quantity span{grid-column:1/-1;color:var(--muted);font-size:11px}
 .planning-order-quantity input{width:88px;min-width:0}
 .planning-order-quantity small{color:var(--muted)}
+.planning-draft-actions>label{min-width:220px;margin:0}
+.planning-draft-actions>label select{padding-block:10px}
 .planning-fact small{color:var(--muted);font-size:10px}
 .planning-advanced{padding:0;overflow:hidden}
 .planning-advanced>summary{padding:16px 18px;font-weight:800;cursor:pointer;list-style:none}
@@ -869,6 +871,7 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
   .planning-row .planning-stock{display:grid}
   .planning-order-quantity{grid-column:2/3;grid-row:auto}
   .planning-actions{grid-column:2/4}
+  .planning-draft-actions>label{width:100%;min-width:0}
   .purchase-order-dialog{padding:12px}
   .supplier-order-sheet{min-width:0;padding:4px}
   .supplier-order-sheet header{display:grid}
