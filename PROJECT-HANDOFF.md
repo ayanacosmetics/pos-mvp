@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Paket v2.4.8 Laporan Transaksi siap deploy
+### Rilis v2.4.8 Laporan Transaksi dikonfirmasi live
 
 - Tombol Riwayat di Kasir dihapus agar layar penjualan fokus pada transaksi
   baru. Riwayat struk dipindahkan ke `Analitik → Transaksi`.
@@ -59,6 +59,11 @@ kode frontend, dokumentasi publik, atau chat.
   periode/outlet dan memecah pengambilan rincian menjadi kelompok aman.
 - Tidak memerlukan migrasi SQL. API disiapkan ke `2.4.8-cloud`, aset web `v72`,
   dan cache PWA `v72`.
+- Commit fitur `7ca110b` sudah didorong ke `origin/main`.
+- Deployment Vercel `dpl_6sRjBNonxYp9qEKF7LheyETmqVrF` berstatus Ready dan
+  alias `kasir-nusa-pos.vercel.app` aktif.
+- Verifikasi publik mengembalikan API `2.4.8-cloud`, halaman Laporan Transaksi,
+  periode mingguan, scope laporan, aset `v72`, dan cache PWA `v72`.
 
 ### Rilis v2.4.7 Keranjang Mobile dikonfirmasi live
 
