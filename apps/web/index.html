@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=65">
+  <link rel="stylesheet" href="/styles.css?v=66">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -145,7 +145,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Scanner Langsung · v2.4.1</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Member Ringkas · v2.4.2</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -161,8 +161,8 @@
             <div class="page-title"><div><p id="top-shift" class="eyebrow">SHIFT BELUM DIBUKA</p><h1>Kasir</h1></div><div class="pos-heading-actions"><button id="open-shortcuts" class="button secondary compact-button" type="button" title="Shortcut keyboard">⌨</button><button id="open-pos-history" class="button secondary" type="button">Riwayat</button><button id="sync-button" class="button secondary">Sinkronkan <span id="queue-count">0</span></button></div></div>
             <div class="search-row">
               <div class="product-search-wrap"><div class="product-search-control"><input id="product-search" placeholder="Scan barcode atau cari nama produk"><button id="connect-scanner-pos" class="button secondary scan-icon-button hidden" type="button" aria-label="Hubungkan scanner Bluetooth" title="Hubungkan scanner Bluetooth"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a2 2 0 0 1 2 2v8H4V5a2 2 0 0 1 2-2Z"/><path d="M7 6v4M10 6v4M13 6v4M17 6v4M8 13l-2 8h6l2-8"/></svg></button><button id="scan-camera-pos" class="button secondary scan-icon-button camera-scan-button" type="button" aria-label="Scan barcode dengan kamera" title="Scan dengan kamera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5 10 3.5h4l1.5 2H19A2.5 2.5 0 0 1 21.5 8v9A2.5 2.5 0 0 1 19 19.5H5A2.5 2.5 0 0 1 2.5 17V8A2.5 2.5 0 0 1 5 5.5h3.5Z"/><circle cx="12" cy="12.5" r="4"/></svg></button></div><small id="pos-scanner-status" class="pos-scanner-status hidden"></small></div>
-              <div class="customer-pos-picker"><div class="customer-search-control"><input id="customer-search" autocomplete="off" placeholder="Pelanggan umum / cari member"><button id="clear-pos-customer" class="icon-button hidden" type="button" aria-label="Gunakan pelanggan umum">×</button></div><select id="customer-select" class="hidden" aria-hidden="true"><option value="">Pelanggan umum</option></select><div id="customer-search-results" class="customer-search-results hidden"></div></div>
-              <button id="new-pos-customer" class="button secondary new-pos-customer" type="button">+ Member</button>
+              <button id="open-pos-customer" class="button secondary pos-member-button" type="button"><span id="pos-member-label">Member</span><small id="pos-member-status">Pelanggan umum</small></button>
+              <select id="customer-select" class="hidden" aria-hidden="true"><option value="">Pelanggan umum</option></select>
               <select id="customer-group" class="hidden"><option value="retail">Eceran</option><option value="wholesale">Grosir</option></select>
             </div>
             <div id="customer-service-note" class="customer-service-note hidden"></div>
@@ -775,6 +775,8 @@
 
   <dialog id="owner-switch-dialog"><div class="dialog-card owner-switch-dialog"><div class="comparison-heading"><div><p class="eyebrow">KONTEKS OWNER</p><h2>Ganti Owner aktif</h2><p class="muted">Pilih Owner lain dalam usaha ini tanpa login ulang. Perpindahan dicatat dalam audit.</p></div><button id="close-owner-switch" class="icon-button" type="button">×</button></div><div id="owner-switch-list" class="owner-switch-list"><div class="empty-state compact">Memuat Owner...</div></div></div></dialog>
 
+  <dialog id="pos-customer-dialog"><div class="dialog-card pos-customer-dialog"><div class="comparison-heading"><div><p class="eyebrow">MEMBER TRANSAKSI</p><h2>Pilih member</h2><p class="muted">Cari member yang sudah terdaftar atau tambahkan member baru.</p></div><button id="close-pos-customer" class="icon-button" type="button" aria-label="Tutup">×</button></div><div class="customer-pos-picker"><div class="customer-search-control"><input id="customer-search" autocomplete="off" placeholder="Cari nama, kode, atau telepon"><button id="clear-pos-customer" class="icon-button hidden" type="button" aria-label="Gunakan pelanggan umum">×</button></div><div id="customer-search-results" class="customer-search-results"></div></div><button id="new-pos-customer" class="button primary full new-pos-customer" type="button">+ Tambah member baru</button></div></dialog>
+
   <dialog id="customer-dialog"><form id="customer-form" class="dialog-card customer-dialog"><div class="comparison-heading"><div><p class="eyebrow">PROFIL PELANGGAN</p><h2 id="customer-dialog-title">Tambah pelanggan</h2></div><button id="close-customer-dialog" class="icon-button" type="button">×</button></div><input id="edit-customer-id" type="hidden"><div class="form-grid compact"><label>Nama<input id="customer-name" required></label><label>Telepon<input id="customer-phone"></label><label>Email<input id="customer-email" type="email"></label><label>Kelompok harga<select id="customer-new-group"><option value="retail">Eceran</option><option value="wholesale">Grosir</option></select></label><label>Tanggal lahir<input id="customer-birth-date" type="date"></label></div><label class="switch-row"><input id="customer-whatsapp-consent" type="checkbox"><span><strong>Izinkan struk WhatsApp</strong><small>Struk hanya dibuka setelah kasir menekan tombol kirim.</small></span></label><label>Alamat<textarea id="customer-address" rows="2"></textarea></label><label>Catatan<textarea id="customer-notes" rows="2"></textarea></label><label class="switch-row"><input id="customer-credit-enabled" type="checkbox"><span><strong>Aktifkan fasilitas kredit</strong><small>Pelanggan dapat membayar sebagian atau mencatat piutang saat checkout.</small></span></label><div id="customer-credit-fields" class="form-grid compact hidden"><label>Batas kredit<input id="customer-credit-limit" type="number" min="0" value="0"></label><label>Jatuh tempo<input id="customer-credit-days" type="number" min="0" max="365" value="30"><small>Hari setelah transaksi</small></label></div><p id="customer-form-error" class="error"></p><div class="button-row"><button id="cancel-customer-dialog" class="button secondary" type="button">Batal</button><button class="button primary" type="submit">Simpan pelanggan</button></div></form></dialog>
 
   <dialog id="customer-statement-dialog"><div class="dialog-card customer-statement-dialog"><div class="comparison-heading"><div><p class="eyebrow">REKENING PELANGGAN</p><h2 id="statement-customer-name">Pelanggan</h2></div><button id="close-customer-statement" class="icon-button" type="button">×</button></div><div id="statement-summary" class="statement-summary"></div><form id="customer-payment-form" class="customer-payment-form"><p class="eyebrow">CATAT PEMBAYARAN</p><div class="form-grid compact"><label>Nominal<input id="customer-payment-amount" type="number" min="1" required></label><label>Metode<select id="customer-payment-method"><option value="CASH">Tunai</option><option value="QRIS">QRIS</option><option value="TRANSFER">Transfer</option><option value="EDC">Kartu / EDC</option></select></label><label id="customer-payment-reference-wrap" class="hidden">Referensi<input id="customer-payment-reference"></label><label>Catatan<input id="customer-payment-note"></label></div><p id="customer-payment-error" class="error"></p><button class="button primary" type="submit">Terima pembayaran</button></form><div><p class="eyebrow">FAKTUR BELUM LUNAS</p><div id="statement-invoices" class="table-wrap"></div></div><div><p class="eyebrow">MUTASI REKENING</p><div id="statement-entries" class="table-wrap"></div></div></div></dialog>
@@ -821,6 +823,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=65"></script>
+  <script type="module" src="/app.js?v=66"></script>
 </body>
 </html>

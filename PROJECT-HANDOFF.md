@@ -45,6 +45,17 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.4.2 siap diverifikasi dan deploy
+
+- **Member Ringkas v2.4.2** menyisakan satu tombol Member pada halaman Kasir.
+  Kolom pencarian dan tombol tambah member tidak lagi memenuhi area katalog.
+- Menekan tombol membuka dialog daftar member dengan pencarian nama, kode, atau
+  telepon, pilihan pelanggan umum, serta tombol tambah member baru.
+- Nama member aktif tetap terlihat pada tombol Kasir. Memilih member atau
+  pelanggan umum langsung menutup dialog dan memperbarui harga transaksi.
+- Cache PWA dinaikkan ke `v66`. Perubahan ini tidak memerlukan SQL atau pembaruan
+  APK karena seluruhnya berada pada aplikasi web.
+
 ### Rilis v2.4.1 dan APK kasir v1.1.0 dikonfirmasi live
 
 - **Scanner Langsung v2.4.1** menambahkan tombol scanner Bluetooth di samping

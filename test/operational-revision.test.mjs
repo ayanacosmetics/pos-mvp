@@ -27,6 +27,22 @@ test('pelanggan POS dapat dicari menurut nama, kode, atau nomor telepon', async 
   assert.match(script, /phoneDigits\.includes\(digits\)/);
 });
 
+test('kasir menampilkan satu tombol Member dan memindahkan daftar serta tambah member ke dialog', async () => {
+  const [html, script] = await Promise.all([
+    readProject('apps/web/index.html'),
+    readProject('apps/web/app.js')
+  ]);
+  const searchRow = html.match(/<div class="search-row">([\s\S]*?)<\/div>\s*<div id="customer-service-note"/)?.[1] ?? '';
+  const dialog = html.match(/<dialog id="pos-customer-dialog">([\s\S]*?)<\/dialog>/)?.[1] ?? '';
+  assert.match(searchRow, /id="open-pos-customer"/);
+  assert.doesNotMatch(searchRow, /id="customer-search"/);
+  assert.match(dialog, /id="customer-search"/);
+  assert.match(dialog, /id="customer-search-results"/);
+  assert.match(dialog, /id="new-pos-customer"/);
+  assert.match(script, /function openPosCustomerPicker/);
+  assert.match(script, /pos-member-label.*customer\?\.name.*Member/);
+});
+
 test('PO dan restok menyediakan cari, scan, stok kosong teratas, serta baris instan', async () => {
   const [html, script] = await Promise.all([
     readProject('apps/web/index.html'),

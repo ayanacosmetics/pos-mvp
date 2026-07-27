@@ -391,6 +391,8 @@ function syncCustomerSearchLabel() {
   if (el('customer-search') && document.activeElement !== el('customer-search')) {
     el('customer-search').value = customer?.name ?? '';
   }
+  if (el('pos-member-label')) el('pos-member-label').textContent = customer?.name ?? 'Member';
+  if (el('pos-member-status')) el('pos-member-status').textContent = customer ? 'Member dipilih' : 'Pelanggan umum';
   el('clear-pos-customer')?.classList.toggle('hidden', !customer);
   const notePanel=el('customer-service-note');
   const note=String(customer?.notes??'').trim();
@@ -427,6 +429,7 @@ async function selectPosCustomer(customerId) {
     el('customer-search-results').classList.add('hidden');
     syncCustomerSearchLabel();
     await updateQuote();
+    if (el('pos-customer-dialog')?.open) el('pos-customer-dialog').close();
     return;
   }
   const customer = state.customers.find((item) => item.id === customerId);
@@ -438,6 +441,18 @@ async function selectPosCustomer(customerId) {
   el('customer-search-results').classList.add('hidden');
   syncCustomerSearchLabel();
   await updateQuote();
+  if (el('pos-customer-dialog')?.open) el('pos-customer-dialog').close();
+}
+
+function openPosCustomerPicker() {
+  const customer = selectedPosCustomer();
+  el('customer-search').value = customer?.name ?? '';
+  renderCustomerSearchResults('');
+  el('pos-customer-dialog').showModal();
+  requestAnimationFrame(() => {
+    el('customer-search').focus();
+    el('customer-search').select();
+  });
 }
 
 function resetPosCustomer() {
@@ -4164,7 +4179,9 @@ el('cancel-barcode-camera').addEventListener('click', stopBarcodeCamera);
 el('barcode-camera-dialog').addEventListener('close', stopBarcodeCamera);
 window.addEventListener('pagehide', stopBarcodeCamera);
 el('customer-group').addEventListener('change', async () => { invalidateSaleAuthorization(); await updateQuote(); });
-el('customer-search').addEventListener('focus', (event) => { event.currentTarget.select(); renderCustomerSearchResults(''); });
+el('open-pos-customer').addEventListener('click',openPosCustomerPicker);
+el('close-pos-customer').addEventListener('click',()=>el('pos-customer-dialog').close());
+el('customer-search').addEventListener('focus', (event) => { event.currentTarget.select(); renderCustomerSearchResults(event.currentTarget.value); });
 el('customer-search').addEventListener('input', (event) => renderCustomerSearchResults(event.currentTarget.value));
 el('customer-search').addEventListener('keydown', (event) => {
   if (event.key === 'Escape') return el('customer-search-results').classList.add('hidden');
@@ -4178,10 +4195,7 @@ el('customer-search-results').addEventListener('click', (event) => {
   if (option) selectPosCustomer(option.dataset.customerId ?? '');
 });
 el('clear-pos-customer').addEventListener('click',()=>selectPosCustomer(''));
-el('new-pos-customer').addEventListener('click',()=>openCustomerEditor(null,'pos'));
-document.addEventListener('click', (event) => {
-  if (!event.target.closest('.customer-pos-picker')) el('customer-search-results').classList.add('hidden');
-});
+el('new-pos-customer').addEventListener('click',()=>{el('pos-customer-dialog').close();openCustomerEditor(null,'pos');});
 el('clear-cart').addEventListener('click', async () => { state.cart = []; resetPosCustomer();el('sale-note').value='';invalidateSaleAuthorization(); await updateQuote(); });
 el('mobile-cart-jump').addEventListener('click',()=>document.querySelector('.cart-pane').scrollIntoView({behavior:'smooth',block:'start'}));
 el('open-pos-history').addEventListener('click',openPosHistory);
