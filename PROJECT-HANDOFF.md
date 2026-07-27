@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Paket v2.4.7 Keranjang Mobile siap deploy
+### Rilis v2.4.7 Keranjang Mobile dikonfirmasi live
 
 - Pada ponsel sampai 760 px, katalog dan keranjang Kasir menjadi dua layar.
   Tombol Keranjang tetap mengambang di katalog dan menampilkan jumlah barang.
@@ -58,6 +58,11 @@ kode frontend, dokumentasi publik, atau chat.
   Seluruh 190/190 pengujian otomatis lulus.
 - Tidak memerlukan migrasi SQL. API disiapkan ke `2.4.7-cloud`, aset web `v71`,
   dan cache PWA `v71`.
+- Commit fitur `7b0eed3` sudah didorong ke `origin/main`.
+- Deployment Vercel `dpl_EnRYzUk8XExe9bGPLP6bvhqxcZs9` berstatus Ready dan
+  alias `kasir-nusa-pos.vercel.app` aktif.
+- Verifikasi publik mengembalikan API `2.4.7-cloud`, rilis Keranjang Mobile,
+  aset `v71`, logika pemisah layar, dan cache PWA `v71`.
 
 ### Rilis v2.4.6 Daftar Barang Ringkas dikonfirmasi live
 
