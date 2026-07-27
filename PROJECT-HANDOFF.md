@@ -45,6 +45,30 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.4.1 dan APK kasir v1.1.0 dikonfirmasi live
+
+- **Scanner Langsung v2.4.1** menambahkan tombol scanner Bluetooth di samping
+  tombol kamera pada halaman Kasir. Tombol hanya muncul di aplikasi Android,
+  sehingga PWA owner tidak menampilkan kontrol yang tidak dapat digunakan.
+- Aplikasi memakai Companion Device Pairing Android untuk memindai dan memilih
+  perangkat terdekat dari dalam aplikasi tanpa izin lokasi. Scanner Bluetooth
+  Classic SPP dibaca melalui socket RFCOMM; scanner HID tetap didukung sebagai
+  fallback dan meneruskan barcode secara otomatis.
+- Status scanner, sambungkan ulang, putuskan, dan Tes scan tersedia pada
+  Pengaturan > Perangkat. Mode tes membaca barcode tanpa memasukkan barang ke
+  keranjang.
+- APK `Kasir-Nusa-Kasir-1.1.0-test.apk` memakai versionCode `2`, target SDK 35,
+  serta sertifikat yang sama dengan APK v1.0.0. APK dapat dipasang sebagai
+  pembaruan tanpa menghapus aplikasi atau sesi. SHA-256:
+  `9E78D6794054FAAEFFB2BF8520EFA466EB68C539138A11061DC7995F8B049D97`.
+- Kompilasi Gradle `assembleDebug`, QA mobile 390 x 844, dan 182/182 pengujian
+  otomatis lulus. Rilis ini tidak memerlukan SQL.
+- Commit `29b65b9` didorong ke `origin/main`. Deployment Vercel
+  `dpl_t7Vc5wS91k9BkUMYiWZmV9ezBcFg` berstatus Ready dan alias produksi aktif.
+- Verifikasi publik mengembalikan API `2.4.1-cloud`, identitas
+  `Scanner Langsung · v2.4.1`, aset/cache `v65`, bridge scanner, serta APK
+  produksi dengan checksum yang benar.
+
 ### Rilis v2.4.0 dikonfirmasi live
 
 - **Restok Ringkas v2.4.0** mengganti kartu produk restok yang padat menjadi
