@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat hotfix database v2.3.3 menunggu SQL
+### Kandidat v2.3.3 — SQL dikonfirmasi, aplikasi siap deploy
 
 - Produksi mengembalikan error `record "old" has no field "receipt_id"` ketika
   pengguna menekan Terima dan tambah stok.
@@ -59,9 +59,8 @@ kode frontend, dokumentasi publik, atau chat.
   tidak tersedia.
 - Trigger penerimaan, item penerimaan, retur supplier, dan sinkronisasi hutang
   tetap dipertahankan. Tidak ada tabel atau data transaksi yang dihapus.
-- 177/177 pengujian otomatis lulus. Supabase CLI lokal tidak memiliki access
-  token/proyek tertaut, sehingga SQL harus dijalankan melalui SQL Editor
-  sebelum penerimaan produksi diuji ulang.
+- Pengguna mengonfirmasi SQL berhasil dijalankan di Supabase pada 27 Juli
+  2026. Source hotfix memiliki 177/177 pengujian otomatis lulus.
 
 ### Rilis v2.3.2 dikonfirmasi live
 

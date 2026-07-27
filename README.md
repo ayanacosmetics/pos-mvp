@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Restok Mobile v2.3.2
+# Kasir Nusa POS — Restok Stabil v2.3.3
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
