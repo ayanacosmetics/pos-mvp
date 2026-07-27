@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat v2.6.1 Foto Galeri menunggu migrasi dan deployment
+### Rilis v2.6.1 Foto Galeri dikonfirmasi live
 
 - Logo struk mengutamakan pilihan langsung dari galeri/kamera; URL dipindahkan
   ke opsi lanjutan.
@@ -58,8 +58,13 @@ kode frontend, dokumentasi publik, atau chat.
 - Kandidat memakai API `2.6.1-cloud`, aset web `v78`, dan cache PWA `v78`.
 - Seluruh 202 pengujian otomatis lulus. Editor produk lulus pemeriksaan visual
   ponsel 390×844 tanpa overlap atau overflow.
-- Jalankan migrasi `supabase/migrations/202607280040_pos_media_storage.sql`
-  sebelum deployment.
+- Migrasi `supabase/migrations/202607280040_pos_media_storage.sql` telah
+  berhasil dijalankan di produksi.
+- Commit fitur `e3210b7` sudah didorong ke `origin/main`.
+- Deployment Vercel `dpl_32Jz7XXs5WyXMQhbqqNLdHrxZbHs` berstatus Ready dan
+  alias `kasir-nusa-pos.vercel.app` aktif.
+- Verifikasi publik mengembalikan API `2.6.1-cloud`, aset/cache `v78`, serta
+  pemilih galeri untuk logo struk dan foto produk.
 
 ### Rilis v2.6.0 Desain Struk dikonfirmasi live
 
