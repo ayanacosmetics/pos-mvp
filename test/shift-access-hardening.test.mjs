@@ -19,8 +19,8 @@ test('versi kandidat final tampil pada API, aplikasi, dan cache PWA', async () =
     readFile(new URL('../apps/web/service-worker.js', import.meta.url), 'utf8'),
     readFile(new URL('../package.json', import.meta.url), 'utf8')
   ]);
-  assert.match(api, /2\.7\.0-cloud/);
-  assert.match(html, /Voucher QR Struk · v2\.7\.0/);
-  assert.match(worker, /nusa-pos-shell-v81/);
-  assert.equal(JSON.parse(pkgText).version, '2.7.0');
+  assert.match(api, /2\.7\.1-cloud/);
+  assert.match(html, /Voucher QR Struk · v2\.7\.1/);
+  assert.match(worker, /nusa-pos-shell-v82/);
+  assert.equal(JSON.parse(pkgText).version, '2.7.1');
 });

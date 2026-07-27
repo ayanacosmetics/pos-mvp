@@ -25,6 +25,8 @@ test('checkout issues voucher and POS recognizes scanned QR code',async()=>{
   assert.match(app,/tryScannedVoucher/);
   assert.match(app,/\^\[A-Z0-9\]\{10\}\$/);
   assert.match(app,/BrowserQRCodeSvgWriter/);
+  assert.match(app,/const form=event\.currentTarget/);
+  assert.match(app,/form\.reset\(\)/);
   assert.match(html,/receipt-voucher-campaign-form/);
 });
 

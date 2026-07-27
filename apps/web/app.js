@@ -1193,7 +1193,7 @@ async function publishVoucher(event){
 }
 
 async function publishReceiptVoucherCampaign(event){
-  event.preventDefault();el('receipt-voucher-form-error').textContent='';
+  event.preventDefault();const form=event.currentTarget;el('receipt-voucher-form-error').textContent='';
   const payload={name:el('receipt-voucher-name').value,triggerMinPurchase:Number(el('receipt-voucher-trigger-min').value),
     discountType:el('receipt-voucher-type').value,discountValue:Number(el('receipt-voucher-value').value),
     maxDiscount:Number(el('receipt-voucher-max').value)||null,redemptionMinPurchase:Number(el('receipt-voucher-redemption-min').value),
@@ -1201,7 +1201,7 @@ async function publishReceiptVoucherCampaign(event){
     customerMode:el('receipt-voucher-customer-mode').value,priority:Number(el('receipt-voucher-priority').value)};
   try{
     await request('/api/receipt-voucher-campaigns',{method:'POST',body:JSON.stringify(payload)});
-    toast('Program voucher struk sudah aktif');event.currentTarget.reset();
+    toast('Program voucher struk sudah aktif');form.reset();
     el('receipt-voucher-trigger-min').value=100000;el('receipt-voucher-redemption-min').value=100000;
     el('receipt-voucher-valid-after').value=1;el('receipt-voucher-valid-days').value=14;await loadPromotionManagement();
   }catch(error){el('receipt-voucher-form-error').textContent=error.message;}
