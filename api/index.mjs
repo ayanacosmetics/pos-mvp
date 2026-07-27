@@ -41,7 +41,7 @@ function normalizedAssignablePermissions(value,role) {
 
 const BACKUP_TABLES = [
   'tenants','profiles','outlets','stock_locations','user_outlets',
-  'customer_price_groups','customers','loyalty_settings','customer_tiers','customer_point_entries','vouchers','voucher_redemptions','customer_account_entries','customer_payment_receipts','customer_payment_allocations','suppliers','supplier_bills','supplier_payable_entries','supplier_payment_receipts','supplier_payment_allocations','products','product_units','price_rules','promotions','promotion_versions','promotion_redemptions',
+  'customer_price_groups','customers','loyalty_settings','customer_tiers','customer_point_entries','vouchers','voucher_redemptions','receipt_voucher_campaigns','customer_account_entries','customer_payment_receipts','customer_payment_allocations','suppliers','supplier_bills','supplier_payable_entries','supplier_payment_receipts','supplier_payment_allocations','products','product_units','price_rules','promotions','promotion_versions','promotion_redemptions',
   'shifts','cash_movements','shift_reconciliations','sales','sale_items','payments','parked_sales','sale_adjustment_authorizations',
   'employee_schedules','attendance_records','employee_targets','approval_policies','approval_requests',
   'backup_exports','pilot_runs','pilot_check_results','production_incidents','recovery_drills',
@@ -619,6 +619,8 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
     customerIds.length ? byChunks('customers','id',customerIds,'select=id,name,phone,notes,group_id') : [],
     cashierIds.length ? byChunks('profiles','user_id',cashierIds,'select=user_id,display_name') : []
   ]);
+  let issuedVouchers=[];
+  try{issuedVouchers=await byChunks('vouchers','source_sale_id',saleIds,'source=eq.RECEIPT&select=*');}catch{}
   const adjustmentIds=[...new Set(items.flatMap((item)=>
     (item.promotion_snapshot??[])
       .filter((promotion)=>promotion.manual&&promotion.id)
@@ -648,6 +650,7 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
           discountAmount:Number(savedAdjustment.discount_amount)
         }
       : null;
+    const issued=issuedVouchers.find((voucher)=>voucher.source_sale_id===sale.id);
     return {
       id:sale.id,receiptNo:sale.receipt_no,status:sale.status,occurredAt:sale.occurred_at,
       cashier,outletName:context.outlets.find((outlet)=>outlet.id===sale.outlet_id)?.name??context.outlet.name,customer,
@@ -657,6 +660,9 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
         lines,subtotal:Number(sale.subtotal),discountTotal:Number(sale.discount_total),
         grandTotal:Number(sale.grand_total),...(manualAdjustment?{manualAdjustment}:{})
       },
+      issuedVoucher:issued?{id:issued.id,code:issued.code,name:issued.name,discountType:issued.discount_type,
+        discountValue:Number(issued.discount_value),maxDiscount:issued.max_discount==null?null:Number(issued.max_discount),
+        minPurchase:Number(issued.min_purchase),startsAt:issued.starts_at,endsAt:issued.ends_at,active:issued.active}:null,
       payments:payments.filter((item) => item.sale_id === sale.id).map((item) => ({
         method:item.method,amount:Number(item.amount),tendered:item.tendered_amount == null ? null : Number(item.tendered_amount),
         reference:item.reference ?? ''
@@ -951,7 +957,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.6.3-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.7.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1428,8 +1434,16 @@ async function routeRequest(request, response, route) {
       await repairSaleReceiptSequence(context);
       result = await rpc('complete_sale_v7', saleCommand);
     }
+    let issuedVoucher=null;
+    try{
+      issuedVoucher=await rpc('issue_receipt_voucher_v1',{
+        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_sale_id:result.id
+      });
+    }catch(error){
+      console.error('Receipt voucher issuance failed after completed sale',error.message);
+    }
     const tenants = await rest('tenants', `id=eq.${context.tenantId}&select=*`);
-    return send(response, 201, { ...result, occurredAt: new Date().toISOString(), cashier: session.profile.display_name, customerGroupId:input.customerGroupId, outletName:context.outlet.name, outlet:context.outlet, business:businessPayload(tenants[0]), quote });
+    return send(response, 201, { ...result, issuedVoucher, occurredAt: new Date().toISOString(), cashier: session.profile.display_name, customerGroupId:input.customerGroupId, outletName:context.outlet.name, outlet:context.outlet, business:businessPayload(tenants[0]), quote });
   }
 
   if(request.method==='GET'&&route==='held-sales'){
@@ -1674,12 +1688,13 @@ async function routeRequest(request, response, route) {
   if(request.method==='GET'&&route==='loyalty'){
     requirePermission(session,'promotion.manage');
     const tenant=encodeURIComponent(context.tenantId);
-    const [settings,tiers,vouchers]=await Promise.all([
+    const [settings,tiers,vouchers,receiptCampaigns]=await Promise.all([
       rest('loyalty_settings',`tenant_id=eq.${tenant}&select=*&limit=1`),
       rest('customer_tiers',`tenant_id=eq.${tenant}&select=*&order=min_lifetime_spend.asc`),
-      rest('vouchers',`tenant_id=eq.${tenant}&select=*&order=created_at.desc`)
+      rest('vouchers',`tenant_id=eq.${tenant}&source=eq.MANUAL&select=*&order=created_at.desc`),
+      rpc('receipt_voucher_dashboard_v1',{p_tenant_id:context.tenantId})
     ]);
-    return send(response,200,{settings:settings[0]??null,tiers,vouchers});
+    return send(response,200,{settings:settings[0]??null,tiers,vouchers,receiptCampaigns});
   }
 
   if(request.method==='PUT'&&route==='loyalty/settings'){
@@ -1722,6 +1737,36 @@ async function routeRequest(request, response, route) {
       method:'PATCH',prefer:'return=representation',body:{active:Boolean(input.active)}
     });
     if(!rows[0]){const error=new Error('Voucher tidak ditemukan');error.status=404;throw error;}
+    return send(response,200,rows[0]);
+  }
+
+  if(request.method==='POST'&&route==='receipt-voucher-campaigns'){
+    requirePermission(session,'promotion.manage');
+    const input=bodyOf(request);
+    const payload={tenant_id:context.tenantId,outlet_id:input.outletId||null,
+      name:String(input.name??'').trim(),active:true,priority:Number(input.priority??0),
+      trigger_min_purchase:Number(input.triggerMinPurchase??0),discount_type:input.discountType,
+      discount_value:Number(input.discountValue),max_discount:input.maxDiscount?Number(input.maxDiscount):null,
+      redemption_min_purchase:Number(input.redemptionMinPurchase??0),
+      valid_after_days:Number(input.validAfterDays??1),valid_days:Number(input.validDays??14),
+      customer_mode:input.customerMode==='MEMBER'?'MEMBER':'BEARER',created_by:session.authUser.id};
+    if(!payload.name||!['FIXED','PERCENT'].includes(payload.discount_type)||payload.discount_value<=0){
+      throw Object.assign(new Error('Nama, jenis, dan nilai voucher wajib diisi'),{status:400});
+    }
+    if(payload.discount_type==='PERCENT'&&payload.discount_value>100){
+      throw Object.assign(new Error('Persentase voucher maksimal 100%'),{status:400});
+    }
+    const rows=await rest('receipt_voucher_campaigns','',{method:'POST',prefer:'return=representation',body:payload});
+    return send(response,201,rows[0]);
+  }
+
+  if(request.method==='POST'&&/^receipt-voucher-campaigns\/[^/]+\/status$/.test(route)){
+    requirePermission(session,'promotion.manage');
+    const input=bodyOf(request),campaignId=route.split('/')[1];
+    const rows=await rest('receipt_voucher_campaigns',`tenant_id=eq.${encodeURIComponent(context.tenantId)}&id=eq.${encodeURIComponent(campaignId)}`,{
+      method:'PATCH',prefer:'return=representation',body:{active:Boolean(input.active),updated_at:new Date().toISOString()}
+    });
+    if(!rows[0])throw Object.assign(new Error('Program voucher struk tidak ditemukan'),{status:404});
     return send(response,200,rows[0]);
   }
 
@@ -2739,6 +2784,13 @@ async function routeRequest(request, response, route) {
       p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_approved_by:session.authUser.id,
       p_sale_id:saleId,p_outlet_id:context.outlet.id,p_reason:String(input.reason ?? '')
     });
+    try{
+      await rpc('cancel_receipt_vouchers_for_sale_v1',{
+        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_sale_id:saleId
+      });
+    }catch(error){
+      console.error('Receipt voucher cancellation failed after void',error.message);
+    }
     return send(response, 200, result);
   }
 

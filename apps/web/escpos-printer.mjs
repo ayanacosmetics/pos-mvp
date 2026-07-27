@@ -92,6 +92,18 @@ function lineBytes(value = '') {
   return [...encoder.encode(`${ascii(value)}\n`)];
 }
 
+function qrBytes(value) {
+  const data=encoder.encode(String(value??''));
+  const length=data.length+3;
+  return [
+    GS,0x28,0x6b,0x04,0x00,0x31,0x41,0x32,0x00,
+    GS,0x28,0x6b,0x03,0x00,0x31,0x43,0x05,
+    GS,0x28,0x6b,0x03,0x00,0x31,0x45,0x31,
+    GS,0x28,0x6b,length&0xff,(length>>8)&0xff,0x31,0x50,0x30,...data,
+    GS,0x28,0x6b,0x03,0x00,0x31,0x51,0x30
+  ];
+}
+
 async function logoRasterBytes(url,logoSize=64,paperWidth=80) {
   if(!url||typeof document==='undefined')return null;
   try{
@@ -171,6 +183,14 @@ export function buildEscPosReceipt(receipt, payments = [], settings = {}, contex
     for (const row of wrap(`Catatan: ${receipt.notes}`, width)) bytes.push(...lineBytes(row));
   }
   if (layout.showLoyaltyPoints&&Number(receipt.pointsEarned) > 0) bytes.push(...lineBytes(`Poin +${Number(receipt.pointsEarned)} | Saldo ${Number(receipt.pointsBalance || 0)}`));
+  if(receipt.issuedVoucher){
+    const voucher=receipt.issuedVoucher;
+    bytes.push(...lineBytes(separator),ESC,0x61,0x01,ESC,0x45,0x01,...lineBytes('VOUCHER BELANJA BERIKUTNYA'),ESC,0x45,0x00);
+    bytes.push(...lineBytes(voucher.discountType==='PERCENT'?`Diskon ${Number(voucher.discountValue)}%`:`Potongan ${rupiah(voucher.discountValue)}`));
+    bytes.push(...qrBytes(voucher.code),LF,...lineBytes(voucher.code));
+    for(const row of wrap(`Min. belanja ${rupiah(voucher.minPurchase)} | ${new Date(voucher.startsAt).toLocaleDateString('id-ID')} - ${new Date(voucher.endsAt).toLocaleDateString('id-ID')}`,width))bytes.push(...lineBytes(row));
+    bytes.push(...lineBytes('Scan saat transaksi berikutnya'),...lineBytes('Hanya 1 kali pakai'),ESC,0x61,0x00);
+  }
   bytes.push(...lineBytes(separator), ESC, 0x61, layout.footerAlignment==='left'?0x00:0x01);
   if(layout.customFooter)for(const textLine of String(layout.customFooter).split('\n'))for(const row of wrap(textLine,width))bytes.push(...lineBytes(row));
   for (const row of wrap(footer, width)) bytes.push(...lineBytes(row));

@@ -8,7 +8,7 @@ import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, uni
 import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null, activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -1171,6 +1171,7 @@ function renderLoyalty(){
   el('loyalty-summary').textContent=`${state.loyalty.vouchers.filter((item)=>item.active).length} voucher aktif`;
   el('tier-list').innerHTML=state.loyalty.tiers.map((tier)=>`<span class="tier-chip" style="--tier-color:${escapeHtml(tier.color)}"><strong>${escapeHtml(tier.name)}</strong><small>mulai ${money.format(tier.min_lifetime_spend)} · ${Number(tier.points_multiplier)}× poin</small></span>`).join('');
   el('voucher-list').innerHTML=state.loyalty.vouchers.map((voucher)=>`<article class="voucher-card" data-voucher-id="${escapeHtml(voucher.id)}"><div><strong>${escapeHtml(voucher.code)} · ${escapeHtml(voucher.name)}</strong><small>${voucher.discount_type==='PERCENT'?`${Number(voucher.discount_value)}%`:money.format(voucher.discount_value)} · min. ${money.format(voucher.min_purchase)} · ${escapeHtml(voucher.segment)}</small><small>${new Date(voucher.starts_at).toLocaleDateString('id-ID')}–${new Date(voucher.ends_at).toLocaleDateString('id-ID')} · dipakai ${voucher.usage_count}${voucher.usage_limit_total?`/${voucher.usage_limit_total}`:''}</small></div><button class="button ${voucher.active?'danger-button':'secondary'} voucher-status" data-active="${!voucher.active}" type="button">${voucher.active?'Hentikan':'Aktifkan'}</button></article>`).join('')||'<div class="empty-state compact">Belum ada voucher berkode.</div>';
+  el('receipt-voucher-campaign-list').innerHTML=(state.loyalty.receiptCampaigns??[]).map((campaign)=>`<article class="voucher-card" data-receipt-campaign-id="${escapeHtml(campaign.id)}"><div><strong>${escapeHtml(campaign.name)}</strong><small>Terbit mulai ${money.format(campaign.trigger_min_purchase)} · ${campaign.discount_type==='PERCENT'?`${Number(campaign.discount_value)}%`:money.format(campaign.discount_value)} · berlaku ${Number(campaign.valid_days)} hari</small><small>${Number(campaign.issued_count)} diterbitkan · ${Number(campaign.redeemed_count)} digunakan · ${Number(campaign.expired_count)} kedaluwarsa</small></div><button class="button ${campaign.active?'danger-button':'secondary'} receipt-voucher-status" data-active="${!campaign.active}" type="button">${campaign.active?'Hentikan':'Aktifkan'}</button></article>`).join('')||'<div class="empty-state compact">Belum ada program voucher otomatis.</div>';
   if(!el('voucher-new-start').value){const start=new Date(),end=new Date(Date.now()+30*86400000);el('voucher-new-start').value=localDateTimeValue(start);el('voucher-new-end').value=localDateTimeValue(end);}
 }
 
@@ -1189,6 +1190,21 @@ async function publishVoucher(event){
     usageLimitPerCustomer:Number(el('voucher-new-limit-customer').value)||null,oneTime:el('voucher-new-once').checked};
   try{await request('/api/vouchers',{method:'POST',body:JSON.stringify(payload)});toast(`Voucher ${payload.code.toUpperCase()} diterbitkan`);event.currentTarget.reset();await loadPromotionManagement();}
   catch(error){el('voucher-form-error').textContent=error.message;}
+}
+
+async function publishReceiptVoucherCampaign(event){
+  event.preventDefault();el('receipt-voucher-form-error').textContent='';
+  const payload={name:el('receipt-voucher-name').value,triggerMinPurchase:Number(el('receipt-voucher-trigger-min').value),
+    discountType:el('receipt-voucher-type').value,discountValue:Number(el('receipt-voucher-value').value),
+    maxDiscount:Number(el('receipt-voucher-max').value)||null,redemptionMinPurchase:Number(el('receipt-voucher-redemption-min').value),
+    validAfterDays:Number(el('receipt-voucher-valid-after').value),validDays:Number(el('receipt-voucher-valid-days').value),
+    customerMode:el('receipt-voucher-customer-mode').value,priority:Number(el('receipt-voucher-priority').value)};
+  try{
+    await request('/api/receipt-voucher-campaigns',{method:'POST',body:JSON.stringify(payload)});
+    toast('Program voucher struk sudah aktif');event.currentTarget.reset();
+    el('receipt-voucher-trigger-min').value=100000;el('receipt-voucher-redemption-min').value=100000;
+    el('receipt-voucher-valid-after').value=1;el('receipt-voucher-valid-days').value=14;await loadPromotionManagement();
+  }catch(error){el('receipt-voucher-form-error').textContent=error.message;}
 }
 
 async function publishPromotion(event) {
@@ -1718,6 +1734,7 @@ function barcodeMatch(value) {
 
 async function handleCameraBarcode(value) {
   const exact = barcodeMatch(value);
+  if (!exact && barcodeCameraTarget === 'pos' && await tryScannedVoucher(value)) return;
   if (!exact) return toast(`Barcode ${value} belum terdaftar pada produk.`);
   if (barcodeCameraTarget === 'pos') {
     await addScannedProduct(exact.product, exact.unit);
@@ -1753,7 +1770,6 @@ function cameraErrorMessage(error) {
 
 async function applyVoucherCode(){
   if(!navigator.onLine)return toast('Voucher hanya dapat diverifikasi saat online.');
-  if(!selectedPosCustomer())return toast('Pilih member terlebih dahulu.');
   if(!state.cart.length)return toast('Keranjang masih kosong.');
   state.voucherCode=el('voucher-code').value.trim().toUpperCase();
   if(!state.voucherCode)return;
@@ -1761,6 +1777,15 @@ async function applyVoucherCode(){
     state.quote=await request('/api/quote',{method:'POST',body:JSON.stringify({lines:state.cart,customerGroupId:el('customer-group').value,customerId:el('customer-select').value,voucherCode:state.voucherCode,at:new Date().toISOString(),...(state.saleAuthorization?{authorization:state.saleAuthorization}:{})})});
     renderCart();toast(`Voucher ${state.voucherCode} dipakai`);
   }catch(error){state.voucherCode='';el('voucher-code').value='';renderCart();toast(error.message);}
+}
+
+async function tryScannedVoucher(value){
+  const code=String(value??'').trim().toUpperCase();
+  if(!/^[A-Z0-9]{10}$/.test(code))return false;
+  if(!state.cart.length){toast('Tambahkan barang sebelum memindai voucher.');return true;}
+  el('voucher-code').value=code;
+  await applyVoucherCode();
+  return true;
 }
 
 async function completeCameraBarcode(value, controls = null) {
@@ -1801,6 +1826,7 @@ async function handleNativeScannerBarcode(value) {
   if (!barcode) return;
   if (!el('page-pos').classList.contains('active')) return toast('Buka halaman Kasir sebelum memindai barang.');
   const exact = barcodeMatch(barcode);
+  if (!exact && await tryScannedVoucher(barcode)) return;
   if (!exact) return toast(`Barcode ${barcode} belum terdaftar pada produk.`);
   await addScannedProduct(exact.product, exact.unit);
   el('product-search').value = '';
@@ -3928,6 +3954,15 @@ function bindReceiptImageFallbacks(root=document) {
   root.querySelectorAll('.receipt-logo').forEach((image)=>image.addEventListener('error',()=>image.remove(),{once:true}));
 }
 
+function renderReceiptVoucherQrs(root=document){
+  const Writer=window.ZXingBrowser?.BrowserQRCodeSvgWriter;
+  if(!Writer)return;
+  const writer=new Writer();
+  root.querySelectorAll('.receipt-voucher-qr[data-code]').forEach((container)=>{
+    container.replaceChildren(writer.write(container.dataset.code,128,128));
+  });
+}
+
 function buildReceiptMarkup(receipt,payments=[],options={}){
   const customer=receipt.customer??state.customers.find((item)=>item.id===el('customer-select')?.value);
   const business=options.business??receipt.business??state.business;
@@ -3942,13 +3977,16 @@ function buildReceiptMarkup(receipt,payments=[],options={}){
   const logo=layout.showLogo&&business.logoUrl?`<img class="receipt-logo" src="${escapeHtml(business.logoUrl)}" alt="Logo ${escapeHtml(business.name??'usaha')}" style="width:${layout.logoSize}px">`:'';
   const meta=`${layout.showCashier?`<span>Kasir</span><strong>${escapeHtml(receipt.cashier??'-')}</strong>`:''}${layout.showCustomer&&customer?`<span>Pelanggan</span><strong>${escapeHtml(customer.name)}</strong>`:''}`;
   const paymentRows=layout.showPaymentDetail?payments.map((payment)=>`<div><span>${escapeHtml(payment.method)}${payment.method==='CASH'&&payment.tendered?` · diterima ${money.format(payment.tendered)}`:''}</span><strong>${money.format(payment.amount)}</strong></div>`).join(''):'';
-  return `<section class="${classes}"><div class="receipt-head">${logo}${layout.showBusinessName?`<strong>${escapeHtml(business.name??'Kasir Nusa')}</strong>`:''}${layout.showOutletName?`<span>${escapeHtml(receipt.outletName??outlet.name??'Outlet')}</span>`:''}${layout.customHeader?`<small class="receipt-custom-header">${escapeHtml(layout.customHeader)}</small>`:''}${layout.showAddress&&address?`<small>${escapeHtml(address)}</small>`:''}${layout.showPhone&&phone?`<small>${escapeHtml(layout.contactLabel||'Tel.')} ${escapeHtml(phone)}</small>`:''}${layout.showDate?`<small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small>`:''}${layout.showReceiptNumber?`<b>${escapeHtml(receipt.receiptNo)}</b>`:''}${receipt.status==='VOIDED'?'<b>VOID / DIBATALKAN</b>':''}</div><div class="receipt-meta">${meta}</div><div class="receipt-lines">${customerView.lines.map((line)=>`<div><span><strong>${escapeHtml(line.productName)}</strong>${layout.showPriceType&&priceLabel?`<small>${escapeHtml(priceLabel)}</small>`:''}<small>${line.qty} ${escapeHtml(line.unitName)} × ${money.format(line.customerUnitPrice)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div><div class="receipt-totals"><div><span>Subtotal</span><strong>${money.format(customerView.subtotal)}</strong></div>${Math.abs(receiptDiscount)>0.01?`<div><span>Promo & diskon</span><strong>${receiptDiscount<0?'+':'−'}${money.format(Math.abs(receiptDiscount))}</strong></div>`:''}<div class="receipt-grand"><span>Total</span><strong>${money.format(customerView.grandTotal)}</strong></div>${paymentRows}${layout.showPaymentDetail&&change?`<div><span>Kembalian</span><strong>${money.format(change)}</strong></div>`:''}</div>${layout.showTransactionNote&&receipt.notes?`<p class="receipt-thanks"><strong>Catatan:</strong> ${escapeHtml(receipt.notes)}</p>`:''}${layout.showLoyaltyPoints&&Number(receipt.pointsEarned)>0?`<p class="receipt-thanks">Poin +${Number(receipt.pointsEarned)} · saldo ${Number(receipt.pointsBalance)}${receipt.tierName?` · ${escapeHtml(receipt.tierName)}`:''}</p>`:''}${layout.customFooter?`<p class="receipt-thanks receipt-custom-footer">${escapeHtml(layout.customFooter)}</p>`:''}<p class="receipt-thanks">${escapeHtml(footer)}</p>${options.copyLabel?`<small class="receipt-copy-label">${escapeHtml(options.copyLabel)}</small>`:''}</section>`;
+  const voucher=receipt.issuedVoucher;
+  const voucherBlock=voucher?`<div class="receipt-issued-voucher"><strong>VOUCHER BELANJA BERIKUTNYA</strong><span>${voucher.discountType==='PERCENT'?`Diskon ${Number(voucher.discountValue)}%`:`Potongan ${money.format(voucher.discountValue)}`}</span><div class="receipt-voucher-qr" data-code="${escapeHtml(voucher.code)}"></div><b>${escapeHtml(voucher.code)}</b><small>Min. belanja ${money.format(voucher.minPurchase)} · berlaku ${new Date(voucher.startsAt).toLocaleDateString('id-ID')}–${new Date(voucher.endsAt).toLocaleDateString('id-ID')}</small><small>Scan saat transaksi berikutnya · hanya 1 kali pakai</small></div>`:'';
+  return `<section class="${classes}"><div class="receipt-head">${logo}${layout.showBusinessName?`<strong>${escapeHtml(business.name??'Kasir Nusa')}</strong>`:''}${layout.showOutletName?`<span>${escapeHtml(receipt.outletName??outlet.name??'Outlet')}</span>`:''}${layout.customHeader?`<small class="receipt-custom-header">${escapeHtml(layout.customHeader)}</small>`:''}${layout.showAddress&&address?`<small>${escapeHtml(address)}</small>`:''}${layout.showPhone&&phone?`<small>${escapeHtml(layout.contactLabel||'Tel.')} ${escapeHtml(phone)}</small>`:''}${layout.showDate?`<small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small>`:''}${layout.showReceiptNumber?`<b>${escapeHtml(receipt.receiptNo)}</b>`:''}${receipt.status==='VOIDED'?'<b>VOID / DIBATALKAN</b>':''}</div><div class="receipt-meta">${meta}</div><div class="receipt-lines">${customerView.lines.map((line)=>`<div><span><strong>${escapeHtml(line.productName)}</strong>${layout.showPriceType&&priceLabel?`<small>${escapeHtml(priceLabel)}</small>`:''}<small>${line.qty} ${escapeHtml(line.unitName)} × ${money.format(line.customerUnitPrice)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div><div class="receipt-totals"><div><span>Subtotal</span><strong>${money.format(customerView.subtotal)}</strong></div>${Math.abs(receiptDiscount)>0.01?`<div><span>Promo & diskon</span><strong>${receiptDiscount<0?'+':'−'}${money.format(Math.abs(receiptDiscount))}</strong></div>`:''}<div class="receipt-grand"><span>Total</span><strong>${money.format(customerView.grandTotal)}</strong></div>${paymentRows}${layout.showPaymentDetail&&change?`<div><span>Kembalian</span><strong>${money.format(change)}</strong></div>`:''}</div>${layout.showTransactionNote&&receipt.notes?`<p class="receipt-thanks"><strong>Catatan:</strong> ${escapeHtml(receipt.notes)}</p>`:''}${layout.showLoyaltyPoints&&Number(receipt.pointsEarned)>0?`<p class="receipt-thanks">Poin +${Number(receipt.pointsEarned)} · saldo ${Number(receipt.pointsBalance)}${receipt.tierName?` · ${escapeHtml(receipt.tierName)}`:''}</p>`:''}${voucherBlock}${layout.customFooter?`<p class="receipt-thanks receipt-custom-footer">${escapeHtml(layout.customFooter)}</p>`:''}<p class="receipt-thanks">${escapeHtml(footer)}</p>${options.copyLabel?`<small class="receipt-copy-label">${escapeHtml(options.copyLabel)}</small>`:''}</section>`;
 }
 
 function renderReceipt(receipt,payments){
   const copies=Math.max(1,Math.min(3,Number(state.deviceSettings.receiptCopies??1)));
   el('receipt-content').innerHTML=Array.from({length:copies},(_,index)=>buildReceiptMarkup(receipt,payments,{copyLabel:copies>1?`Salinan ${index+1} dari ${copies}`:''})).join('');
   bindReceiptImageFallbacks(el('receipt-content'));
+  renderReceiptVoucherQrs(el('receipt-content'));
   const width=Number(state.deviceSettings.paperWidth??80)===58?58:80;
   el('receipt-dialog').classList.toggle('paper-58',width===58);
   let printStyle=el('receipt-print-page-style');
@@ -4591,6 +4629,8 @@ el('product-search').addEventListener('keydown', (event) => {
   const value = event.target.value.trim();
   const exact = barcodeMatch(value);
   if (exact) addScannedProduct(exact.product, exact.unit);
+  else if(/^[A-Za-z0-9]{10}$/.test(value))tryScannedVoucher(value);
+  event.target.value='';
 });
 el('pos-category-filters').addEventListener('click',(event)=>{const button=event.target.closest('[data-category]');if(!button)return;state.posCategoryFilter=button.dataset.category;renderProducts(el('product-search').value);});
 el('favorite-filter').addEventListener('click',()=>{state.favoriteOnly=!state.favoriteOnly;renderProducts(el('product-search').value);});
@@ -5086,7 +5126,9 @@ el('supplier-payment-method').addEventListener('change',()=>el('supplier-payment
 el('promotion-form').addEventListener('submit', publishPromotion);
 el('loyalty-settings-form').addEventListener('submit',saveLoyaltySettings);
 el('voucher-form').addEventListener('submit',publishVoucher);
+el('receipt-voucher-campaign-form').addEventListener('submit',publishReceiptVoucherCampaign);
 el('voucher-list').addEventListener('click',async(event)=>{const button=event.target.closest('.voucher-status');if(!button)return;try{await request(`/api/vouchers/${button.closest('[data-voucher-id]').dataset.voucherId}/status`,{method:'POST',body:JSON.stringify({active:button.dataset.active==='true'})});await loadPromotionManagement();}catch(error){toast(error.message);}});
+el('receipt-voucher-campaign-list').addEventListener('click',async(event)=>{const button=event.target.closest('.receipt-voucher-status');if(!button)return;try{await request(`/api/receipt-voucher-campaigns/${button.closest('[data-receipt-campaign-id]').dataset.receiptCampaignId}/status`,{method:'POST',body:JSON.stringify({active:button.dataset.active==='true'})});await loadPromotionManagement();}catch(error){toast(error.message);}});
 el('simulate-promo').addEventListener('click', simulatePromotion);
 el('promo-type').addEventListener('change',syncPromotionForm);
 el('promo-target-type').addEventListener('change',syncPromotionForm);
