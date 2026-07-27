@@ -8,7 +8,7 @@ test('sidebar memakai accordion subfitur untuk seluruh modul', async () => {
   const [html, script, css] = await Promise.all([
     read('../apps/web/index.html'), read('../apps/web/app.js'), read('../apps/web/styles.css')
   ]);
-  for (const group of ['sales','inventory','relations','growth','insights','system']) {
+  for (const group of ['sales','inventory','restock','relations','growth','insights','system']) {
     assert.match(html, new RegExp(`data-nav-group="${group}"`));
     assert.match(html, new RegExp(`data-nav-panel="${group}"`));
   }
@@ -33,7 +33,8 @@ test('fitur gabungan dipisahkan menjadi tujuan halaman sendiri', async () => {
   assert.match(html,/data-page="outlet-transfer-request"/);
   assert.match(html,/data-page="outlet-transfer-approval"/);
   assert.match(html,/data-page="outlet-in-transit"/);
-  for (const view of ['planning','documents','order','receipt','supplier-return']) assert.match(html, new RegExp(`data-purchase-view-target="${view}"`));
+  for (const view of ['planning','documents','receipt','supplier-return']) assert.match(html, new RegExp(`data-purchase-view-target="${view}"`));
+  assert.match(html, /id="purchase-view-order"/);
   for (const view of ['summary','performance','purchases','sales','audit']) assert.match(html, new RegExp(`data-report-view="${view}"`));
   for (const view of ['business','outlets','locations','device','health']) assert.match(html, new RegExp(`data-settings-view="${view}"`));
   assert.match(script, /function showStockView/);

@@ -7,10 +7,10 @@ const css = await readFile(new URL('../apps/web/styles.css', import.meta.url), '
 const worker = await readFile(new URL('../apps/web/service-worker.js', import.meta.url), 'utf8');
 
 test('Nusa Commerce memakai identitas rilis dan aset shell terbaru', () => {
-  assert.match(html, /Restok Terpandu · v2\.3\.0/);
-  assert.match(html, /styles\.css\?v=59/);
-  assert.match(html, /app\.js\?v=59/);
-  assert.match(worker, /nusa-pos-shell-v59/);
+  assert.match(html, /Restok Sederhana · v2\.3\.1/);
+  assert.match(html, /styles\.css\?v=60/);
+  assert.match(html, /app\.js\?v=60/);
+  assert.match(worker, /nusa-pos-shell-v60/);
 });
 
 test('login memiliki hierarki brand profesional tanpa aset eksternal', () => {
@@ -24,7 +24,7 @@ test('login memiliki hierarki brand profesional tanpa aset eksternal', () => {
 test('navigasi utama memakai ikon vektor yang aksesibel', () => {
   const groups = [...html.matchAll(/data-nav-group="[^"]+"/g)];
   const icons = [...html.matchAll(/class="nav-icon"><svg[^>]*aria-hidden="true"/g)];
-  assert.equal(groups.length, 10);
+  assert.equal(groups.length, 11);
   assert.equal(icons.length, groups.length);
   assert.match(css, /\.nav-icon svg\{/);
   assert.match(css, /\.feature-nav-item\.active::before\{/);

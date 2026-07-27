@@ -45,6 +45,24 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat v2.3.1 siap deploy
+
+- **Restok Sederhana v2.3.1** memindahkan seluruh pembelian dari kelompok
+  Barang & Stok ke satu lipatan Restok dengan empat submenu: Pilih barang,
+  Pesanan supplier, Terima barang, dan Retur supplier.
+- Daftar menampilkan seluruh produk dari stok paling sedikit. Pengguna memilih
+  barang dan mengubah jumlah pesan langsung; pengaturan analisis/approval
+  disembunyikan dalam bagian lanjutan.
+- Satu tombol membuat surat pesanan lalu mengajukannya ke alur persetujuan.
+  Pesanan dapat dicetak A4, disimpan PDF, atau dibagikan sebagai teks dan
+  selalu bertanda `BUKAN BUKTI PEMBAYARAN`.
+- Pesanan yang disetujui diteruskan ke penerimaan dengan supplier, lokasi, dan
+  sisa barang otomatis terisi. Staf mencatat faktur serta jumlah yang benar-benar
+  tiba sebelum stok bertambah.
+- QA browser desktop dan mobile 390 x 844 lulus tanpa overflow. Tidak
+  memerlukan migrasi SQL. Cache offline dinaikkan ke `nusa-pos-shell-v60`;
+  173 pengujian otomatis ditargetkan lulus.
+
 ### Rilis v2.3.0 dikonfirmasi live
 
 - **Restok Terpandu v2.3.0** mengubah penerimaan barang yang sebelumnya

@@ -1708,7 +1708,9 @@ async function loadRestockPlanning() {
 function renderRestockPlanning() {
   const neededOnly = el('planning-needed-only').checked;
   const all = state.restockPlanning.recommendations ?? [];
-  const list = all.filter((item) => !neededOnly || Number(item.suggestedQty) > 0 || item.urgency === 'OUT_OF_STOCK');
+  const list = all
+    .filter((item) => !neededOnly || Number(item.suggestedQty) > 0 || item.urgency === 'OUT_OF_STOCK')
+    .sort((a,b) => Number(a.stock) - Number(b.stock) || String(a.productName).localeCompare(String(b.productName),'id'));
   const count = (urgency) => all.filter((item) => item.urgency === urgency).length;
   const suggestedValue = all.reduce((sum,item)=>sum+(Number(item.suggestedQty)*Number(item.estimatedCost??0)),0);
   el('restock-planning-metrics').innerHTML = [
@@ -1718,16 +1720,17 @@ function renderRestockPlanning() {
   ].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
   el('restock-planning-list').innerHTML = list.map((item)=>{
     const [urgencyLabel,urgencyClass]=planningUrgency[item.urgency]??[item.urgency,'draft'];
-    const selectable=Boolean(item.supplierId)&&Number(item.suggestedQty)>0;
+    const selectable=Boolean(item.supplierId);
+    const orderQty=Number(item.suggestedQty)>0?Number(item.suggestedQty):1;
     const supplierCopy=item.supplierName?escapeHtml(item.supplierName):'<span class="planning-unconfigured">Supplier belum diatur</span>';
     return `<article class="planning-row ${item.urgency.toLowerCase().replaceAll('_','-')}" data-product-id="${escapeHtml(item.productId)}">
       <input class="planning-select" type="checkbox" aria-label="Pilih ${escapeHtml(item.productName)}" ${selectable?'':'disabled'}>
       <div class="planning-product"><strong>${escapeHtml(item.productName)}</strong><small>${escapeHtml(item.sku)} · ${supplierCopy}</small><span class="status-badge ${urgencyClass}">${urgencyLabel}</span></div>
-      <div class="planning-fact"><span>Stok + akan datang</span><strong>${Number(item.stock).toLocaleString('id-ID')} + ${Number(item.onOrder).toLocaleString('id-ID')} pcs</strong></div>
+      <div class="planning-fact planning-stock"><span>Stok sekarang</span><strong>${Number(item.stock).toLocaleString('id-ID')} pcs</strong><small>${Number(item.onOrder)>0?`${Number(item.onOrder).toLocaleString('id-ID')} pcs sedang dipesan`:'Belum ada pesanan aktif'}</small></div>
       <div class="planning-fact"><span>Rata-rata jual</span><strong>${Number(item.averageDailySales).toLocaleString('id-ID')} pcs/hari</strong></div>
-      <div class="planning-fact"><span>Target / cover</span><strong>${Number(item.targetStock).toLocaleString('id-ID')} pcs · ${item.daysOfCover===null?'-':`${item.daysOfCover} hari`}</strong></div>
-      <div class="planning-fact"><span>Saran pesan</span><strong>${Number(item.suggestedQty).toLocaleString('id-ID')} pcs</strong></div>
-      <div class="planning-actions"><button class="button secondary edit-restock-policy" type="button">Atur</button>${item.supplierId?'<button class="button secondary compare-planning-supplier" type="button">Harga</button>':''}</div>
+      <div class="planning-fact planning-cover"><span>Ketahanan stok</span><strong>${item.daysOfCover===null?'-':`${item.daysOfCover} hari`}</strong><small>Target ${Number(item.targetStock).toLocaleString('id-ID')} pcs</small></div>
+      <label class="planning-order-quantity"><span>Jumlah pesan</span><input class="planning-order-qty" type="number" min="0.000001" step="any" value="${orderQty}" ${selectable?'':'disabled'}><small>pcs</small></label>
+      <div class="planning-actions"><button class="button secondary edit-restock-policy" type="button">${item.supplierId?'Ubah aturan':'Pilih supplier'}</button>${item.supplierId?'<button class="button secondary compare-planning-supplier" type="button">Cek harga</button>':''}</div>
     </article>`;
   }).join('') || '<div class="empty-state compact">Tidak ada barang yang sesuai filter. Stok berada di atas kebutuhan saat ini.</div>';
   syncPlanningSelection();
@@ -1785,22 +1788,31 @@ async function savePlanningSettings(event) {
 }
 
 async function createPlanningDraft() {
-  const selected=[...document.querySelectorAll('.planning-select:checked')].map((input)=>planningItemForRow(input.closest('.planning-row')));
+  const selected=[...document.querySelectorAll('.planning-select:checked')].map((input)=>{
+    const row=input.closest('.planning-row');
+    return {...planningItemForRow(row),orderQty:Number(row.querySelector('.planning-order-qty').value)};
+  });
+  if(selected.some((item)=>!(item.orderQty>0)))return toast('Jumlah pesanan setiap barang harus lebih dari nol.');
   const supplierIds=[...new Set(selected.map((item)=>item.supplierId).filter(Boolean))];
-  if(supplierIds.length!==1)return toast('Pilih barang dari satu supplier untuk setiap draft PO.');
+  if(supplierIds.length!==1)return toast('Pilih barang dari satu supplier untuk setiap surat pesanan.');
   const maxLead=Math.max(...selected.map((item)=>Number(item.leadTimeDays??0)));
   const expected=new Date();expected.setDate(expected.getDate()+maxLead);
-  const button=el('create-planning-draft');button.disabled=true;button.textContent='Membuat draft...';
+  const button=el('create-planning-draft');button.disabled=true;button.textContent='Membuat pesanan...';
   try{
     const result=await request('/api/restock-planning/draft',{method:'POST',body:JSON.stringify({
       supplierId:supplierIds[0],locationId:el('planning-location').value,expectedOn:expected.toISOString().slice(0,10),
-      items:selected.map((item)=>({productId:item.productId,baseQty:item.suggestedQty,unitCost:Number(item.estimatedCost??0)}))
+      items:selected.map((item)=>({productId:item.productId,baseQty:item.orderQty,unitCost:Number(item.estimatedCost??0)}))
     })});
-    toast(`${result.po_no} dibuat dari rekomendasi restok.`);
+    let status='DRAFT';
+    if(result.id){
+      const submitted=await request(`/api/purchase-orders/${result.id}/submit`,{method:'POST',body:'{}'});
+      status=submitted.status??status;
+    }
+    toast(`${result.po_no} siap diproses · ${purchaseStatus[status]?.[0]??status}.`);
     await Promise.all([loadPurchaseOrders(),loadRestockPlanning()]);
     showPurchaseView('documents');
   }catch(error){toast(error.message);}
-  finally{button.textContent='Buat draft PO';syncPlanningSelection();}
+  finally{button.textContent='Buat pesanan supplier';syncPlanningSelection();}
 }
 
 async function loadPurchaseOrders() {
@@ -1828,7 +1840,8 @@ function renderPurchaseOrders() {
     const progress = ordered ? Math.round((received/ordered)*100) : 0;
     const canApprove = ['OWNER','ADMIN'].includes(state.session.user.role);
     const actions = [
-      order.status === 'DRAFT' ? `<button class="button secondary po-open" data-id="${order.id}">Ubah</button><button class="button primary po-action" data-id="${order.id}" data-action="submit">Ajukan</button>` : '',
+      order.status !== 'CANCELLED' ? `<button class="button secondary po-print" data-id="${order.id}">Cetak / bagikan</button>` : '',
+      order.status === 'DRAFT' ? `<button class="button secondary po-open" data-id="${order.id}">Ubah</button><button class="button primary po-action" data-id="${order.id}" data-action="submit">Siapkan pesanan</button>` : '',
       order.status === 'SUBMITTED' && canApprove ? `<button class="button primary po-action" data-id="${order.id}" data-action="approve">Setujui</button>` : '',
       ['APPROVED','PARTIALLY_RECEIVED'].includes(order.status) ? `<button class="button primary po-receive" data-id="${order.id}">Terima barang</button>` : '',
       !['RECEIVED','CANCELLED','PARTIALLY_RECEIVED'].includes(order.status) && canApprove ? `<button class="button secondary po-action" data-id="${order.id}" data-action="cancel">Batalkan</button>` : ''
@@ -1840,6 +1853,50 @@ function renderPurchaseOrders() {
   document.querySelectorAll('.po-open').forEach((button) => button.addEventListener('click', () => editPurchaseOrder(button.dataset.id)));
   document.querySelectorAll('.po-action').forEach((button) => button.addEventListener('click', () => transitionPurchaseOrder(button.dataset.id, button.dataset.action)));
   document.querySelectorAll('.po-receive').forEach((button) => button.addEventListener('click', () => prepareOrderReceipt(button.dataset.id)));
+  document.querySelectorAll('.po-print').forEach((button) => button.addEventListener('click', () => openPurchaseOrderPrint(button.dataset.id)));
+}
+
+function purchaseOrderShareText(order) {
+  const business=state.business??{};
+  const lines=order.items.map((item,index)=>`${index+1}. ${item.product_name} — ${Number(item.ordered_qty).toLocaleString('id-ID')} pcs`).join('\n');
+  return `${business.name??'Kasir Nusa'}\nSURAT PESANAN BARANG ${order.po_no}\nSupplier: ${order.supplier_name}\n\n${lines}\n\nEstimasi total: ${money.format(order.grand_total)}\nDokumen ini adalah permintaan barang, BUKAN BUKTI PEMBAYARAN.`;
+}
+
+function openPurchaseOrderPrint(orderId) {
+  const order=state.purchaseOrders.find((item)=>item.id===orderId);
+  if(!order)return;
+  state.printingPurchaseOrder=order;
+  const business=state.business??{};
+  const supplier=state.suppliers.find((item)=>item.id===order.supplier_id);
+  const location=state.locations.find((item)=>item.id===order.location_id);
+  const rows=order.items.map((item,index)=>`<tr><td>${index+1}</td><td><strong>${escapeHtml(item.product_name)}</strong>${item.sku?`<small>${escapeHtml(item.sku)}</small>`:''}</td><td>${Number(item.ordered_qty).toLocaleString('id-ID')} pcs</td><td>${money.format(item.unit_cost)}</td><td>${money.format(item.line_total)}</td></tr>`).join('');
+  el('purchase-order-print-content').innerHTML=`<article class="supplier-order-sheet">
+    <header><div><span class="supplier-order-brand">${escapeHtml(business.name??'Kasir Nusa')}</span><small>${escapeHtml(business.address??'')}</small><small>${escapeHtml(business.phone??'')}</small></div><div><p>SURAT PESANAN BARANG</p><strong>${escapeHtml(order.po_no)}</strong></div></header>
+    <div class="supplier-order-notice"><strong>BUKAN BUKTI PEMBAYARAN</strong><span>Dokumen ini adalah permintaan pengadaan barang kepada supplier.</span></div>
+    <section class="supplier-order-meta"><div><span>Kepada supplier</span><strong>${escapeHtml(order.supplier_name)}</strong><small>${escapeHtml(supplier?.phone??'')}</small><small>${escapeHtml(supplier?.address??'')}</small></div><div><span>Dikirim ke</span><strong>${escapeHtml(location?.name??'-')}</strong><small>Dibuat ${new Date(order.created_at).toLocaleDateString('id-ID')}</small><small>${order.expected_on?`Diharapkan tiba ${new Date(`${order.expected_on}T00:00:00`).toLocaleDateString('id-ID')}`:'Tanggal tiba belum ditentukan'}</small></div></section>
+    <table><thead><tr><th>No.</th><th>Barang</th><th>Jumlah</th><th>Estimasi / pcs</th><th>Jumlah</th></tr></thead><tbody>${rows}</tbody></table>
+    <section class="supplier-order-total"><span>Estimasi total pesanan</span><strong>${money.format(order.grand_total)}</strong></section>
+    ${order.notes?`<section class="supplier-order-notes"><span>Catatan untuk supplier</span><p>${escapeHtml(order.notes)}</p></section>`:''}
+    <footer><div><span>Dibuat oleh</span><strong>${escapeHtml(state.session?.user?.displayName??state.session?.user?.name??'-')}</strong></div><div><span>Konfirmasi supplier</span><strong>____________________</strong></div></footer>
+  </article>`;
+  el('purchase-order-dialog').showModal();
+}
+
+async function sharePurchaseOrder() {
+  const order=state.printingPurchaseOrder;
+  if(!order)return;
+  const text=purchaseOrderShareText(order);
+  if(navigator.share){
+    try{await navigator.share({title:`Pesanan ${order.po_no}`,text});return;}catch(error){if(error.name==='AbortError')return;}
+  }
+  await navigator.clipboard.writeText(text);
+  toast('Ringkasan pesanan disalin. Tempelkan ke chat supplier.');
+}
+
+function printPurchaseOrder() {
+  document.body.classList.add('printing-purchase-order');
+  window.print();
+  setTimeout(()=>document.body.classList.remove('printing-purchase-order'),500);
 }
 
 function newPurchaseOrder() {
@@ -4073,6 +4130,10 @@ el('held-sales-list').addEventListener('click',(event)=>{const row=event.target.
 el('close-receipt').addEventListener('click',()=>el('receipt-dialog').close());
 el('whatsapp-receipt').addEventListener('click',shareReceiptWhatsApp);
 el('print-receipt').addEventListener('click',()=>printReceiptDirect(state.lastReceipt,state.lastReceipt?.payments??state.paymentDraft));
+el('close-purchase-order-print').addEventListener('click',()=>el('purchase-order-dialog').close());
+el('share-purchase-order').addEventListener('click',sharePurchaseOrder);
+el('print-purchase-order').addEventListener('click',printPurchaseOrder);
+el('purchase-order-dialog').addEventListener('close',()=>document.body.classList.remove('printing-purchase-order'));
 el('sync-button').addEventListener('click', syncQueue);
 el('find-return-sale').addEventListener('click',findReturnSale);
 el('return-receipt-search').addEventListener('keydown',(event)=>{if(event.key==='Enter'){event.preventDefault();findReturnSale();}});

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=59">
+  <link rel="stylesheet" href="/styles.css?v=60">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -58,18 +58,20 @@
           <button data-page="returns" class="feature-nav-item" data-permission="sales.return"><span>Retur penjualan</span><small>Pengembalian dan refund</small></button>
           <button data-page="shift" class="feature-nav-item" data-permission="pos.sell"><span>Shift kasir</span><small>Kas masuk, keluar, buka dan tutup</small></button>
         </div>
-        <button data-nav-group="inventory" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 8 8-4 8 4-8 4zM4 8v8l8 4 8-4V8M12 12v8"/></svg></span><span>Barang & Stok<small>Produk dan pembelian</small></span><b>›</b></button>
+        <button data-nav-group="inventory" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 8 8-4 8 4-8 4zM4 8v8l8 4 8-4V8M12 12v8"/></svg></span><span>Barang & Stok<small>Produk dan persediaan</small></span><b>›</b></button>
         <div data-nav-panel="inventory" class="feature-nav-panel">
           <button data-page="products" class="feature-nav-item" data-permission="catalog.manage"><span>Produk</span><small>Master, satuan, barcode, harga</small></button>
           <button data-page="stock-list" data-target-page="stock" data-stock-view="list" class="feature-nav-item" data-permission="inventory.manage"><span>Daftar stok</span><small>Saldo per lokasi</small></button>
           <button data-page="stock-expiry" data-target-page="stock" data-stock-view="expiry" class="feature-nav-item" data-permission="inventory.manage"><span>Batch & EXP</span><small>FEFO dan kedaluwarsa</small></button>
           <button data-page="stock-count" data-target-page="stock" data-stock-view="count" class="feature-nav-item" data-permission="inventory.manage"><span>Stok opname</span><small>Jumlah fisik dan selisih</small></button>
           <button data-page="stock-ledger" data-target-page="stock" data-stock-view="ledger" class="feature-nav-item" data-permission="inventory.manage"><span>Jurnal stok</span><small>Jejak pergerakan terbaru</small></button>
-          <button data-page="restock-planning" data-target-page="restock" data-purchase-view-target="planning" class="feature-nav-item" data-permission="purchasing.view_cost"><span>Rencana restok</span><small>Rekomendasi kebutuhan</small></button>
-          <button data-page="purchase-documents" data-target-page="restock" data-purchase-view-target="documents" class="feature-nav-item" data-permission="purchasing.view_cost"><span>Purchase Order</span><small>Daftar dokumen pembelian</small></button>
-          <button data-page="purchase-order" data-target-page="restock" data-purchase-view-target="order" class="feature-nav-item" data-permission="purchasing.view_cost"><span>Buat PO</span><small>Editor pesanan supplier</small></button>
-          <button data-page="purchase-receipt" data-target-page="restock" data-purchase-view-target="receipt" class="feature-nav-item" data-permission="purchasing.receive"><span>Terima barang</span><small>Faktur dan penambahan stok</small></button>
-          <button data-page="supplier-return" data-target-page="restock" data-purchase-view-target="supplier-return" class="feature-nav-item" data-permission="purchasing.receive"><span>Retur supplier</span><small>Nota retur dan kredit</small></button>
+        </div>
+        <button data-nav-group="restock" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4zM8 7V4h8v3M8 12h8M12 9v6"/></svg></span><span>Restok<small>Pesan dan terima barang</small></span><b>›</b></button>
+        <div data-nav-panel="restock" class="feature-nav-panel">
+          <button data-page="restock-planning" data-target-page="restock" data-purchase-view-target="planning" class="feature-nav-item" data-permission="purchasing.view_cost"><span>Pilih barang</span><small>Stok paling sedikit dahulu</small></button>
+          <button data-page="purchase-documents" data-target-page="restock" data-purchase-view-target="documents" class="feature-nav-item" data-permission="purchasing.view_cost"><span>Pesanan supplier</span><small>Cetak, bagikan, dan pantau</small></button>
+          <button data-page="purchase-receipt" data-target-page="restock" data-purchase-view-target="receipt" class="feature-nav-item" data-permission="purchasing.receive"><span>Terima barang</span><small>Catat barang yang sudah tiba</small></button>
+          <button data-page="supplier-return" data-target-page="restock" data-purchase-view-target="supplier-return" class="feature-nav-item" data-permission="purchasing.receive"><span>Retur supplier</span><small>Kembalikan barang bermasalah</small></button>
         </div>
         <button data-nav-group="multioutlet" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V8l4-4 4 4v12M12 11l4-4 4 4v9M7 13h2M15 14h2"/></svg></span><span>Multi-outlet<small>Transfer dan kontrol cabang</small></span><b>›</b></button>
         <div data-nav-panel="multioutlet" class="feature-nav-panel">
@@ -143,7 +145,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Restok Terpandu · v2.3.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Restok Sederhana · v2.3.1</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -212,32 +214,35 @@
 
       <section id="page-restock" class="page">
         <div class="content-width">
-          <div class="page-title"><div><p class="eyebrow">PURCHASE ORDER & PENERIMAAN</p><h1>Pembelian dan restok</h1><p class="muted">Rencanakan pesanan, minta persetujuan, lalu terima barang sebagian atau seluruhnya.</p></div><span class="pill success">Alur terkontrol</span></div>
-          <div class="purchase-tabs" role="tablist"><button class="purchase-tab active" data-purchase-view="planning">Rencana restok</button><button class="purchase-tab" data-purchase-view="documents">Dokumen pembelian</button><button class="purchase-tab" data-purchase-view="order">Buat PO</button><button class="purchase-tab" data-purchase-view="receipt">Terima barang</button><button class="purchase-tab" data-purchase-view="supplier-return">Retur supplier</button></div>
+          <div class="page-title"><div><p class="eyebrow">ALUR RESTOK</p><h1>Pesan lalu terima barang</h1><p class="muted">Pilih stok yang menipis, kirim surat pesanan ke supplier, lalu catat barang ketika tiba.</p></div><span class="pill success">3 langkah utama</span></div>
+          <div class="purchase-tabs hidden" role="tablist" aria-hidden="true"><button class="purchase-tab active" data-purchase-view="planning">Pilih barang</button><button class="purchase-tab" data-purchase-view="documents">Pesanan supplier</button><button class="purchase-tab" data-purchase-view="order">Ubah pesanan</button><button class="purchase-tab" data-purchase-view="receipt">Terima barang</button><button class="purchase-tab" data-purchase-view="supplier-return">Retur supplier</button></div>
 
           <div id="purchase-view-planning" class="purchase-view">
             <div id="restock-planning-metrics" class="purchase-metrics"></div>
             <div class="planning-layout">
               <div class="surface planning-workspace">
-                <div class="document-toolbar planning-toolbar"><div><p class="eyebrow">REKOMENDASI PEMBELIAN</p><h2>Barang yang perlu dipesan</h2></div><div><select id="planning-location" aria-label="Lokasi rencana restok"></select><select id="planning-supplier-filter" aria-label="Filter supplier"><option value="">Semua supplier</option></select><button id="refresh-restock-planning" class="button secondary" type="button">Hitung ulang</button></div></div>
-                <label class="planning-needed-filter"><input id="planning-needed-only" type="checkbox" checked> Tampilkan hanya barang yang perlu dipesan</label>
+                <div class="document-toolbar planning-toolbar"><div><p class="eyebrow">LANGKAH 1</p><h2>Pilih barang untuk dipesan</h2><small>Produk otomatis diurutkan dari stok paling sedikit.</small></div><div><select id="planning-location" aria-label="Lokasi rencana restok"></select><select id="planning-supplier-filter" aria-label="Filter supplier"><option value="">Semua supplier</option></select><button id="refresh-restock-planning" class="button secondary" type="button">Muat ulang</button></div></div>
+                <label class="planning-needed-filter"><input id="planning-needed-only" type="checkbox"> Hanya tampilkan barang yang disarankan sistem</label>
                 <div id="restock-planning-list"><div class="empty-state compact">Memuat rekomendasi restok...</div></div>
-                <div class="planning-draft-actions"><span><strong id="planning-selected-count">0 barang dipilih</strong><small>Draft hanya dapat dibuat untuk satu supplier.</small></span><button id="create-planning-draft" class="button primary" type="button" disabled>Buat draft PO</button></div>
+                <div class="planning-draft-actions"><span><strong id="planning-selected-count">0 barang dipilih</strong><small>Satu surat pesanan dibuat untuk satu supplier.</small></span><button id="create-planning-draft" class="button primary" type="button" disabled>Buat pesanan supplier</button></div>
               </div>
-              <form id="purchase-planning-settings-form" class="surface planning-settings">
-                <p class="eyebrow">ATURAN PEMBELIAN</p><h2>Analisis & persetujuan</h2>
-                <label>Rata-rata penjualan<input id="planning-lookback-days" type="number" min="7" max="365" value="30"><small>Jumlah hari histori yang dianalisis.</small></label>
-                <label>Batas PO tanpa approval<input id="planning-approval-threshold" type="number" min="0" step="1000" value="5000000"><small>Di atas nilai ini, Staff Pembelian menunggu Owner/Admin.</small></label>
-                <button id="save-planning-settings" class="button primary full" type="submit">Simpan aturan</button>
-                <p id="planning-settings-note" class="muted"></p>
-              </form>
+              <details class="surface planning-settings planning-advanced">
+                <summary>Pengaturan lanjutan</summary>
+                <form id="purchase-planning-settings-form">
+                  <p class="eyebrow">ATURAN OTOMATIS</p><h2>Analisis & persetujuan</h2>
+                  <label>Rata-rata penjualan<input id="planning-lookback-days" type="number" min="7" max="365" value="30"><small>Jumlah hari histori yang dianalisis.</small></label>
+                  <label>Batas pesanan tanpa persetujuan<input id="planning-approval-threshold" type="number" min="0" step="1000" value="5000000"><small>Di atas nilai ini, Staff menunggu Owner/Admin.</small></label>
+                  <button id="save-planning-settings" class="button primary full" type="submit">Simpan aturan</button>
+                  <p id="planning-settings-note" class="muted"></p>
+                </form>
+              </details>
             </div>
           </div>
 
           <div id="purchase-view-documents" class="purchase-view hidden">
             <div id="purchase-metrics" class="purchase-metrics"></div>
             <div class="surface purchase-documents">
-              <div class="document-toolbar"><div><p class="eyebrow">DAFTAR PURCHASE ORDER</p><h2>Dokumen terbaru</h2></div><div><select id="purchase-status-filter"><option value="">Semua status</option><option value="DRAFT">Draft</option><option value="SUBMITTED">Menunggu persetujuan</option><option value="APPROVED">Disetujui</option><option value="PARTIALLY_RECEIVED">Diterima sebagian</option><option value="RECEIVED">Selesai</option><option value="CANCELLED">Dibatalkan</option></select><button id="refresh-purchase-orders" class="button secondary">Muat ulang</button><button id="new-purchase-order" class="button primary">Buat PO baru</button></div></div>
+              <div class="document-toolbar"><div><p class="eyebrow">LANGKAH 2</p><h2>Pesanan supplier</h2><small>Cetak atau bagikan dokumen ini ke supplier. Dokumen bukan bukti pembayaran.</small></div><div><select id="purchase-status-filter"><option value="">Semua status</option><option value="DRAFT">Belum dikirim</option><option value="SUBMITTED">Menunggu persetujuan</option><option value="APPROVED">Sudah dikirim / menunggu barang</option><option value="PARTIALLY_RECEIVED">Tiba sebagian</option><option value="RECEIVED">Selesai</option><option value="CANCELLED">Dibatalkan</option></select><button id="refresh-purchase-orders" class="button secondary">Muat ulang</button><button id="new-purchase-order" class="button secondary">Pesanan manual</button></div></div>
               <div id="purchase-order-list"></div>
             </div>
           </div>
@@ -783,6 +788,7 @@
   <dialog id="payment-dialog"><form id="payment-form" class="dialog-card checkout-dialog"><div class="comparison-heading"><div><p class="eyebrow">PEMBAYARAN</p><h2 id="payment-total">Rp0</h2></div><button id="close-payment" class="icon-button" type="button">×</button></div><label>Cara bayar<select id="payment-mode"><option value="SINGLE">Satu metode</option><option value="SPLIT">Gabungkan beberapa metode</option></select></label><div id="payment-lines"></div><button id="add-payment-line" class="button secondary full hidden" type="button">Tambah metode pembayaran</button><section id="cash-keypad" class="cash-keypad"><div class="cash-keypad-heading"><div><p class="eyebrow">UANG DITERIMA</p><strong id="cash-keypad-value">Rp0</strong></div><button class="link-button" type="button" data-cash-key="CLEAR">Hapus</button></div><div id="cash-suggestions" class="cash-suggestions"></div><div class="cash-key-grid" aria-label="Keypad uang diterima"><button type="button" data-cash-key="1">1</button><button type="button" data-cash-key="2">2</button><button type="button" data-cash-key="3">3</button><button type="button" data-cash-key="4">4</button><button type="button" data-cash-key="5">5</button><button type="button" data-cash-key="6">6</button><button type="button" data-cash-key="7">7</button><button type="button" data-cash-key="8">8</button><button type="button" data-cash-key="9">9</button><button type="button" data-cash-key="000">000</button><button type="button" data-cash-key="0">0</button><button type="button" data-cash-key="BACKSPACE" aria-label="Hapus satu angka">⌫</button></div></section><div class="checkout-balance"><div><span>Total dialokasikan</span><strong id="payment-allocated">Rp0</strong></div><div><span>Sisa pembayaran</span><strong id="payment-remaining">Rp0</strong></div><div class="checkout-change"><span>Kembalian</span><strong id="payment-change">Rp0</strong></div></div><p id="payment-error" class="error"></p><div class="button-row"><button id="cancel-payment" class="button secondary" type="button">Batal</button><button id="confirm-payment" class="button primary" type="submit">Selesaikan transaksi</button></div></form></dialog>
   <dialog id="held-sales-dialog"><div class="dialog-card held-sales-dialog"><div class="comparison-heading"><div><p class="eyebrow">TRANSAKSI DITAHAN</p><h2>Lanjutkan keranjang</h2></div><button id="close-held-sales" class="icon-button" type="button">×</button></div><div id="held-sales-list"><div class="empty-state compact">Belum ada transaksi ditahan.</div></div></div></dialog>
   <dialog id="receipt-dialog"><div class="dialog-card receipt-dialog"><div id="receipt-content"></div><div class="button-row no-print"><button id="close-receipt" class="button secondary" type="button">Transaksi baru</button><button id="whatsapp-receipt" class="button secondary hidden" type="button">WhatsApp</button><button id="print-receipt" class="button primary" type="button">Cetak struk</button></div></div></dialog>
+  <dialog id="purchase-order-dialog"><div class="dialog-card purchase-order-dialog"><div id="purchase-order-print-content"></div><div class="button-row no-print"><button id="close-purchase-order-print" class="button secondary" type="button">Tutup</button><button id="share-purchase-order" class="button secondary" type="button">Bagikan ke supplier</button><button id="print-purchase-order" class="button primary" type="button">Cetak / Simpan PDF</button></div></div></dialog>
   <dialog id="product-dialog"><form id="product-form" class="dialog-card product-editor">
     <div class="comparison-heading"><div><p id="product-dialog-eyebrow" class="eyebrow">PRODUK BARU</p><h2 id="product-dialog-title">Tambah produk</h2><p class="muted">Setiap varian mempunyai SKU, barcode, harga, dan stok sendiri.</p></div><button id="close-product-dialog" class="icon-button" type="button">×</button></div>
     <input id="edit-product-id" type="hidden">
@@ -809,6 +815,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=59"></script>
+  <script type="module" src="/app.js?v=60"></script>
 </body>
 </html>
