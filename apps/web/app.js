@@ -275,6 +275,7 @@ async function applyBootstrap(data, { offline = false } = {}) {
   el('user-name').textContent = state.session.user.displayName;
   el('user-role').textContent = roleLabels[state.session.user.role] ?? state.session.user.role;
   el('switch-account').classList.toggle('hidden', !state.session.canSwitchOwners);
+  renderLastSync();
   document.querySelectorAll('[data-permission]').forEach((node) => node.classList.toggle('hidden', !state.session.permissions.includes(node.dataset.permission)));
   syncNavigationPermissions();
   el('session-view').classList.add('hidden');
@@ -314,6 +315,7 @@ async function bootstrap({ reportError = false } = {}) {
     const data = await request('/api/bootstrap');
     saveBootstrapCache(data);
     await applyBootstrap(data);
+    recordLastSync();
   } catch (error) {
     const cached = localStorage.getItem('pos_bootstrap_cache');
     if (!error.status && cached) {
@@ -352,6 +354,79 @@ async function refreshCatalog() {
   renderShift();
   renderImportLocations();
   if (state.session.permissions.includes('catalog.manage')) await loadProductManagement();
+}
+
+function lastSyncStorageKey() {
+  return `pos_last_manual_sync:${state.session?.user?.id ?? 'anonymous'}:${state.activeOutletId ?? 'default'}`;
+}
+
+function renderLastSync(value = localStorage.getItem(lastSyncStorageKey())) {
+  const label = el('sync-last-time');
+  if (!label) return;
+  const occurredAt = value ? new Date(value) : null;
+  if (!occurredAt || Number.isNaN(occurredAt.getTime())) {
+    label.textContent = 'Belum disinkronkan';
+    label.removeAttribute('title');
+    return;
+  }
+  label.textContent = `Terakhir ${new Intl.DateTimeFormat('id-ID', {
+    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+  }).format(occurredAt).replace(',', '')}`;
+  label.title = `Sinkron terakhir ${occurredAt.toLocaleString('id-ID')}`;
+}
+
+function recordLastSync(value = new Date().toISOString()) {
+  localStorage.setItem(lastSyncStorageKey(), value);
+  renderLastSync(value);
+  return value;
+}
+
+async function synchronizeData() {
+  if (!navigator.onLine) return toast('Perangkat sedang offline. Hubungkan internet lalu coba sinkronkan lagi.');
+  const button = el('sync-now');
+  const label = el('sync-last-time');
+  const activeItem = document.querySelector('.feature-nav-item.active:not(.hidden)');
+  const page = activeItem?.dataset.page ?? 'pos';
+  const target = activeItem?.dataset.targetPage ?? page;
+  button.disabled = true;
+  button.classList.add('syncing');
+  label.textContent = 'Menyinkronkan...';
+  try {
+    await refreshCatalog();
+    await updateQuote();
+    const tasks = [];
+    if (target === 'stock' && state.session.permissions.includes('inventory.manage')) tasks.push(loadInventory());
+    if (target === 'restock' && state.session.permissions.includes('purchasing.view_cost')) {
+      tasks.push(loadPurchaseOrders(), loadRestockPlanning(), loadRecentSupplierReturns());
+    }
+    if (target === 'reports' && state.session.permissions.includes('report.view')) tasks.push(loadReport());
+    if (target === 'users' && state.session.permissions.includes('identity.manage')) tasks.push(loadUsers());
+    if (target === 'settings' && state.session.permissions.includes('identity.manage')) tasks.push(loadSettingsWorkspace());
+    if (target === 'sync-review' && state.session.permissions.includes('audit.view')) tasks.push(loadSyncReview());
+    if (target === 'returns' && state.session.permissions.includes('sales.return')) tasks.push(loadRecentReturns());
+    if (['promotions', 'loyalty'].includes(target) && state.session.permissions.includes('promotion.manage')) tasks.push(loadPromotionManagement());
+    if (target === 'customers' && state.session.permissions.includes('pos.sell')) tasks.push(loadCrmDashboard(), loadCustomerAging());
+    if (target === 'imports' && state.session.permissions.includes('audit.view')) tasks.push(loadImportHistory());
+    if (target === 'backups' && state.session.permissions.includes('identity.manage')) tasks.push(loadBackupHistory());
+    if (target === 'pos' && state.session.permissions.includes('pos.sell')) tasks.push(loadHeldSales());
+    if (multioutletPages.has(page)) tasks.push(loadMultiOutletWorkspace());
+    if (accountingPages.has(page)) tasks.push(loadAccounting({ sync: true }));
+    if (pilotPages.has(page) && page !== 'pilot-sop') tasks.push(loadPilotDashboard());
+    if (page.startsWith('owner-') && state.session.permissions.includes('finance.owner')) tasks.push(loadOwnerFinance());
+    if (page === 'workforce-schedule' || page === 'workforce-targets') tasks.push(loadWorkforceOverview());
+    if (page === 'workforce-approvals') tasks.push(loadApprovals());
+    if (page === 'workforce-activity' && state.session.permissions.includes('workforce.manage')) tasks.push(loadWorkforceActivity());
+    if (page === 'workforce-reconciliation' && state.session.permissions.includes('workforce.manage')) tasks.push(loadWorkforceReconciliations());
+    await Promise.all(tasks);
+    recordLastSync();
+    toast('Data terbaru berhasil disinkronkan.');
+  } catch (error) {
+    renderLastSync();
+    toast(`Sinkronisasi gagal: ${error.message}`);
+  } finally {
+    button.disabled = false;
+    button.classList.remove('syncing');
+  }
 }
 
 function favoriteProductIds() {
@@ -2708,6 +2783,7 @@ async function switchActiveOutlet(event) {
   try {
     await refreshCatalog();
     await loadHeldSales();
+    renderLastSync();
     toast(`Outlet aktif: ${state.outlets.find((outlet) => outlet.id === state.activeOutletId)?.name ?? 'Outlet'}`);
   } catch (error) {
     state.activeOutletId = previous;
@@ -4234,6 +4310,7 @@ async function switchOwnerContext(ownerId) {
 }
 
 el('switch-account').addEventListener('click', openOwnerSwitch);
+el('sync-now').addEventListener('click', synchronizeData);
 el('close-owner-switch').addEventListener('click',()=>el('owner-switch-dialog').close());
 el('owner-switch-list').addEventListener('click',async(event)=>{
   const button=event.target.closest('[data-owner-id]');

@@ -1033,3 +1033,14 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
 .permission-option small,.permission-owner-note small,.user-outlet-list small{display:block;color:var(--muted);font-size:10px;line-height:1.35}
 .permission-owner-note{padding:14px;border:1px solid #9dc5bd;border-radius:10px;background:var(--brand-2)}
 @media(max-width:600px){.permission-options{grid-template-columns:1fr;max-height:48vh}}
+.sidebar-sync{display:grid;grid-template-columns:34px minmax(0,1fr);align-items:center;gap:10px;width:calc(100% - 10px);margin:0 5px 14px;padding:10px;border:1px solid rgba(255,255,255,.11);border-radius:10px;background:rgba(255,255,255,.045);color:#f4fbfa;text-align:left}
+.sidebar-sync:hover,.sidebar-sync:focus-visible{border-color:rgba(255,255,255,.24);background:rgba(255,255,255,.085);outline:none}
+.sidebar-sync:disabled{cursor:wait;opacity:.72}
+.sidebar-sync>span:last-child{display:grid;gap:2px;min-width:0}
+.sidebar-sync strong{font-size:12px;line-height:1.2}
+.sidebar-sync small{overflow:hidden;color:#91a8a7;font-size:9px;line-height:1.3;text-overflow:ellipsis;white-space:nowrap}
+.sidebar-sync-icon{display:grid;width:32px;height:32px;place-items:center;border-radius:8px;background:rgba(255,255,255,.07);color:#9fc8c1}
+.sidebar-sync-icon svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.sidebar-sync.syncing .sidebar-sync-icon svg{animation:sidebar-sync-spin .8s linear infinite}
+@keyframes sidebar-sync-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.sidebar-sync.syncing .sidebar-sync-icon svg{animation:none}}

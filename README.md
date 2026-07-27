@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Kelola Staff v2.4.10
+# Kasir Nusa POS — Sinkronisasi Data v2.4.11
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -9,6 +9,9 @@ Produksi menggunakan:
 - Aplikasi Android native untuk kasir; PWA untuk owner di iOS dan backoffice.
 - Pada ponsel, katalog dan keranjang Kasir berada di layar terpisah; tablet dan
   desktop tetap menampilkan keduanya berdampingan.
+- Tombol Sinkronkan Data berada di bagian paling atas sidebar. Tombol mengambil
+  ulang perubahan dari perangkat lain dan menampilkan tanggal serta waktu
+  sinkron terakhir untuk akun dan outlet aktif.
 - Owner mengatur hak akses setiap akun Staff/Admin melalui checklist fitur.
   Harga manual dan void hanya tersedia bagi akun yang diberi izin, tanpa
   membagikan atau memasukkan sandi Owner.

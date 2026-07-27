@@ -45,6 +45,24 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Paket v2.4.11 Sinkronisasi Data siap deployment
+
+- Tombol `Sinkronkan data` ditempatkan paling atas pada sidebar, tepat di bawah
+  logo, dan tersedia bagi seluruh peran.
+- Sinkronisasi mengambil ulang katalog, harga, stok, pelanggan, supplier,
+  promo, shift, serta data halaman aktif seperti laporan, restok, atau staff.
+- Keranjang dihitung ulang setelah sinkron agar perubahan harga/promo dari
+  perangkat lain segera diterapkan secara aman.
+- Tombol menampilkan status proses dan tanggal/jam sinkron terakhir. Waktu
+  disimpan per akun dan outlet pada perangkat, termasuk setelah aplikasi dibuka
+  ulang.
+- Saat offline, sinkronisasi ditolak dengan pesan yang jelas tanpa menghapus
+  data lokal atau keranjang.
+- Kandidat memakai API `2.4.11-cloud`, aset web `v75`, dan cache PWA `v75`.
+- Seluruh 193 pengujian otomatis lulus. Pemeriksaan visual tombol dan waktu
+  sinkron lulus pada desktop 1365×900 serta drawer ponsel 390×844.
+- Tidak memerlukan migrasi SQL.
+
 ### Rilis v2.4.10 Kelola Staff dikonfirmasi live
 
 - Menu `Pengguna` diganti menjadi `Kelola Staff`.
