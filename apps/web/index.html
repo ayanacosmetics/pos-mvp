@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=76">
+  <link rel="stylesheet" href="/styles.css?v=77">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -162,13 +162,14 @@
           <button data-page="backups" class="feature-nav-item" data-permission="identity.manage"><span>Backup</span><small>Snapshot dan verifikasi</small></button>
           <button data-page="users" class="feature-nav-item" data-permission="identity.manage"><span>Kelola Staff</span><small>Akun, peran, outlet</small></button>
           <button data-page="settings-business" data-target-page="settings" data-settings-view="business" class="feature-nav-item" data-permission="identity.manage"><span>Identitas usaha</span><small>Informasi struk dan dokumen</small></button>
+          <button data-page="settings-receipt" data-target-page="settings" data-settings-view="receipt" class="feature-nav-item" data-permission="identity.manage"><span>Desain struk</span><small>Logo, susunan, dan informasi</small></button>
           <button data-page="settings-outlets" data-target-page="settings" data-settings-view="outlets" class="feature-nav-item" data-permission="identity.manage"><span>Outlet</span><small>Cabang dan nomor struk</small></button>
           <button data-page="settings-locations" data-target-page="settings" data-settings-view="locations" class="feature-nav-item" data-permission="identity.manage"><span>Lokasi stok</span><small>Toko, gudang, transit</small></button>
           <button data-page="settings-device" data-target-page="settings" data-settings-view="device" class="feature-nav-item" data-permission="identity.manage"><span>Perangkat</span><small>Kasir, printer, instalasi PWA</small></button>
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Tipe Pelanggan & Harga · v2.5.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Desain Struk · v2.6.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -612,6 +613,50 @@
           <div class="button-row"><button class="button primary" type="submit">Simpan identitas usaha</button></div>
         </form>
 
+        <form id="receipt-settings-form" class="surface settings-section receipt-designer">
+          <div class="settings-section-head"><div><p class="eyebrow">DESAIN STRUK</p><h2>Atur tampilan struk pelanggan</h2><p class="muted">Satu desain dipakai seluruh outlet dan kasir. Pesan khusus outlet tetap dapat menggantikan pesan usaha.</p></div><span class="status-badge approved">LIVE PREVIEW</span></div>
+          <div class="receipt-designer-layout">
+            <div class="receipt-designer-controls">
+              <section>
+                <h3>Logo dan kepala struk</h3>
+                <div class="form-grid compact">
+                  <label class="settings-wide">URL logo<input id="setting-receipt-logo-url" type="url" placeholder="https://... atau pilih gambar di bawah"></label>
+                  <label class="settings-wide">Pilih gambar<input id="setting-receipt-logo-file" type="file" accept="image/png,image/jpeg,image/webp"><small>Gambar otomatis diperkecil. Logo hitam-putih memberikan hasil thermal paling tajam.</small></label>
+                  <label>Teks tambahan<input id="setting-receipt-custom-header" maxlength="80" placeholder="Contoh: Grosir & Eceran"></label>
+                  <label>Ukuran logo<input id="setting-receipt-logo-size" type="range" min="32" max="96" step="4" value="64"><small><span id="setting-receipt-logo-size-value">64</span> px</small></label>
+                  <label>Posisi kepala<select id="setting-receipt-header-align"><option value="center">Tengah</option><option value="left">Kiri</option></select></label>
+                  <label>Ukuran nama usaha<select id="setting-receipt-title-size"><option value="large">Besar</option><option value="normal">Normal</option></select></label>
+                  <label>Kerapatan<select id="setting-receipt-density"><option value="normal">Normal</option><option value="compact">Ringkas</option></select></label>
+                  <label>Garis pemisah<select id="setting-receipt-separator"><option value="dashed">Putus-putus</option><option value="double">Garis ganda</option></select></label>
+                  <label>Posisi penutup<select id="setting-receipt-footer-align"><option value="center">Tengah</option><option value="left">Kiri</option></select></label>
+                </div>
+                <button id="remove-receipt-logo" class="button secondary" type="button">Hapus logo</button>
+              </section>
+              <section>
+                <h3>Informasi yang dicetak</h3>
+                <div class="receipt-option-grid">
+                  <label><input id="receipt-show-logo" type="checkbox"> Logo</label>
+                  <label><input id="receipt-show-business" type="checkbox"> Nama usaha</label>
+                  <label><input id="receipt-show-outlet" type="checkbox"> Nama outlet</label>
+                  <label><input id="receipt-show-address" type="checkbox"> Alamat</label>
+                  <label><input id="receipt-show-phone" type="checkbox"> Telepon</label>
+                  <label><input id="receipt-show-date" type="checkbox"> Tanggal dan jam</label>
+                  <label><input id="receipt-show-number" type="checkbox"> Nomor struk</label>
+                  <label><input id="receipt-show-cashier" type="checkbox"> Nama kasir</label>
+                  <label><input id="receipt-show-customer" type="checkbox"> Nama pelanggan</label>
+                  <label><input id="receipt-show-price-type" type="checkbox"> Label Harga Member/Grosir</label>
+                  <label><input id="receipt-show-payment" type="checkbox"> Rincian pembayaran</label>
+                  <label><input id="receipt-show-note" type="checkbox"> Catatan transaksi</label>
+                  <label><input id="receipt-show-points" type="checkbox"> Poin loyalitas</label>
+                </div>
+              </section>
+              <p id="receipt-settings-error" class="error"></p>
+              <div class="button-row"><button id="reset-receipt-layout" class="button secondary" type="button">Kembalikan standar</button><button class="button primary" type="submit">Simpan desain struk</button></div>
+            </div>
+            <aside class="receipt-preview-panel"><div class="receipt-preview-toolbar"><span>Pratinjau</span><small id="receipt-preview-paper">80 mm</small></div><div id="receipt-design-preview" class="receipt-design-preview"></div></aside>
+          </div>
+        </form>
+
         <div class="settings-split">
           <div class="surface settings-section">
             <div class="settings-section-head"><div><p class="eyebrow">OUTLET</p><h2>Cabang dan nomor struk</h2></div><button id="new-outlet-setting" class="button secondary" type="button">Outlet baru</button></div>
@@ -832,6 +877,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=76"></script>
+  <script type="module" src="/app.js?v=77"></script>
 </body>
 </html>

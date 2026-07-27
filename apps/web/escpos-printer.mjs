@@ -92,10 +92,40 @@ function lineBytes(value = '') {
   return [...encoder.encode(`${ascii(value)}\n`)];
 }
 
+async function logoRasterBytes(url,logoSize=64,paperWidth=80) {
+  if(!url||typeof document==='undefined')return null;
+  try{
+    const response=await fetch(url);if(!response.ok)throw new Error('Logo tidak dapat diambil');
+    const blob=await response.blob();
+    const bitmap=typeof createImageBitmap==='function'?await createImageBitmap(blob):await new Promise((resolve,reject)=>{
+      const image=new Image();image.onload=()=>resolve(image);image.onerror=reject;image.src=URL.createObjectURL(blob);
+    });
+    const targetWidth=Math.min(Number(paperWidth)===58?240:360,Math.round(80+(Math.max(32,Math.min(96,Number(logoSize)||64))-32)*2.5));
+    const scale=Math.min(targetWidth/bitmap.width,140/bitmap.height,1);
+    const width=Math.max(1,Math.round(bitmap.width*scale)),height=Math.max(1,Math.round(bitmap.height*scale));
+    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+    const context=canvas.getContext('2d',{willReadFrequently:true});context.fillStyle='#fff';context.fillRect(0,0,width,height);context.drawImage(bitmap,0,0,width,height);
+    const pixels=context.getImageData(0,0,width,height).data,bytesPerRow=Math.ceil(width/8),data=new Uint8Array(bytesPerRow*height);
+    for(let y=0;y<height;y+=1)for(let x=0;x<width;x+=1){
+      const index=(y*width+x)*4,luminance=.299*pixels[index]+.587*pixels[index+1]+.114*pixels[index+2];
+      if(pixels[index+3]>40&&luminance<180)data[y*bytesPerRow+(x>>3)]|=0x80>>(x&7);
+    }
+    return new Uint8Array([GS,0x76,0x30,0x00,bytesPerRow&0xff,(bytesPerRow>>8)&0xff,height&0xff,(height>>8)&0xff,...data,LF]);
+  }catch{return null;}
+}
+
 export function buildEscPosReceipt(receipt, payments = [], settings = {}, context = {}) {
   const width = Number(settings.paperWidth) === 58 ? 32 : 48;
   const quote = customerReceiptView(receipt.quote);
   const business = receipt.business ?? context.business ?? {};
+  const layout = {
+    headerAlignment:'center',footerAlignment:'center',titleSize:'large',density:'normal',
+    separator:'dashed',showLogo:true,showBusinessName:true,showOutletName:true,
+    showAddress:true,showPhone:true,showDate:true,showReceiptNumber:true,
+    showCashier:true,showCustomer:true,showPriceType:true,showPaymentDetail:true,
+    showTransactionNote:true,showLoyaltyPoints:true,customHeader:'',
+    ...(business.receiptLayout??{})
+  };
   const outlet = receipt.outlet ?? context.outlet ?? {};
   const customer = receipt.customer ?? context.customer;
   const groupId = receipt.customerGroupId ?? customer?.group_id ?? 'retail';
@@ -106,34 +136,42 @@ export function buildEscPosReceipt(receipt, payments = [], settings = {}, contex
   const phone = outlet.phone || business.phone;
   const occurredAt = new Date(receipt.occurredAt ?? Date.now()).toLocaleString('id-ID');
   const change = Number(receipt.change ?? 0);
-  const bytes = [ESC, 0x40, ESC, 0x61, 0x01, ESC, 0x45, 0x01];
-  bytes.push(...lineBytes(business.name || 'Kasir Nusa'));
-  bytes.push(ESC, 0x45, 0x00, ...lineBytes(receipt.outletName || outlet.name || 'Outlet'));
-  if (address) for (const row of wrap(address, width)) bytes.push(...lineBytes(row));
-  if (phone) bytes.push(...lineBytes(`Tel. ${phone}`));
-  bytes.push(...lineBytes(occurredAt), ESC, 0x45, 0x01, ...lineBytes(receipt.receiptNo || 'STRUK TES'), ESC, 0x45, 0x00);
+  const separator=layout.separator==='double'?'='.repeat(width):rule(width);
+  const bytes = [ESC, 0x40, ESC, 0x61, layout.headerAlignment==='left'?0x00:0x01];
+  if(layout.showLogo&&context.logoRaster)bytes.push(...context.logoRaster);
+  if(layout.showBusinessName){
+    if(layout.titleSize==='large')bytes.push(ESC,0x21,0x20);
+    bytes.push(ESC,0x45,0x01,...lineBytes(business.name || 'Kasir Nusa'),ESC,0x45,0x00);
+    if(layout.titleSize==='large')bytes.push(ESC,0x21,0x00);
+  }
+  if(layout.showOutletName)bytes.push(...lineBytes(receipt.outletName || outlet.name || 'Outlet'));
+  if(layout.customHeader)bytes.push(...lineBytes(layout.customHeader));
+  if (layout.showAddress&&address) for (const row of wrap(address, width)) bytes.push(...lineBytes(row));
+  if (layout.showPhone&&phone) bytes.push(...lineBytes(`Tel. ${phone}`));
+  if(layout.showDate)bytes.push(...lineBytes(occurredAt));
+  if(layout.showReceiptNumber)bytes.push(ESC, 0x45, 0x01, ...lineBytes(receipt.receiptNo || 'STRUK TES'), ESC, 0x45, 0x00);
   if (receipt.status === 'VOIDED') bytes.push(...lineBytes('VOID / DIBATALKAN'));
-  bytes.push(ESC, 0x61, 0x00, ...lineBytes(rule(width)));
-  bytes.push(...lineBytes(columns('Kasir', receipt.cashier || '-', width)));
-  if (customer?.name) bytes.push(...lineBytes(columns('Pelanggan', customer.name, width)));
-  bytes.push(...lineBytes(rule(width)));
+  bytes.push(ESC, 0x61, 0x00, ...lineBytes(separator));
+  if(layout.showCashier)bytes.push(...lineBytes(columns('Kasir', receipt.cashier || '-', width)));
+  if (layout.showCustomer&&customer?.name) bytes.push(...lineBytes(columns('Pelanggan', customer.name, width)));
+  bytes.push(...lineBytes(separator));
   for (const line of quote.lines) {
     for (const row of wrap(line.productName, width)) bytes.push(...lineBytes(row));
-    if (priceLabel) bytes.push(...lineBytes(priceLabel));
+    if (layout.showPriceType&&priceLabel) bytes.push(...lineBytes(priceLabel));
     bytes.push(...lineBytes(columns(`${line.qty} ${line.unitName} x ${rupiah(line.customerUnitPrice)}`, rupiah(line.total), width)));
   }
-  bytes.push(...lineBytes(rule(width)));
+  bytes.push(...lineBytes(separator));
   bytes.push(...lineBytes(columns('Subtotal', rupiah(quote.subtotal), width)));
   if (Math.abs(Number(quote.discountTotal)) > 0.01) bytes.push(...lineBytes(columns('Promo & diskon', `-${rupiah(Math.abs(quote.discountTotal))}`, width)));
   bytes.push(ESC, 0x45, 0x01, ...lineBytes(columns('TOTAL', rupiah(quote.grandTotal), width)), ESC, 0x45, 0x00);
-  for (const payment of payments) bytes.push(...lineBytes(columns(payment.method || 'Pembayaran', rupiah(payment.amount), width)));
-  if (change) bytes.push(...lineBytes(columns('Kembalian', rupiah(change), width)));
-  if (receipt.notes) {
-    bytes.push(...lineBytes(rule(width)));
+  if(layout.showPaymentDetail)for (const payment of payments) bytes.push(...lineBytes(columns(payment.method || 'Pembayaran', rupiah(payment.amount), width)));
+  if (layout.showPaymentDetail&&change) bytes.push(...lineBytes(columns('Kembalian', rupiah(change), width)));
+  if (layout.showTransactionNote&&receipt.notes) {
+    bytes.push(...lineBytes(separator));
     for (const row of wrap(`Catatan: ${receipt.notes}`, width)) bytes.push(...lineBytes(row));
   }
-  if (Number(receipt.pointsEarned) > 0) bytes.push(...lineBytes(`Poin +${Number(receipt.pointsEarned)} | Saldo ${Number(receipt.pointsBalance || 0)}`));
-  bytes.push(...lineBytes(rule(width)), ESC, 0x61, 0x01);
+  if (layout.showLoyaltyPoints&&Number(receipt.pointsEarned) > 0) bytes.push(...lineBytes(`Poin +${Number(receipt.pointsEarned)} | Saldo ${Number(receipt.pointsBalance || 0)}`));
+  bytes.push(...lineBytes(separator), ESC, 0x61, layout.footerAlignment==='left'?0x00:0x01);
   for (const row of wrap(footer, width)) bytes.push(...lineBytes(row));
   bytes.push(LF, LF, LF, ESC, 0x61, 0x00);
   return new Uint8Array(bytes);
@@ -194,7 +232,12 @@ export async function disconnectBluetoothPrinter() {
 
 export async function printEscPosReceipt(receipt, payments, settings, context) {
   const copies = Math.max(1, Math.min(3, Number(settings.receiptCopies ?? 1)));
-  const commands = buildEscPosReceipt(receipt, payments, settings, context);
+  const business = receipt.business ?? context.business ?? {};
+  const layout = { showLogo:true, logoSize:64, ...(business.receiptLayout ?? {}) };
+  const logoRaster = layout.showLogo
+    ? await logoRasterBytes(business.logoUrl, layout.logoSize, settings.paperWidth)
+    : null;
+  const commands = buildEscPosReceipt(receipt, payments, settings, { ...context, logoRaster });
   for (let copy = 0; copy < copies; copy += 1) await write(commands);
 }
 

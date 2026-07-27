@@ -44,6 +44,14 @@ const permissionDefaults={
   MANAGER:['pos.sell','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage'],
   ADMIN:permissionOptions.map(([permission])=>permission)
 };
+const defaultReceiptLayout={
+  headerAlignment:'center',footerAlignment:'center',titleSize:'large',
+  density:'normal',separator:'dashed',logoSize:64,customHeader:'',
+  showLogo:true,showBusinessName:true,showOutletName:true,showAddress:true,
+  showPhone:true,showDate:true,showReceiptNumber:true,showCashier:true,
+  showCustomer:true,showPriceType:true,showPaymentDetail:true,
+  showTransactionNote:true,showLoyaltyPoints:true
+};
 let refreshPromise = null;
 let deferredInstallPrompt = null;
 let quoteRevision = 0;
@@ -2961,6 +2969,84 @@ async function printReceiptDirect(receipt, payments, { automatic = false } = {})
   }
 }
 
+function currentReceiptLayout() {
+  return {...defaultReceiptLayout,...(state.business?.receiptLayout??{})};
+}
+
+const receiptToggleFields={
+  showLogo:'receipt-show-logo',showBusinessName:'receipt-show-business',
+  showOutletName:'receipt-show-outlet',showAddress:'receipt-show-address',
+  showPhone:'receipt-show-phone',showDate:'receipt-show-date',
+  showReceiptNumber:'receipt-show-number',showCashier:'receipt-show-cashier',
+  showCustomer:'receipt-show-customer',showPriceType:'receipt-show-price-type',
+  showPaymentDetail:'receipt-show-payment',showTransactionNote:'receipt-show-note',
+  showLoyaltyPoints:'receipt-show-points'
+};
+
+function receiptLayoutFromControls() {
+  return {
+    headerAlignment:el('setting-receipt-header-align').value,
+    footerAlignment:el('setting-receipt-footer-align').value,
+    titleSize:el('setting-receipt-title-size').value,
+    density:el('setting-receipt-density').value,
+    separator:el('setting-receipt-separator').value,
+    logoSize:Number(el('setting-receipt-logo-size').value),
+    customHeader:el('setting-receipt-custom-header').value.trim(),
+    ...Object.fromEntries(Object.entries(receiptToggleFields).map(([key,id])=>[key,el(id).checked]))
+  };
+}
+
+function populateReceiptLayoutControls(layout=currentReceiptLayout()) {
+  el('setting-receipt-logo-url').value=state.business?.logoUrl??'';
+  el('setting-receipt-custom-header').value=layout.customHeader??'';
+  el('setting-receipt-logo-size').value=String(layout.logoSize??64);
+  el('setting-receipt-logo-size-value').textContent=String(layout.logoSize??64);
+  el('setting-receipt-header-align').value=layout.headerAlignment??'center';
+  el('setting-receipt-footer-align').value=layout.footerAlignment??'center';
+  el('setting-receipt-title-size').value=layout.titleSize??'large';
+  el('setting-receipt-density').value=layout.density??'normal';
+  el('setting-receipt-separator').value=layout.separator??'dashed';
+  for(const [key,id] of Object.entries(receiptToggleFields))el(id).checked=layout[key]!==false;
+  renderReceiptDesignPreview();
+}
+
+function renderReceiptDesignPreview() {
+  if(!el('receipt-design-preview'))return;
+  const previewBusiness={...state.business,logoUrl:el('setting-receipt-logo-url').value.trim(),receiptLayout:receiptLayoutFromControls()};
+  const outlet=state.outlets.find((item)=>item.id===state.activeOutletId)??{name:'Toko Utama'};
+  const receipt={
+    receiptNo:'UTM-000128',occurredAt:new Date().toISOString(),cashier:'Ayu',
+    customer:{name:'Budi',group_id:'member'},customerGroupId:'member',
+    business:previewBusiness,outlet,outletName:outlet.name,pointsEarned:2,pointsBalance:48,
+    notes:'Titip diambil sore',
+    quote:{lines:[
+      {productName:'Lip Tint Rose',qty:1,unitName:'pcs',gross:25000,customerUnitPrice:25000,total:25000},
+      {productName:'Facial Wash',qty:2,unitName:'pcs',gross:36000,customerUnitPrice:18000,total:36000}
+    ],subtotal:61000,discountTotal:5000,grandTotal:56000}
+  };
+  el('receipt-design-preview').innerHTML=buildReceiptMarkup(receipt,[{method:'CASH',amount:56000,tendered:60000}],{business:previewBusiness,outlet,preview:true});
+  el('receipt-preview-paper').textContent=`${state.deviceSettings.paperWidth??80} mm`;
+  bindReceiptImageFallbacks(el('receipt-design-preview'));
+}
+
+async function receiptLogoFromFile(file) {
+  if(!file?.type?.match(/^image\/(png|jpeg|webp)$/))throw new Error('Pilih gambar PNG, JPEG, atau WebP.');
+  if(file.size>5_000_000)throw new Error('Berkas logo maksimal 5 MB sebelum diperkecil.');
+  const source=await new Promise((resolve,reject)=>{
+    const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('Logo gagal dibaca.'));reader.readAsDataURL(file);
+  });
+  const image=await new Promise((resolve,reject)=>{
+    const node=new Image();node.onload=()=>resolve(node);node.onerror=()=>reject(new Error('Format logo tidak dapat dibuka.'));node.src=source;
+  });
+  const scale=Math.min(1,320/image.width,160/image.height);
+  const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
+  const context=canvas.getContext('2d');context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(image,0,0,canvas.width,canvas.height);
+  let result=canvas.toDataURL('image/png');
+  if(result.length>280000)result=canvas.toDataURL('image/jpeg',.82);
+  if(result.length>300000)throw new Error('Logo masih terlalu besar. Gunakan gambar yang lebih sederhana.');
+  return result;
+}
+
 function renderSettings() {
   const business = state.business ?? {};
   el('setting-business-name').value = business.name ?? '';
@@ -2970,6 +3056,7 @@ function renderSettings() {
   el('setting-business-tax').value = business.taxId ?? '';
   el('setting-business-address').value = business.address ?? '';
   el('setting-business-footer').value = business.receiptFooter ?? '';
+  populateReceiptLayoutControls();
   const outletOptions = state.settings.outlets.filter((outlet) => outlet.active).map((outlet) => `<option value="${escapeHtml(outlet.id)}">${escapeHtml(outlet.name)}</option>`).join('');
   el('setting-location-outlet').innerHTML = outletOptions;
   el('setting-device-outlet').innerHTML = outletOptions;
@@ -3155,13 +3242,27 @@ async function saveBusinessSettings(event) {
       name: el('setting-business-name').value.trim(), legalName: el('setting-business-legal').value.trim(),
       phone: el('setting-business-phone').value.trim(), email: el('setting-business-email').value.trim(),
       taxId: el('setting-business-tax').value.trim(), address: el('setting-business-address').value.trim(),
-      receiptFooter: el('setting-business-footer').value.trim()
+      receiptFooter: el('setting-business-footer').value.trim(),logoUrl:state.business.logoUrl??''
     }) });
     state.business = data.business;
     saveBootstrapCache({ ...JSON.parse(localStorage.getItem('pos_bootstrap_cache') ?? '{}'), business: state.business, session: state.session });
     toast('Identitas usaha berhasil disimpan');
   } catch (error) { toast(error.message); }
   finally { button.disabled = false; }
+}
+
+async function saveReceiptSettings(event) {
+  event.preventDefault();
+  const button=event.submitter;button.disabled=true;el('receipt-settings-error').textContent='';
+  try{
+    const data=await request('/api/settings/receipt',{method:'PUT',body:JSON.stringify({
+      logoUrl:el('setting-receipt-logo-url').value.trim(),layout:receiptLayoutFromControls()
+    })});
+    state.business=data.business;
+    saveBootstrapCache({...JSON.parse(localStorage.getItem('pos_bootstrap_cache')??'{}'),business:state.business,session:state.session});
+    populateReceiptLayoutControls();
+    toast('Desain struk berhasil disimpan dan berlaku untuk seluruh kasir');
+  }catch(error){el('receipt-settings-error').textContent=error.message;}finally{button.disabled=false;}
 }
 
 async function saveOutletSettings(event) {
@@ -3770,27 +3871,37 @@ function openPaymentDialog(){
   renderPaymentLines();el('payment-dialog').showModal();
 }
 
-function renderReceipt(receipt,payments){
-  const customer=receipt.customer??state.customers.find((item)=>item.id===el('customer-select').value);
+function bindReceiptImageFallbacks(root=document) {
+  root.querySelectorAll('.receipt-logo').forEach((image)=>image.addEventListener('error',()=>image.remove(),{once:true}));
+}
+
+function buildReceiptMarkup(receipt,payments=[],options={}){
+  const customer=receipt.customer??state.customers.find((item)=>item.id===el('customer-select')?.value);
+  const business=options.business??receipt.business??state.business;
+  const outlet=options.outlet??receipt.outlet??state.outlets.find((item)=>item.id===state.activeOutletId)??{};
+  const layout={...defaultReceiptLayout,...(business.receiptLayout??{})};
   const groupId=receipt.customerGroupId??customer?.group_id??'retail';
   const priceLabel=groupId==='retail'?'':`Harga ${customerGroupName(groupId)}`;
-  const lines=receipt.quote?.lines??[];
-  const change=Number(receipt.change??0);
-  const business=receipt.business??state.business;
-  const outlet=receipt.outlet??state.outlets.find((item)=>item.id===state.activeOutletId)??{};
-  const address=outlet.address||business.address;
-  const phone=outlet.phone||business.phone;
+  const address=outlet.address||business.address,phone=outlet.phone||business.phone;
   const footer=outlet.receipt_footer||business.receiptFooter||'Terima kasih telah berbelanja.';
-  const customerView=customerReceiptView(receipt.quote),receiptDiscount=Number(customerView.discountTotal);
-  const body=`<div class="receipt-head"><strong>${escapeHtml(business.name??'Kasir Nusa')}</strong><span>${escapeHtml(receipt.outletName??outlet.name??'Outlet')}</span>${address?`<small>${escapeHtml(address)}</small>`:''}${phone?`<small>Tel. ${escapeHtml(phone)}</small>`:''}<small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small><b>${escapeHtml(receipt.receiptNo)}</b>${receipt.status==='VOIDED'?'<b>VOID / DIBATALKAN</b>':''}</div><div class="receipt-meta"><span>Kasir</span><strong>${escapeHtml(receipt.cashier)}</strong>${customer?`<span>Pelanggan</span><strong>${escapeHtml(customer.name)}</strong>`:''}</div><div class="receipt-lines">${customerView.lines.map((line)=>`<div><span><strong>${escapeHtml(line.productName)}</strong>${priceLabel?`<small>${escapeHtml(priceLabel)}</small>`:''}<small>${line.qty} ${escapeHtml(line.unitName)} × ${money.format(line.customerUnitPrice)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div><div class="receipt-totals"><div><span>Subtotal</span><strong>${money.format(customerView.subtotal)}</strong></div>${Math.abs(receiptDiscount)>0.01?`<div><span>Promo & diskon</span><strong>${receiptDiscount<0?'+':'−'}${money.format(Math.abs(receiptDiscount))}</strong></div>`:''}<div class="receipt-grand"><span>Total</span><strong>${money.format(customerView.grandTotal)}</strong></div>${payments.map((payment)=>`<div><span>${payment.method}${payment.method==='CASH'&&payment.tendered?` · diterima ${money.format(payment.tendered)}`:''}</span><strong>${money.format(payment.amount)}</strong></div>`).join('')}${change?`<div><span>Kembalian</span><strong>${money.format(change)}</strong></div>`:''}</div>${receipt.notes?`<p class="receipt-thanks"><strong>Catatan:</strong> ${escapeHtml(receipt.notes)}</p>`:''}<p class="receipt-thanks">${escapeHtml(footer)}</p>`;
+  const customerView=customerReceiptView(receipt.quote),receiptDiscount=Number(customerView.discountTotal),change=Number(receipt.change??0);
+  const classes=['receipt-copy',`receipt-header-${layout.headerAlignment}`,`receipt-footer-${layout.footerAlignment}`,`receipt-title-${layout.titleSize}`,`receipt-density-${layout.density}`,`receipt-separator-${layout.separator}`].join(' ');
+  const logo=layout.showLogo&&business.logoUrl?`<img class="receipt-logo" src="${escapeHtml(business.logoUrl)}" alt="Logo ${escapeHtml(business.name??'usaha')}" style="width:${layout.logoSize}px">`:'';
+  const meta=`${layout.showCashier?`<span>Kasir</span><strong>${escapeHtml(receipt.cashier??'-')}</strong>`:''}${layout.showCustomer&&customer?`<span>Pelanggan</span><strong>${escapeHtml(customer.name)}</strong>`:''}`;
+  const paymentRows=layout.showPaymentDetail?payments.map((payment)=>`<div><span>${escapeHtml(payment.method)}${payment.method==='CASH'&&payment.tendered?` · diterima ${money.format(payment.tendered)}`:''}</span><strong>${money.format(payment.amount)}</strong></div>`).join(''):'';
+  return `<section class="${classes}"><div class="receipt-head">${logo}${layout.showBusinessName?`<strong>${escapeHtml(business.name??'Kasir Nusa')}</strong>`:''}${layout.showOutletName?`<span>${escapeHtml(receipt.outletName??outlet.name??'Outlet')}</span>`:''}${layout.customHeader?`<small class="receipt-custom-header">${escapeHtml(layout.customHeader)}</small>`:''}${layout.showAddress&&address?`<small>${escapeHtml(address)}</small>`:''}${layout.showPhone&&phone?`<small>Tel. ${escapeHtml(phone)}</small>`:''}${layout.showDate?`<small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small>`:''}${layout.showReceiptNumber?`<b>${escapeHtml(receipt.receiptNo)}</b>`:''}${receipt.status==='VOIDED'?'<b>VOID / DIBATALKAN</b>':''}</div><div class="receipt-meta">${meta}</div><div class="receipt-lines">${customerView.lines.map((line)=>`<div><span><strong>${escapeHtml(line.productName)}</strong>${layout.showPriceType&&priceLabel?`<small>${escapeHtml(priceLabel)}</small>`:''}<small>${line.qty} ${escapeHtml(line.unitName)} × ${money.format(line.customerUnitPrice)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div><div class="receipt-totals"><div><span>Subtotal</span><strong>${money.format(customerView.subtotal)}</strong></div>${Math.abs(receiptDiscount)>0.01?`<div><span>Promo & diskon</span><strong>${receiptDiscount<0?'+':'−'}${money.format(Math.abs(receiptDiscount))}</strong></div>`:''}<div class="receipt-grand"><span>Total</span><strong>${money.format(customerView.grandTotal)}</strong></div>${paymentRows}${layout.showPaymentDetail&&change?`<div><span>Kembalian</span><strong>${money.format(change)}</strong></div>`:''}</div>${layout.showTransactionNote&&receipt.notes?`<p class="receipt-thanks"><strong>Catatan:</strong> ${escapeHtml(receipt.notes)}</p>`:''}${layout.showLoyaltyPoints&&Number(receipt.pointsEarned)>0?`<p class="receipt-thanks">Poin +${Number(receipt.pointsEarned)} · saldo ${Number(receipt.pointsBalance)}${receipt.tierName?` · ${escapeHtml(receipt.tierName)}`:''}</p>`:''}<p class="receipt-thanks">${escapeHtml(footer)}</p>${options.copyLabel?`<small class="receipt-copy-label">${escapeHtml(options.copyLabel)}</small>`:''}</section>`;
+}
+
+function renderReceipt(receipt,payments){
   const copies=Math.max(1,Math.min(3,Number(state.deviceSettings.receiptCopies??1)));
-  const pointsMarkup=Number(receipt.pointsEarned)>0?`<p class="receipt-thanks">Poin +${Number(receipt.pointsEarned)} · saldo ${Number(receipt.pointsBalance)}${receipt.tierName?` · ${escapeHtml(receipt.tierName)}`:''}</p>`:'';
-  el('receipt-content').innerHTML=Array.from({length:copies},(_,index)=>`<section class="receipt-copy">${body}${pointsMarkup}${copies>1?`<small class="receipt-copy-label">Salinan ${index+1} dari ${copies}</small>`:''}</section>`).join('');
+  el('receipt-content').innerHTML=Array.from({length:copies},(_,index)=>buildReceiptMarkup(receipt,payments,{copyLabel:copies>1?`Salinan ${index+1} dari ${copies}`:''})).join('');
+  bindReceiptImageFallbacks(el('receipt-content'));
   const width=Number(state.deviceSettings.paperWidth??80)===58?58:80;
   el('receipt-dialog').classList.toggle('paper-58',width===58);
   let printStyle=el('receipt-print-page-style');
   if(!printStyle){printStyle=document.createElement('style');printStyle.id='receipt-print-page-style';document.head.append(printStyle);}
   printStyle.textContent=`@media print{@page{size:${width}mm auto;margin:2mm}}`;
+  const customer=receipt.customer??state.customers.find((item)=>item.id===el('customer-select').value);
   el('whatsapp-receipt').classList.toggle('hidden',!(customer?.phone&&customer?.whatsapp_consent));
   el('receipt-dialog').showModal();
   if(state.deviceSettings.autoPrint)setTimeout(()=>printReceiptDirect(receipt,payments,{automatic:true}),250);
@@ -3991,7 +4102,7 @@ function showReportView(name='summary'){
 
 function showSettingsView(name='business'){
   const page=el('page-settings'),splits=[...page.querySelectorAll('.settings-split')];
-  const views={business:el('business-settings-form'),outlets:splits[0],locations:splits[1],health:page.querySelector('.system-health'),device:el('device-settings-form')};
+  const views={business:el('business-settings-form'),receipt:el('receipt-settings-form'),outlets:splits[0],locations:splits[1],health:page.querySelector('.system-health'),device:el('device-settings-form')};
   Object.entries(views).forEach(([key,node])=>node?.classList.toggle('hidden',key!==name));
 }
 
@@ -4840,6 +4951,24 @@ el('refresh-settings').addEventListener('click', loadSettingsWorkspace);
 el('refresh-system-health').addEventListener('click', loadSystemHealth);
 el('install-app').addEventListener('click', installPwa);
 el('business-settings-form').addEventListener('submit', saveBusinessSettings);
+el('receipt-settings-form').addEventListener('submit',saveReceiptSettings);
+el('receipt-settings-form').addEventListener('input',(event)=>{
+  if(event.target.id==='setting-receipt-logo-file')return;
+  if(event.target.id==='setting-receipt-logo-size')el('setting-receipt-logo-size-value').textContent=event.target.value;
+  renderReceiptDesignPreview();
+});
+el('setting-receipt-logo-file').addEventListener('change',async(event)=>{
+  el('receipt-settings-error').textContent='';
+  try{
+    const file=event.target.files[0];if(!file)return;
+    el('setting-receipt-logo-url').value=await receiptLogoFromFile(file);
+    el('receipt-show-logo').checked=true;renderReceiptDesignPreview();
+  }catch(error){el('receipt-settings-error').textContent=error.message;}finally{event.target.value='';}
+});
+el('remove-receipt-logo').addEventListener('click',()=>{
+  el('setting-receipt-logo-url').value='';el('receipt-show-logo').checked=false;renderReceiptDesignPreview();
+});
+el('reset-receipt-layout').addEventListener('click',()=>populateReceiptLayoutControls(defaultReceiptLayout));
 el('new-outlet-setting').addEventListener('click', newOutletEditor);
 el('outlet-settings-form').addEventListener('submit', saveOutletSettings);
 el('settings-outlet-list').addEventListener('click',(event)=>{const row=event.target.closest('.edit-setting-outlet');if(row)editOutletSetting(row.dataset.outletId);});
@@ -4847,6 +4976,9 @@ el('new-location-setting').addEventListener('click', newLocationEditor);
 el('location-settings-form').addEventListener('submit', saveLocationSettings);
 el('settings-location-list').addEventListener('click',(event)=>{const row=event.target.closest('.edit-setting-location');if(row)editLocationSetting(row.dataset.locationId);});
 el('device-settings-form').addEventListener('submit', saveDeviceSettings);
+el('setting-device-paper').addEventListener('change',()=>{
+  state.deviceSettings.paperWidth=Number(el('setting-device-paper').value);renderReceiptDesignPreview();
+});
 el('connect-printer').addEventListener('click', connectReceiptPrinter);
 el('test-printer').addEventListener('click', testReceiptPrinter);
 el('disconnect-printer').addEventListener('click', disconnectReceiptPrinter);

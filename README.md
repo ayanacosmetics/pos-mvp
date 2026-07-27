@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Tipe Pelanggan & Harga v2.5.0
+# Kasir Nusa POS — Desain Struk v2.6.0
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -20,6 +20,9 @@ Produksi menggunakan:
   terdaftar hanya mencetak nama pelanggan, sedangkan tipe harga non-umum
   dicetak pada setiap baris barang sebagai `Harga Member`, `Harga Grosir`, dan
   seterusnya.
+- Owner dapat mengatur desain struk dari `Sistem → Desain struk`: memasukkan
+  logo, melihat pratinjau langsung, mengubah posisi dan kerapatan, serta memilih
+  informasi yang dicetak. Desain yang sama berlaku ke seluruh kasir.
 - Owner mengatur hak akses setiap akun Staff/Admin melalui checklist fitur.
   Harga manual dan void hanya tersedia bagi akun yang diberi izin, tanpa
   membagikan atau memasukkan sandi Owner.

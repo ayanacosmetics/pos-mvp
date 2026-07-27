@@ -45,6 +45,23 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat v2.6.0 Desain Struk menunggu migrasi dan deployment
+
+- Owner mendapat halaman `Sistem → Desain struk` dengan pratinjau langsung.
+- Logo dapat dipilih dari galeri atau URL, diperkecil otomatis, lalu digunakan
+  pada struk browser dan cetak thermal ESC/POS Bluetooth.
+- Posisi kepala/penutup, ukuran nama dan logo, kerapatan, garis pemisah, teks
+  tambahan, serta informasi yang dicetak dapat diatur per usaha.
+- Pengaturan berlaku ke seluruh kasir; lebar kertas dan jumlah salinan tetap
+  menjadi pengaturan setiap perangkat.
+- Penyimpanan logo lama dilindungi agar perubahan identitas usaha tidak
+  menghapusnya tanpa sengaja.
+- Kandidat memakai API `2.6.0-cloud`, aset web `v77`, dan cache PWA `v77`.
+- Seluruh 200 pengujian otomatis lulus. Visual desktop 1440×1000 dan ponsel
+  390×844 lulus tanpa overflow.
+- Jalankan migrasi
+  `supabase/migrations/202607280039_receipt_layout_settings.sql` sebelum deploy.
+
 ### Rilis v2.5.0 Tipe Pelanggan & Harga dikonfirmasi live
 
 - Tipe pelanggan kini merupakan master dinamis milik tenant. Data awal

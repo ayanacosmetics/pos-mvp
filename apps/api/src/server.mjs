@@ -16,7 +16,14 @@ export const store = new PosStore(dataPath, products, promotionVersions);
 const sessions = new Map();
 const saleAuthorizations = new Map();
 const port = Number(process.env.PORT ?? 4173);
-let localBusiness = { id:'tenant-demo', name:'Kasir Nusa Demo', legalName:'', phone:'', email:'', address:'', taxId:'', currency:'IDR', receiptFooter:'Terima kasih telah berbelanja.', logoUrl:'' };
+const defaultReceiptLayout = {
+  headerAlignment:'center', footerAlignment:'center', titleSize:'large', density:'normal',
+  separator:'dashed', logoSize:64, customHeader:'', showLogo:true, showBusinessName:true,
+  showOutletName:true, showAddress:true, showPhone:true, showDate:true,
+  showReceiptNumber:true, showCashier:true, showCustomer:true, showPriceType:true,
+  showPaymentDetail:true, showTransactionNote:true, showLoyaltyPoints:true
+};
+let localBusiness = { id:'tenant-demo', name:'Kasir Nusa Demo', legalName:'', phone:'', email:'', address:'', taxId:'', currency:'IDR', receiptFooter:'Terima kasih telah berbelanja.', logoUrl:'', receiptLayout:{...defaultReceiptLayout} };
 let localOutletSettings = outlets.map((outlet) => ({ ...outlet, code:outlet.code ?? 'UTM', timezone:'Asia/Makassar', active:true, receipt_prefix:outlet.code ?? 'UTM', phone:'', address:'', receipt_footer:'' }));
 let localCustomerGroups = customerGroups.map((group,index)=>({...group,isDefault:group.id==='retail',active:true,sortOrder:index*10}));
 let localLocations = [
@@ -79,7 +86,7 @@ function requirePermission(request, response, permission) {
 }
 
 async function api(request, response, url) {
-  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '2.5.0-local', storage: 'sqlite' });
+  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '2.6.0-local', storage: 'sqlite' });
 
   if (request.method === 'POST' && url.pathname === '/api/login') {
     const input = await bodyOf(request);
@@ -108,6 +115,17 @@ async function api(request, response, url) {
   if (request.method === 'PUT' && url.pathname === '/api/settings/business') {
     const session = requirePermission(request,response,PERMISSIONS.MANAGE_USERS); if(!session)return;
     localBusiness={...localBusiness,...await bodyOf(request)};
+    return json(response,200,{business:localBusiness});
+  }
+
+  if (request.method === 'PUT' && url.pathname === '/api/settings/receipt') {
+    const session = requirePermission(request,response,PERMISSIONS.MANAGE_USERS); if(!session)return;
+    const input=await bodyOf(request);
+    localBusiness={
+      ...localBusiness,
+      logoUrl:typeof input.logoUrl==='string'?input.logoUrl:localBusiness.logoUrl,
+      receiptLayout:{...defaultReceiptLayout,...(input.layout??{})}
+    };
     return json(response,200,{business:localBusiness});
   }
 

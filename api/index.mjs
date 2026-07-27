@@ -397,12 +397,51 @@ async function cloudContext(session, request) {
 }
 
 function businessPayload(row = {}) {
+  const receiptLayout = {
+    headerAlignment:'center',footerAlignment:'center',titleSize:'large',
+    density:'normal',separator:'dashed',logoSize:64,customHeader:'',
+    showLogo:true,showBusinessName:true,showOutletName:true,showAddress:true,
+    showPhone:true,showDate:true,showReceiptNumber:true,showCashier:true,
+    showCustomer:true,showPriceType:true,showPaymentDetail:true,
+    showTransactionNote:true,showLoyaltyPoints:true,
+    ...(row.receipt_layout_json && typeof row.receipt_layout_json==='object' ? row.receipt_layout_json : {})
+  };
   return {
     id: row.id ?? null, name: row.name ?? 'Kasir Nusa', legalName: row.legal_name ?? '',
     phone: row.phone ?? '', email: row.email ?? '', address: row.address ?? '', taxId: row.tax_id ?? '',
     currency: row.currency ?? 'IDR', receiptFooter: row.receipt_footer ?? 'Terima kasih telah berbelanja.',
-    logoUrl: row.logo_url ?? ''
+    logoUrl: row.logo_url ?? '', receiptLayout
   };
+}
+
+function normalizeReceiptLayout(input = {}) {
+  const choice=(value,allowed,fallback)=>allowed.includes(value)?value:fallback;
+  const boolean=(key,fallback=true)=>input[key]===undefined?fallback:Boolean(input[key]);
+  const customHeader=String(input.customHeader??'').trim().replace(/\s+/g,' ').slice(0,80);
+  return {
+    headerAlignment:choice(input.headerAlignment,['left','center'],'center'),
+    footerAlignment:choice(input.footerAlignment,['left','center'],'center'),
+    titleSize:choice(input.titleSize,['normal','large'],'large'),
+    density:choice(input.density,['compact','normal'],'normal'),
+    separator:choice(input.separator,['dashed','double'],'dashed'),
+    logoSize:Math.max(32,Math.min(96,Number(input.logoSize)||64)),customHeader,
+    showLogo:boolean('showLogo'),showBusinessName:boolean('showBusinessName'),
+    showOutletName:boolean('showOutletName'),showAddress:boolean('showAddress'),
+    showPhone:boolean('showPhone'),showDate:boolean('showDate'),
+    showReceiptNumber:boolean('showReceiptNumber'),showCashier:boolean('showCashier'),
+    showCustomer:boolean('showCustomer'),showPriceType:boolean('showPriceType'),
+    showPaymentDetail:boolean('showPaymentDetail'),
+    showTransactionNote:boolean('showTransactionNote'),
+    showLoyaltyPoints:boolean('showLoyaltyPoints')
+  };
+}
+
+function normalizeReceiptLogo(value) {
+  const logo=String(value??'').trim();
+  if(!logo)return '';
+  if(logo.length>300000)throw Object.assign(new Error('Logo terlalu besar; pilih gambar di bawah 300 KB'),{status:400});
+  if(/^https?:\/\/\S+$/i.test(logo)||/^data:image\/(png|jpeg|webp);base64,[a-z0-9+/=\s]+$/i.test(logo))return logo;
+  throw Object.assign(new Error('Logo harus berupa gambar PNG, JPEG, WebP, atau URL http/https'),{status:400});
 }
 
 function devicePayload(row, fallbackId = null) {
@@ -881,7 +920,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.5.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.6.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1141,13 +1180,27 @@ async function routeRequest(request, response, route) {
   if (request.method === 'PUT' && route === 'settings/business') {
     requirePermission(session, 'identity.manage');
     const input = bodyOf(request);
+    const current=input.logoUrl===undefined
+      ?(await rest('tenants',`id=eq.${encodeURIComponent(context.tenantId)}&select=logo_url&limit=1`))[0]
+      :null;
     const row = await rpc('save_business_settings', {
       p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_name: input.name,
       p_legal_name: input.legalName ?? '', p_phone: input.phone ?? '', p_email: input.email ?? '',
       p_address: input.address ?? '', p_tax_id: input.taxId ?? '', p_receipt_footer: input.receiptFooter ?? '',
-      p_logo_url: input.logoUrl ?? ''
+      p_logo_url: normalizeReceiptLogo(input.logoUrl??current?.logo_url??'')
     });
     return send(response, 200, { business: businessPayload(row) });
+  }
+
+  if (request.method === 'PUT' && route === 'settings/receipt') {
+    requirePermission(session,'identity.manage');
+    const input=bodyOf(request);
+    const row=await rpc('save_receipt_layout_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,
+      p_layout:normalizeReceiptLayout(input.layout),
+      p_logo_url:normalizeReceiptLogo(input.logoUrl)
+    });
+    return send(response,200,{business:businessPayload(row)});
   }
 
   if (request.method === 'POST' && route === 'settings/outlets') {
