@@ -78,7 +78,7 @@ function requirePermission(request, response, permission) {
 }
 
 async function api(request, response, url) {
-  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '2.4.8-local', storage: 'sqlite' });
+  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '2.4.9-local', storage: 'sqlite' });
 
   if (request.method === 'POST' && url.pathname === '/api/login') {
     const input = await bodyOf(request);
@@ -118,15 +118,14 @@ async function api(request, response, url) {
   if (request.method === 'POST' && url.pathname === '/api/sale-authorizations') {
     const session = requirePermission(request, response, PERMISSIONS.POS_SELL);
     if (!session) return;
+    if (!can(session,PERMISSIONS.ADJUST_SALE)) return json(response,403,{error:'Akun ini tidak diizinkan mengubah harga atau memberi diskon manual'});
     const input = await bodyOf(request);
-    const approver = demoUsers.find((item) => item.email === input.approverEmail && item.password === input.approverPassword && ['OWNER','ADMIN'].includes(item.role));
-    if (!approver) return json(response, 422, { error: 'Email atau kata sandi supervisor salah' });
     try {
       const adjustment = normalizeSaleAdjustment(input.adjustment);
       const baseQuote = quoteBasket({ lines: input.lines, customerGroupId: input.customerGroupId, products: store.catalog(), promotions: store.promotions(), at: new Date() });
       const id = crypto.randomUUID();
       const token = crypto.randomUUID();
-      const approvedBy = approver.displayName;
+      const approvedBy = session.user.displayName;
       const quote = applySaleAdjustment(baseQuote, adjustment, { id, approvedBy });
       const authorization = { id, token, approvedBy, adjustment, discountAmount: quote.manualAdjustment.discountAmount, expiresAt: new Date(Date.now() + 300000).toISOString() };
       saleAuthorizations.set(id, { ...authorization, cashierId: session.user.id, fingerprint: saleAdjustmentFingerprintPayload(input.lines, input.customerGroupId, adjustment), consumed: false });
@@ -200,15 +199,11 @@ async function api(request, response, url) {
 
   if (request.method === 'POST' && /^\/api\/pos-sales\/[^/]+\/void$/.test(url.pathname)) {
     const session=requirePermission(request,response,PERMISSIONS.POS_SELL);if(!session)return;
+    if(!can(session,PERMISSIONS.VOID_SALE))return json(response,403,{error:'Akun ini tidak diizinkan melakukan void transaksi'});
     const input=await bodyOf(request);
-    let approver=session.user;
-    if(!['OWNER','ADMIN'].includes(session.user.role)){
-      approver=demoUsers.find((user)=>user.email===String(input.approverEmail??'').trim().toLowerCase()&&user.password===input.approverPassword&&['OWNER','ADMIN'].includes(user.role));
-      if(!approver)return json(response,422,{error:'Email atau kata sandi Owner/Admin salah'});
-    }
     try{
       const saleId=decodeURIComponent(url.pathname.split('/')[3]);
-      return json(response,200,store.voidSale({saleId,reason:input.reason,actorId:session.user.id,approvedBy:approver.id}));
+      return json(response,200,store.voidSale({saleId,reason:input.reason,actorId:session.user.id,approvedBy:session.user.id}));
     }catch(error){return json(response,409,{error:error.message});}
   }
 

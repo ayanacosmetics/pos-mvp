@@ -1025,3 +1025,11 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
   .product-image-field{grid-column:auto}
 }
 .report-sales-layout{min-height:440px}
+.permission-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-height:360px;overflow:auto;padding:2px}
+.permission-option{display:flex;grid-template-columns:none;align-items:flex-start;gap:10px;margin:0;padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.permission-option:has(input:checked){border-color:#8eb8b2;background:var(--brand-2)}
+.permission-option input{width:17px;height:17px;margin:2px 0 0;accent-color:var(--brand)}
+.permission-option span,.permission-owner-note{display:grid;gap:3px}
+.permission-option small,.permission-owner-note small,.user-outlet-list small{display:block;color:var(--muted);font-size:10px;line-height:1.35}
+.permission-owner-note{padding:14px;border:1px solid #9dc5bd;border-radius:10px;background:var(--brand-2)}
+@media(max-width:600px){.permission-options{grid-template-columns:1fr;max-height:48vh}}

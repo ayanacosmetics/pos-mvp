@@ -62,18 +62,19 @@ test('owner dapat membuat user Auth dan profil outlet tanpa membocorkan kata san
     if (target.includes('/rest/v1/outlets?')) return responseOf([{ id: ids.outletA, name: 'Cabang A', active: true }]);
     if (target.includes('/rest/v1/stock_locations?')) return responseOf([{ id: ids.locationA, outlet_id: ids.outletA, kind: 'STORE' }]);
     if (target.endsWith('/auth/v1/admin/users')) return responseOf({ id: newUser, email: 'kasir@example.com' });
-    if (target.endsWith('/rest/v1/rpc/manage_profile_access')) return responseOf({ userId: newUser, displayName: 'Kasir Baru', role: 'CASHIER', active: true, outletIds: [ids.outletA] });
+    if (target.endsWith('/rest/v1/rpc/manage_profile_access_v2')) return responseOf({ userId: newUser, displayName: 'Kasir Baru', role: 'CASHIER', active: true, outletIds: [ids.outletA], permissions:['pos.sell'] });
     return responseOf({ message: `Mock belum menangani ${target}` }, 500);
   };
   try {
-    const result = await invoke('POST', 'users', { email: 'kasir@example.com', password: 'rahasia123', displayName: 'Kasir Baru', role: 'CASHIER', outletIds: [ids.outletA] });
+    const result = await invoke('POST', 'users', { email: 'kasir@example.com', password: 'rahasia123', displayName: 'Kasir Baru', role: 'CASHIER', outletIds: [ids.outletA], permissions:['pos.sell'] });
     assert.equal(result.status, 201);
     assert.equal(result.body.email, 'kasir@example.com');
     assert.equal(Object.hasOwn(result.body, 'password'), false);
     const authCall = calls.find((entry) => entry.target.endsWith('/auth/v1/admin/users'));
     assert.equal(authCall.options.headers.apikey, 'service-secret');
-    const profileCall = calls.find((entry) => entry.target.endsWith('/rpc/manage_profile_access'));
+    const profileCall = calls.find((entry) => entry.target.endsWith('/rpc/manage_profile_access_v2'));
     assert.deepEqual(profileCall.body.p_outlet_ids, [ids.outletA]);
+    assert.deepEqual(profileCall.body.p_permissions, ['pos.sell']);
   } finally { globalThis.fetch = originalFetch; restoreEnvironment(); }
 });
 
@@ -85,8 +86,11 @@ test('backoffice menyediakan pengelolaan user, peran, outlet, dan status akun', 
   assert.match(html, /data-page="users"[^>]+data-permission="identity\.manage"/);
   assert.match(html, /id="create-user-form"/);
   assert.match(html, /id="new-user-outlets"/);
+  assert.match(html, /id="new-user-permissions"/);
+  assert.match(html, /id="edit-user-permissions"/);
   assert.match(html, /id="edit-user-active"/);
   assert.match(script, /request\('\/api\/users'/);
   assert.match(script, /method: 'PATCH'/);
+  assert.match(script, /selectedPermissions/);
   assert.match(script, /user\.id === state\.session\.user\.id/);
 });

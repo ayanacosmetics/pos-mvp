@@ -69,8 +69,8 @@ test('harga manual naik atau turun tetap memerlukan otorisasi dan tercatat di au
   assert.match(migration, /discount_amount <> 0/);
   assert.match(migration, /SALE_PRICE_OVERRIDE_APPROVED/);
   assert.match(migration, /'direction'.*'DECREASE'.*'INCREASE'/s);
-  assert.match(api, /\['OWNER','ADMIN'\]\.includes\(session\.profile\.role\)/);
-  assert.match(api, /Email dan kata sandi Owner\/Admin wajib diisi/);
+  assert.match(api, /requirePermission\(session, 'sale\.adjust'\)/);
+  assert.doesNotMatch(api, /Email dan kata sandi Owner\/Admin wajib diisi/);
   assert.match(html, /PENYESUAIAN HARGA INTERNAL/);
   assert.match(script, /DISKON PELANGGAN/);
 });

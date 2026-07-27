@@ -45,6 +45,25 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Paket v2.4.9 Hak Akses Akun menunggu migrasi produksi
+
+- Menu Pengguna kini menyediakan checklist hak akses per akun Staff/Admin,
+  terpisah dari label peran dan penempatan outlet.
+- Hak `sale.adjust` mengontrol harga/diskon manual dan `sale.void` mengontrol
+  void transaksi. Keduanya tidak lagi meminta email atau sandi Owner.
+- API menghitung izin efektif dari `profiles.custom_permissions` dan tetap
+  memeriksanya pada server; menyembunyikan tombol di UI bukan satu-satunya
+  perlindungan.
+- Izin khusus Owner `identity.manage`, `finance.owner`, dan `pilot.manage` tidak
+  tersedia di checklist dan tidak dapat disimpan sebagai izin kustom.
+- Profil lama dengan izin `null` tetap memakai bawaan peran agar migrasi tidak
+  memutus akses yang sudah berjalan.
+- Migrasi yang harus dijalankan sebelum deployment:
+  `supabase/migrations/202607270037_custom_permissions.sql`.
+- Kandidat menggunakan API `2.4.9-cloud`, aset web `v73`, dan cache PWA `v73`.
+- Seluruh 192 pengujian otomatis lulus. Pemeriksaan visual checklist juga lulus
+  pada desktop 1365×900 dan ponsel 390×844 tanpa overflow horizontal.
+
 ### Rilis v2.4.8 Laporan Transaksi dikonfirmasi live
 
 - Tombol Riwayat di Kasir dihapus agar layar penjualan fokus pada transaksi

@@ -19,6 +19,31 @@ state.restockWizardStep = 'document';
 const el = (id) => document.getElementById(id);
 const posDevice = deviceIdentity();
 const roleLabels = { OWNER: 'Owner', ADMIN: 'Admin', MANAGER: 'Manajer Outlet', CASHIER: 'Kasir', PURCHASING: 'Pembelian', WAREHOUSE: 'Gudang' };
+const permissionOptions=[
+  ['pos.sell','Penjualan kasir','Transaksi, member, shift, dan pembayaran'],
+  ['sale.adjust','Ubah harga & diskon manual','Penyesuaian sensitif tanpa sandi Owner'],
+  ['sale.void','Void transaksi','Batalkan transaksi dan kembalikan stok'],
+  ['sales.return','Retur pelanggan','Proses pengembalian barang dan dana'],
+  ['purchasing.view_cost','Lihat harga modal','Harga beli dan perbandingan supplier'],
+  ['purchasing.receive','Restok & penerimaan','Pesanan serta penerimaan supplier'],
+  ['inventory.manage','Kelola stok','Transfer, opname, batch, dan jurnal stok'],
+  ['catalog.manage','Kelola produk & harga','Produk, satuan, barcode, dan harga jual'],
+  ['promotion.manage','Promo & loyalitas','Aturan promo, poin, tier, dan voucher'],
+  ['report.view','Lihat laporan','Pendapatan, keuntungan, produk, dan transaksi'],
+  ['audit.view','Audit & sinkronisasi','Jejak aktivitas dan konflik offline'],
+  ['workforce.self','Fitur karyawan sendiri','Jadwal, absensi, target, dan permintaan'],
+  ['workforce.manage','Kelola karyawan','Jadwal, target, aktivitas, rekonsiliasi'],
+  ['approval.manage','Putuskan persetujuan','Setujui permintaan operasional'],
+  ['multioutlet.view','Lihat multi-outlet','Ringkasan lintas cabang'],
+  ['multioutlet.manage','Kelola multi-outlet','Transfer, harga, dan promo cabang']
+];
+const permissionDefaults={
+  CASHIER:['pos.sell','workforce.self'],
+  PURCHASING:['purchasing.view_cost','purchasing.receive','workforce.self'],
+  WAREHOUSE:['inventory.manage','workforce.self'],
+  MANAGER:['pos.sell','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage'],
+  ADMIN:permissionOptions.map(([permission])=>permission)
+};
 let refreshPromise = null;
 let deferredInstallPrompt = null;
 let quoteRevision = 0;
@@ -1314,6 +1339,7 @@ async function updateQuote() {
 
 function renderCart() {
   el('mobile-cart-count').textContent=state.cart.reduce((sum,line)=>sum+Number(line.qty??0),0);
+  el('open-order-adjustment').classList.toggle('hidden',!state.session.permissions.includes('sale.adjust'));
   if (!state.quote) {
     el('cart-lines').innerHTML = '<div class="empty-state">Belum ada barang.<br><small>Scan barcode atau pilih produk.</small></div>';
     el('subtotal').textContent = money.format(0); el('discount').textContent = `−${money.format(0)}`; el('price-adjustment-summary').classList.add('hidden'); el('grand-total').textContent = money.format(0); el('pay-button').disabled = true; el('exact-cash-button').disabled = true; el('hold-cart').disabled = true;
@@ -1325,7 +1351,8 @@ function renderCart() {
     const cartLine=state.cart[index],product=state.products.find((item)=>item.id===cartLine.productId),unit=product?.units.find((item)=>item.id===cartLine.unitId);
     const usedBase=state.cart.filter((item)=>item.productId===cartLine.productId).reduce((sum,item)=>sum+Number(item.qty)*Number(product?.units.find((candidate)=>candidate.id===item.unitId)?.factor??0),0);
     const atLimit=!product||!unit||usedBase+Number(unit.factor)>Number(product.stockBase??0);
-    return `<div class="cart-line"><div class="cart-line-main"><div><strong>${line.productName}</strong><br><small class="cart-line-meta">${line.qty} <button class="cart-unit-change" data-index="${index}" type="button" aria-label="Ganti satuan ${escapeHtml(line.productName)}">${escapeHtml(line.unitName)} <span aria-hidden="true">⌄</span></button> · ${money.format(line.gross / line.qty)} · stok ${product?.stockBase??0} pcs</small></div><strong>${money.format(line.total)}</strong></div><div class="cart-controls"><button data-index="${index}" data-delta="-1">−</button><span>${line.qty}</span><button data-index="${index}" data-delta="1" ${atLimit?'disabled title="Stok tidak mencukupi"':''}>+</button><button class="manual-line-adjustment" data-index="${index}" type="button" ${state.saleAuthorization?'disabled':''}>Ubah harga</button></div>${line.promotions.map((promo) => { const raised=Number(promo.discount)<0; return `<div class="promo-note ${promo.manual?'manual':''}">${promo.manual?'Harga manual ':''}${escapeHtml(promo.code)} v${promo.version}: ${raised?'+':'−'}${money.format(Math.abs(promo.discount))}${promo.approvedBy?` · ${escapeHtml(promo.approvedBy)}`:''}</div>`; }).join('')}</div>`;
+    const canAdjust=state.session.permissions.includes('sale.adjust');
+    return `<div class="cart-line"><div class="cart-line-main"><div><strong>${line.productName}</strong><br><small class="cart-line-meta">${line.qty} <button class="cart-unit-change" data-index="${index}" type="button" aria-label="Ganti satuan ${escapeHtml(line.productName)}">${escapeHtml(line.unitName)} <span aria-hidden="true">⌄</span></button> · ${money.format(line.gross / line.qty)} · stok ${product?.stockBase??0} pcs</small></div><strong>${money.format(line.total)}</strong></div><div class="cart-controls"><button data-index="${index}" data-delta="-1">−</button><span>${line.qty}</span><button data-index="${index}" data-delta="1" ${atLimit?'disabled title="Stok tidak mencukupi"':''}>+</button>${canAdjust?`<button class="manual-line-adjustment" data-index="${index}" type="button" ${state.saleAuthorization?'disabled':''}>Ubah harga</button>`:''}</div>${line.promotions.map((promo) => { const raised=Number(promo.discount)<0; return `<div class="promo-note ${promo.manual?'manual':''}">${promo.manual?'Harga manual ':''}${escapeHtml(promo.code)} v${promo.version}: ${raised?'+':'−'}${money.format(Math.abs(promo.discount))}${promo.approvedBy?` · ${escapeHtml(promo.approvedBy)}`:''}</div>`; }).join('')}</div>`;
   }).join('');
   document.querySelectorAll('.cart-controls button[data-delta]').forEach((button) => button.addEventListener('click', () => changeQty(Number(button.dataset.index), Number(button.dataset.delta))));
   document.querySelectorAll('.cart-unit-change').forEach((button) => button.addEventListener('click', () => {
@@ -1354,6 +1381,7 @@ function renderSaleAuthorizationStatus() {
   const panel = el('sale-authorization-status');
   if (!panel) return;
   panel.classList.toggle('hidden', !state.saleAuthorization);
+  el('open-order-adjustment').classList.toggle('hidden',!state.session.permissions.includes('sale.adjust'));
   el('open-order-adjustment').disabled = !state.quote || Boolean(state.saleAuthorization);
   if (!state.saleAuthorization) {
     panel.innerHTML = '';
@@ -1373,7 +1401,8 @@ function renderSaleAuthorizationStatus() {
 
 function openSaleAdjustmentDialog(lineIndex = null) {
   if (!state.quote || state.saleAuthorization) return;
-  if (!navigator.onLine) return toast('Persetujuan supervisor memerlukan koneksi internet.');
+  if (!state.session.permissions.includes('sale.adjust'))return toast('Akun Anda tidak memiliki hak mengubah harga atau diskon manual.');
+  if (!navigator.onLine) return toast('Perubahan harga manual memerlukan koneksi internet.');
   state.adjustmentTargetIndex = lineIndex;
   const isLine = Number.isInteger(lineIndex);
   const line = isLine ? state.quote.lines[lineIndex] : null;
@@ -1392,13 +1421,6 @@ function openSaleAdjustmentDialog(lineIndex = null) {
     : '<option value="PERCENT">Diskon persen</option><option value="FIXED_DISCOUNT">Potongan nominal</option>';
   el('adjustment-value').value = '';
   el('adjustment-reason').value = '';
-  el('approver-email').value = '';
-  el('approver-password').value = '';
-  const selfApproved = ['OWNER','ADMIN'].includes(state.session.user.role);
-  el('supervisor-approval-fields').classList.toggle('hidden', selfApproved);
-  el('self-approval-note').classList.toggle('hidden', !selfApproved);
-  el('approver-email').disabled = selfApproved;
-  el('approver-password').disabled = selfApproved;
   el('adjustment-error').textContent = '';
   el('sale-adjustment-dialog').showModal();
   el('approve-adjustment').textContent=isLine?'Simpan harga internal':'Terapkan diskon';
@@ -1407,7 +1429,7 @@ function openSaleAdjustmentDialog(lineIndex = null) {
 
 async function approveSaleAdjustment(event) {
   event.preventDefault();
-  if (!navigator.onLine) return el('adjustment-error').textContent = 'Persetujuan supervisor memerlukan koneksi internet.';
+  if (!navigator.onLine) return el('adjustment-error').textContent = 'Perubahan harga manual memerlukan koneksi internet.';
   const button = el('approve-adjustment');
   const line = Number.isInteger(state.adjustmentTargetIndex) ? state.cart[state.adjustmentTargetIndex] : null;
   const adjustment = {
@@ -1427,14 +1449,11 @@ async function approveSaleAdjustment(event) {
       body: JSON.stringify({
         lines: state.cart,
         customerGroupId: el('customer-group').value,
-        adjustment,
-        approverEmail: el('approver-email').value,
-        approverPassword: el('approver-password').value
+        adjustment
       })
     });
     state.saleAuthorization = result.authorization;
     state.quote = result.quote;
-    el('approver-password').value = '';
     el('sale-adjustment-dialog').close();
     renderCart();
     toast(`Harga manual disetujui oleh ${result.authorization.approvedBy}.`);
@@ -2537,6 +2556,21 @@ function selectedOutletIds(containerId, role) {
   return [...el(containerId).querySelectorAll('input:checked')].map((input) => input.value);
 }
 
+function renderPermissionOptions(containerId,selected,role){
+  const container=el(containerId);
+  if(role==='OWNER'){
+    container.innerHTML='<div class="permission-owner-note"><strong>Owner memiliki seluruh akses</strong><small>Hak keuangan, pengguna, keamanan, dan seluruh fitur operasional selalu aktif.</small></div>';
+    return;
+  }
+  const active=new Set(selected??permissionDefaults[role]??[]);
+  container.innerHTML=permissionOptions.map(([permission,label,description])=>`<label class="permission-option"><input type="checkbox" value="${permission}" ${active.has(permission)?'checked':''}><span><strong>${label}</strong><small>${description}</small></span></label>`).join('');
+}
+
+function selectedPermissions(containerId,role){
+  if(role==='OWNER')return null;
+  return [...el(containerId).querySelectorAll('input:checked')].map((input)=>input.value);
+}
+
 function renderUserMetrics() {
   const active = state.users.filter((user) => user.active);
   const metrics = [
@@ -2559,7 +2593,8 @@ function renderUsers() {
   });
   el('user-list').innerHTML = users.map((user) => {
     const outletNames = user.role === 'OWNER' ? ['Semua outlet'] : user.outletIds.map((id) => outletsById.get(id)).filter(Boolean);
-    return `<div class="user-row" data-user-id="${escapeHtml(user.id)}"><div class="user-person"><strong>${escapeHtml(user.displayName)}</strong><small>${escapeHtml(user.email ?? 'Email tidak tersedia')}</small></div><span class="role-badge ${user.active ? '' : 'inactive'}">${user.active ? escapeHtml(roleLabels[user.role] ?? user.role) : 'NONAKTIF'}</span><div class="user-outlet-list">${escapeHtml(outletNames.join(', ') || 'Belum ditempatkan')}</div><button class="button secondary edit-user" type="button">Atur akses</button></div>`;
+    const accessCount=user.role==='OWNER'?'Semua akses':`${user.permissions?.length??0} akses`;
+    return `<div class="user-row" data-user-id="${escapeHtml(user.id)}"><div class="user-person"><strong>${escapeHtml(user.displayName)}</strong><small>${escapeHtml(user.email ?? 'Email tidak tersedia')}</small></div><span class="role-badge ${user.active ? '' : 'inactive'}">${user.active ? escapeHtml(roleLabels[user.role] ?? user.role) : 'NONAKTIF'}</span><div class="user-outlet-list">${escapeHtml(outletNames.join(', ') || 'Belum ditempatkan')}<small>${accessCount}</small></div><button class="button secondary edit-user" type="button">Atur akses</button></div>`;
   }).join('') || '<div class="empty-state compact">Tidak ada pengguna yang sesuai filter.</div>';
 }
 
@@ -2570,6 +2605,7 @@ async function loadUsers() {
     state.users = data.users ?? [];
     state.outlets = data.outlets ?? state.outlets;
     renderOutletOptions('new-user-outlets', [], el('new-user-role').value);
+    renderPermissionOptions('new-user-permissions',permissionDefaults[el('new-user-role').value],el('new-user-role').value);
     renderUserMetrics();
     renderUsers();
   } catch (error) {
@@ -2589,7 +2625,8 @@ async function createUser(event) {
   try {
     await request('/api/users', { method: 'POST', body: JSON.stringify({
       displayName: el('new-user-name').value.trim(), email: el('new-user-email').value.trim(),
-      password: el('new-user-password').value, role, outletIds
+      password: el('new-user-password').value, role, outletIds,
+      permissions:selectedPermissions('new-user-permissions',role)
     }) });
     el('create-user-form').reset();
     el('new-user-role').value = 'CASHIER';
@@ -2611,6 +2648,7 @@ function openUserEditor(userId) {
   el('edit-user-active').disabled = user.id === state.session.user.id;
   el('edit-user-error').textContent = '';
   renderOutletOptions('edit-user-outlets', user.outletIds, user.role);
+  renderPermissionOptions('edit-user-permissions',user.permissions,user.role);
   el('edit-user-dialog').showModal();
 }
 
@@ -2623,7 +2661,8 @@ async function saveUser(event) {
   button.disabled = true; button.textContent = 'Menyimpan...'; el('edit-user-error').textContent = '';
   try {
     await request(`/api/users/${encodeURIComponent(el('edit-user-id').value)}`, { method: 'PATCH', body: JSON.stringify({
-      displayName: el('edit-user-name').value.trim(), role, active: el('edit-user-active').checked, outletIds
+      displayName: el('edit-user-name').value.trim(), role, active: el('edit-user-active').checked, outletIds,
+      permissions:selectedPermissions('edit-user-permissions',role)
     }) });
     el('edit-user-dialog').close();
     toast('Hak akses pengguna berhasil diperbarui');
@@ -3674,25 +3713,23 @@ function renderPosSales(){
 }
 
 function renderPosSaleDetail(sale){
-  el('pos-history-detail').innerHTML=`<div class="pos-history-detail-head"><div><p class="eyebrow">${sale.status==='VOIDED'?'TRANSAKSI VOID':'TRANSAKSI SELESAI'}</p><h2>${escapeHtml(sale.receiptNo)}</h2><small>${new Date(sale.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(sale.cashier)}</small></div><strong>${money.format(sale.quote.grandTotal)}</strong></div><div class="pos-history-facts"><div><span>Pelanggan</span><strong>${escapeHtml(sale.customer?.name??'Pelanggan umum')}</strong></div><div><span>Pembayaran</span><strong>${sale.payments.map((payment)=>escapeHtml(payment.method)).join(' + ')}</strong></div></div><div class="pos-history-lines">${sale.quote.lines.map((line)=>`<div><span>${escapeHtml(line.productName)}<small> · ${line.qty} ${escapeHtml(line.unitName)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div>${sale.notes?`<div class="sale-note-display"><strong>Catatan transaksi</strong><br>${escapeHtml(sale.notes)}</div>`:''}${sale.customer?.notes?`<div class="sale-note-display"><strong>Catatan pelanggan</strong><br>${escapeHtml(sale.customer.notes)}</div>`:''}${sale.status==='VOIDED'?`<div class="sale-note-display"><strong>Alasan void</strong><br>${escapeHtml(sale.voidReason)}</div>`:''}<div class="pos-history-actions"><button class="button primary reprint-pos-sale" type="button">Cetak ulang struk</button>${sale.status==='COMPLETED'?'<button class="button danger open-void-sale" type="button">Void transaksi</button>':''}</div>`;
+  const canVoid=state.session.permissions.includes('sale.void');
+  el('pos-history-detail').innerHTML=`<div class="pos-history-detail-head"><div><p class="eyebrow">${sale.status==='VOIDED'?'TRANSAKSI VOID':'TRANSAKSI SELESAI'}</p><h2>${escapeHtml(sale.receiptNo)}</h2><small>${new Date(sale.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(sale.cashier)}</small></div><strong>${money.format(sale.quote.grandTotal)}</strong></div><div class="pos-history-facts"><div><span>Pelanggan</span><strong>${escapeHtml(sale.customer?.name??'Pelanggan umum')}</strong></div><div><span>Pembayaran</span><strong>${sale.payments.map((payment)=>escapeHtml(payment.method)).join(' + ')}</strong></div></div><div class="pos-history-lines">${sale.quote.lines.map((line)=>`<div><span>${escapeHtml(line.productName)}<small> · ${line.qty} ${escapeHtml(line.unitName)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div>${sale.notes?`<div class="sale-note-display"><strong>Catatan transaksi</strong><br>${escapeHtml(sale.notes)}</div>`:''}${sale.customer?.notes?`<div class="sale-note-display"><strong>Catatan pelanggan</strong><br>${escapeHtml(sale.customer.notes)}</div>`:''}${sale.status==='VOIDED'?`<div class="sale-note-display"><strong>Alasan void</strong><br>${escapeHtml(sale.voidReason)}</div>`:''}<div class="pos-history-actions"><button class="button primary reprint-pos-sale" type="button">Cetak ulang struk</button>${sale.status==='COMPLETED'&&canVoid?'<button class="button danger open-void-sale" type="button">Void transaksi</button>':''}</div>`;
 }
 
 function openVoidSale(sale){
   if(!navigator.onLine)return toast('Void transaksi memerlukan koneksi internet.');
+  if(!state.session.permissions.includes('sale.void'))return toast('Akun Anda tidak memiliki hak void transaksi.');
   el('void-sale-id').value=sale.id;
   el('void-sale-title').textContent=`Void ${sale.receiptNo}`;
-  el('void-sale-reason').value='';el('void-approver-email').value='';el('void-approver-password').value='';el('void-sale-error').textContent='';
-  const selfApproved=['OWNER','ADMIN'].includes(state.session.user.role);
-  el('void-supervisor-fields').classList.toggle('hidden',selfApproved);
-  el('void-self-approval').classList.toggle('hidden',!selfApproved);
-  el('void-approver-email').disabled=selfApproved;el('void-approver-password').disabled=selfApproved;
+  el('void-sale-reason').value='';el('void-sale-error').textContent='';
   el('void-sale-dialog').showModal();el('void-sale-reason').focus();
 }
 
 async function submitVoidSale(event){
   event.preventDefault();const button=el('confirm-void-sale');button.disabled=true;el('void-sale-error').textContent='';
   try{
-    const result=await request(`/api/pos-sales/${el('void-sale-id').value}/void`,{method:'POST',body:JSON.stringify({reason:el('void-sale-reason').value,approverEmail:el('void-approver-email').value,approverPassword:el('void-approver-password').value})});
+    const result=await request(`/api/pos-sales/${el('void-sale-id').value}/void`,{method:'POST',body:JSON.stringify({reason:el('void-sale-reason').value})});
     toast(`${result.receiptNo} berhasil di-void`);el('void-sale-dialog').close();await Promise.all([loadPosSales(el('pos-history-search').value,{reportScope:true}),refreshCatalog(),refreshShift()]);
     if(state.session.permissions.includes('report.view'))await loadReport();
   }catch(error){el('void-sale-error').textContent=error.message;}
@@ -4596,8 +4633,8 @@ el('refresh-users').addEventListener('click', loadUsers);
 el('create-user-form').addEventListener('submit', createUser);
 el('user-search').addEventListener('input', renderUsers);
 el('user-status-filter').addEventListener('change', renderUsers);
-el('new-user-role').addEventListener('change', () => renderOutletOptions('new-user-outlets', selectedOutletIds('new-user-outlets', 'CASHIER'), el('new-user-role').value));
-el('edit-user-role').addEventListener('change', () => renderOutletOptions('edit-user-outlets', selectedOutletIds('edit-user-outlets', 'CASHIER'), el('edit-user-role').value));
+el('new-user-role').addEventListener('change', () => {const role=el('new-user-role').value;renderOutletOptions('new-user-outlets', selectedOutletIds('new-user-outlets', 'CASHIER'),role);renderPermissionOptions('new-user-permissions',permissionDefaults[role],role);});
+el('edit-user-role').addEventListener('change', () => {const role=el('edit-user-role').value;renderOutletOptions('edit-user-outlets', selectedOutletIds('edit-user-outlets', 'CASHIER'),role);renderPermissionOptions('edit-user-permissions',permissionDefaults[role],role);});
 el('user-list').addEventListener('click', (event) => { const button = event.target.closest('.edit-user'); if (button) openUserEditor(button.closest('[data-user-id]').dataset.userId); });
 el('edit-user-form').addEventListener('submit', saveUser);
 el('close-user-editor').addEventListener('click', () => el('edit-user-dialog').close());

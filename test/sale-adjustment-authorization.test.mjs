@@ -121,7 +121,8 @@ test('fondasi v1.13 mengikat persetujuan ke kasir, outlet, keranjang, masa berla
   assert.match(migration,/SALE_ADJUSTMENT_CONSUMED/);
   assert.match(api,/sale-authorizations/);
   assert.match(api,/verifySaleAuthorization/);
-  assert.match(html,/Persetujuan Owner\/Admin/);
+  assert.match(html,/Sandi Owner tidak diperlukan/);
+  assert.doesNotMatch(html,/id="approver-password"/);
   assert.match(script,/invalidateSaleAuthorization/);
 });
 

@@ -23,7 +23,8 @@ test('void transaksi wajib persetujuan, alasan, audit, dan pengembalian stok ato
   assert.match(migration,/'SALE_VOID'/);
   assert.match(migration,/'SALE_VOIDED'/);
   assert.match(migration,/for update/);
-  assert.match(api,/approvedSupervisor/);
+  assert.match(api,/requirePermission\(session, 'sale\.void'\)/);
+  assert.match(api,/p_approved_by:session\.authUser\.id/);
   assert.match(api,/rpc\('void_sale_v2'/);
 });
 

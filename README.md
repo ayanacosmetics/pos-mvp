@@ -1,4 +1,4 @@
-# Kasir Nusa POS — Laporan Transaksi v2.4.8
+# Kasir Nusa POS — Hak Akses Akun v2.4.9
 
 Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta toko campuran yang melayani penjualan ecer dan grosir.
 
@@ -9,6 +9,9 @@ Produksi menggunakan:
 - Aplikasi Android native untuk kasir; PWA untuk owner di iOS dan backoffice.
 - Pada ponsel, katalog dan keranjang Kasir berada di layar terpisah; tablet dan
   desktop tetap menampilkan keduanya berdampingan.
+- Owner mengatur hak akses setiap akun Staff/Admin melalui checklist fitur.
+  Harga manual dan void hanya tersedia bagi akun yang diberi izin, tanpa
+  membagikan atau memasukkan sandi Owner.
 - Riwayat struk berada di Analitik → Transaksi bersama ringkasan pendapatan,
   keuntungan, retur, jumlah transaksi, serta tren harian untuk periode harian,
   mingguan, bulanan, atau rentang tanggal khusus.

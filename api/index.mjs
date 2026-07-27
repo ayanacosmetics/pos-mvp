@@ -7,13 +7,37 @@ import { calculateEmployeeCommission } from '../packages/domain/src/employee-ope
 import { validateJournalLines } from '../packages/domain/src/ledger.mjs';
 
 const PERMISSIONS = {
-  OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner','multioutlet.view','multioutlet.manage','pilot.manage'],
-  ADMIN: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage'],
+  OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner','multioutlet.view','multioutlet.manage','pilot.manage','sale.adjust','sale.void'],
+  ADMIN: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage','sale.adjust','sale.void'],
   MANAGER: ['pos.sell','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage'],
   CASHIER: ['pos.sell','workforce.self'],
   PURCHASING: ['purchasing.view_cost','purchasing.receive','workforce.self'],
   WAREHOUSE: ['inventory.manage','workforce.self']
 };
+const ASSIGNABLE_PERMISSIONS=new Set([
+  'pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage',
+  'sales.return','catalog.manage','promotion.manage','report.view','audit.view',
+  'workforce.self','workforce.manage','approval.manage','multioutlet.view',
+  'multioutlet.manage','sale.adjust','sale.void'
+]);
+
+function effectivePermissions(profile) {
+  if(profile?.role==='OWNER')return [...PERMISSIONS.OWNER];
+  if(Array.isArray(profile?.custom_permissions)){
+    return [...new Set(profile.custom_permissions.filter((permission)=>ASSIGNABLE_PERMISSIONS.has(permission)))];
+  }
+  return [...(PERMISSIONS[profile?.role]??[])];
+}
+
+function normalizedAssignablePermissions(value,role) {
+  if(role==='OWNER')return null;
+  if(!Array.isArray(value))return [...(PERMISSIONS[role]??[]).filter((permission)=>ASSIGNABLE_PERMISSIONS.has(permission))];
+  const permissions=[...new Set(value.map(String))];
+  if(permissions.some((permission)=>!ASSIGNABLE_PERMISSIONS.has(permission))){
+    throw Object.assign(new Error('Hak akses pengguna tidak valid'),{status:400});
+  }
+  return permissions;
+}
 
 const BACKUP_TABLES = [
   'tenants','profiles','outlets','stock_locations','user_outlets',
@@ -176,7 +200,7 @@ async function sessionOf(request) {
   const assignments = profile.role === 'OWNER' ? [] : await rest('user_outlets', `tenant_id=eq.${profile.tenant_id}&user_id=eq.${authUser.id}&select=outlet_id`);
   return {
     token, authUser, profile, outletIds: assignments.map((item) => item.outlet_id),
-    permissions: PERMISSIONS[profile.role] ?? [], authenticatedUser,
+    permissions: effectivePermissions(profile), authenticatedUser,
     authenticatedProfile, ownerContextActive
   };
 }
@@ -193,7 +217,7 @@ function authPayload(auth, profile) {
     expiresIn: auth.expires_in,
     expiresAt: auth.expires_at,
     user: { id: auth.user.id, displayName: profile.display_name, role: profile.role },
-    permissions: PERMISSIONS[profile.role] ?? []
+    permissions: effectivePermissions(profile)
   };
 }
 
@@ -550,28 +574,6 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
   }).filter((sale) => !normalized || `${sale.receiptNo} ${sale.cashier} ${sale.customer?.name ?? ''} ${sale.customer?.phone ?? ''}`.toLowerCase().includes(normalized));
 }
 
-async function approvedSupervisor(session, tenantId, input) {
-  if (['OWNER','ADMIN'].includes(session.profile.role)) return { id:session.authUser.id, profile:session.profile };
-  const email = String(input.approverEmail ?? '').trim().toLowerCase();
-  const password = String(input.approverPassword ?? '');
-  if (!email || !password) { const error = new Error('Email dan kata sandi Owner/Admin wajib diisi'); error.status = 400; throw error; }
-  let auth;
-  try {
-    const config = env();
-    auth = await supabase('/auth/v1/token?grant_type=password', {
-      method:'POST',body:{email,password},token:config.anon
-    });
-  } catch {
-    const error = new Error('Email atau kata sandi Owner/Admin salah'); error.status = 422; throw error;
-  }
-  const profile = await profileFor(auth.user.id);
-  await supabase('/auth/v1/logout?scope=local', { method:'POST',token:auth.access_token }).catch(() => {});
-  if (!profile?.active || profile.tenant_id !== tenantId || !['OWNER','ADMIN'].includes(profile.role)) {
-    const error = new Error('Akun tersebut bukan Owner atau Admin aktif pada usaha ini'); error.status = 403; throw error;
-  }
-  return { id:auth.user.id, profile };
-}
-
 async function loadReturnablePurchase(context,{receiptId=null,documentNo=null,supplierId=null}={}) {
   const identifier=receiptId?`id=eq.${encodeURIComponent(receiptId)}`:`document_no=eq.${encodeURIComponent(String(documentNo??'').trim())}`;
   const supplierFilter=supplierId?`&supplier_id=eq.${encodeURIComponent(supplierId)}`:'';
@@ -843,7 +845,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.4.8-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.4.9-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1182,6 +1184,7 @@ async function routeRequest(request, response, route) {
     return send(response, 200, { users: profiles.map((profile) => ({
       id: profile.user_id, email: authUsers.find((user) => user.id === profile.user_id)?.email ?? null,
       displayName: profile.display_name, role: profile.role, active: profile.active, createdAt: profile.created_at,
+      permissions:effectivePermissions(profile),customPermissions:profile.custom_permissions,
       outletIds: assignments.filter((item) => item.user_id === profile.user_id).map((item) => item.outlet_id)
     })), outlets: context.outlets });
   }
@@ -1197,9 +1200,11 @@ async function routeRequest(request, response, route) {
     } });
     const authUser = created.user ?? created;
     try {
-      const profile = await rpc('manage_profile_access', {
+      const permissions=normalizedAssignablePermissions(input.permissions,input.role);
+      const profile = await rpc('manage_profile_access_v2', {
         p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_user_id: authUser.id,
-        p_display_name: input.displayName, p_role: input.role, p_active: true, p_outlet_ids: input.outletIds ?? []
+        p_display_name: input.displayName, p_role: input.role, p_active: true,
+        p_outlet_ids: input.outletIds ?? [],p_permissions:permissions
       });
       return send(response, 201, { ...profile, email: authUser.email });
     } catch (error) {
@@ -1212,53 +1217,31 @@ async function routeRequest(request, response, route) {
     requirePermission(session, 'identity.manage');
     const userId = route.split('/')[1];
     const input = bodyOf(request);
-    const profile = await rpc('manage_profile_access', {
+    const permissions=normalizedAssignablePermissions(input.permissions,input.role);
+    const profile = await rpc('manage_profile_access_v2', {
       p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_user_id: userId,
-      p_display_name: input.displayName, p_role: input.role, p_active: input.active !== false, p_outlet_ids: input.outletIds ?? []
+      p_display_name: input.displayName, p_role: input.role, p_active: input.active !== false,
+      p_outlet_ids: input.outletIds ?? [],p_permissions:permissions
     });
     return send(response, 200, profile);
   }
 
   if (request.method === 'POST' && route === 'sale-authorizations') {
     requirePermission(session, 'pos.sell');
+    requirePermission(session, 'sale.adjust');
     if (!context.outlet?.id) { const error = new Error('Outlet aktif tidak ditemukan'); error.status = 409; throw error; }
     const input = bodyOf(request);
     if (!Array.isArray(input.lines) || !input.lines.length) { const error = new Error('Keranjang masih kosong'); error.status = 400; throw error; }
     const adjustment = normalizeSaleAdjustment(input.adjustment);
-    const approverEmail = String(input.approverEmail ?? '').trim().toLowerCase();
-    const approverPassword = String(input.approverPassword ?? '');
-    let approverUserId = session.authUser.id;
-    let approverProfile = ['OWNER','ADMIN'].includes(session.profile.role) ? session.profile : null;
-    if (!approverProfile) {
-      if (!approverEmail || !approverPassword) { const error = new Error('Email dan kata sandi Owner/Admin wajib diisi'); error.status = 400; throw error; }
-      try {
-        const config = env();
-        const approverAuth = await supabase('/auth/v1/token?grant_type=password', {
-          method: 'POST', body: { email: approverEmail, password: approverPassword }, token: config.anon
-        });
-        approverUserId = approverAuth.user.id;
-        approverProfile = await profileFor(approverUserId);
-      } catch {
-        const error = new Error('Email atau kata sandi Owner/Admin salah');
-        error.status = 422;
-        throw error;
-      }
-    }
-    if (!approverProfile?.active || approverProfile.tenant_id !== context.tenantId || !['OWNER','ADMIN'].includes(approverProfile.role)) {
-      const error = new Error('Akun tersebut bukan Owner atau Admin aktif pada usaha ini');
-      error.status = 403;
-      throw error;
-    }
-
     const fingerprint = saleAdjustmentFingerprint(input.lines, input.customerGroupId, adjustment);
     const token = randomBytes(32).toString('hex');
     const baseQuote = await baseSaleQuote(context, input);
-    const preview = applySaleAdjustment(baseQuote, adjustment, { approvedBy: approverProfile.display_name });
+    const preview = applySaleAdjustment(baseQuote, adjustment, { approvedBy: session.profile.display_name });
     const approved = await rpc('create_sale_adjustment_authorization', {
       p_tenant_id: context.tenantId,
       p_outlet_id: context.outlet.id,
       p_cashier_id: session.authUser.id,
-      p_approved_by: approverUserId,
+      p_approved_by: session.authUser.id,
       p_basket_fingerprint: fingerprint,
       p_approval_token_hash: hashApprovalToken(token),
       p_adjustment: adjustment,
@@ -2604,11 +2587,11 @@ async function routeRequest(request, response, route) {
 
   if (request.method === 'POST' && /^pos-sales\/[^/]+\/void$/.test(route)) {
     requirePermission(session, 'pos.sell');
+    requirePermission(session, 'sale.void');
     const input = bodyOf(request);
     const saleId = route.split('/')[1];
-    const supervisor = await approvedSupervisor(session, context.tenantId, input);
     const result = await rpc('void_sale_v2', {
-      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_approved_by:supervisor.id,
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_approved_by:session.authUser.id,
       p_sale_id:saleId,p_outlet_id:context.outlet.id,p_reason:String(input.reason ?? '')
     });
     return send(response, 200, result);
