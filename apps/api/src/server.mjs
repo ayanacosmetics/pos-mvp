@@ -18,7 +18,7 @@ const saleAuthorizations = new Map();
 const port = Number(process.env.PORT ?? 4173);
 const defaultReceiptLayout = {
   headerAlignment:'center', footerAlignment:'center', titleSize:'large', density:'normal',
-  separator:'dashed', logoSize:64, customHeader:'', showLogo:true, showBusinessName:true,
+  separator:'dashed', logoSize:64, customHeader:'', customFooter:'', contactLabel:'Tel.', showLogo:true, showBusinessName:true,
   showOutletName:true, showAddress:true, showPhone:true, showDate:true,
   showReceiptNumber:true, showCashier:true, showCustomer:true, showPriceType:true,
   showPaymentDetail:true, showTransactionNote:true, showLoyaltyPoints:true
@@ -86,7 +86,7 @@ function requirePermission(request, response, permission) {
 }
 
 async function api(request, response, url) {
-  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '2.6.2-local', storage: 'sqlite' });
+  if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { status: 'ok', version: '2.6.3-local', storage: 'sqlite' });
 
   if (request.method === 'POST' && url.pathname === '/api/login') {
     const input = await bodyOf(request);

@@ -46,7 +46,7 @@ const permissionDefaults={
 };
 const defaultReceiptLayout={
   headerAlignment:'center',footerAlignment:'center',titleSize:'large',
-  density:'normal',separator:'dashed',logoSize:64,customHeader:'',
+  density:'normal',separator:'dashed',logoSize:64,customHeader:'',customFooter:'',contactLabel:'Tel.',
   showLogo:true,showBusinessName:true,showOutletName:true,showAddress:true,
   showPhone:true,showDate:true,showReceiptNumber:true,showCashier:true,
   showCustomer:true,showPriceType:true,showPaymentDetail:true,
@@ -3032,6 +3032,8 @@ function receiptLayoutFromControls() {
     separator:el('setting-receipt-separator').value,
     logoSize:Number(el('setting-receipt-logo-size').value),
     customHeader:el('setting-receipt-custom-header').value.trim(),
+    customFooter:el('setting-receipt-custom-footer').value.trim(),
+    contactLabel:el('setting-receipt-contact-label').value.trim()||'Tel.',
     ...Object.fromEntries(Object.entries(receiptToggleFields).map(([key,id])=>[key,el(id).checked]))
   };
 }
@@ -3039,6 +3041,8 @@ function receiptLayoutFromControls() {
 function populateReceiptLayoutControls(layout=currentReceiptLayout()) {
   el('setting-receipt-logo-url').value=state.business?.logoUrl??'';
   el('setting-receipt-custom-header').value=layout.customHeader??'';
+  el('setting-receipt-custom-footer').value=layout.customFooter??'';
+  el('setting-receipt-contact-label').value=layout.contactLabel??'Tel.';
   el('setting-receipt-logo-size').value=String(layout.logoSize??64);
   el('setting-receipt-logo-size-value').textContent=String(layout.logoSize??64);
   el('setting-receipt-header-align').value=layout.headerAlignment??'center';
@@ -3938,7 +3942,7 @@ function buildReceiptMarkup(receipt,payments=[],options={}){
   const logo=layout.showLogo&&business.logoUrl?`<img class="receipt-logo" src="${escapeHtml(business.logoUrl)}" alt="Logo ${escapeHtml(business.name??'usaha')}" style="width:${layout.logoSize}px">`:'';
   const meta=`${layout.showCashier?`<span>Kasir</span><strong>${escapeHtml(receipt.cashier??'-')}</strong>`:''}${layout.showCustomer&&customer?`<span>Pelanggan</span><strong>${escapeHtml(customer.name)}</strong>`:''}`;
   const paymentRows=layout.showPaymentDetail?payments.map((payment)=>`<div><span>${escapeHtml(payment.method)}${payment.method==='CASH'&&payment.tendered?` · diterima ${money.format(payment.tendered)}`:''}</span><strong>${money.format(payment.amount)}</strong></div>`).join(''):'';
-  return `<section class="${classes}"><div class="receipt-head">${logo}${layout.showBusinessName?`<strong>${escapeHtml(business.name??'Kasir Nusa')}</strong>`:''}${layout.showOutletName?`<span>${escapeHtml(receipt.outletName??outlet.name??'Outlet')}</span>`:''}${layout.customHeader?`<small class="receipt-custom-header">${escapeHtml(layout.customHeader)}</small>`:''}${layout.showAddress&&address?`<small>${escapeHtml(address)}</small>`:''}${layout.showPhone&&phone?`<small>Tel. ${escapeHtml(phone)}</small>`:''}${layout.showDate?`<small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small>`:''}${layout.showReceiptNumber?`<b>${escapeHtml(receipt.receiptNo)}</b>`:''}${receipt.status==='VOIDED'?'<b>VOID / DIBATALKAN</b>':''}</div><div class="receipt-meta">${meta}</div><div class="receipt-lines">${customerView.lines.map((line)=>`<div><span><strong>${escapeHtml(line.productName)}</strong>${layout.showPriceType&&priceLabel?`<small>${escapeHtml(priceLabel)}</small>`:''}<small>${line.qty} ${escapeHtml(line.unitName)} × ${money.format(line.customerUnitPrice)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div><div class="receipt-totals"><div><span>Subtotal</span><strong>${money.format(customerView.subtotal)}</strong></div>${Math.abs(receiptDiscount)>0.01?`<div><span>Promo & diskon</span><strong>${receiptDiscount<0?'+':'−'}${money.format(Math.abs(receiptDiscount))}</strong></div>`:''}<div class="receipt-grand"><span>Total</span><strong>${money.format(customerView.grandTotal)}</strong></div>${paymentRows}${layout.showPaymentDetail&&change?`<div><span>Kembalian</span><strong>${money.format(change)}</strong></div>`:''}</div>${layout.showTransactionNote&&receipt.notes?`<p class="receipt-thanks"><strong>Catatan:</strong> ${escapeHtml(receipt.notes)}</p>`:''}${layout.showLoyaltyPoints&&Number(receipt.pointsEarned)>0?`<p class="receipt-thanks">Poin +${Number(receipt.pointsEarned)} · saldo ${Number(receipt.pointsBalance)}${receipt.tierName?` · ${escapeHtml(receipt.tierName)}`:''}</p>`:''}<p class="receipt-thanks">${escapeHtml(footer)}</p>${options.copyLabel?`<small class="receipt-copy-label">${escapeHtml(options.copyLabel)}</small>`:''}</section>`;
+  return `<section class="${classes}"><div class="receipt-head">${logo}${layout.showBusinessName?`<strong>${escapeHtml(business.name??'Kasir Nusa')}</strong>`:''}${layout.showOutletName?`<span>${escapeHtml(receipt.outletName??outlet.name??'Outlet')}</span>`:''}${layout.customHeader?`<small class="receipt-custom-header">${escapeHtml(layout.customHeader)}</small>`:''}${layout.showAddress&&address?`<small>${escapeHtml(address)}</small>`:''}${layout.showPhone&&phone?`<small>${escapeHtml(layout.contactLabel||'Tel.')} ${escapeHtml(phone)}</small>`:''}${layout.showDate?`<small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small>`:''}${layout.showReceiptNumber?`<b>${escapeHtml(receipt.receiptNo)}</b>`:''}${receipt.status==='VOIDED'?'<b>VOID / DIBATALKAN</b>':''}</div><div class="receipt-meta">${meta}</div><div class="receipt-lines">${customerView.lines.map((line)=>`<div><span><strong>${escapeHtml(line.productName)}</strong>${layout.showPriceType&&priceLabel?`<small>${escapeHtml(priceLabel)}</small>`:''}<small>${line.qty} ${escapeHtml(line.unitName)} × ${money.format(line.customerUnitPrice)}</small></span><strong>${money.format(line.total)}</strong></div>`).join('')}</div><div class="receipt-totals"><div><span>Subtotal</span><strong>${money.format(customerView.subtotal)}</strong></div>${Math.abs(receiptDiscount)>0.01?`<div><span>Promo & diskon</span><strong>${receiptDiscount<0?'+':'−'}${money.format(Math.abs(receiptDiscount))}</strong></div>`:''}<div class="receipt-grand"><span>Total</span><strong>${money.format(customerView.grandTotal)}</strong></div>${paymentRows}${layout.showPaymentDetail&&change?`<div><span>Kembalian</span><strong>${money.format(change)}</strong></div>`:''}</div>${layout.showTransactionNote&&receipt.notes?`<p class="receipt-thanks"><strong>Catatan:</strong> ${escapeHtml(receipt.notes)}</p>`:''}${layout.showLoyaltyPoints&&Number(receipt.pointsEarned)>0?`<p class="receipt-thanks">Poin +${Number(receipt.pointsEarned)} · saldo ${Number(receipt.pointsBalance)}${receipt.tierName?` · ${escapeHtml(receipt.tierName)}`:''}</p>`:''}${layout.customFooter?`<p class="receipt-thanks receipt-custom-footer">${escapeHtml(layout.customFooter)}</p>`:''}<p class="receipt-thanks">${escapeHtml(footer)}</p>${options.copyLabel?`<small class="receipt-copy-label">${escapeHtml(options.copyLabel)}</small>`:''}</section>`;
 }
 
 function renderReceipt(receipt,payments){

@@ -123,7 +123,7 @@ export function buildEscPosReceipt(receipt, payments = [], settings = {}, contex
     separator:'dashed',showLogo:true,showBusinessName:true,showOutletName:true,
     showAddress:true,showPhone:true,showDate:true,showReceiptNumber:true,
     showCashier:true,showCustomer:true,showPriceType:true,showPaymentDetail:true,
-    showTransactionNote:true,showLoyaltyPoints:true,customHeader:'',
+    showTransactionNote:true,showLoyaltyPoints:true,customHeader:'',customFooter:'',contactLabel:'Tel.',
     ...(business.receiptLayout??{})
   };
   const outlet = receipt.outlet ?? context.outlet ?? {};
@@ -145,9 +145,9 @@ export function buildEscPosReceipt(receipt, payments = [], settings = {}, contex
     if(layout.titleSize==='large')bytes.push(ESC,0x21,0x00);
   }
   if(layout.showOutletName)bytes.push(...lineBytes(receipt.outletName || outlet.name || 'Outlet'));
-  if(layout.customHeader)bytes.push(...lineBytes(layout.customHeader));
+  if(layout.customHeader)for(const textLine of String(layout.customHeader).split('\n'))for(const row of wrap(textLine,width))bytes.push(...lineBytes(row));
   if (layout.showAddress&&address) for (const row of wrap(address, width)) bytes.push(...lineBytes(row));
-  if (layout.showPhone&&phone) bytes.push(...lineBytes(`Tel. ${phone}`));
+  if (layout.showPhone&&phone) bytes.push(...lineBytes(`${layout.contactLabel||'Tel.'} ${phone}`));
   if(layout.showDate)bytes.push(...lineBytes(occurredAt));
   if(layout.showReceiptNumber)bytes.push(ESC, 0x45, 0x01, ...lineBytes(receipt.receiptNo || 'STRUK TES'), ESC, 0x45, 0x00);
   if (receipt.status === 'VOIDED') bytes.push(...lineBytes('VOID / DIBATALKAN'));
@@ -172,6 +172,7 @@ export function buildEscPosReceipt(receipt, payments = [], settings = {}, contex
   }
   if (layout.showLoyaltyPoints&&Number(receipt.pointsEarned) > 0) bytes.push(...lineBytes(`Poin +${Number(receipt.pointsEarned)} | Saldo ${Number(receipt.pointsBalance || 0)}`));
   bytes.push(...lineBytes(separator), ESC, 0x61, layout.footerAlignment==='left'?0x00:0x01);
+  if(layout.customFooter)for(const textLine of String(layout.customFooter).split('\n'))for(const row of wrap(textLine,width))bytes.push(...lineBytes(row));
   for (const row of wrap(footer, width)) bytes.push(...lineBytes(row));
   bytes.push(LF, LF, LF, ESC, 0x61, 0x00);
   return new Uint8Array(bytes);

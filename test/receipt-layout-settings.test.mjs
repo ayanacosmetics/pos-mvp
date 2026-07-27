@@ -45,24 +45,29 @@ test('pengaturan desain struk tersedia, tervalidasi, dan disimpan per usaha', as
   assert.match(api, /normalizeReceiptLogo/);
   for (const id of [
     'receipt-settings-form','setting-receipt-logo-file','setting-receipt-logo-size',
-    'setting-receipt-paper','receipt-show-business','receipt-show-price-type','receipt-design-preview'
+    'setting-receipt-paper','setting-receipt-contact-label','setting-receipt-custom-footer',
+    'receipt-show-business','receipt-show-price-type','receipt-design-preview'
   ]) assert.match(html, new RegExp(`id="${id}"`));
   assert.match(html,/id="setting-receipt-paper"[\s\S]*value="58"[\s\S]*value="80"/);
   assert.match(app, /receiptLogoFromFile/);
   assert.match(app, /buildReceiptMarkup/);
   assert.match(app,/paperWidth:Number\(el\('setting-receipt-paper'\)\.value\)/);
   assert.match(app,/el\('setting-device-paper'\)\.value=el\('setting-receipt-paper'\)\.value/);
+  assert.match(app,/contactLabel:el\('setting-receipt-contact-label'\)/);
+  assert.match(app,/receipt-custom-footer/);
 });
 
 test('layout thermal menyembunyikan informasi yang dimatikan dan memakai kepala khusus', () => {
   const bytes = buildEscPosReceipt(sampleReceipt({
-    customHeader:'Grosir & Eceran',
+    customHeader:'Grosir & Eceran\nPesan melalui WhatsApp',
+    customFooter:'Barang yang dibeli tidak dapat ditukar.\nInstagram @kasirnusa',
+    contactLabel:'WA',
     headerAlignment:'left',
     separator:'double',
     showBusinessName:false,
     showOutletName:false,
     showAddress:false,
-    showPhone:false,
+    showPhone:true,
     showDate:false,
     showReceiptNumber:false,
     showCashier:false,
@@ -76,8 +81,12 @@ test('layout thermal menyembunyikan informasi yang dimatikan dan memakai kepala 
   });
   const text = new TextDecoder().decode(bytes);
   assert.match(text, /Grosir & Eceran/);
+  assert.match(text,/Pesan melalui WhatsApp/);
+  assert.match(text,/WA 08123456789/);
+  assert.match(text,/Barang yang dibeli tidak dapat\s+ditukar/);
+  assert.match(text,/Instagram @kasirnusa/);
   assert.match(text, /=+/);
-  assert.doesNotMatch(text, /Kasir Nusa POS|Toko Utama|Jalan Melati|081234|UTM-000128/);
+  assert.doesNotMatch(text, /Kasir Nusa POS|Toko Utama|Jalan Melati|UTM-000128/);
   assert.doesNotMatch(text, /Kasir|Pelanggan|Harga Member|CASH|Catatan|Poin/);
 });
 

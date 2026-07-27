@@ -45,6 +45,18 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat v2.6.3 Header & Footer menunggu deployment
+
+- Editor struk menyediakan keterangan header dan footer tambahan yang mendukung
+  beberapa baris.
+- Sebutan nomor kontak tidak lagi hardcoded `Tel.`; Owner dapat memakai `WA`,
+  `HP`, atau teks lain hingga 16 karakter.
+- Keterangan footer tambahan dicetak sebelum pesan penutup usaha/outlet, sehingga
+  keduanya dapat dipakai bersama.
+- HTML, pratinjau, dan cetak thermal ESC/POS memakai konfigurasi yang sama.
+- Kandidat memakai API `2.6.3-cloud`, aset web `v80`, dan cache PWA `v80`.
+- Seluruh 202 pengujian otomatis lulus. Tidak memerlukan migrasi SQL baru.
+
 ### Rilis v2.6.2 Kertas 58/80 dikonfirmasi live
 
 - Pilihan lebar kertas 58 mm dan 80 mm kini tersedia langsung pada halaman

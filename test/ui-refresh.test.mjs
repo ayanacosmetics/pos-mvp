@@ -7,10 +7,10 @@ const css = await readFile(new URL('../apps/web/styles.css', import.meta.url), '
 const worker = await readFile(new URL('../apps/web/service-worker.js', import.meta.url), 'utf8');
 
 test('Nusa Commerce memakai identitas rilis dan aset shell terbaru', () => {
-  assert.match(html, /Kertas 58\/80 · v2\.6\.2/);
-  assert.match(html, /styles\.css\?v=79/);
-  assert.match(html, /app\.js\?v=79/);
-  assert.match(worker, /nusa-pos-shell-v79/);
+  assert.match(html, /Header & Footer · v2\.6\.3/);
+  assert.match(html, /styles\.css\?v=80/);
+  assert.match(html, /app\.js\?v=80/);
+  assert.match(worker, /nusa-pos-shell-v80/);
 });
 
 test('login memiliki hierarki brand profesional tanpa aset eksternal', () => {

@@ -426,7 +426,7 @@ async function cloudContext(session, request) {
 function businessPayload(row = {}) {
   const receiptLayout = {
     headerAlignment:'center',footerAlignment:'center',titleSize:'large',
-    density:'normal',separator:'dashed',logoSize:64,customHeader:'',
+    density:'normal',separator:'dashed',logoSize:64,customHeader:'',customFooter:'',contactLabel:'Tel.',
     showLogo:true,showBusinessName:true,showOutletName:true,showAddress:true,
     showPhone:true,showDate:true,showReceiptNumber:true,showCashier:true,
     showCustomer:true,showPriceType:true,showPaymentDetail:true,
@@ -444,14 +444,18 @@ function businessPayload(row = {}) {
 function normalizeReceiptLayout(input = {}) {
   const choice=(value,allowed,fallback)=>allowed.includes(value)?value:fallback;
   const boolean=(key,fallback=true)=>input[key]===undefined?fallback:Boolean(input[key]);
-  const customHeader=String(input.customHeader??'').trim().replace(/\s+/g,' ').slice(0,80);
+  const multiline=(value,limit)=>String(value??'').replace(/\r/g,'').split('\n')
+    .map((line)=>line.trim().replace(/[ \t]+/g,' ')).filter(Boolean).join('\n').slice(0,limit);
+  const customHeader=multiline(input.customHeader,200);
+  const customFooter=multiline(input.customFooter,300);
+  const contactLabel=String(input.contactLabel??'Tel.').trim().replace(/\s+/g,' ').slice(0,16)||'Tel.';
   return {
     headerAlignment:choice(input.headerAlignment,['left','center'],'center'),
     footerAlignment:choice(input.footerAlignment,['left','center'],'center'),
     titleSize:choice(input.titleSize,['normal','large'],'large'),
     density:choice(input.density,['compact','normal'],'normal'),
     separator:choice(input.separator,['dashed','double'],'dashed'),
-    logoSize:Math.max(32,Math.min(96,Number(input.logoSize)||64)),customHeader,
+    logoSize:Math.max(32,Math.min(96,Number(input.logoSize)||64)),customHeader,customFooter,contactLabel,
     showLogo:boolean('showLogo'),showBusinessName:boolean('showBusinessName'),
     showOutletName:boolean('showOutletName'),showAddress:boolean('showAddress'),
     showPhone:boolean('showPhone'),showDate:boolean('showDate'),
@@ -947,7 +951,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.6.2-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.6.3-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
