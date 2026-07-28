@@ -1040,6 +1040,7 @@ function normalizeImportRows(kind, rawRows) {
 
 async function previewImport(context, input) {
   const kind = String(input.kind ?? '').toUpperCase();
+  const mode=['CREATE_ONLY','UPDATE_ONLY'].includes(String(input.mode??'').toUpperCase())?String(input.mode).toUpperCase():'MIXED';
   const supported=['PRODUCTS','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES','CUSTOMERS','SUPPLIERS'];
   if (!supported.includes(kind)) return { valid: false, kind, rows: [], errors: [{ row: 0, field: 'kind', message: 'Jenis impor tidak valid' }] };
   const normalized = normalizeImportRows(kind, input.rows);
@@ -1073,6 +1074,9 @@ async function previewImport(context, input) {
     });
     normalized.rows.forEach((row,index) => {
       if(row.openingQty!==null&&existingCodes.has(row.sku))normalized.errors.push({row:index+2,field:'openingQty',message:'Kosongkan stok awal saat mengedit barang; gunakan stok opname atau restok'});
+      if(mode==='CREATE_ONLY'&&row.sku&&existingCodes.has(row.sku))normalized.errors.push({row:index+2,field:'sku',message:`SKU ${row.sku} sudah ada. Gunakan halaman Edit produk massal`});
+      if(mode==='UPDATE_ONLY'&&!row.sku)normalized.errors.push({row:index+2,field:'sku',message:'SKU wajib diisi saat mengedit produk'});
+      if(mode==='UPDATE_ONLY'&&row.sku&&!existingCodes.has(row.sku))normalized.errors.push({row:index+2,field:'sku',message:`SKU ${row.sku} belum ada. Gunakan halaman Import produk baru`});
     });
   }
   if(productExtension){
@@ -1110,7 +1114,7 @@ async function previewImport(context, input) {
     update: productExtension?(kind==='PRODUCT_VARIANTS'?normalized.rows.length:normalized.rows.filter((row)=>normalized.existingKeys?.has(extensionKey(row))).length):normalized.rows.filter((row) => existingCodes.has(String(row[codeField]).toUpperCase())).length,
     error: normalized.errors.length
   };
-  return { valid: normalized.errors.length === 0, kind, locationId, rows: normalized.rows, errors: normalized.errors, summary };
+  return { valid: normalized.errors.length === 0, kind, mode, locationId, rows: normalized.rows, errors: normalized.errors, summary };
 }
 
 function backupChecksum(payload) {
@@ -1261,7 +1265,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.14.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.14.1-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1870,6 +1874,20 @@ async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'products/manage') {
     requirePermission(session, 'catalog.manage');
     return send(response,200,{products:await loadManagedProducts(context.tenantId)});
+  }
+
+  if(request.method==='POST'&&route==='products/bulk-delete'){
+    requirePermission(session,'catalog.manage');
+    if(!['OWNER','ADMIN'].includes(session.profile.role)){const error=new Error('Hanya Owner atau Admin yang dapat menghapus produk');error.status=403;throw error;}
+    const input=bodyOf(request),productIds=[...new Set(Array.isArray(input.productIds)?input.productIds.map((id)=>String(id).trim()):[])];
+    if(!productIds.length){const error=new Error('Pilih minimal satu produk');error.status=400;throw error;}
+    if(productIds.length>10000){const error=new Error('Maksimal 10.000 produk sekali proses');error.status=400;throw error;}
+    if(productIds.some((id)=>!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))){
+      const error=new Error('Identitas produk tidak valid');error.status=400;throw error;
+    }
+    return send(response,200,await rpc('delete_products_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_product_ids:productIds
+    }));
   }
 
   if (request.method === 'PUT' && /^products\/[^/]+$/.test(route)) {

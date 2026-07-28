@@ -709,13 +709,20 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
   .surface,.table-wrap{box-shadow:none}
 }
 .product-page-actions{display:flex;flex-wrap:wrap;justify-content:flex-end}
+.page-back-button{display:inline-flex;margin:0 0 12px;padding:0;border:0;background:transparent;color:var(--brand);font:inherit;font-size:13px;font-weight:850;cursor:pointer}
+.page-back-button:hover{text-decoration:underline}
+.product-selection-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 20px;border-bottom:1px solid var(--line);background:#f8fbfa}
+.product-selection-toolbar span{display:grid;gap:2px}.product-selection-toolbar small{color:var(--muted)}
+.product-select-cell{width:42px;text-align:center!important}.product-select-cell input{width:18px;height:18px;margin:0;accent-color:var(--brand);cursor:pointer}
+.product-admin-table tr.selected td{background:#eff8f5}
+.import-control h2{margin:2px 0 4px}.import-control>p.muted{margin:0 0 14px}
 .product-data-types-dialog{width:min(720px,calc(100vw - 28px))}
 .product-data-type-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .product-data-type-grid button{display:grid;gap:5px;min-height:112px;padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);text-align:left}
 .product-data-type-grid button:hover,.product-data-type-grid button:focus-visible{border-color:var(--brand);background:var(--brand-2);outline:none}
 .product-data-type-grid strong{font-size:14px}.product-data-type-grid small,.product-data-note{color:var(--muted);font-size:10px;line-height:1.5}
 .product-data-note{margin:14px 0 0;padding:12px;border-radius:9px;background:var(--paper)}
-@media(max-width:760px){.product-page-actions{justify-content:stretch}.product-page-actions .button{flex:1 1 calc(50% - 6px)}.product-data-type-grid{grid-template-columns:1fr}.product-data-type-grid button{min-height:82px}}
+@media(max-width:760px){.product-page-actions{justify-content:stretch}.product-page-actions .button{flex:1 1 calc(50% - 6px)}.product-data-type-grid{grid-template-columns:1fr}.product-data-type-grid button{min-height:82px}.product-selection-toolbar{position:sticky;z-index:3;top:0;padding:9px 12px}.product-selection-toolbar small{display:none}.product-selection-toolbar .button{padding:9px 12px}.product-select-cell{position:sticky;left:0;background:inherit}}
 
 .stock-flow-row>div{display:grid;gap:2px}.stock-flow-row small{color:var(--muted);font-size:9px}
 

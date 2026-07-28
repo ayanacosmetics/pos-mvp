@@ -9,7 +9,7 @@ import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
 import { createProductExportWorkbook, createTemplateWorkbook, productExportRows, productExtensionExportRows, workbookMatrix, workbookTemplates } from './product-workbook.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], selectedProductIds:new Set(), productImportMode:'GENERAL', productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -621,6 +621,8 @@ function renderProductTable() {
   const query=el('product-admin-search')?.value.trim().toLowerCase()??'';
   const status=el('product-admin-status')?.value??'ACTIVE';
   const all=state.managedProducts;
+  const availableIds=new Set(all.map((product)=>product.id));
+  for(const productId of state.selectedProductIds)if(!availableIds.has(productId))state.selectedProductIds.delete(productId);
   const list=all.filter((product)=>{
     const matches=!query||`${product.sku} ${product.name} ${product.brand??''} ${product.category} ${product.variantGroup??''} ${product.variantName??''} ${product.units.map((unit)=>unit.barcode??'').join(' ')}`.toLowerCase().includes(query);
     const statusMatch=status==='ALL'||(status==='ACTIVE'&&product.active)||(status==='INACTIVE'&&!product.active)||(status==='LOW_STOCK'&&product.active&&product.minimumStock>0&&product.stockBase<=product.minimumStock);
@@ -632,12 +634,18 @@ function renderProductTable() {
   const brands=[...new Set(all.map((product)=>product.brand).filter(Boolean))].sort();
   el('product-category-options').innerHTML=categories.map((value)=>`<option value="${escapeHtml(value)}">`).join('');
   el('product-brand-options').innerHTML=brands.map((value)=>`<option value="${escapeHtml(value)}">`).join('');
-  el('product-table').innerHTML=list.length?`<table class="product-admin-table"><thead><tr><th>SKU & status</th><th>Produk</th><th>Satuan & barcode</th><th>Harga</th><th>Stok</th><th>Aksi</th></tr></thead><tbody>${list.map((product)=>{
+  const allVisibleSelected=list.length>0&&list.every((product)=>state.selectedProductIds.has(product.id));
+  el('product-table').innerHTML=list.length?`<table class="product-admin-table"><thead><tr><th class="product-select-cell"><input id="select-all-products" type="checkbox" aria-label="Pilih semua barang yang tampil" ${allVisibleSelected?'checked':''}></th><th>SKU & status</th><th>Produk</th><th>Satuan & barcode</th><th>Harga</th><th>Stok</th><th>Aksi</th></tr></thead><tbody>${list.map((product)=>{
     const prices=productPrices(product);
     const variant=[product.variantGroup,product.variantName].filter(Boolean).join(' · ');
     const customPrices=customCustomerGroups().filter((group)=>prices.byGroup[group.id]>0).map((group)=>`${escapeHtml(group.name)} ${money.format(prices.byGroup[group.id])}`).join(' · ');
-    return `<tr data-product-id="${product.id}"><td><strong>${escapeHtml(product.sku)}</strong><br><span class="badge ${product.active?'ok':'danger'}">${product.active?'Aktif':'Nonaktif'}</span></td><td><strong>${escapeHtml(product.name)}</strong>${variant?`<br><small>Varian: ${escapeHtml(variant)}</small>`:''}<br><small>${escapeHtml(product.brand??'Tanpa merek')} · ${escapeHtml(product.category)}</small></td><td>${product.units.map((unit)=>`<span class="product-unit-pill">${escapeHtml(unit.name)} · isi ${unit.factor}${unit.barcode?` · ${escapeHtml(unit.barcode)}`:''}</span>`).join('')}</td><td><strong>${money.format(prices.retail)}</strong>${customPrices?`<br><small>${customPrices}</small>`:''}</td><td><strong>${product.stockBase} pcs</strong><br><small>Minimum ${product.minimumStock||0}</small></td><td><div class="product-actions"><button class="button secondary edit-product" type="button">Edit</button><button class="button ${product.active?'danger-button':'secondary'} toggle-product" type="button" data-active="${!product.active}">${product.active?'Nonaktifkan':'Aktifkan'}</button></div></td></tr>`;
+    return `<tr data-product-id="${product.id}" class="${state.selectedProductIds.has(product.id)?'selected':''}"><td class="product-select-cell"><input class="select-product" type="checkbox" aria-label="Pilih ${escapeHtml(product.name)}" ${state.selectedProductIds.has(product.id)?'checked':''}></td><td><strong>${escapeHtml(product.sku)}</strong><br><span class="badge ${product.active?'ok':'danger'}">${product.active?'Aktif':'Nonaktif'}</span></td><td><strong>${escapeHtml(product.name)}</strong>${variant?`<br><small>Varian: ${escapeHtml(variant)}</small>`:''}<br><small>${escapeHtml(product.brand??'Tanpa merek')} · ${escapeHtml(product.category)}</small></td><td>${product.units.map((unit)=>`<span class="product-unit-pill">${escapeHtml(unit.name)} · isi ${unit.factor}${unit.barcode?` · ${escapeHtml(unit.barcode)}`:''}</span>`).join('')}</td><td><strong>${money.format(prices.retail)}</strong>${customPrices?`<br><small>${customPrices}</small>`:''}</td><td><strong>${product.stockBase} pcs</strong><br><small>Minimum ${product.minimumStock||0}</small></td><td><div class="product-actions"><button class="button secondary edit-product" type="button">Edit</button><button class="button ${product.active?'danger-button':'secondary'} toggle-product" type="button" data-active="${!product.active}">${product.active?'Nonaktifkan':'Aktifkan'}</button></div></td></tr>`;
   }).join('')}</tbody></table>`:'<div class="empty-state compact">Tidak ada produk yang cocok dengan filter.</div>';
+  const selectAll=el('select-all-products');
+  if(selectAll)selectAll.indeterminate=!allVisibleSelected&&list.some((product)=>state.selectedProductIds.has(product.id));
+  const selectedCount=state.selectedProductIds.size;
+  el('selected-product-count').textContent=`${selectedCount.toLocaleString('id-ID')} barang dipilih`;
+  el('delete-selected-products').disabled=selectedCount===0;
 }
 
 function renderRelations() {
@@ -988,6 +996,25 @@ async function toggleProductStatus(productId,active){
   }catch(error){toast(error.message);}
 }
 
+async function deleteSelectedProducts(){
+  const productIds=[...state.selectedProductIds];
+  if(!productIds.length)return;
+  const names=productIds.map((id)=>state.managedProducts.find((product)=>product.id===id)?.name).filter(Boolean);
+  const sample=names.slice(0,3).join(', ');
+  const remainder=names.length>3?` dan ${names.length-3} lainnya`:'';
+  if(!confirm(`Hapus ${productIds.length} barang terpilih (${sample}${remainder})?\n\nBarang yang belum pernah dipakai akan dihapus permanen. Barang yang sudah memiliki stok atau riwayat transaksi akan diarsipkan agar laporan lama tetap aman.`))return;
+  const button=el('delete-selected-products');button.disabled=true;button.textContent='Menghapus…';
+  try{
+    const result=await request('/api/products/bulk-delete',{method:'POST',body:JSON.stringify({productIds})});
+    state.selectedProductIds.clear();
+    const deleted=Number(result.deleted??0),archived=Number(result.archived??0),blocked=Number(result.blocked??0);
+    toast(`${deleted} barang dihapus${archived?`, ${archived} barang berhistori diarsipkan`:''}${blocked?`, ${blocked} masih dipakai PO aktif`:''}`);
+    await refreshCatalog();
+    if(state.session.permissions.includes('inventory.manage'))await loadInventory();
+  }catch(error){toast(error.message);}
+  finally{button.textContent='Hapus barang';button.disabled=state.selectedProductIds.size===0;}
+}
+
 function openCustomerEditor(customerId=null,source='relations'){
   const customer=customerId?state.customers.find((item)=>item.id===customerId):null;
   state.customerEditorSource=source;
@@ -1125,18 +1152,48 @@ function syncImportKindUi() {
   updateProductExportCount();
 }
 
-async function openProductImportWorkspace(kind,{focus='import'}={}) {
+function syncProductImportModeUi(){
+  const mode=state.productImportMode;
+  const createOnly=mode==='CREATE_ONLY',updateOnly=mode==='UPDATE_ONLY';
+  document.querySelectorAll('.import-create-only').forEach((node)=>node.classList.toggle('hidden',updateOnly));
+  document.querySelectorAll('.import-update-only').forEach((node)=>node.classList.toggle('hidden',!updateOnly));
+  el('import-kind-label').classList.toggle('hidden',mode!=='GENERAL');
+  el('download-import-template').classList.toggle('hidden',updateOnly);
+  const kind=el('import-kind').value,template=workbookTemplates[kind];
+  el('import-location-label').classList.toggle('hidden',kind!=='PRODUCTS'||updateOnly);
+  if(createOnly){
+    el('import-page-eyebrow').textContent='PRODUK BARU';
+    el('import-page-title').textContent='Import produk baru';
+    el('import-page-description').textContent='Tambahkan barang baru dari Excel tanpa mengubah produk yang sudah tersimpan.';
+    el('import-control-title').textContent='Upload file produk baru';
+    el('import-control-description').textContent='SKU boleh dikosongkan agar dibuat otomatis. SKU yang sudah ada akan ditolak.';
+  }else if(updateOnly){
+    const extension=kind!=='PRODUCTS';
+    el('import-page-eyebrow').textContent=extension?'TIPE PRODUK':'EDIT PRODUK';
+    el('import-page-title').textContent=extension?`Export / import ${template?.sheet??'tipe produk'}`:'Edit produk massal';
+    el('import-page-description').textContent=extension?'Kelola data tambahan untuk produk yang sudah terdaftar.':'Export produk yang dipilih, edit di Excel, kemudian upload kembali.';
+    el('import-control-title').textContent=extension?`Upload ${template?.sheet??'data produk'}`:'Upload hasil edit produk';
+    el('import-control-description').textContent='SKU wajib dipertahankan dan hanya produk yang sudah ada yang dapat diperbarui.';
+  }else{
+    el('import-page-eyebrow').textContent='DATA MASSAL';
+    el('import-page-title').textContent='Export dan import Excel';
+    el('import-page-description').textContent='Pilih jenis data yang ingin diproses.';
+    el('import-control-title').textContent='Upload file Excel';
+    el('import-control-description').textContent='Periksa isi file sebelum menyimpannya.';
+  }
+}
+
+async function openProductImportWorkspace(kind,{mode='CREATE_ONLY'}={}) {
   if(!workbookTemplates[kind])return;
   el('product-data-types-dialog').close();
+  state.productImportMode=mode;
   showPage('imports');
   el('import-kind').value=kind;
   syncImportKindUi();
-  resetImportPreview(`Gunakan template ${workbookTemplates[kind].sheet}, lalu pilih file yang sudah diisi.`);
+  syncProductImportModeUi();
+  resetImportPreview(mode==='UPDATE_ONLY'?`Export ${workbookTemplates[kind].sheet}, edit datanya, lalu upload kembali.`:`Gunakan template ${workbookTemplates[kind].sheet}, lalu pilih file yang sudah diisi.`);
   if(state.session.permissions.includes('catalog.manage'))await loadProductManagement();
-  requestAnimationFrame(()=>{
-    const target=focus==='export'?document.querySelector('.product-export-panel'):document.querySelector('.import-control');
-    target?.scrollIntoView({behavior:'smooth',block:'start'});
-  });
+  requestAnimationFrame(()=>document.querySelector('#page-imports .page-title')?.scrollIntoView({behavior:'smooth',block:'start'}));
 }
 
 function resetImportPreview(message = 'Pilih file untuk melihat data sebelum disimpan.') {
@@ -1199,7 +1256,7 @@ async function inspectImportFile() {
     if(!isCsv&&!window.XLSX)throw new Error('Komponen Excel belum siap. Muat ulang aplikasi.');
     const matrix=isCsv?parseCsv(await file.text()):workbookMatrix(window.XLSX,await file.arrayBuffer(),kind);
     const rows = mapCsvRows(kind,matrix);
-    const input = { kind, locationId: kind === 'PRODUCTS' ? el('import-location').value : null, rows };
+    const input = { kind, mode:state.productImportMode, locationId: kind === 'PRODUCTS' ? el('import-location').value : null, rows };
     const preview = await request('/api/imports/preview', { method:'POST', body:JSON.stringify(input) });
     state.importDraft = { ...input, rows: preview.rows, fileName: file.name, idempotencyKey: crypto.randomUUID(), valid: preview.valid };
     renderImportPreview(preview);
@@ -5393,6 +5450,10 @@ el('nav').addEventListener('click', (event) => {
   if(groupButton){openNavGroup(groupButton.dataset.navGroup,{toggle:true});return;}
   const button=event.target.closest('[data-page]');
   if(!button)return;
+  if(button.dataset.page==='imports'){
+    state.productImportMode='GENERAL';
+    syncProductImportModeUi();
+  }
   showPage(button.dataset.page);
   const target=button.dataset.targetPage??button.dataset.page;
   if(mobileSidebarMedia.matches)setSidebarOpen(false);
@@ -5902,12 +5963,13 @@ el('close-user-editor').addEventListener('click', () => el('edit-user-dialog').c
 el('cancel-user-edit').addEventListener('click', () => el('edit-user-dialog').close());
 el('open-product-dialog').addEventListener('click', () => openProductEditor());
 el('open-price-policy').addEventListener('click',openPricePolicy);
-el('open-import-products').addEventListener('click',()=>openProductImportWorkspace('PRODUCTS'));
-el('open-export-products').addEventListener('click',()=>openProductImportWorkspace('PRODUCTS',{focus:'export'}));
+el('open-import-products').addEventListener('click',()=>openProductImportWorkspace('PRODUCTS',{mode:'CREATE_ONLY'}));
+el('open-export-products').addEventListener('click',()=>openProductImportWorkspace('PRODUCTS',{mode:'UPDATE_ONLY'}));
+el('back-to-products').addEventListener('click',()=>showPage('products'));
 el('open-product-data-types').addEventListener('click',()=>el('product-data-types-dialog').showModal());
 el('close-product-data-types').addEventListener('click',()=>el('product-data-types-dialog').close());
 el('product-data-types-dialog').addEventListener('click',(event)=>{
-  const button=event.target.closest('[data-product-import-kind]');if(button)openProductImportWorkspace(button.dataset.productImportKind);
+  const button=event.target.closest('[data-product-import-kind]');if(button)openProductImportWorkspace(button.dataset.productImportKind,{mode:'UPDATE_ONLY'});
 });
 el('close-price-policy').addEventListener('click',()=>el('price-policy-dialog').close());
 el('preview-price-policy').addEventListener('click',previewPricePolicy);
@@ -5956,12 +6018,26 @@ el('product-price-tiers').addEventListener('click',(event)=>{
 });
 el('product-admin-search').addEventListener('input',renderProductTable);
 el('product-admin-status').addEventListener('change',renderProductTable);
+el('delete-selected-products').addEventListener('click',deleteSelectedProducts);
 el('export-products-xlsx').addEventListener('click',exportProductsXlsx);
 ['export-product-category','export-product-brand','export-product-status','export-product-sort'].forEach((id)=>el(id).addEventListener('change',updateProductExportCount));
 el('product-table').addEventListener('click',(event)=>{
   const row=event.target.closest('[data-product-id]');if(!row)return;
   if(event.target.closest('.edit-product'))openProductEditor(row.dataset.productId);
   const toggle=event.target.closest('.toggle-product');if(toggle)toggleProductStatus(row.dataset.productId,toggle.dataset.active==='true');
+});
+el('product-table').addEventListener('change',(event)=>{
+  if(event.target.id==='select-all-products'){
+    const checked=event.target.checked;
+    document.querySelectorAll('#product-table [data-product-id]').forEach((row)=>{
+      if(checked)state.selectedProductIds.add(row.dataset.productId);else state.selectedProductIds.delete(row.dataset.productId);
+    });
+    renderProductTable();return;
+  }
+  const checkbox=event.target.closest('.select-product');if(!checkbox)return;
+  const productId=checkbox.closest('[data-product-id]')?.dataset.productId;if(!productId)return;
+  if(checkbox.checked)state.selectedProductIds.add(productId);else state.selectedProductIds.delete(productId);
+  renderProductTable();
 });
 el('product-form').addEventListener('submit', saveProduct);
 el('new-image-file').addEventListener('change',(event)=>{
@@ -5988,6 +6064,7 @@ el('import-kind').addEventListener('change', () => {
   el('import-file').value = '';
   el('import-file-name').textContent = 'Belum ada file dipilih';
   syncImportKindUi();
+  syncProductImportModeUi();
   resetImportPreview('Unduh dan gunakan template Excel untuk jenis data yang dipilih.');
 });
 el('import-location').addEventListener('change', () => { if (el('import-file').files[0]) inspectImportFile(); });

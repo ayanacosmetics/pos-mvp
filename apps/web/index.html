@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=107">
+  <link rel="stylesheet" href="/styles.css?v=108">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -176,7 +176,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Excel Produk Fleksibel · v2.14.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Produk Massal Aman · v2.14.1</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -358,26 +358,34 @@
         <div id="product-metrics" class="product-metrics"></div>
         <div class="surface product-directory">
           <div class="product-directory-head"><div><p class="eyebrow">DIREKTORI PRODUK</p><h2>Semua barang</h2></div><div class="product-filters"><input id="product-admin-search" type="search" placeholder="Cari SKU, produk, merek, atau barcode"><select id="product-admin-status"><option value="ACTIVE">Produk aktif</option><option value="ALL">Semua status</option><option value="INACTIVE">Produk nonaktif</option><option value="LOW_STOCK">Stok menipis</option></select></div></div>
+          <div id="product-selection-toolbar" class="product-selection-toolbar"><span><strong id="selected-product-count">0 barang dipilih</strong><small>Pilih beberapa barang untuk dikelola sekaligus.</small></span><button id="delete-selected-products" class="button danger-button" type="button" disabled>Hapus barang</button></div>
           <div id="product-table" class="table-wrap"><div class="empty-state compact">Memuat master produk…</div></div>
         </div>
       </div></section>
 
       <section id="page-imports" class="page"><div class="content-width">
-        <div class="page-title"><div><p class="eyebrow">DATA MASSAL</p><h1>Export dan import Excel</h1><p class="muted">Masukkan barang baru atau edit barang lama tanpa mengisi ulang satu per satu.</p></div><button id="download-import-template" class="button secondary">Unduh template Excel</button></div>
-        <div class="import-guide surface">
+        <div class="page-title"><div><button id="back-to-products" class="page-back-button" type="button">← Kembali ke Produk</button><p id="import-page-eyebrow" class="eyebrow">DATA MASSAL</p><h1 id="import-page-title">Export dan import Excel</h1><p id="import-page-description" class="muted">Masukkan barang baru atau edit barang lama tanpa mengisi ulang satu per satu.</p></div><button id="download-import-template" class="button secondary">Unduh template Excel</button></div>
+        <div class="import-guide surface import-create-only">
           <div><span>1</span><strong>Unduh template</strong><small>SKU boleh kosong untuk barang baru.</small></div>
-          <div><span>2</span><strong>Isi atau edit</strong><small>Satu sheet Barang yang sederhana.</small></div>
-          <div><span>3</span><strong>Periksa & simpan</strong><small>Ribuan baris diproses bertahap otomatis.</small></div>
+          <div><span>2</span><strong>Isi produk baru</strong><small>File ini hanya menambahkan barang yang belum ada.</small></div>
+          <div><span>3</span><strong>Periksa & simpan</strong><small>Barang lama tidak akan ikut berubah.</small></div>
         </div>
-        <div class="surface product-export-panel">
+        <div class="import-guide surface import-update-only hidden">
+          <div><span>1</span><strong>Export barang</strong><small>Pilih dan unduh produk yang ingin diedit.</small></div>
+          <div><span>2</span><strong>Edit di Excel</strong><small>Jangan mengubah atau mengosongkan SKU.</small></div>
+          <div><span>3</span><strong>Periksa & simpan</strong><small>File ini hanya memperbarui barang yang sudah ada.</small></div>
+        </div>
+        <div class="surface product-export-panel import-update-only hidden">
           <div class="import-preview-heading"><div><p class="eyebrow">EXPORT BARANG</p><h2>Edit massal di Excel</h2><p class="muted">Pertahankan SKU hasil export agar produk diperbarui, bukan dibuat ganda.</p></div><button id="export-products-xlsx" class="button primary" type="button">Export barang</button></div>
           <div class="product-export-filters"><label>Kategori<select id="export-product-category"><option value="">Semua kategori</option></select></label><label>Merek<select id="export-product-brand"><option value="">Semua merek</option></select></label><label>Status<select id="export-product-status"><option value="ALL">Semua status</option><option value="ACTIVE">Aktif</option><option value="INACTIVE">Nonaktif</option></select></label><label>Urutan<select id="export-product-sort"><option value="SKU_ASC">No. barang / SKU terkecil</option><option value="SKU_DESC">No. barang / SKU terbesar</option><option value="NAME_ASC">Nama barang A-Z</option><option value="BARCODE_ASC">Barcode</option><option value="STOCK_ASC">Stok paling sedikit</option><option value="STOCK_DESC">Stok paling banyak</option></select></label></div>
           <small id="export-product-count" class="muted">Memuat daftar barang...</small>
         </div>
         <div class="import-workspace">
           <div class="surface import-control">
-            <p class="eyebrow">FILE YANG AKAN DIPERIKSA</p>
-            <label>Jenis data<select id="import-kind"><option value="PRODUCTS">Barang utama & stok awal</option><option value="PRODUCT_UNITS">Multi satuan</option><option value="PRODUCT_VARIANTS">Varian barang</option><option value="PRODUCT_PRICES">Tipe harga pelanggan</option><option value="CUSTOMERS">Pelanggan</option><option value="SUPPLIERS">Supplier</option></select></label>
+            <p id="import-control-eyebrow" class="eyebrow">FILE YANG AKAN DIPERIKSA</p>
+            <h2 id="import-control-title">Upload file Excel</h2>
+            <p id="import-control-description" class="muted">Periksa isi file sebelum menyimpannya.</p>
+            <label id="import-kind-label">Jenis data<select id="import-kind"><option value="PRODUCTS">Barang utama & stok awal</option><option value="PRODUCT_UNITS">Multi satuan</option><option value="PRODUCT_VARIANTS">Varian barang</option><option value="PRODUCT_PRICES">Tipe harga pelanggan</option><option value="CUSTOMERS">Pelanggan</option><option value="SUPPLIERS">Supplier</option></select></label>
             <label id="import-location-label">Lokasi stok awal<select id="import-location"></select><small class="muted">Stok awal hanya untuk produk yang belum pernah bertransaksi.</small></label>
             <label class="import-dropzone" for="import-file"><strong>Pilih file Excel</strong><small id="import-file-name">Belum ada file dipilih</small><input id="import-file" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"></label>
             <p id="import-message" class="muted">Format utama XLSX. CSV lama tetap dapat dibaca.</p>
@@ -929,6 +937,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=107"></script>
+  <script type="module" src="/app.js?v=108"></script>
 </body>
 </html>

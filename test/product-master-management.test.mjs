@@ -65,6 +65,10 @@ test('edit produk dan perubahan status memakai transaksi terproteksi',async()=>{
     assert.equal(archived.status,200);
     assert.ok(rpcCalls[1].target.endsWith('/rpc/set_product_active'));
     assert.equal(rpcCalls[1].body.p_active,false);
+    const bulkDelete=await callApi('POST','products/bulk-delete',{productIds:[ids.product]});
+    assert.equal(bulkDelete.status,200);
+    assert.ok(rpcCalls[2].target.endsWith('/rpc/delete_products_v1'));
+    assert.deepEqual(rpcCalls[2].body.p_product_ids,[ids.product]);
   }finally{
     globalThis.fetch=originalFetch;
     for(const [key,value] of Object.entries(previous)){const envKey={url:'SUPABASE_URL',anon:'SUPABASE_ANON_KEY',service:'SUPABASE_SERVICE_ROLE_KEY'}[key];if(value===undefined)delete process.env[envKey];else process.env[envKey]=value;}
@@ -82,4 +86,11 @@ test('migrasi dan UI menjaga histori sambil menyediakan varian dan arsip',async(
   assert.match(html,/id="product-units-editor"/);
   assert.match(script,/loadProductManagement/);
   assert.match(script,/toggleProductStatus/);
+  assert.match(html,/id="delete-selected-products"/);
+  assert.match(script,/id="select-all-products"/);
+  assert.match(script,/deleteSelectedProducts/);
+  const bulkDeleteMigration=await readFile(new URL('../supabase/migrations/202607290043_bulk_product_delete.sql',import.meta.url),'utf8');
+  assert.match(bulkDeleteMigration,/delete_products_v1/);
+  assert.match(bulkDeleteMigration,/foreign_key_violation/);
+  assert.match(bulkDeleteMigration,/PRODUCTS_BULK_DELETED/);
 });

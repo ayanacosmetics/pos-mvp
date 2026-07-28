@@ -44,6 +44,19 @@ test('pratinjau impor memisahkan produk baru dan produk yang diperbarui tanpa me
     assert.equal(result.body.valid,true);
     assert.deepEqual(result.body.summary,{total:2,create:1,update:1,error:0});
     assert.equal(calls.some((call)=>call.options.method==='POST' && call.target.includes('/rpc/')),false);
+    const createOnly=await callApi('POST','imports/preview',{kind:'PRODUCTS',mode:'CREATE_ONLY',locationId:ids.location,rows:[
+      {sku:'KOS-001',name:'Lip Tint',retailPrice:'25000'}
+    ]});
+    assert.equal(createOnly.body.valid,false);
+    assert.match(createOnly.body.errors[0].message,/Edit produk massal/);
+    const updateOnly=await callApi('POST','imports/preview',{kind:'PRODUCTS',mode:'UPDATE_ONLY',locationId:ids.location,rows:[
+      {sku:'',name:'Produk tanpa SKU',retailPrice:'25000'},
+      {sku:'BARU-001',name:'Produk belum ada',retailPrice:'25000'}
+    ]});
+    assert.equal(updateOnly.body.valid,false);
+    assert.equal(updateOnly.body.errors.length,2);
+    assert.match(updateOnly.body.errors[0].message,/SKU wajib/);
+    assert.match(updateOnly.body.errors[1].message,/Import produk baru/);
   }finally{
     globalThis.fetch=originalFetch;
     for(const [key,value] of Object.entries(previous)){const envKey={url:'SUPABASE_URL',anon:'SUPABASE_ANON_KEY',service:'SUPABASE_SERVICE_ROLE_KEY'}[key];if(value===undefined)delete process.env[envKey];else process.env[envKey]=value;}
@@ -167,4 +180,10 @@ test('fondasi impor memiliki audit, perlindungan stok berjalan, dan UI pratinjau
   assert.match(extensionMigration,/source='MANUAL'/);
   assert.match(html,/id="open-import-products"/);
   assert.match(html,/data-product-import-kind="PRODUCT_UNITS"/);
+  assert.match(html,/id="back-to-products"/);
+  assert.match(html,/class="import-guide surface import-create-only"/);
+  assert.match(html,/class="import-guide surface import-update-only hidden"/);
+  assert.match(script,/productImportMode:'GENERAL'/);
+  assert.match(script,/mode:'CREATE_ONLY'/);
+  assert.match(script,/mode:'UPDATE_ONLY'/);
 });
