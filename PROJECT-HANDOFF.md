@@ -45,6 +45,20 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.11.0 Harga Bertingkat per Tipe Pelanggan
+
+- Editor produk tidak lagi memakai satu harga bertingkat global yang bercampur
+  dengan seluruh tipe pelanggan.
+- Harga Umum, Member, Grosir, dan tipe pelanggan lain memiliki daftar tingkat
+  masing-masing: minimal 1 pcs selalu terlihat, lalu minimal 3/6/12 atau jumlah
+  lain dapat ditambahkan dan dihapus sesuai kebutuhan.
+- Harga minimal 1 untuk tipe khusus boleh kosong agar otomatis memakai harga
+  Umum; tingkat harga yang diisi tetap diterapkan hanya pada tipe tersebut.
+- Data lama tetap dapat dibuka. Tingkat global lama ditampilkan pada setiap tipe
+  dan akan disimpan sebagai aturan eksplisit saat produk diperbarui.
+- API `2.11.0-cloud`, aset/cache PWA `v101`, migrasi SQL
+  `202607280039_customer_group_price_tiers.sql`.
+
 ### Rilis v2.10.3 Laporan Pembelian
 
 - Laporan pembelian memakai halaman awal seperti laporan transaksi penjualan:

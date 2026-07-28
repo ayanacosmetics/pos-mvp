@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=100">
+  <link rel="stylesheet" href="/styles.css?v=101">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -176,7 +176,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Laporan Pembelian · v2.10.3</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Harga Bertingkat · v2.11.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -889,7 +889,7 @@
     <input id="edit-product-id" type="hidden">
     <section class="product-editor-section"><p class="eyebrow">IDENTITAS BARANG</p><div class="form-grid compact"><label>SKU<input id="new-sku" required></label><label>Nama produk<input id="new-name" required></label><label>Kategori<input id="new-category" list="product-category-options" required></label><label>Merek<input id="new-brand" list="product-brand-options"></label><div class="product-image-field product-photo-editor"><div id="new-image-preview" class="product-photo-preview"><span>Foto produk</span></div><div><label class="media-picker">Pilih dari galeri atau kamera<input id="new-image-file" type="file" accept="image/png,image/jpeg,image/webp"><small>Foto otomatis diperkecil sebelum diunggah.</small></label><button id="remove-product-image" class="link-button" type="button">Hapus foto</button><details class="media-url-option"><summary>Gunakan URL gambar (opsional)</summary><label>URL foto<input id="new-image-url" type="url" maxlength="2000" placeholder="https://..."></label></details></div></div><label>Kelompok varian<input id="new-variant-group" placeholder="Contoh: Lip Tint Velvet"></label><label>Nama varian<input id="new-variant-name" placeholder="Contoh: Rose 01"></label><label>Batas stok minimum<input id="new-min-stock" type="number" min="0" value="0"></label><label class="switch-row editor-switch"><input id="new-track-expiry" type="checkbox"><span><strong>Pantau batch & EXP</strong><small>Aktifkan untuk kosmetik atau barang kedaluwarsa.</small></span></label></div><datalist id="product-category-options"></datalist><datalist id="product-brand-options"></datalist></section>
     <section class="product-editor-section"><div class="product-editor-section-head"><div><p class="eyebrow">SATUAN & BARCODE</p><strong>Pcs, lusin, karton, atau satuan lainnya</strong></div><button id="add-product-unit" type="button" class="button secondary">Tambah satuan</button></div><div id="product-units-editor"></div><small class="muted">Harus ada tepat satu satuan dasar dengan isi 1.</small></section>
-    <section class="product-editor-section"><p class="eyebrow">HARGA JUAL</p><div class="form-grid compact"><label>Harga umum / pcs<input id="new-retail-price" type="number" min="1" required></label><div id="product-customer-prices" class="form-grid compact"></div><label>Minimal harga bertingkat (pcs)<input id="new-tier-qty" type="number" min="0"></label><label>Harga bertingkat / pcs<input id="new-tier-price" type="number" min="0"></label></div><small>Harga tipe pelanggan boleh kosong; produk akan memakai harga umum.</small></section>
+    <section class="product-editor-section"><p class="eyebrow">HARGA JUAL</p><div id="product-price-tiers" class="product-price-tiers"></div><small>Setiap tipe dimulai dari minimal 1 pcs. Tambahkan tingkat 3, 6, 12, atau jumlah lain bila harganya berubah. Harga tipe pelanggan yang kosong akan memakai harga Umum.</small></section>
     <p id="product-error" class="error"></p><div class="button-row"><button id="cancel-product" type="button" class="button secondary">Batal</button><button id="save-product-button" type="submit" class="button primary">Simpan produk</button></div>
   </form></dialog>
   <dialog id="supplier-comparison-dialog"><div class="dialog-card comparison-dialog"><div class="comparison-heading"><div><p class="eyebrow">PERBANDINGAN SUPPLIER</p><h2 id="comparison-product-name">Histori harga</h2></div><button id="close-supplier-comparison" class="icon-button" type="button">×</button></div><div id="supplier-comparison-content"></div></div></dialog>
@@ -912,6 +912,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=100"></script>
+  <script type="module" src="/app.js?v=101"></script>
 </body>
 </html>

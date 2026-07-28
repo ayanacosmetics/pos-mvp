@@ -8,7 +8,7 @@ import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, uni
 import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], productPriceTiers: {}, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -530,14 +530,19 @@ function renderCustomerGroupControls() {
 }
 
 function productPrices(product) {
-  const byGroup=Object.fromEntries(state.customerGroups.map((group)=>[
-    group.id,product.priceRules.find((rule)=>rule.customerGroupId===group.id&&rule.minBaseQty===1)?.unitPriceBase??0
+  const legacyTiers=product.priceRules.filter((rule)=>!rule.customerGroupId&&rule.minBaseQty>1);
+  const tiersByGroup=Object.fromEntries(state.customerGroups.map((group)=>{
+    const explicit=product.priceRules.filter((rule)=>rule.customerGroupId===group.id);
+    const merged=[...explicit,...legacyTiers.filter((legacy)=>!explicit.some((rule)=>rule.minBaseQty===legacy.minBaseQty))]
+      .map((rule)=>({minBaseQty:Number(rule.minBaseQty),unitPriceBase:Number(rule.unitPriceBase)}))
+      .sort((a,b)=>a.minBaseQty-b.minBaseQty);
+    if(!merged.some((rule)=>rule.minBaseQty===1))merged.unshift({minBaseQty:1,unitPriceBase:0});
+    return [group.id,merged];
+  }));
+  const byGroup=Object.fromEntries(Object.entries(tiersByGroup).map(([groupId,tiers])=>[
+    groupId,tiers.find((rule)=>rule.minBaseQty===1)?.unitPriceBase??0
   ]));
-  return {
-    retail:byGroup.retail??0,byGroup,
-    tierQty:product.priceRules.find((rule)=>!rule.customerGroupId&&rule.minBaseQty>1)?.minBaseQty??0,
-    tierPrice:product.priceRules.find((rule)=>!rule.customerGroupId&&rule.minBaseQty>1)?.unitPriceBase??0
-  };
+  return {retail:byGroup.retail??0,byGroup,tiersByGroup};
 }
 
 function renderProductTable() {
@@ -722,9 +727,40 @@ async function productImageDataFromFile(file){
   }finally{URL.revokeObjectURL(source);}
 }
 
+function defaultProductPriceTiers(product=null){
+  if(product)return productPrices(product).tiersByGroup;
+  return Object.fromEntries(state.customerGroups.filter((group)=>group.active!==false).map((group)=>[group.id,[{minBaseQty:1,unitPriceBase:''}]]));
+}
+
+function readProductPriceTierDraft(){
+  const draft={};
+  document.querySelectorAll('.product-price-tier-card').forEach((card)=>{
+    draft[card.dataset.groupId]=[...card.querySelectorAll('.product-price-tier-row')].map((row)=>({
+      minBaseQty:Number(row.querySelector('.price-tier-min').value),
+      unitPriceBase:row.querySelector('.price-tier-amount').value
+    }));
+  });
+  state.productPriceTiers=draft;
+  return draft;
+}
+
+function renderProductPriceTierEditor(){
+  el('product-price-tiers').innerHTML=state.customerGroups.filter((group)=>group.active!==false).map((group)=>{
+    const tiers=(state.productPriceTiers[group.id]??[{minBaseQty:1,unitPriceBase:''}]).sort((a,b)=>Number(a.minBaseQty)-Number(b.minBaseQty));
+    const isRetail=group.id==='retail';
+    return `<section class="product-price-tier-card" data-group-id="${escapeHtml(group.id)}">
+      <header><div><strong>${escapeHtml(isRetail?'Harga Umum':group.name)}</strong><small>${isRetail?'Harga dasar untuk pelanggan umum':`Harga khusus ${escapeHtml(group.name)}; boleh mengikuti Umum`}</small></div><button class="button secondary add-product-price-tier" type="button">+ Tingkat harga</button></header>
+      <div class="product-price-tier-list">${tiers.map((tier,index)=>`<div class="product-price-tier-row">
+        <label>Minimal pembelian<input class="price-tier-min" type="number" min="${index===0?1:2}" step="1" value="${Number(tier.minBaseQty)||1}" ${index===0?'readonly':''} required></label>
+        <label>Harga / pcs<input ${isRetail&&index===0?'id="new-retail-price"':''} class="price-tier-amount" type="number" min="1" step="any" value="${Number(tier.unitPriceBase)>0?Number(tier.unitPriceBase):''}" placeholder="${isRetail?'Masukkan harga':'Gunakan harga Umum'}" ${isRetail||index>0?'required':''}></label>
+        ${index===0?'<span class="price-tier-base">Harga mulai 1 pcs</span>':'<button class="icon-button remove-product-price-tier" type="button" aria-label="Hapus tingkat harga">×</button>'}
+      </div>`).join('')}</div>
+    </section>`;
+  }).join('');
+}
+
 function openProductEditor(productId=null){
   const product=productId?state.managedProducts.find((item)=>item.id===productId):null;
-  const prices=product?productPrices(product):{retail:'',byGroup:{},tierQty:'',tierPrice:''};
   el('product-form').reset();el('product-error').textContent='';
   el('edit-product-id').value=product?.id??'';
   el('product-dialog-eyebrow').textContent=product?'EDIT PRODUK':'PRODUK BARU';
@@ -736,26 +772,21 @@ function openProductEditor(productId=null){
   renderProductPhotoPreview(state.productImagePreviewUrl);
   el('new-variant-group').value=product?.variantGroup??'';el('new-variant-name').value=product?.variantName??'';
   el('new-min-stock').value=product?.minimumStock??0;el('new-track-expiry').checked=Boolean(product?.trackExpiry);
-  el('new-retail-price').value=prices.retail;
-  el('product-customer-prices').innerHTML=customCustomerGroups().map((group)=>`<label>Harga ${escapeHtml(group.name)} / pcs<input class="customer-price-input" data-group-id="${escapeHtml(group.id)}" type="number" min="1" value="${prices.byGroup[group.id]||''}" placeholder="Gunakan harga umum"></label>`).join('');
-  el('new-tier-qty').value=prices.tierQty;el('new-tier-price').value=prices.tierPrice;
+  state.productPriceTiers=defaultProductPriceTiers(product);renderProductPriceTierEditor();
   state.productUnitsDraft=product?product.units.map((unit)=>({...unit})):[{id:null,name:'pcs',factor:1,barcode:''}];
   renderProductUnitEditor();el('product-dialog').showModal();
 }
 
 function productPayload(){
-  const prices=[
-    {customerGroupId:'retail',unitPriceBase:Number(el('new-retail-price').value)},
-    ...[...document.querySelectorAll('.customer-price-input')].filter((input)=>Number(input.value)>0).map((input)=>({
-      customerGroupId:input.dataset.groupId,unitPriceBase:Number(input.value)
-    }))
-  ];
+  const prices=Object.entries(readProductPriceTierDraft()).flatMap(([customerGroupId,tiers])=>tiers
+    .filter((tier)=>Number(tier.unitPriceBase)>0)
+    .map((tier)=>({customerGroupId,minBaseQty:Number(tier.minBaseQty),unitPriceBase:Number(tier.unitPriceBase)})));
   return {
     id:el('edit-product-id').value||null,sku:el('new-sku').value,name:el('new-name').value,category:el('new-category').value,
     brand:el('new-brand').value,imageUrl:el('new-image-url').value,variantGroup:el('new-variant-group').value,variantName:el('new-variant-name').value,
     minimumStock:Number(el('new-min-stock').value),trackExpiry:el('new-track-expiry').checked,
     retailPrice:Number(el('new-retail-price').value),prices,
-    tierQty:Number(el('new-tier-qty').value),tierPrice:Number(el('new-tier-price').value),units:state.productUnitsDraft
+    units:state.productUnitsDraft
   };
 }
 
@@ -5691,6 +5722,21 @@ el('product-units-editor').addEventListener('input',(event)=>{
 el('product-units-editor').addEventListener('click',(event)=>{
   const button=event.target.closest('.remove-product-unit');if(!button)return;
   state.productUnitsDraft.splice(Number(button.closest('.product-unit-row').dataset.index),1);renderProductUnitEditor();
+});
+el('product-price-tiers').addEventListener('click',(event)=>{
+  const card=event.target.closest('.product-price-tier-card');if(!card)return;
+  readProductPriceTierDraft();
+  const tiers=state.productPriceTiers[card.dataset.groupId];
+  if(event.target.closest('.add-product-price-tier')){
+    const nextMinimum=Math.max(3,...tiers.map((tier)=>Number(tier.minBaseQty)+1));
+    tiers.push({minBaseQty:nextMinimum,unitPriceBase:''});renderProductPriceTierEditor();
+  }
+  const remove=event.target.closest('.remove-product-price-tier');
+  if(remove){
+    const index=[...card.querySelectorAll('.product-price-tier-row')].indexOf(remove.closest('.product-price-tier-row'));
+    if(index>0)tiers.splice(index,1);
+    renderProductPriceTierEditor();
+  }
 });
 el('product-admin-search').addEventListener('input',renderProductTable);
 el('product-admin-status').addEventListener('change',renderProductTable);

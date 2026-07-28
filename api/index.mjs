@@ -330,8 +330,12 @@ function normalizeProductInput(input,id=null) {
     {customerGroupId:'retail',unitPriceBase:input.retailPrice},
     ...(Number(input.wholesalePrice)>0?[{customerGroupId:'wholesale',unitPriceBase:input.wholesalePrice}]:[])
   ];
-  const prices=rawPrices.map((price)=>({customerGroupId:String(price.customerGroupId??'').trim(),unitPriceBase:Number(price.unitPriceBase)}));
-  const retailPrice=prices.find((price)=>price.customerGroupId==='retail')?.unitPriceBase;
+  const prices=rawPrices.map((price)=>({
+    customerGroupId:String(price.customerGroupId??'').trim(),
+    minBaseQty:Number(price.minBaseQty??1),
+    unitPriceBase:Number(price.unitPriceBase)
+  }));
+  const retailPrice=prices.find((price)=>price.customerGroupId==='retail'&&price.minBaseQty===1)?.unitPriceBase;
   const normalized={
     id:id??input.id??null,sku:String(input.sku??'').trim().toUpperCase(),name:String(input.name??'').trim(),
     category:String(input.category??'').trim()||'Lainnya',brand:String(input.brand??'').trim(),
@@ -339,16 +343,17 @@ function normalizeProductInput(input,id=null) {
     variantGroup:String(input.variantGroup??'').trim(),variantName:String(input.variantName??'').trim(),
     minimumStock:Number(input.minimumStock??0),trackExpiry:Boolean(input.trackExpiry),
     retailPrice:Number(retailPrice),wholesalePrice:Number(prices.find((price)=>price.customerGroupId==='wholesale')?.unitPriceBase??0),
-    tierQty:Number(input.tierQty??0),tierPrice:Number(input.tierPrice??0),prices,
+    prices,
     units:units.map((unit)=>({id:unit.id??null,name:String(unit.name??'').trim(),factor:Number(unit.factor),barcode:String(unit.barcode??'').trim()}))
   };
   if(!normalized.sku||!normalized.name)throw Object.assign(new Error('SKU dan nama produk wajib diisi'),{status:400});
   if(!(normalized.retailPrice>0))throw Object.assign(new Error('Harga umum harus lebih dari nol'),{status:400});
-  const priceGroups=new Set();
+  const priceTiers=new Set();
   for(const price of normalized.prices){
-    if(!/^[a-z0-9][a-z0-9_-]{1,39}$/.test(price.customerGroupId)||!(price.unitPriceBase>0))throw Object.assign(new Error('Tipe dan nominal harga produk tidak valid'),{status:400});
-    if(priceGroups.has(price.customerGroupId))throw Object.assign(new Error('Tipe harga produk tercatat dua kali'),{status:400});
-    priceGroups.add(price.customerGroupId);
+    if(!/^[a-z0-9][a-z0-9_-]{1,39}$/.test(price.customerGroupId)||!Number.isInteger(price.minBaseQty)||price.minBaseQty<1||!(price.unitPriceBase>0))throw Object.assign(new Error('Tipe, minimal pembelian, dan nominal harga produk tidak valid'),{status:400});
+    const tierKey=`${price.customerGroupId}:${price.minBaseQty}`;
+    if(priceTiers.has(tierKey))throw Object.assign(new Error('Minimal pembelian pada tipe harga yang sama tercatat dua kali'),{status:400});
+    priceTiers.add(tierKey);
   }
   if(!(normalized.minimumStock>=0))throw Object.assign(new Error('Batas stok minimum tidak valid'),{status:400});
   if(normalized.imageUrl){
@@ -1135,7 +1140,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.10.3-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.11.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1738,7 +1743,7 @@ async function routeRequest(request, response, route) {
   if (request.method === 'POST' && route === 'products') {
     requirePermission(session, 'catalog.manage');
     const input = normalizeProductInput(bodyOf(request));
-    return send(response, 201, await rpc('save_product_v4', { p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_product: input }));
+    return send(response, 201, await rpc('save_product_v5', { p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_product: input }));
   }
 
   if (request.method === 'GET' && route === 'products/manage') {
@@ -1750,7 +1755,7 @@ async function routeRequest(request, response, route) {
     requirePermission(session, 'catalog.manage');
     const productId=route.split('/')[1];
     const input=normalizeProductInput(bodyOf(request),productId);
-    return send(response,200,await rpc('save_product_v4',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_product:input}));
+    return send(response,200,await rpc('save_product_v5',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_product:input}));
   }
 
   if (request.method === 'POST' && /^products\/[^/]+\/status$/.test(route)) {

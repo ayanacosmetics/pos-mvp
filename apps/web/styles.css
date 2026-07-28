@@ -117,6 +117,24 @@ textarea{font:inherit;width:100%;resize:vertical;border:1px solid var(--line);bo
   color:var(--ink);
   background:var(--paper);
 }
+
+.product-price-tiers{display:grid;gap:12px}
+.product-price-tier-card{padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--paper)}
+.product-price-tier-card>header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.product-price-tier-card>header strong,.product-price-tier-card>header small{display:block}
+.product-price-tier-card>header small{margin-top:3px;color:var(--muted)}
+.product-price-tier-card>header .button{padding:8px 11px;font-size:12px}
+.product-price-tier-list{display:grid;gap:8px}
+.product-price-tier-row{display:grid;grid-template-columns:180px minmax(180px,1fr) 150px;align-items:end;gap:9px;padding:10px;border-radius:11px;background:#fff}
+.product-price-tier-row label{margin:0}
+.product-price-tier-row .icon-button{margin-bottom:3px}
+.price-tier-base{align-self:center;color:var(--muted);font-size:11px;font-weight:750}
+@media(max-width:600px){
+  .product-price-tier-card>header{align-items:flex-start}
+  .product-price-tier-row{grid-template-columns:1fr 1fr}
+  .product-price-tier-row .icon-button,.price-tier-base{grid-column:2;justify-self:end}
+  .product-price-tier-card>header .button{white-space:nowrap}
+}
 .receipt-return-status{padding:4px 8px;border:1px solid #9f372f;border-radius:5px;color:#9f372f}.receipt-line-returned{background:#fff4f1}.receipt-returned-note,.returned-line-detail{color:#a13d34!important;font-weight:800}.receipt-return-deduction{color:#a13d34}.receipt-return-summary{display:grid;gap:3px;margin:8px 0;padding:9px;border:1px dashed #a13d34;text-align:center;color:#7f2d27}.pos-history-row .return-label{color:#a13d34;font-weight:800}.return-summary-display{border:1px solid #e0aaa4;background:#fff4f1;color:#7f2d27}
 .report-trend-panel>summary{display:flex;align-items:center;justify-content:space-between;gap:14px;cursor:pointer;list-style:none}.report-trend-panel>summary::-webkit-details-marker{display:none}.report-trend-panel>summary span{display:grid;gap:4px}.report-trend-panel>summary small{color:var(--muted);font-weight:850;letter-spacing:.1em}.report-trend-panel>summary strong{font-size:17px}.report-trend-panel[open]>summary{margin-bottom:15px;padding-bottom:12px;border-bottom:1px solid var(--line)}.report-trend-panel>summary b{color:var(--muted)}
 .sales-period-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:14px}.sales-period-nav.hidden{display:none}.sales-period-nav button{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:82px;padding:17px;border:1px solid var(--line);border-radius:13px;background:var(--surface);color:var(--ink);text-align:left}.sales-period-nav button:hover{border-color:#91b8b2;background:#f7faf9}.sales-period-nav button span{display:grid;gap:4px}.sales-period-nav button strong{font-size:15px}.sales-period-nav button small{color:var(--muted);font-size:10px}.sales-period-nav button b{color:var(--brand);font-size:24px}.sales-report-detail-toolbar{display:flex;align-items:center;gap:14px;margin-bottom:12px}.sales-report-detail-toolbar.hidden{display:none}.sales-report-detail-toolbar>div{display:grid;gap:2px}.sales-report-detail-toolbar small{color:var(--muted);font-size:9px;font-weight:850;letter-spacing:.1em}.sales-report-detail-toolbar strong{font-size:16px}.sales-period-breakdown{margin-bottom:14px}.sales-period-list{display:grid;gap:8px}.sales-period-row{display:grid;grid-template-columns:minmax(130px,1fr) repeat(3,minmax(100px,.7fr)) auto;align-items:center;gap:12px;padding:13px;border:1px solid var(--line);border-radius:11px;background:var(--surface)}.sales-period-row>span{display:grid;gap:3px}.sales-period-row small{color:var(--muted)}.sales-period-row .button{padding:8px 11px}@media(max-width:760px){.sales-period-nav{grid-template-columns:1fr}.sales-period-nav button{min-height:72px;padding:14px}.sales-period-row{grid-template-columns:repeat(2,minmax(0,1fr))}.sales-period-row>span{display:grid!important}.sales-period-row>span:first-child,.sales-period-row .button{grid-column:1/-1}.sales-period-row .button{width:100%}}
