@@ -45,5 +45,5 @@ test('cloud API protects multi-outlet routes and applies outlet price and promo 
   assert.match(api,/save_outlet_price_override_v1/);
   assert.match(api,/assign_promotion_outlets_v1/);
   assert.match(api,/priority: 100000/);
-  assert.match(api,/version: '2\.13\.2-cloud'/);
+  assert.match(api,/version: '2\.14\.0-cloud'/);
 });

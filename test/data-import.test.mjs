@@ -62,6 +62,7 @@ test('impor tervalidasi diteruskan ke transaksi database dengan idempotensi', as
     if(target.includes('/rest/v1/outlets?'))return responseOf([{id:ids.outlet,name:'Toko Utama',active:true}]);
     if(target.includes('/rest/v1/stock_locations?'))return responseOf([{id:ids.location,outlet_id:ids.outlet,name:'Toko Utama',kind:'STORE'}]);
     if(target.includes('/rest/v1/customers?'))return responseOf([]);
+    if(target.includes('/rest/v1/customer_price_groups?'))return responseOf([{id:'retail',name:'Umum'},{id:'wholesale',name:'Grosir'}]);
     if(target.endsWith('/rest/v1/rpc/import_initial_data')){rpcBody=JSON.parse(options.body);return responseOf({id:'job-1',kind:'CUSTOMERS',total:1,created:1,updated:0,duplicate:false});}
     return responseOf({message:`Mock belum menangani ${target}`},500);
   };
@@ -108,6 +109,38 @@ test('commit produk mengalokasikan SKU kosong dan memisahkan barang baru dari ed
   }
 });
 
+test('multi satuan menerima jumlah satuan tak terbatas dan diteruskan ke transaksi khusus',async()=>{
+  const originalFetch=globalThis.fetch,previous={url:process.env.SUPABASE_URL,anon:process.env.SUPABASE_ANON_KEY,service:process.env.SUPABASE_SERVICE_ROLE_KEY};
+  process.env.SUPABASE_URL='https://project.supabase.test';process.env.SUPABASE_ANON_KEY='anon';process.env.SUPABASE_SERVICE_ROLE_KEY='service';
+  let rpcBody=null;
+  globalThis.fetch=async(url,options={})=>{
+    const target=String(url);
+    if(target.endsWith('/auth/v1/user'))return responseOf({id:ids.user});
+    if(target.includes('/rest/v1/profiles?'))return responseOf([{user_id:ids.user,tenant_id:ids.tenant,display_name:'Owner',role:'OWNER',active:true}]);
+    if(target.includes('/rest/v1/outlets?'))return responseOf([{id:ids.outlet,name:'Toko Utama',active:true}]);
+    if(target.includes('/rest/v1/stock_locations?'))return responseOf([{id:ids.location,outlet_id:ids.outlet,name:'Toko Utama',kind:'STORE'}]);
+    if(target.includes('/rest/v1/products?'))return responseOf([{id:ids.product,sku:'KOS-001'}]);
+    if(target.includes('/rest/v1/product_units?'))return responseOf([{product_id:ids.product,name:'pcs',factor_to_base:1,barcode:'8991'}]);
+    if(target.endsWith('/rest/v1/rpc/import_product_extensions_v1')){rpcBody=JSON.parse(options.body);return responseOf({created:3,updated:1,duplicate:false});}
+    return responseOf({message:`Mock belum menangani ${target}`},500);
+  };
+  const rows=[
+    {sku:'KOS-001',unitName:'pcs',factor:1,barcode:'8991'},
+    {sku:'KOS-001',unitName:'pak',factor:6,barcode:'8996'},
+    {sku:'KOS-001',unitName:'lusin',factor:12,barcode:'89912'},
+    {sku:'KOS-001',unitName:'dus',factor:144,barcode:'899144'}
+  ];
+  try{
+    const preview=await callApi('POST','imports/preview',{kind:'PRODUCT_UNITS',rows});
+    assert.equal(preview.status,200);assert.equal(preview.body.valid,true);assert.deepEqual(preview.body.summary,{total:4,create:3,update:1,error:0});
+    const result=await callApi('POST','imports/commit',{kind:'PRODUCT_UNITS',fileName:'satuan.xlsx',rows},{'idempotency-key':'units-1'});
+    assert.equal(result.status,201);assert.equal(result.body.total,4);assert.equal(rpcBody.p_kind,'PRODUCT_UNITS');assert.equal(rpcBody.p_rows.length,4);
+  }finally{
+    globalThis.fetch=originalFetch;
+    for(const [key,value] of Object.entries(previous)){const envKey={url:'SUPABASE_URL',anon:'SUPABASE_ANON_KEY',service:'SUPABASE_SERVICE_ROLE_KEY'}[key];if(value===undefined)delete process.env[envKey];else process.env[envKey]=value;}
+  }
+});
+
 test('fondasi impor memiliki audit, perlindungan stok berjalan, dan UI pratinjau Excel', async () => {
   const migration=await readFile(new URL('../supabase/migrations/202607230011_initial_data_import.sql',import.meta.url),'utf8');
   const html=await readFile(new URL('../apps/web/index.html',import.meta.url),'utf8');
@@ -126,4 +159,12 @@ test('fondasi impor memiliki audit, perlindungan stok berjalan, dan UI pratinjau
   assert.match(api,/update_import_products_v1/);
   assert.match(excelMigration,/product_import_sku_reservations/);
   assert.match(excelMigration,/PRODUCTS_MASS_UPDATED/);
+  const extensionMigration=await readFile(new URL('../supabase/migrations/202607290042_product_extension_imports.sql',import.meta.url),'utf8');
+  assert.match(extensionMigration,/import_product_extensions_v1/);
+  assert.match(extensionMigration,/PRODUCT_UNITS_MASS_UPDATED/);
+  assert.match(extensionMigration,/PRODUCT_VARIANTS_MASS_UPDATED/);
+  assert.match(extensionMigration,/PRODUCT_PRICES_MASS_UPDATED/);
+  assert.match(extensionMigration,/source='MANUAL'/);
+  assert.match(html,/id="open-import-products"/);
+  assert.match(html,/data-product-import-kind="PRODUCT_UNITS"/);
 });

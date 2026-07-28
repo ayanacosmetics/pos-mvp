@@ -45,6 +45,21 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat v2.14.0 Excel Produk Fleksibel
+
+- Tombol Import produk baru, Export/edit produk, dan Tipe produk berada langsung
+  di header halaman Produk, sejajar dengan Tambah produk manual.
+- Template Barang hanya memakai satuan dasar; kolom satuan terbesar/kecil yang
+  memaksakan dua satuan telah dihapus. File lama tetap kompatibel.
+- Multi Satuan, Varian, dan Harga Pelanggan memakai workbook terpisah. Satu SKU
+  dapat memiliki jumlah satuan dan tingkat harga yang tidak dibatasi dua baris.
+- Varian adalah SKU mandiri yang dikelompokkan sehingga barcode, stok, modal,
+  dan harga setiap varian tetap dapat berbeda.
+- Harga pelanggan manual tidak ditimpa aturan harga aman otomatis pada tipe dan
+  tingkat minimal pembelian yang sama.
+- API `2.14.0-cloud`, aset/cache PWA `v107`, migrasi SQL
+  `202607290042_product_extension_imports.sql`.
+
 ### Rilis v2.13.2 Startup Cepat
 
 - Cache katalog terakhir ditampilkan segera saat aplikasi dibuka, sementara

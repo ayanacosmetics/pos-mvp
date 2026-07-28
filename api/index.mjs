@@ -993,6 +993,36 @@ function normalizeImportRows(kind, rawRows) {
       rows.push(row);
       return;
     }
+    if(kind==='PRODUCT_UNITS'){
+      const row={sku:String(raw.sku??'').trim().toUpperCase(),unitName:String(raw.unitName??'').trim(),factor:importNumber(raw.factor),barcode:String(raw.barcode??'').trim()};
+      const key=`${row.sku}:${row.unitName.toLowerCase()}`;
+      if(!row.sku)addError(rowNo,'sku','SKU wajib diisi');
+      if(!row.unitName)addError(rowNo,'unitName','Nama satuan wajib diisi');
+      if(!(row.factor>0))addError(rowNo,'factor','Isi satuan dasar harus lebih dari nol');
+      if(seenCodes.has(key))addError(rowNo,'unitName',`Satuan ${row.unitName} untuk SKU ${row.sku} muncul lebih dari sekali`);
+      seenCodes.add(key);
+      if(row.barcode&&seenBarcodes.has(row.barcode))addError(rowNo,'barcode',`Barcode ${row.barcode} muncul lebih dari sekali`);
+      if(row.barcode)seenBarcodes.add(row.barcode);
+      rows.push(row);return;
+    }
+    if(kind==='PRODUCT_VARIANTS'){
+      const row={sku:String(raw.sku??'').trim().toUpperCase(),variantGroup:String(raw.variantGroup??'').trim(),variantName:String(raw.variantName??'').trim()};
+      if(!row.sku)addError(rowNo,'sku','SKU wajib diisi');
+      if(!row.variantGroup)addError(rowNo,'variantGroup','Kelompok varian wajib diisi');
+      if(!row.variantName)addError(rowNo,'variantName','Nama varian wajib diisi');
+      if(seenCodes.has(row.sku))addError(rowNo,'sku',`SKU ${row.sku} muncul lebih dari sekali`);
+      seenCodes.add(row.sku);rows.push(row);return;
+    }
+    if(kind==='PRODUCT_PRICES'){
+      const row={sku:String(raw.sku??'').trim().toUpperCase(),customerGroup:String(raw.customerGroup??'').trim(),minQty:importNumber(raw.minQty),unitPrice:importNumber(raw.unitPrice)};
+      const key=`${row.sku}:${row.customerGroup.toLowerCase()}:${row.minQty}`;
+      if(!row.sku)addError(rowNo,'sku','SKU wajib diisi');
+      if(!row.customerGroup)addError(rowNo,'customerGroup','Tipe pelanggan wajib diisi');
+      if(!(row.minQty>0))addError(rowNo,'minQty','Minimal pembelian harus lebih dari nol');
+      if(!(row.unitPrice>0))addError(rowNo,'unitPrice','Harga harus lebih dari nol');
+      if(seenCodes.has(key))addError(rowNo,'minQty',`Tingkat harga yang sama untuk SKU ${row.sku} muncul lebih dari sekali`);
+      seenCodes.add(key);rows.push(row);return;
+    }
     const row = { code: String(raw.code ?? '').trim().toUpperCase(), name: String(raw.name ?? '').trim(), phone: String(raw.phone ?? '').trim() };
     if (!row.code) addError(rowNo, 'code', 'Kode wajib diisi');
     if (!row.name) addError(rowNo, 'name', 'Nama wajib diisi');
@@ -1001,7 +1031,7 @@ function normalizeImportRows(kind, rawRows) {
     if (kind === 'CUSTOMERS') {
       const group = String(raw.groupId ?? 'retail').trim().toLowerCase();
       row.groupId = ['retail','ecer','eceran'].includes(group) ? 'retail' : ['wholesale','grosir'].includes(group) ? 'wholesale' : group;
-      if (!['retail','wholesale'].includes(row.groupId)) addError(rowNo, 'groupId', 'Kelompok harus eceran atau grosir');
+      if(!row.groupId)addError(rowNo,'groupId','Tipe pelanggan wajib diisi');
     } else row.address = String(raw.address ?? '').trim();
     rows.push(row);
   });
@@ -1010,16 +1040,27 @@ function normalizeImportRows(kind, rawRows) {
 
 async function previewImport(context, input) {
   const kind = String(input.kind ?? '').toUpperCase();
-  if (!['PRODUCTS','CUSTOMERS','SUPPLIERS'].includes(kind)) return { valid: false, kind, rows: [], errors: [{ row: 0, field: 'kind', message: 'Jenis impor tidak valid' }] };
+  const supported=['PRODUCTS','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES','CUSTOMERS','SUPPLIERS'];
+  if (!supported.includes(kind)) return { valid: false, kind, rows: [], errors: [{ row: 0, field: 'kind', message: 'Jenis impor tidak valid' }] };
   const normalized = normalizeImportRows(kind, input.rows);
   const locationId = input.locationId || null;
   if (kind === 'PRODUCTS' && normalized.rows.some((row) => row.openingQty !== null) && !context.locationIds.includes(locationId)) {
     normalized.errors.push({ row: 0, field: 'locationId', message: 'Pilih lokasi untuk stok awal' });
   }
-  const table = kind === 'PRODUCTS' ? 'products' : kind === 'CUSTOMERS' ? 'customers' : 'suppliers';
-  const codeField = kind === 'PRODUCTS' ? 'sku' : 'code';
+  const productExtension=['PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES'].includes(kind);
+  const table = kind === 'PRODUCTS'||productExtension ? 'products' : kind === 'CUSTOMERS' ? 'customers' : 'suppliers';
+  const codeField = kind === 'PRODUCTS'||productExtension ? 'sku' : 'code';
   const existing = await rest(table, `tenant_id=eq.${context.tenantId}&select=id,${codeField}`);
   const existingCodes = new Set(existing.map((row) => String(row[codeField]).toUpperCase()));
+  if(kind==='CUSTOMERS'){
+    const groups=await rest('customer_price_groups',`tenant_id=eq.${context.tenantId}&active=eq.true&select=id,name`);
+    const groupByInput=new Map(groups.flatMap((group)=>[[String(group.id).toLowerCase(),group.id],[String(group.name).toLowerCase(),group.id]]));
+    normalized.rows.forEach((row,index)=>{
+      const groupId=groupByInput.get(String(row.groupId).toLowerCase());
+      if(!groupId)normalized.errors.push({row:index+2,field:'groupId',message:`Tipe pelanggan ${row.groupId||'-'} belum dibuat atau tidak aktif`});
+      else row.groupId=groupId;
+    });
+  }
   if (kind === 'PRODUCTS') {
     const units = await rest('product_units', `tenant_id=eq.${context.tenantId}&barcode=not.is.null&select=product_id,barcode`);
     const productCodeById = new Map(existing.map((row) => [row.id,String(row.sku).toUpperCase()]));
@@ -1034,10 +1075,39 @@ async function previewImport(context, input) {
       if(row.openingQty!==null&&existingCodes.has(row.sku))normalized.errors.push({row:index+2,field:'openingQty',message:'Kosongkan stok awal saat mengedit barang; gunakan stok opname atau restok'});
     });
   }
+  if(productExtension){
+    normalized.rows.forEach((row,index)=>{
+      if(!existingCodes.has(row.sku))normalized.errors.push({row:index+2,field:'sku',message:`SKU ${row.sku||'-'} belum ada. Import Barang utama terlebih dahulu`});
+    });
+    if(kind==='PRODUCT_UNITS'){
+      const units=await rest('product_units',`tenant_id=eq.${context.tenantId}&select=product_id,name,barcode,factor_to_base`);
+      const skuByProduct=new Map(existing.map((product)=>[product.id,String(product.sku).toUpperCase()]));
+      const barcodeOwner=new Map(units.filter((unit)=>unit.barcode).map((unit)=>[unit.barcode,skuByProduct.get(unit.product_id)]));
+      normalized.rows.forEach((row,index)=>{
+        const owner=barcodeOwner.get(row.barcode);
+        if(row.barcode&&owner&&owner!==row.sku)normalized.errors.push({row:index+2,field:'barcode',message:`Barcode sudah digunakan SKU ${owner}`});
+      });
+      normalized.existingKeys=new Set(units.map((unit)=>`${skuByProduct.get(unit.product_id)}:${String(unit.name).toLowerCase()}`));
+    }
+    if(kind==='PRODUCT_PRICES'){
+      const groups=await rest('customer_price_groups',`tenant_id=eq.${context.tenantId}&active=eq.true&select=id,name`);
+      const groupByInput=new Map(groups.flatMap((group)=>[[String(group.id).toLowerCase(),group.id],[String(group.name).toLowerCase(),group.id]]));
+      normalized.rows.forEach((row,index)=>{
+        const groupId=groupByInput.get(row.customerGroup.toLowerCase());
+        if(!groupId)normalized.errors.push({row:index+2,field:'customerGroup',message:`Tipe pelanggan ${row.customerGroup||'-'} belum dibuat atau tidak aktif`});
+        else if(groupId==='retail')normalized.errors.push({row:index+2,field:'customerGroup',message:'Harga Umum diubah melalui file Barang, bukan file Harga Pelanggan'});
+        else row.customerGroup=groupId;
+      });
+      const rules=await rest('price_rules',`tenant_id=eq.${context.tenantId}&starts_at=is.null&ends_at=is.null&select=product_id,customer_group_id,min_base_qty`);
+      const skuByProduct=new Map(existing.map((product)=>[product.id,String(product.sku).toUpperCase()]));
+      normalized.existingKeys=new Set(rules.map((rule)=>`${skuByProduct.get(rule.product_id)}:${rule.customer_group_id}:${Number(rule.min_base_qty)}`));
+    }
+  }
+  const extensionKey=(row)=>kind==='PRODUCT_UNITS'?`${row.sku}:${row.unitName.toLowerCase()}`:kind==='PRODUCT_PRICES'?`${row.sku}:${row.customerGroup}:${Number(row.minQty)}`:row.sku;
   const summary = {
     total: normalized.rows.length,
-    create: normalized.rows.filter((row) => !existingCodes.has(String(row[codeField]).toUpperCase())).length,
-    update: normalized.rows.filter((row) => existingCodes.has(String(row[codeField]).toUpperCase())).length,
+    create: productExtension?(kind==='PRODUCT_VARIANTS'?0:normalized.rows.filter((row)=>!normalized.existingKeys?.has(extensionKey(row))).length):normalized.rows.filter((row) => !existingCodes.has(String(row[codeField]).toUpperCase())).length,
+    update: productExtension?(kind==='PRODUCT_VARIANTS'?normalized.rows.length:normalized.rows.filter((row)=>normalized.existingKeys?.has(extensionKey(row))).length):normalized.rows.filter((row) => existingCodes.has(String(row[codeField]).toUpperCase())).length,
     error: normalized.errors.length
   };
   return { valid: normalized.errors.length === 0, kind, locationId, rows: normalized.rows, errors: normalized.errors, summary };
@@ -1191,7 +1261,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.13.2-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.14.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1845,13 +1915,16 @@ async function routeRequest(request, response, route) {
       const products=await rest('products',`tenant_id=eq.${context.tenantId}&select=sku`),existing=new Set(products.map((product)=>String(product.sku).toUpperCase()));
       addChunks('CREATE',rows.filter((row)=>!existing.has(row.sku)));
       addChunks('UPDATE',rows.filter((row)=>existing.has(row.sku)));
-    }else addChunks('STANDARD',rows);
+    }else if(['PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES'].includes(preview.kind))addChunks('PRODUCT_EXTENSION',rows);
+    else addChunks('STANDARD',rows);
     const results=[];
     for(let index=0;index<tasks.length;index+=1){
       const task=tasks[index],chunkKey=tasks.length===1?key:`${key}:${index+1}`;
       const result=task.type==='UPDATE'
         ?await rpc('update_import_products_v1',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:chunkKey,p_file_name:input.fileName??null,p_rows:task.rows})
-        :await rpc('import_initial_data',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:chunkKey,p_kind:preview.kind,p_file_name:input.fileName??null,p_location_id:preview.locationId,p_rows:task.rows});
+        :task.type==='PRODUCT_EXTENSION'
+          ?await rpc('import_product_extensions_v1',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:chunkKey,p_kind:preview.kind,p_file_name:input.fileName??null,p_rows:task.rows})
+          :await rpc('import_initial_data',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:chunkKey,p_kind:preview.kind,p_file_name:input.fileName??null,p_location_id:preview.locationId,p_rows:task.rows});
       if(preview.kind==='PRODUCTS'&&task.type==='CREATE')await rpc('apply_import_product_settings_v1',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_rows:task.rows});
       results.push(result);
     }

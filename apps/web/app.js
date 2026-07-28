@@ -6,7 +6,7 @@ import { customerReceiptView } from './receipt.mjs';
 import { disconnectBluetoothPrinter, printEscPosReceipt, printEscPosTest, printerConnected, printerSelected, restoreGrantedPrinter, selectBluetoothPrinter, supportsBluetoothClassicPrinting } from './escpos-printer.mjs';
 import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, unitFitsStock } from './pos-units.mjs';
 import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
-import { createProductExportWorkbook, createTemplateWorkbook, productExportRows, workbookMatrix, workbookTemplates } from './product-workbook.mjs';
+import { createProductExportWorkbook, createTemplateWorkbook, productExportRows, productExtensionExportRows, workbookMatrix, workbookTemplates } from './product-workbook.mjs';
 
 const storedAuth = loadAuth();
 const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
@@ -555,15 +555,22 @@ function renderProductExportFilters(){
   updateProductExportCount();
 }
 
-function updateProductExportCount(){if(el('export-product-count'))el('export-product-count').textContent=`${productExportRows(state.managedProducts,productExportFilters()).length.toLocaleString('id-ID')} barang akan diexport.`;}
+function updateProductExportCount(){
+  if(!el('export-product-count'))return;
+  const kind=['PRODUCTS','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES'].includes(el('import-kind')?.value)?el('import-kind').value:'PRODUCTS';
+  const rows=kind==='PRODUCTS'?productExportRows(state.managedProducts,productExportFilters()):productExtensionExportRows(state.managedProducts,kind,productExportFilters());
+  el('export-product-count').textContent=`${rows.length.toLocaleString('id-ID')} baris ${workbookTemplates[kind].sheet} akan diexport.`;
+}
 
 function exportProductsXlsx(){
   try{
     if(!window.XLSX)throw new Error('Komponen Excel belum siap. Muat ulang aplikasi.');
-    const {workbook,count}=createProductExportWorkbook(window.XLSX,state.managedProducts,productExportFilters());
+    const kind=['PRODUCTS','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES'].includes(el('import-kind').value)?el('import-kind').value:'PRODUCTS';
+    const {workbook,count}=createProductExportWorkbook(window.XLSX,state.managedProducts,productExportFilters(),kind);
     if(!count)throw new Error('Tidak ada barang yang cocok dengan filter export');
-    window.XLSX.writeFile(workbook,`barang-kasir-nusa-${new Date().toISOString().slice(0,10)}.xlsx`,{compression:true});
-    toast(`${count.toLocaleString('id-ID')} barang berhasil diexport`);
+    const names={PRODUCTS:'barang',PRODUCT_UNITS:'satuan-barang',PRODUCT_VARIANTS:'varian-barang',PRODUCT_PRICES:'harga-pelanggan'};
+    window.XLSX.writeFile(workbook,`${names[kind]}-kasir-nusa-${new Date().toISOString().slice(0,10)}.xlsx`,{compression:true});
+    toast(`${count.toLocaleString('id-ID')} baris berhasil diexport`);
   }catch(error){toast(error.message);}
 }
 
@@ -1060,7 +1067,10 @@ async function recordSupplierPayment(event){
 }
 
 const importAliases = {
-  PRODUCTS: { no_barang_sku:'sku',sku:'sku',nama_barang:'name',nama:'name',kategori:'category',merek:'brand',satuan_terkecil:'baseUnit',satuan_dasar:'baseUnit',barcode_satuan_terkecil:'baseBarcode',barcode_dasar:'baseBarcode',harga_umum:'retailPrice',harga_ecer:'retailPrice',harga_grosir:'wholesalePrice',min_qty_grosir:'tierQty',harga_per_pcs_grosir:'tierPrice',satuan_besar:'bulkUnit',isi_dalam_pcs:'bulkFactor',isi_satuan_besar:'bulkFactor',barcode_satuan_besar:'bulkBarcode',stok_awal:'openingQty',modal_per_pcs:'openingCost',modal_awal:'openingCost',nomor_batch:'batchNo',tanggal_exp:'expiresOn',stok_minimum:'minimumStock',pantau_exp:'trackExpiry' },
+  PRODUCTS: { no_barang_sku:'sku',sku:'sku',nama_barang:'name',nama:'name',kategori:'category',merek:'brand',satuan_terkecil:'baseUnit',satuan_dasar:'baseUnit',barcode_satuan_terkecil:'baseBarcode',barcode_satuan_dasar:'baseBarcode',barcode_dasar:'baseBarcode',harga_umum:'retailPrice',harga_ecer:'retailPrice',harga_grosir:'wholesalePrice',min_qty_grosir:'tierQty',harga_per_pcs_grosir:'tierPrice',satuan_besar:'bulkUnit',isi_dalam_pcs:'bulkFactor',isi_satuan_besar:'bulkFactor',barcode_satuan_besar:'bulkBarcode',stok_awal:'openingQty',modal_per_pcs:'openingCost',modal_per_satuan_dasar:'openingCost',modal_awal:'openingCost',nomor_batch:'batchNo',tanggal_exp:'expiresOn',stok_minimum:'minimumStock',pantau_exp:'trackExpiry' },
+  PRODUCT_UNITS: { no_barang_sku:'sku',sku:'sku',nama_satuan:'unitName',satuan:'unitName',isi_dalam_satuan_dasar:'factor',isi:'factor',barcode:'barcode' },
+  PRODUCT_VARIANTS: { no_barang_sku:'sku',sku:'sku',kelompok_varian:'variantGroup',nama_varian:'variantName' },
+  PRODUCT_PRICES: { no_barang_sku:'sku',sku:'sku',tipe_pelanggan:'customerGroup',tipe_harga:'customerGroup',minimal_pembelian:'minQty',min_qty:'minQty',harga_per_satuan_dasar:'unitPrice',harga:'unitPrice' },
   CUSTOMERS: { kode:'code',nama:'name',telepon:'phone',kelompok:'groupId' },
   SUPPLIERS: { kode:'code',nama:'name',telepon:'phone',alamat:'address' }
 };
@@ -1104,6 +1114,31 @@ function downloadImportTemplate() {
   }catch(error){toast(error.message);}
 }
 
+function syncImportKindUi() {
+  const kind=el('import-kind').value,template=workbookTemplates[kind];
+  renderImportLocations();
+  if(template){
+    el('download-import-template').textContent=`Unduh template ${template.sheet}`;
+    el('export-products-xlsx').textContent=`Export ${template.sheet}`;
+  }
+  el('export-products-xlsx').classList.toggle('hidden',!['PRODUCTS','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES'].includes(kind));
+  updateProductExportCount();
+}
+
+async function openProductImportWorkspace(kind,{focus='import'}={}) {
+  if(!workbookTemplates[kind])return;
+  el('product-data-types-dialog').close();
+  showPage('imports');
+  el('import-kind').value=kind;
+  syncImportKindUi();
+  resetImportPreview(`Gunakan template ${workbookTemplates[kind].sheet}, lalu pilih file yang sudah diisi.`);
+  if(state.session.permissions.includes('catalog.manage'))await loadProductManagement();
+  requestAnimationFrame(()=>{
+    const target=focus==='export'?document.querySelector('.product-export-panel'):document.querySelector('.import-control');
+    target?.scrollIntoView({behavior:'smooth',block:'start'});
+  });
+}
+
 function resetImportPreview(message = 'Pilih file untuk melihat data sebelum disimpan.') {
   state.importDraft = null;
   el('commit-import').disabled = true;
@@ -1119,7 +1154,12 @@ function mapCsvRows(kind, matrix) {
   const aliases = importAliases[kind];
   const headers = matrix[0].map((header) => String(header).trim().toLowerCase().replaceAll(' ','_'));
   const mappedHeaders = headers.map((header) => aliases[header] ?? null);
-  const required = kind === 'PRODUCTS' ? ['name','retailPrice'] : ['code','name'];
+  const requiredByKind={
+    PRODUCTS:['name','retailPrice'],PRODUCT_UNITS:['sku','unitName','factor'],
+    PRODUCT_VARIANTS:['sku','variantGroup','variantName'],PRODUCT_PRICES:['sku','customerGroup','minQty','unitPrice'],
+    CUSTOMERS:['code','name'],SUPPLIERS:['code','name']
+  };
+  const required = requiredByKind[kind]??[];
   const missing = required.filter((field) => !mappedHeaders.includes(field));
   if (missing.length) throw new Error('Susunan kolom tidak cocok. Gunakan file contoh yang disediakan.');
   return matrix.slice(1).map((cells) => Object.fromEntries(mappedHeaders.map((field,index) => [field,cells[index] ?? '']).filter(([field]) => field)));
@@ -1133,8 +1173,15 @@ function renderImportPreview(preview) {
   el('import-validity').className = `pill ${preview.valid ? 'success' : ''}`;
   el('import-validity').textContent = preview.valid ? 'Siap disimpan' : 'Perlu diperbaiki';
   el('import-errors').innerHTML = preview.errors.length ? `<div class="import-error-list"><strong>${preview.errors.length} hal perlu diperbaiki</strong>${preview.errors.slice(0,20).map((error) => `<p>Baris ${error.row || '—'} · ${escapeHtml(error.message)}</p>`).join('')}</div>` : '';
-  const keys = preview.kind === 'PRODUCTS' ? ['sku','name','retailPrice','bulkUnit','openingQty','minimumStock','trackExpiry'] : preview.kind === 'CUSTOMERS' ? ['code','name','phone','groupId'] : ['code','name','phone','address'];
-  const labels = { sku:'No. barang / SKU',name:'Nama',retailPrice:'Harga umum',bulkUnit:'Satuan besar',openingQty:'Stok awal',minimumStock:'Stok minimum',trackExpiry:'Pantau EXP',code:'Kode',phone:'Telepon',groupId:'Kelompok',address:'Alamat' };
+  const keysByKind={
+    PRODUCTS:['sku','name','baseUnit','retailPrice','openingQty','minimumStock','trackExpiry'],
+    PRODUCT_UNITS:['sku','unitName','factor','barcode'],
+    PRODUCT_VARIANTS:['sku','variantGroup','variantName'],
+    PRODUCT_PRICES:['sku','customerGroup','minQty','unitPrice'],
+    CUSTOMERS:['code','name','phone','groupId'],SUPPLIERS:['code','name','phone','address']
+  };
+  const keys=keysByKind[preview.kind]??[];
+  const labels = { sku:'No. barang / SKU',name:'Nama',baseUnit:'Satuan dasar',retailPrice:'Harga umum',openingQty:'Stok awal',minimumStock:'Stok minimum',trackExpiry:'Pantau EXP',unitName:'Nama satuan',factor:'Isi satuan dasar',barcode:'Barcode',variantGroup:'Kelompok varian',variantName:'Nama varian',customerGroup:'Tipe pelanggan',minQty:'Minimal beli',unitPrice:'Harga / satuan dasar',code:'Kode',phone:'Telepon',groupId:'Kelompok',address:'Alamat' };
   el('import-preview').innerHTML = `<table><thead><tr><th>Baris</th>${keys.map((key) => `<th>${labels[key]}</th>`).join('')}</tr></thead><tbody>${preview.rows.slice(0,50).map((row,index) => `<tr><td>${index+2}</td>${keys.map((key) => `<td>${escapeHtml(row[key] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table>${preview.rows.length>50?'<p class="muted import-more">Menampilkan 50 baris pertama.</p>':''}`;
   el('commit-import').disabled = !preview.valid;
   el('import-message').textContent = preview.valid ? `${summary.total} baris sudah lolos pemeriksaan dan belum disimpan.` : 'Perbaiki file sesuai pesan, lalu pilih kembali file tersebut.';
@@ -1185,7 +1232,7 @@ async function loadImportHistory() {
   try {
     const data = await request('/api/imports');
     state.importJobs = data.jobs ?? [];
-    const labels = { PRODUCTS:'Produk',CUSTOMERS:'Pelanggan',SUPPLIERS:'Supplier' };
+    const labels = { PRODUCTS:'Produk',PRODUCT_UNITS:'Satuan barang',PRODUCT_VARIANTS:'Varian barang',PRODUCT_PRICES:'Harga pelanggan',CUSTOMERS:'Pelanggan',SUPPLIERS:'Supplier' };
     el('import-history-list').innerHTML = state.importJobs.length ? state.importJobs.map((job) => `<div class="import-history-row"><div><strong>${labels[job.import_kind] ?? job.import_kind}</strong><small>${escapeHtml(job.file_name ?? 'Tanpa nama file')} · ${new Intl.DateTimeFormat('id-ID',{dateStyle:'medium',timeStyle:'short'}).format(new Date(job.created_at))}</small></div><div><strong>${job.total_rows} baris</strong><small>${job.created_rows} baru · ${job.updated_rows} diperbarui</small></div><span class="badge ok">Selesai</span></div>`).join('') : '<div class="empty-state compact">Belum ada riwayat impor.</div>';
   } catch (error) { el('import-history-list').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`; }
 }
@@ -5855,6 +5902,13 @@ el('close-user-editor').addEventListener('click', () => el('edit-user-dialog').c
 el('cancel-user-edit').addEventListener('click', () => el('edit-user-dialog').close());
 el('open-product-dialog').addEventListener('click', () => openProductEditor());
 el('open-price-policy').addEventListener('click',openPricePolicy);
+el('open-import-products').addEventListener('click',()=>openProductImportWorkspace('PRODUCTS'));
+el('open-export-products').addEventListener('click',()=>openProductImportWorkspace('PRODUCTS',{focus:'export'}));
+el('open-product-data-types').addEventListener('click',()=>el('product-data-types-dialog').showModal());
+el('close-product-data-types').addEventListener('click',()=>el('product-data-types-dialog').close());
+el('product-data-types-dialog').addEventListener('click',(event)=>{
+  const button=event.target.closest('[data-product-import-kind]');if(button)openProductImportWorkspace(button.dataset.productImportKind);
+});
 el('close-price-policy').addEventListener('click',()=>el('price-policy-dialog').close());
 el('preview-price-policy').addEventListener('click',previewPricePolicy);
 el('price-policy-form').addEventListener('submit',applyPricePolicy);
@@ -5933,8 +5987,8 @@ el('import-file').addEventListener('change', inspectImportFile);
 el('import-kind').addEventListener('change', () => {
   el('import-file').value = '';
   el('import-file-name').textContent = 'Belum ada file dipilih';
-  renderImportLocations();
-  resetImportPreview('Unduh dan gunakan contoh CSV untuk jenis data yang dipilih.');
+  syncImportKindUi();
+  resetImportPreview('Unduh dan gunakan template Excel untuk jenis data yang dipilih.');
 });
 el('import-location').addEventListener('change', () => { if (el('import-file').files[0]) inspectImportFile(); });
 el('commit-import').addEventListener('click', commitImport);

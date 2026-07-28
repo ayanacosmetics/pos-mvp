@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=106">
+  <link rel="stylesheet" href="/styles.css?v=107">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -176,7 +176,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Startup Cepat · v2.13.2</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Excel Produk Fleksibel · v2.14.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -354,7 +354,7 @@
       </section>
 
       <section id="page-products" class="page"><div class="content-width">
-        <div class="page-title"><div><p class="eyebrow">MASTER KATALOG</p><h1>Produk dan varian</h1><p class="muted">Kelola SKU, barcode, satuan, harga, batas stok, dan status jual.</p></div><div class="page-title-actions"><button id="open-price-policy" class="button secondary">Aturan harga massal</button><button id="open-product-dialog" class="button primary">Tambah produk</button></div></div>
+        <div class="page-title"><div><p class="eyebrow">MASTER KATALOG</p><h1>Produk dan varian</h1><p class="muted">Kelola SKU, barcode, satuan, harga, batas stok, dan status jual.</p></div><div class="page-title-actions product-page-actions"><button id="open-import-products" class="button secondary">Import produk baru</button><button id="open-export-products" class="button secondary">Export / edit produk</button><button id="open-product-data-types" class="button secondary">Tipe produk</button><button id="open-price-policy" class="button secondary">Aturan harga massal</button><button id="open-product-dialog" class="button primary">Tambah produk</button></div></div>
         <div id="product-metrics" class="product-metrics"></div>
         <div class="surface product-directory">
           <div class="product-directory-head"><div><p class="eyebrow">DIREKTORI PRODUK</p><h2>Semua barang</h2></div><div class="product-filters"><input id="product-admin-search" type="search" placeholder="Cari SKU, produk, merek, atau barcode"><select id="product-admin-status"><option value="ACTIVE">Produk aktif</option><option value="ALL">Semua status</option><option value="INACTIVE">Produk nonaktif</option><option value="LOW_STOCK">Stok menipis</option></select></div></div>
@@ -377,7 +377,7 @@
         <div class="import-workspace">
           <div class="surface import-control">
             <p class="eyebrow">FILE YANG AKAN DIPERIKSA</p>
-            <label>Jenis data<select id="import-kind"><option value="PRODUCTS">Barang, harga umum, satuan & stok awal</option><option value="CUSTOMERS">Pelanggan</option><option value="SUPPLIERS">Supplier</option></select></label>
+            <label>Jenis data<select id="import-kind"><option value="PRODUCTS">Barang utama & stok awal</option><option value="PRODUCT_UNITS">Multi satuan</option><option value="PRODUCT_VARIANTS">Varian barang</option><option value="PRODUCT_PRICES">Tipe harga pelanggan</option><option value="CUSTOMERS">Pelanggan</option><option value="SUPPLIERS">Supplier</option></select></label>
             <label id="import-location-label">Lokasi stok awal<select id="import-location"></select><small class="muted">Stok awal hanya untuk produk yang belum pernah bertransaksi.</small></label>
             <label class="import-dropzone" for="import-file"><strong>Pilih file Excel</strong><small id="import-file-name">Belum ada file dipilih</small><input id="import-file" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"></label>
             <p id="import-message" class="muted">Format utama XLSX. CSV lama tetap dapat dibaca.</p>
@@ -889,6 +889,7 @@
   <dialog id="held-sales-dialog"><div class="dialog-card held-sales-dialog"><div class="comparison-heading"><div><p class="eyebrow">TRANSAKSI DITAHAN</p><h2>Lanjutkan keranjang</h2></div><button id="close-held-sales" class="icon-button" type="button">×</button></div><div id="held-sales-list"><div class="empty-state compact">Belum ada transaksi ditahan.</div></div></div></dialog>
   <dialog id="receipt-dialog"><div class="dialog-card receipt-dialog"><div id="receipt-content"></div><div class="button-row no-print"><button id="close-receipt" class="button secondary" type="button">Transaksi baru</button><button id="whatsapp-receipt" class="button secondary hidden" type="button">WhatsApp</button><button id="print-receipt" class="button primary" type="button">Cetak struk</button></div></div></dialog>
   <dialog id="purchase-order-dialog"><div class="dialog-card purchase-order-dialog"><div id="purchase-order-print-content"></div><div class="button-row no-print"><button id="close-purchase-order-print" class="button secondary" type="button">Tutup</button><button id="share-purchase-order" class="button secondary" type="button">Bagikan ke supplier</button><button id="print-purchase-order" class="button primary" type="button">Cetak / Simpan PDF</button></div></div></dialog>
+  <dialog id="product-data-types-dialog"><div class="dialog-card product-data-types-dialog"><div class="comparison-heading"><div><p class="eyebrow">EXPORT / IMPORT TIPE PRODUK</p><h2>Pilih data tambahan</h2><p class="muted">Buat produk utama terlebih dahulu. Setelah itu pilih data yang ingin diexport atau diimport.</p></div><button id="close-product-data-types" class="icon-button" type="button" aria-label="Tutup">×</button></div><div class="product-data-type-grid"><button type="button" data-product-import-kind="PRODUCT_PRICES"><strong>Tipe harga</strong><small>Member, Grosir, dan tingkat minimal pembelian</small></button><button type="button" data-product-import-kind="PRODUCT_UNITS"><strong>Multi satuan</strong><small>pcs, pak, lusin, dus, atau jumlah satuan lainnya</small></button><button type="button" data-product-import-kind="PRODUCT_VARIANTS"><strong>Varian</strong><small>Warna, ukuran, aroma, dan kelompok produk</small></button></div><p class="product-data-note">Barang satuan tunggal tidak perlu mengisi Multi Satuan. Harga Umum tetap berada pada file Barang utama.</p></div></dialog>
   <dialog id="product-dialog"><form id="product-form" class="dialog-card product-editor">
     <div class="comparison-heading"><div><p id="product-dialog-eyebrow" class="eyebrow">PRODUK BARU</p><h2 id="product-dialog-title">Tambah produk</h2><p class="muted">Setiap varian mempunyai SKU, barcode, harga, dan stok sendiri.</p></div><button id="close-product-dialog" class="icon-button" type="button">×</button></div>
     <input id="edit-product-id" type="hidden">
@@ -928,6 +929,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=106"></script>
+  <script type="module" src="/app.js?v=107"></script>
 </body>
 </html>
