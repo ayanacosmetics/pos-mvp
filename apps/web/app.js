@@ -316,7 +316,6 @@ async function applyBootstrap(data, { offline = false } = {}) {
   if (!offline && state.session.permissions.includes('promotion.manage')) await loadPromotionManagement();
   if (!offline && state.session.permissions.includes('pos.sell')) await loadHeldSales();
   if (!offline && state.session.permissions.includes('pos.sell')) await loadCustomerAging();
-  if (!offline && state.session.permissions.includes('sales.return')) await loadRecentReturns();
   if (!offline && state.session.permissions.includes('workforce.self')) { await loadWorkforceOverview(); await loadApprovals(); }
   if (!offline && state.session.permissions.includes('workforce.manage')) { await loadWorkforceActivity(); await loadWorkforceReconciliations(); }
 }
@@ -416,7 +415,6 @@ async function synchronizeData() {
     if (target === 'users' && state.session.permissions.includes('identity.manage')) tasks.push(loadUsers());
     if (target === 'settings' && state.session.permissions.includes('identity.manage')) tasks.push(loadSettingsWorkspace());
     if (target === 'sync-review' && state.session.permissions.includes('audit.view')) tasks.push(loadSyncReview());
-    if (target === 'returns' && state.session.permissions.includes('sales.return')) tasks.push(loadRecentReturns());
     if (['promotions', 'loyalty'].includes(target) && state.session.permissions.includes('promotion.manage')) tasks.push(loadPromotionManagement());
     if (target === 'customers' && state.session.permissions.includes('pos.sell')) tasks.push(loadCrmDashboard(), loadCustomerAging());
     if (target === 'imports' && state.session.permissions.includes('audit.view')) tasks.push(loadImportHistory());
@@ -3775,11 +3773,6 @@ function syncReturnRefundFields() {
   el('submit-return').disabled=!selectedReturnItems().length||!cashReady;
 }
 
-function renderSaleReturnHistory() {
-  const history=state.returnSale?.returns??[];
-  el('sale-return-history').innerHTML=`<div class="return-section-heading"><div><p class="eyebrow">RIWAYAT STRUK INI</p><h2>${history.length} retur sebelumnya</h2></div></div>${history.map((item)=>`<div class="return-history-row"><div><strong>${escapeHtml(item.returnNo)}</strong><small>${new Date(item.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(item.reason)}</small></div><div><strong>${money.format(item.total)}</strong><small>${escapeHtml(item.refundMethod??'-')}</small></div></div>`).join('')||'<div class="empty-state compact">Belum pernah diretur.</div>'}`;
-}
-
 function renderReturnSale() {
   const sale=state.returnSale;
   if(!sale){el('return-workspace').classList.add('hidden');return;}
@@ -3787,7 +3780,7 @@ function renderReturnSale() {
   const statusLabel=({RETURNABLE:'BELUM DIRETUR',PARTIALLY_RETURNED:'RETUR SEBAGIAN',FULLY_RETURNED:'SUDAH DIRETUR PENUH'})[sale.status]??sale.status;
   el('return-sale-summary').innerHTML=`<div><p class="eyebrow">STRUK DITEMUKAN</p><h2>${escapeHtml(sale.receiptNo)}</h2><small>${new Date(sale.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(sale.outletName)} · ${escapeHtml(sale.cashierName)}</small></div><div><span class="status-badge ${sale.status==='FULLY_RETURNED'?'received':'approved'}">${statusLabel}</span><strong>${money.format(sale.grandTotal)}</strong><small>${escapeHtml(sale.paymentMethod)} · ${escapeHtml(sale.customer?.name??'Pelanggan umum')}</small></div>`;
   el('return-item-list').innerHTML=sale.lines.map((line)=>`<article class="return-line ${line.remainingQty<=0?'completed':''}" data-sale-item-id="${escapeHtml(line.saleItemId)}"><label class="return-line-select"><input class="return-select" type="checkbox" ${line.remainingQty<=0?'disabled':''}><span><strong>${escapeHtml(line.productName)}</strong><small>Terjual ${Number(line.soldQty).toLocaleString('id-ID')} pcs · pernah diretur ${Number(line.returnedQty).toLocaleString('id-ID')} pcs</small></span></label><div class="return-line-fields"><label>Jumlah retur<input class="return-qty" type="number" min="0" max="${line.remainingQty}" step="any" value="${line.remainingQty>0?1:0}" ${line.remainingQty<=0?'disabled':''}></label><label>Kondisi barang<select class="return-condition" ${line.remainingQty<=0?'disabled':''}><option value="SALEABLE">Layak dijual kembali</option><option value="OPENED">Sudah dibuka/dipakai</option><option value="DAMAGED">Rusak atau bocor</option><option value="EXPIRED">Kedaluwarsa</option></select></label><div class="return-line-value"><span>Sisa dapat diretur</span><strong>${Number(line.remainingQty).toLocaleString('id-ID')} pcs</strong><small>${money.format(line.unitRefund)} / pcs</small></div></div><div class="return-stock-impact"><span class="badge ok">Kembali ke stok jual</span><strong class="return-line-refund">${money.format(0)}</strong></div></article>`).join('');
-  renderSaleReturnHistory(); syncReturnRefundFields();
+  syncReturnRefundFields();
 }
 
 function updateReturnLine(row) {
@@ -3807,9 +3800,16 @@ async function findReturnSale() {
   catch(error){state.returnSale=null;renderReturnSale();el('return-search-status').textContent=error.message;}
 }
 
-async function loadRecentReturns() {
-  try{const data=await request('/api/returns/recent');state.recentReturns=data.returns??[];el('return-recent-list').innerHTML=state.recentReturns.map((item)=>`<div class="return-recent-row"><div><strong>${escapeHtml(item.returnNo)}</strong><small>Struk ${escapeHtml(item.receiptNo)} · ${new Date(item.occurredAt).toLocaleString('id-ID')}</small></div><div><span>${escapeHtml(item.reason)}</span><small>${Number(item.restockedQty).toLocaleString('id-ID')} pcs kembali stok · ${Number(item.damagedQty).toLocaleString('id-ID')} pcs tidak layak jual</small></div><div><strong>${money.format(item.total)}</strong><small>${escapeHtml(item.refundMethod??'-')} · ${escapeHtml(item.actorName)}</small></div></div>`).join('')||'<div class="empty-state compact">Belum ada retur penjualan.</div>';}
-  catch(error){el('return-recent-list').innerHTML=`<div class="empty-state compact">Riwayat gagal dimuat: ${escapeHtml(error.message)}</div>`;}
+function cancelCustomerReturn() {
+  if(!state.returnSale)return;
+  if(!window.confirm('Batalkan proses retur yang sedang diisi dan kembali ke pencarian struk?'))return;
+  state.returnSale=null;
+  el('return-form').reset();
+  el('return-refund-reference').value='';
+  el('return-workspace').classList.add('hidden');
+  el('return-receipt-search').value='';
+  el('return-search-status').textContent='Proses retur dibatalkan. Masukkan nomor struk lain untuk memulai kembali.';
+  el('return-receipt-search').focus();
 }
 
 async function submitCustomerReturn(event) {
@@ -3823,7 +3823,7 @@ async function submitCustomerReturn(event) {
   try{
     const result=await request('/api/returns',{method:'POST',headers:{'idempotency-key':crypto.randomUUID()},body:JSON.stringify({saleId:state.returnSale.id,reason:note?`${reason} — ${note}`:reason,refundMethod,refundReference:refundReference||null,refundShiftId:effective==='CASH'?state.currentShift?.id:null,items:items.map(({unitRefund,...item})=>item)})});
     toast(`Retur ${result.returnNo} berhasil · ${money.format(result.total)}`);
-    const refreshed=await request(`/api/sales/${state.returnSale.id}`);state.returnSale=refreshed.sale;renderReturnSale();await loadRecentReturns();await refreshCatalog();await loadCustomerAging();
+    const refreshed=await request(`/api/sales/${state.returnSale.id}`);state.returnSale=refreshed.sale;renderReturnSale();await refreshCatalog();await loadCustomerAging();
     if(state.session.permissions.includes('inventory.manage'))await loadInventory(); if(state.session.permissions.includes('report.view'))await loadReport();
   }catch(error){toast(error.message);}finally{button.textContent='Proses retur dan refund';syncReturnRefundFields();}
 }
@@ -4786,7 +4786,6 @@ el('nav').addEventListener('click', (event) => {
   if(mobileSidebarMedia.matches)setSidebarOpen(false);
   if(target==='users')loadUsers();
   if(target==='sync-review')loadSyncReview();
-  if(target==='returns')loadRecentReturns();
   if(target==='settings')loadSettingsWorkspace();
   if(target==='loyalty')showLoyaltyView('');
   if(['promotions','loyalty'].includes(target))loadPromotionManagement();
@@ -4940,7 +4939,7 @@ el('return-item-list').addEventListener('change',(event)=>{const row=event.targe
 el('select-all-returnable').addEventListener('click',()=>{el('return-item-list').querySelectorAll('.return-select:not(:disabled)').forEach((input)=>{input.checked=true;updateReturnLine(input.closest('.return-line'));});});
 el('return-refund-method').addEventListener('change',syncReturnRefundFields);
 el('return-form').addEventListener('submit',submitCustomerReturn);
-el('refresh-return-history').addEventListener('click',loadRecentReturns);
+el('cancel-return').addEventListener('click',cancelCustomerReturn);
 el('refresh-sync-review').addEventListener('click', loadSyncReview);
 el('sync-review-list').addEventListener('click', (event) => {
   const button = event.target.closest('.sync-decision');
