@@ -24,6 +24,7 @@ state.salesMetrics = null;
 state.salesYears = [];
 state.salesPeriodTrail = [];
 state.salesReportFilter = {staffId:'',paymentState:'ALL',sort:'DESC',paymentMethods:['CASH','QRIS','TRANSFER','EDC','CREDIT','MULTIPAYMENT'],includeCreditProfit:true,includeCreditRevenue:false};
+state.salesAnalysis = {preset:'TODAY',data:null,view:'sales-products'};
 const el = (id) => document.getElementById(id);
 const posDevice = deviceIdentity();
 const roleLabels = { OWNER: 'Owner', ADMIN: 'Admin', MANAGER: 'Manajer Outlet', CASHIER: 'Kasir', PURCHASING: 'Pembelian', WAREHOUSE: 'Gudang' };
@@ -419,7 +420,9 @@ async function synchronizeData() {
     if (target === 'restock' && state.session.permissions.includes('purchasing.view_cost')) {
       tasks.push(loadPurchaseOrders(), loadRestockPlanning(), loadRecentSupplierReturns());
     }
-    if (target === 'reports' && state.session.permissions.includes('report.view')) tasks.push(loadReport());
+    if (target === 'reports' && state.session.permissions.includes('report.view')) tasks.push(
+      ['sales-products','sales-categories','sales-addons','stock-flow'].includes(state.reportView)?loadSalesAnalysis():loadReport()
+    );
     if (target === 'users' && state.session.permissions.includes('identity.manage')) tasks.push(loadUsers());
     if (target === 'settings' && state.session.permissions.includes('identity.manage')) tasks.push(loadSettingsWorkspace());
     if (target === 'sync-review' && state.session.permissions.includes('audit.view')) tasks.push(loadSyncReview());
@@ -3764,6 +3767,61 @@ async function loadFilteredSalesReport(){
   return data;
 }
 
+function salesAnalysisRange(){
+  const today=storeDateToday(),preset=state.salesAnalysis.preset;
+  if(preset==='MONTH')return{from:`${today.slice(0,7)}-01`,to:today};
+  if(preset==='YEAR')return{from:`${today.slice(0,4)}-01-01`,to:today};
+  if(preset==='CUSTOM')return{from:el('sales-analysis-from').value,to:el('sales-analysis-to').value};
+  return{from:today,to:today};
+}
+
+function renderSalesAnalysis(){
+  const view=state.salesAnalysis.view,data=state.salesAnalysis.data??{},query=el('sales-analysis-search').value.trim().toLowerCase(),sort=el('sales-analysis-sort').value;
+  const flow=view==='stock-flow';
+  const dashboard=flow
+    ? (data.rows??[]).reduce((sum,row)=>{sum.qtySold+=Number(row.stockOut);sum.netRevenue+=Number(row.stockIn);sum.grossProfit+=Number(row.netFlow);return sum;},{qtySold:0,netRevenue:0,grossProfit:0})
+    : data.dashboard??{qtySold:0,netRevenue:0,grossProfit:0};
+  el('sales-analysis-dashboard').innerHTML=flow
+    ? `<article class="primary"><span>Stok keluar</span><strong>${Number(dashboard.qtySold).toLocaleString('id-ID')} pcs</strong></article><article><span>Stok masuk</span><strong>${Number(dashboard.netRevenue).toLocaleString('id-ID')} pcs</strong></article><article><span>Perubahan bersih</span><strong>${Number(dashboard.grossProfit).toLocaleString('id-ID')} pcs</strong></article>`
+    : `<article class="primary"><span>Qty terjual</span><strong>${Number(dashboard.qtySold).toLocaleString('id-ID')} pcs</strong></article><article><span>Pendapatan</span><strong>${money.format(dashboard.netRevenue)}</strong></article><article><span>Keuntungan</span><strong>${money.format(dashboard.grossProfit)}</strong></article>`;
+  let rows=view==='sales-categories'?data.categories??[]:view==='sales-addons'?data.addons??[]:view==='stock-flow'?data.rows??[]:data.products??[];
+  rows=rows.filter((row)=>!query||`${row.productName??''} ${row.sku??''} ${row.category??''}`.toLowerCase().includes(query));
+  const qty=(row)=>Number(flow?row.stockOut:row.qtySold??row.addonTransactions??0);
+  rows.sort((a,b)=>{
+    if(sort==='QTY_ASC')return qty(a)-qty(b);
+    if(sort==='NAME')return String(a.productName??a.category).localeCompare(String(b.productName??b.category),'id');
+    if(sort==='PROFIT')return Number(b.grossProfit??b.netFlow)-Number(a.grossProfit??a.netFlow);
+    if(sort==='REVENUE')return Number(b.netRevenue??b.stockIn)-Number(a.netRevenue??a.stockIn);
+    return qty(b)-qty(a);
+  });
+  el('sales-analysis-list').innerHTML=rows.map((row)=>{
+    if(view==='sales-categories')return`<article class="sales-analysis-row category"><span class="sales-analysis-avatar">${escapeHtml(String(row.category).slice(0,1).toUpperCase())}</span><div><strong>${escapeHtml(row.category)}</strong><small>${Number(row.productCount)} barang · Pendapatan ${money.format(row.netRevenue)} · Keuntungan ${money.format(row.grossProfit)}</small></div><aside><small>Terjual</small><strong>${Number(row.qtySold).toLocaleString('id-ID')} pcs</strong></aside></article>`;
+    if(flow)return`<article class="sales-analysis-row">${productThumbnail({...row,name:row.productName})}<div><strong>${escapeHtml(row.productName)}</strong><small>${escapeHtml(row.sku)} · ${escapeHtml(row.category)}</small><small>Masuk ${Number(row.stockIn).toLocaleString('id-ID')} · Keluar ${Number(row.stockOut).toLocaleString('id-ID')} · Bersih ${Number(row.netFlow).toLocaleString('id-ID')}</small></div><aside><small>Stok sekarang</small><strong>${Number(row.currentStock).toLocaleString('id-ID')} pcs</strong></aside></article>`;
+    const right=view==='sales-addons'?`${Number(row.addonTransactions).toLocaleString('id-ID')} transaksi`:`${Number(row.qtySold).toLocaleString('id-ID')} pcs`;
+    return`<article class="sales-analysis-row">${productThumbnail({...row,name:row.productName})}<div><strong>${escapeHtml(row.productName)}</strong><small>${escapeHtml(row.sku)} · ${escapeHtml(row.category)}</small><small>Keuntungan ${money.format(row.grossProfit)} · Pendapatan ${money.format(row.netRevenue)}</small></div><aside><small>${view==='sales-addons'?'Terjual sebagai add-on':'Total terjual'}</small><strong>${right}</strong></aside></article>`;
+  }).join('')||'<div class="empty-state compact">Belum ada data yang sesuai.</div>';
+  bindProductImageFallbacks(el('sales-analysis-list'));
+}
+
+async function loadSalesAnalysis(){
+  readSalesReportFilter();
+  const range=salesAnalysisRange();
+  if(!range.from||!range.to||range.from>range.to)return toast('Periode analisis tidak valid.');
+  el('report-status').classList.add('loading');el('report-status').textContent='Memuat analisis...';
+  try{
+    const filter=state.salesReportFilter,params=new URLSearchParams({from:range.from,to:range.to,paymentState:filter.paymentState,paymentMethods:filter.paymentMethods.join(','),includeCreditProfit:String(filter.includeCreditProfit),includeCreditRevenue:String(filter.includeCreditRevenue)});
+    if(filter.staffId)params.set('staffId',filter.staffId);
+    if(el('report-outlet').value)params.set('outletId',el('report-outlet').value);
+    const endpoint=state.salesAnalysis.view==='stock-flow'?'stock-flow':'sales-items';
+    const data=await request(`/api/reports/${endpoint}?${params}`);
+    state.salesAnalysis.data=data;
+    if(data.staff)renderSalesStaffOptions(data.staff);
+    renderSalesAnalysis();
+    el('report-status').textContent=`Periode ${new Date(`${range.from}T00:00:00`).toLocaleDateString('id-ID')}–${new Date(`${range.to}T00:00:00`).toLocaleDateString('id-ID')}${data.truncated?' · maksimal 10.000 transaksi':''}`;
+  }catch(error){el('report-status').textContent=`Analisis belum dapat dimuat: ${error.message}`;toast(error.message);}
+  finally{el('report-status').classList.remove('loading');}
+}
+
 function renderSalesMetricCards(metrics){
   state.salesMetrics=metrics;
   const options=[
@@ -4565,20 +4623,22 @@ function showStockView(name='list'){
 
 function syncSalesReportShell(){
   const salesActive=state.reportView==='sales';
+  const analysisActive=['sales-products','sales-categories','sales-addons','stock-flow'].includes(state.reportView);
   const detailOpen=salesActive&&state.salesReportOpen;
   el('sales-period-nav').classList.toggle('hidden',!salesActive||detailOpen);
   el('sales-report-detail-toolbar').classList.toggle('hidden',!detailOpen);
-  el('sales-report-filters').classList.toggle('hidden',!detailOpen);
+  el('sales-report-filters').classList.toggle('hidden',!detailOpen&&!analysisActive);
   el('sales-metric-value').classList.toggle('hidden',!detailOpen);
-  if(!salesActive){
+  el('sales-analysis-page').classList.toggle('hidden',!analysisActive);
+  if(!salesActive&&!analysisActive){
     el('report-filter-panel').classList.remove('hidden');
     el('report-status').classList.remove('hidden');
     return;
   }
   el('report-filter-panel').classList.add('hidden');
-  el('report-status').classList.toggle('hidden',!detailOpen);
+  el('report-status').classList.toggle('hidden',salesActive&&!detailOpen);
   el('report-cards').classList.toggle('hidden',!detailOpen);
-  if(!detailOpen){
+  if(!detailOpen||analysisActive){
     el('sales-period-breakdown').classList.add('hidden');
     el('report-sales-workspace').classList.add('hidden');
   }
@@ -4595,26 +4655,35 @@ function showReportView(name='summary'){
     performance:['Kinerja produk & outlet','Bandingkan omzet, laba, jumlah terjual, dan kontribusi setiap outlet.'],
     purchases:['Laporan pembelian','Nilai penerimaan dan retur pembelian dirangkum per supplier.'],
     'purchases-history':['Riwayat pembelian','Buka setiap transaksi untuk melihat dan mencetak struk pembelian asli.'],
-    sales:['Penjualan','Pendapatan, keuntungan, retur, dan seluruh riwayat struk dalam satu halaman.'],
+    sales:['Transaksi','Pendapatan, keuntungan, retur, dan seluruh riwayat struk dalam satu halaman.'],
+    'sales-products':['Penjualan barang','Daftar barang terjual beserta qty, pendapatan, dan keuntungan.'],
+    'sales-categories':['Penjualan kategori','Bandingkan qty, pendapatan, dan keuntungan setiap kategori.'],
+    'sales-addons':['Add-on','Barang tambahan yang terjual bersama barang lain dalam satu transaksi.'],
+    'stock-flow':['Arus stok','Pantau stok masuk, keluar, perubahan bersih, dan saldo saat ini.'],
     audit:['Jejak aktivitas','Tinjau aktivitas sensitif yang tercatat oleh sistem.']
   };
   el('report-page-title').textContent=headings[name]?.[0]??headings.summary[0];
   el('report-page-description').textContent=headings[name]?.[1]??headings.summary[1];
+  el('export-report').classList.toggle('hidden',['sales-products','sales-categories','sales-addons','stock-flow'].includes(name));
   if(name!=='sales')el('sales-period-breakdown').classList.add('hidden');
   cards.classList.toggle('hidden',!['summary','sales'].includes(name));
   daily?.classList.toggle('hidden',name!=='summary');
-  products?.classList.toggle('hidden',name!=='performance');
+  products?.classList.add('hidden');
   outlets?.classList.toggle('hidden',name!=='performance');
   purchases?.classList.toggle('hidden',name!=='purchases');
   sales.classList.add('hidden');
   purchaseWorkspace.classList.toggle('hidden',name!=='purchases-history');
   audit.classList.toggle('hidden',name!=='audit');
-  primary?.classList.toggle('hidden',!['summary','performance'].includes(name));
+  primary?.classList.toggle('hidden',name!=='summary');
   secondary?.classList.toggle('hidden',!['performance','purchases'].includes(name));
   if(primary)primary.style.gridTemplateColumns='1fr';
   if(secondary)secondary.style.gridTemplateColumns='1fr';
   if(name==='sales')state.salesReportOpen=false;
+  if(['sales-products','sales-categories','sales-addons','stock-flow'].includes(name)){
+    state.salesAnalysis.view=name;state.salesAnalysis.data=null;
+  }
   syncSalesReportShell();
+  if(['sales-products','sales-categories','sales-addons','stock-flow'].includes(name)&&state.session)loadSalesAnalysis();
   if(name==='purchases-history'&&state.session)loadPurchaseReportReceipts();
 }
 
@@ -4867,6 +4936,10 @@ function showPage(name) {
   if(target==='pos')setMobilePosView('catalog',{focus:false});
   const group=item?.closest('[data-nav-panel]')?.dataset.navPanel;
   if(group)openNavGroup(group);
+  if(item?.closest('#sales-report-subnav')){
+    el('sales-report-subnav').classList.add('active');
+    el('sales-report-subnav-toggle').setAttribute('aria-expanded','true');
+  }
   localStorage.setItem('pos_active_page',name);
   if(multioutletPages.has(name))loadMultiOutletWorkspace().catch((error)=>toast(error.message));
   if(accountingPages.has(name))loadAccounting({sync:!state.accounting}).catch((error)=>toast(error.message));
@@ -5022,6 +5095,12 @@ el('logout').addEventListener('click', async () => {
   await endCurrentSession(portal);
 });
 el('nav').addEventListener('click', (event) => {
+  const reportSubnav=event.target.closest('#sales-report-subnav-toggle');
+  if(reportSubnav){
+    const open=el('sales-report-subnav').classList.toggle('active');
+    reportSubnav.setAttribute('aria-expanded',String(open));reportSubnav.querySelector('b').textContent=open?'⌄':'›';
+    return;
+  }
   const groupButton=event.target.closest('[data-nav-group]');
   if(groupButton){openNavGroup(groupButton.dataset.navGroup,{toggle:true});return;}
   const button=event.target.closest('[data-page]');
@@ -5035,6 +5114,20 @@ el('nav').addEventListener('click', (event) => {
   if(target==='loyalty')showLoyaltyView('');
   if(['promotions','loyalty'].includes(target))loadPromotionManagement();
 });
+el('sales-analysis-sort').addEventListener('change',renderSalesAnalysis);
+el('sales-analysis-search').addEventListener('input',renderSalesAnalysis);
+el('sales-analysis-periods').addEventListener('click',(event)=>{
+  const button=event.target.closest('[data-analysis-period]');if(!button)return;
+  state.salesAnalysis.preset=button.dataset.analysisPeriod;
+  el('sales-analysis-periods').querySelectorAll('button').forEach((item)=>item.classList.toggle('active',item===button));
+  el('sales-analysis-custom-period').classList.toggle('hidden',state.salesAnalysis.preset!=='CUSTOM');
+  if(state.salesAnalysis.preset==='CUSTOM'){
+    if(!el('sales-analysis-from').value)el('sales-analysis-from').value=storeDateToday();
+    if(!el('sales-analysis-to').value)el('sales-analysis-to').value=storeDateToday();
+  }
+  if(state.salesAnalysis.preset!=='CUSTOM')loadSalesAnalysis();
+});
+el('apply-sales-analysis-period').addEventListener('click',loadSalesAnalysis);
 el('sidebar-toggle').addEventListener('click', () => setSidebarOpen(!el('app-view').classList.contains('sidebar-open'), { restoreFocus:true }));
 el('sidebar-backdrop').addEventListener('click', () => setSidebarOpen(false, { restoreFocus:true }));
 document.addEventListener('keydown', (event) => {
@@ -5366,7 +5459,10 @@ el('purge-telemetry').addEventListener('click',async()=>{
     toast(`${result.deleted??0} event lama dibersihkan`);await loadPilotDashboard();
   }catch(error){toast(error.message);}
 });
-el('refresh-report').addEventListener('click',()=>state.reportView==='sales'&&state.salesPeriodLevel==='ALL'?loadSalesAllTime():loadReport());
+el('refresh-report').addEventListener('click',()=>{
+  if(['sales-products','sales-categories','sales-addons','stock-flow'].includes(state.reportView))return loadSalesAnalysis();
+  return state.reportView==='sales'&&state.salesPeriodLevel==='ALL'?loadSalesAllTime():loadReport();
+});
 el('apply-report-filter').addEventListener('click',()=>{
   if(matchMedia('(max-width:760px)').matches)el('report-filter-panel').open=false;
   if(state.reportView==='sales'){
@@ -5398,6 +5494,7 @@ el('sales-report-filters').addEventListener('change',async(event)=>{
   readSalesReportFilter();
   const calculationSummary=el('sales-report-filters').querySelectorAll('.sales-filter-group summary small')[1];
   calculationSummary.textContent=`${Number(state.salesReportFilter.includeCreditProfit)+Number(state.salesReportFilter.includeCreditRevenue)} pilihan aktif`;
+  if(['sales-products','sales-categories','sales-addons','stock-flow'].includes(state.reportView)){await loadSalesAnalysis();return;}
   if(event.target.id==='sales-filter-sort'){renderPosSales();return;}
   el('report-status').classList.add('loading');el('report-status').textContent='Menerapkan filter transaksi...';
   try{

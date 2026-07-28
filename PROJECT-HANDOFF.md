@@ -45,6 +45,19 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.10.0 Laporan Transaksi
+
+- Modul `Analitik` berganti nama menjadi `Laporan`.
+- Lipatan `Laporan transaksi` berisi halaman terpisah untuk Transaksi,
+  Penjualan barang, Penjualan kategori, Add-on, dan Arus stok.
+- Penjualan barang menyediakan filter staff/pembayaran, urutan, pencarian,
+  periode Today/Bulan/Tahun/Khusus, dashboard qty-pendapatan-keuntungan, foto
+  barang, stok terjual, serta angka pendapatan dan keuntungan per barang.
+- Kinerja produk lama tidak ditampilkan ganda; Kinerja outlet tetap tersedia.
+- Kategori, add-on lintas barang dalam satu transaksi, dan arus stok memiliki
+  halaman serta sumber data produksi sendiri.
+- API `2.10.0-cloud`, aset/cache PWA `v97`, tanpa migrasi SQL baru.
+
 ### Rilis v2.9.7 Filter Penjualan
 
 - Empat tombol metrik dipadatkan menjadi satu baris teks tanpa ikon.

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { filteredSalesReport } from '../api/index.mjs';
+import { buildSalesItemAnalytics, filteredSalesReport } from '../api/index.mjs';
 
 const [html, app, api, css] = await Promise.all([
   readFile(new URL('../apps/web/index.html', import.meta.url), 'utf8'),
@@ -23,8 +23,20 @@ test('filter laporan membedakan tunai, piutang, dan multipayment',()=>{
   assert.equal(split.metrics.transactionCount,1);assert.equal(split.metrics.netSales,300000);assert.equal(split.metrics.grossProfit,40000);
 });
 
+test('analisis barang menghitung qty, pendapatan, keuntungan, kategori, dan add-on',()=>{
+  const sales=[{id:'sale-1',status:'COMPLETED',cashierId:'staff-1',payments:[{method:'CASH',amount:50000}],quote:{grandTotal:50000},paidCreditAmount:0}];
+  const items=[
+    {sale_id:'sale-1',product_id:'p1',product_name:'Lip Tint',base_qty:2,total:30000,cost_total:18000},
+    {sale_id:'sale-1',product_id:'p2',product_name:'Pouch',base_qty:1,total:20000,cost_total:8000}
+  ];
+  const products=[{id:'p1',sku:'LIP-1',name:'Lip Tint',category:'Makeup'},{id:'p2',sku:'ADD-1',name:'Pouch',category:'Aksesori'}];
+  const result=buildSalesItemAnalytics(sales,items,products,[],[{product_id:'p1',quantity:8},{product_id:'p2',quantity:4}],{paymentMethods:['CASH'],paymentState:'ALL',includeCreditProfit:true,includeCreditRevenue:true});
+  assert.equal(result.dashboard.qtySold,3);assert.equal(result.dashboard.netRevenue,50000);assert.equal(result.dashboard.grossProfit,24000);
+  assert.equal(result.products[0].currentStock,8);assert.equal(result.categories.length,2);assert.equal(result.addons.length,2);
+});
+
 test('laporan penjualan menyatukan ringkasan keuntungan dan riwayat struk', () => {
-  assert.match(html, /data-report-view="sales"[\s\S]*<span>Penjualan<\/span>/);
+  assert.match(html, /data-report-view="sales"[\s\S]*<span>Transaksi<\/span>/);
   assert.doesNotMatch(html, /data-report-view="sales-history"/);
   assert.match(html, /data-report-view="purchases"[\s\S]*Laporan pembelian/);
   assert.match(html, /data-report-view="purchases-history"[\s\S]*Riwayat pembelian/);
@@ -60,6 +72,8 @@ test('laporan penjualan menyatukan ringkasan keuntungan dan riwayat struk', () =
   assert.match(app,/function readSalesReportFilter\(\)/);
   assert.match(app,/function filteredPosSales\(\)/);
   assert.match(api,/route==='reports\/sales-filtered'/);
+  assert.match(api,/route==='reports\/sales-items'/);
+  assert.match(api,/route==='reports\/stock-flow'/);
   assert.match(api,/function filteredSalesReport/);
   assert.match(api,/classification=payments\.length>1\?'MULTIPAYMENT'/);
   assert.match(app,/PENJUALAN PER BULAN/);
@@ -72,6 +86,8 @@ test('laporan penjualan menyatukan ringkasan keuntungan dan riwayat struk', () =
   assert.match(css,/#page-reports #report-cards:has\(\.sales-metric-button\)\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   assert.match(app,/Nomor struk/);
   assert.match(app,/Waktu transaksi/);
+  assert.match(html,/id="sales-analysis-dashboard"/);
+  assert.match(html,/id="sales-analysis-list"/);
 });
 
 test('klik penjualan membuka struk pelanggan asli', () => {

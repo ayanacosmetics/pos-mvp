@@ -712,32 +712,38 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
   }).filter((sale) => !normalized || `${sale.receiptNo} ${sale.cashier} ${sale.customer?.name ?? ''} ${sale.customer?.phone ?? ''}`.toLowerCase().includes(normalized));
 }
 
+const canonicalReportPayment=(value)=>{
+  const method=String(value??'').trim().toUpperCase();
+  return ['TUNAI','CASH'].includes(method)?'CASH':method;
+};
+
+function saleMatchesReportFilter(sale,{staffId='',paymentState='ALL',paymentMethods=[]}={}){
+  const payments=sale.payments??[];
+  const hasCredit=payments.some((payment)=>canonicalReportPayment(payment.method)==='CREDIT');
+  const classification=payments.length>1?'MULTIPAYMENT':canonicalReportPayment(payments[0]?.method);
+  if(staffId&&sale.cashierId!==staffId)return false;
+  if(paymentState==='PAID'&&hasCredit)return false;
+  if(paymentState==='CREDIT'&&!hasCredit)return false;
+  return new Set(paymentMethods).has(classification);
+}
+
+function saleSettlementRatio(sale){
+  const nonCreditPaid=(sale.payments??[]).filter((payment)=>canonicalReportPayment(payment.method)!=='CREDIT').reduce((sum,payment)=>sum+Number(payment.amount??0),0);
+  const settledAmount=nonCreditPaid+Number(sale.paidCreditAmount??0);
+  return Number(sale.quote?.grandTotal)>0?Math.min(1,Math.max(0,settledAmount/Number(sale.quote.grandTotal))):1;
+}
+
 export function filteredSalesReport(sales,{timezone,staffId='',paymentState='ALL',paymentMethods=[],includeCreditProfit=true,includeCreditRevenue=false}={}){
-  const canonical=(value)=>{
-    const method=String(value??'').trim().toUpperCase();
-    return ['TUNAI','CASH'].includes(method)?'CASH':method;
-  };
   const staff=[...new Map(sales.filter((sale)=>sale.cashierId).map((sale)=>[sale.cashierId,{id:sale.cashierId,name:sale.cashier}])).values()]
     .sort((a,b)=>a.name.localeCompare(b.name,'id'));
-  const allowed=new Set(paymentMethods);
-  const selected=sales.filter((sale)=>{
-    const payments=sale.payments??[];
-    const hasCredit=payments.some((payment)=>canonical(payment.method)==='CREDIT');
-    const classification=payments.length>1?'MULTIPAYMENT':canonical(payments[0]?.method);
-    if(staffId&&sale.cashierId!==staffId)return false;
-    if(paymentState==='PAID'&&hasCredit)return false;
-    if(paymentState==='CREDIT'&&!hasCredit)return false;
-    return allowed.has(classification);
-  });
+  const selected=sales.filter((sale)=>saleMatchesReportFilter(sale,{staffId,paymentState,paymentMethods}));
   const daily=new Map();
   const metrics={netSales:0,grossProfit:0,returnTotal:0,transactionCount:0};
   for(const sale of selected){
     if(sale.status==='VOIDED')continue;
     const total=Math.max(0,Number(sale.netTotal??0));
     const cost=Math.max(0,Number(sale.netCost??0));
-    const nonCreditPaid=(sale.payments??[]).filter((payment)=>canonical(payment.method)!=='CREDIT').reduce((sum,payment)=>sum+Number(payment.amount??0),0);
-    const settledAmount=nonCreditPaid+Number(sale.paidCreditAmount??0);
-    const paidRatio=Number(sale.quote?.grandTotal)>0?Math.min(1,Math.max(0,settledAmount/Number(sale.quote.grandTotal))):1;
+    const paidRatio=saleSettlementRatio(sale);
     const revenue=includeCreditRevenue?total:total*paidRatio;
     const profit=includeCreditProfit?total-cost:(total-cost)*paidRatio;
     const date=todayInTimeZone(new Date(sale.occurredAt),timezone);
@@ -787,6 +793,46 @@ async function loadSalesReportSource(context,{outletIds,from,to,limit=10000}){
       quote:{grandTotal:Number(sale.grand_total)},
       payments:payments.filter((item)=>item.sale_id===sale.id).map((item)=>({method:item.method,amount:Number(item.amount)}))};
   });
+}
+
+export function buildSalesItemAnalytics(sales,items,products,returnItems,balances,options={}){
+  const selected=sales.filter((sale)=>sale.status!=='VOIDED'&&saleMatchesReportFilter(sale,options));
+  const selectedIds=new Set(selected.map((sale)=>sale.id)),grouped=new Map();
+  const productMap=new Map(products.map((product)=>[product.id,product]));
+  const stockMap=balances.reduce((map,row)=>map.set(row.product_id,(map.get(row.product_id)??0)+Number(row.quantity)),new Map());
+  const ensure=(productId,name='Produk')=>{
+    const product=productMap.get(productId)??{};
+    if(!grouped.has(productId))grouped.set(productId,{productId,sku:product.sku??'',productName:product.name??name,
+      category:product.category??'Lainnya',imageUrl:product.image_url??null,qtySold:0,netRevenue:0,grossProfit:0,
+      addonTransactions:0,currentStock:stockMap.get(productId)??0});
+    return grouped.get(productId);
+  };
+  for(const sale of selected){
+    const own=items.filter((item)=>item.sale_id===sale.id),isAddonSale=new Set(own.map((item)=>item.product_id)).size>1;
+    const revenueFactor=options.includeCreditRevenue?1:saleSettlementRatio(sale);
+    const profitFactor=options.includeCreditProfit?1:saleSettlementRatio(sale);
+    for(const item of own){
+      const row=ensure(item.product_id,item.product_name);
+      row.qtySold+=Number(item.base_qty);row.netRevenue+=Number(item.total)*revenueFactor;
+      row.grossProfit+=(Number(item.total)-Number(item.cost_total))*profitFactor;
+      if(isAddonSale)row.addonTransactions+=1;
+    }
+  }
+  for(const returned of returnItems.filter((item)=>selectedIds.has(item.sale_id))){
+    const sale=selected.find((item)=>item.id===returned.sale_id),row=ensure(returned.product_id);
+    const revenueFactor=options.includeCreditRevenue?1:saleSettlementRatio(sale);
+    const profitFactor=options.includeCreditProfit?1:saleSettlementRatio(sale);
+    row.qtySold-=Number(returned.base_qty);row.netRevenue-=Number(returned.line_total)*revenueFactor;
+    row.grossProfit-=(Number(returned.line_total)-Number(returned.base_qty)*Number(returned.unit_cost??0))*profitFactor;
+  }
+  const rows=[...grouped.values()].filter((row)=>row.qtySold||row.netRevenue||row.grossProfit);
+  const categories=[...rows.reduce((map,row)=>{
+    const current=map.get(row.category)??{category:row.category,qtySold:0,netRevenue:0,grossProfit:0,productCount:0};
+    current.qtySold+=row.qtySold;current.netRevenue+=row.netRevenue;current.grossProfit+=row.grossProfit;current.productCount+=1;
+    map.set(row.category,current);return map;
+  },new Map()).values()];
+  return{products:rows,categories,addons:rows.filter((row)=>row.addonTransactions>0),
+    dashboard:rows.reduce((sum,row)=>{sum.qtySold+=row.qtySold;sum.netRevenue+=row.netRevenue;sum.grossProfit+=row.grossProfit;return sum;},{qtySold:0,netRevenue:0,grossProfit:0})};
 }
 
 async function loadReturnablePurchase(context,{receiptId=null,documentNo=null,supplierId=null}={}) {
@@ -1075,7 +1121,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.9.7-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.10.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -3079,6 +3125,61 @@ async function routeRequest(request, response, route) {
       includeCreditRevenue:queryValue(request,'includeCreditRevenue')==='true'
     });
     return send(response,200,{...report,period:{from,to},truncated:sales.length>=10000});
+  }
+
+  if(request.method==='GET'&&route==='reports/sales-items'){
+    requirePermission(session,'report.view');
+    const from=queryValue(request,'from'),to=queryValue(request,'to'),outletId=queryValue(request,'outletId');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(from??'')||!/^\d{4}-\d{2}-\d{2}$/.test(to??'')||from>to)throw Object.assign(new Error('Periode analisis barang tidak valid'),{status:400});
+    if(outletId&&!context.outlets.some((outlet)=>outlet.id===outletId))throw Object.assign(new Error('Outlet laporan tidak dapat diakses'),{status:403});
+    const allowedMethods=['CASH','QRIS','TRANSFER','EDC','CREDIT','MULTIPAYMENT'];
+    const rawMethods=queryValue(request,'paymentMethods');
+    const options={
+      staffId:String(queryValue(request,'staffId')??''),
+      paymentState:['ALL','PAID','CREDIT'].includes(String(queryValue(request,'paymentState')).toUpperCase())?String(queryValue(request,'paymentState')).toUpperCase():'ALL',
+      paymentMethods:(rawMethods==null?allowedMethods:String(rawMethods).split(',').map((item)=>item.trim().toUpperCase())).filter((method)=>allowedMethods.includes(method)),
+      includeCreditProfit:queryValue(request,'includeCreditProfit')!=='false',
+      includeCreditRevenue:queryValue(request,'includeCreditRevenue')==='true'
+    };
+    const outletIds=outletId?[outletId]:context.outlets.map((outlet)=>outlet.id);
+    const sales=await loadSalesReportSource(context,{outletIds,from,to,limit:10000});
+    if(!sales.length)return send(response,200,{products:[],categories:[],addons:[],staff:[],dashboard:{qtySold:0,netRevenue:0,grossProfit:0},period:{from,to}});
+    const saleIds=sales.map((sale)=>sale.id);
+    const byChunks=async(table,column,ids,tail)=>(await Promise.all(Array.from({length:Math.ceil(ids.length/80)},(_,index)=>ids.slice(index*80,index*80+80)).map((chunk)=>rest(table,`tenant_id=eq.${context.tenantId}&${column}=${inFilter(chunk)}&${tail}`)))).flat();
+    const items=await byChunks('sale_items','sale_id',saleIds,'select=sale_id,product_id,product_name,base_qty,total,cost_total');
+    const returns=await byChunks('customer_returns','sale_id',saleIds,'status=eq.COMPLETED&select=id,sale_id');
+    const rawReturnItems=returns.length?await byChunks('customer_return_items','return_id',returns.map((item)=>item.id),'select=return_id,product_id,base_qty,line_total,unit_cost'):[];
+    const returnSaleMap=new Map(returns.map((item)=>[item.id,item.sale_id]));
+    const returnItems=rawReturnItems.map((item)=>({...item,sale_id:returnSaleMap.get(item.return_id)}));
+    const productIds=[...new Set([...items.map((item)=>item.product_id),...returnItems.map((item)=>item.product_id)])];
+    const locationIds=context.locations.filter((location)=>outletIds.includes(location.outlet_id)).map((location)=>location.id);
+    const [products,balances]=await Promise.all([
+      productIds.length?byChunks('products','id',productIds,'select=id,sku,name,category,image_url'):[],
+      productIds.length&&locationIds.length?rest('stock_balances',`tenant_id=eq.${context.tenantId}&location_id=${inFilter(locationIds)}&product_id=${inFilter(productIds)}&select=product_id,quantity`):[]
+    ]);
+    const staff=filteredSalesReport(sales,{timezone:context.outlet.timezone??'Asia/Makassar',paymentMethods:allowedMethods}).staff;
+    return send(response,200,{...buildSalesItemAnalytics(sales,items,products,returnItems,balances,options),staff,period:{from,to},truncated:sales.length>=10000});
+  }
+
+  if(request.method==='GET'&&route==='reports/stock-flow'){
+    requirePermission(session,'report.view');
+    const from=queryValue(request,'from'),to=queryValue(request,'to'),outletId=queryValue(request,'outletId');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(from??'')||!/^\d{4}-\d{2}-\d{2}$/.test(to??'')||from>to)throw Object.assign(new Error('Periode arus stok tidak valid'),{status:400});
+    if(outletId&&!context.outlets.some((outlet)=>outlet.id===outletId))throw Object.assign(new Error('Outlet arus stok tidak dapat diakses'),{status:403});
+    const outletIds=outletId?[outletId]:context.outlets.map((outlet)=>outlet.id);
+    const locations=context.locations.filter((location)=>outletIds.includes(location.outlet_id));
+    if(!locations.length)return send(response,200,{rows:[],period:{from,to}});
+    const timezone=context.outlet.timezone??'Asia/Makassar';
+    const ledger=await rest('stock_ledger',`tenant_id=eq.${context.tenantId}&location_id=${inFilter(locations.map((item)=>item.id))}&occurred_at=gte.${encodeURIComponent(`${shiftIsoDate(from,-1)}T00:00:00Z`)}&occurred_at=lt.${encodeURIComponent(`${shiftIsoDate(to,2)}T00:00:00Z`)}&select=product_id,delta,event_type,occurred_at&order=occurred_at.desc&limit=10000`);
+    const scoped=ledger.filter((item)=>{const date=todayInTimeZone(new Date(item.occurred_at),timezone);return date>=from&&date<=to;});
+    const productIds=[...new Set(scoped.map((item)=>item.product_id))];
+    const [products,balances]=await Promise.all([
+      productIds.length?rest('products',`tenant_id=eq.${context.tenantId}&id=${inFilter(productIds)}&select=id,sku,name,category,image_url`):[],
+      productIds.length?rest('stock_balances',`tenant_id=eq.${context.tenantId}&location_id=${inFilter(locations.map((item)=>item.id))}&product_id=${inFilter(productIds)}&select=product_id,quantity`):[]
+    ]);
+    const rows=[...scoped.reduce((map,item)=>{const product=products.find((row)=>row.id===item.product_id)??{};const row=map.get(item.product_id)??{productId:item.product_id,sku:product.sku??'',productName:product.name??'Produk',category:product.category??'Lainnya',imageUrl:product.image_url??null,stockIn:0,stockOut:0,netFlow:0,currentStock:0};const delta=Number(item.delta);if(delta>0)row.stockIn+=delta;else row.stockOut+=Math.abs(delta);row.netFlow+=delta;map.set(item.product_id,row);return map;},new Map()).values()];
+    for(const row of rows)row.currentStock=balances.filter((item)=>item.product_id===row.productId).reduce((sum,item)=>sum+Number(item.quantity),0);
+    return send(response,200,{rows,period:{from,to},truncated:ledger.length>=10000});
   }
 
   if(request.method==='GET'&&route==='reports/sales-years'){

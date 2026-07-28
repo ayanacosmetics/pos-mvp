@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=96">
+  <link rel="stylesheet" href="/styles.css?v=97">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -116,11 +116,18 @@
           <button data-page="promotions" class="feature-nav-item" data-permission="promotion.manage"><span>Promo</span><small>Aturan dan simulasi promo</small></button>
           <button data-page="loyalty" class="feature-nav-item" data-permission="promotion.manage"><span>Loyalitas</span><small>Poin, tier, voucher, segmentasi</small></button>
         </div>
-        <button data-nav-group="insights" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg></span><span>Analitik<small>Laporan dan audit</small></span><b>›</b></button>
+        <button data-nav-group="insights" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg></span><span>Laporan<small>Transaksi dan operasional</small></span><b>›</b></button>
         <div data-nav-panel="insights" class="feature-nav-panel">
           <button data-page="reports-summary" data-target-page="reports" data-report-view="summary" class="feature-nav-item" data-permission="report.view"><span>Ringkasan</span><small>Omzet, laba, tren harian</small></button>
-          <button data-page="reports-performance" data-target-page="reports" data-report-view="performance" class="feature-nav-item" data-permission="report.view"><span>Produk & outlet</span><small>Kinerja produk dan cabang</small></button>
-          <button data-page="reports-sales" data-target-page="reports" data-report-view="sales" class="feature-nav-item" data-permission="report.view"><span>Penjualan</span><small>Pendapatan, laba, dan riwayat struk</small></button>
+          <button id="sales-report-subnav-toggle" class="feature-subnav-toggle" type="button" data-permission="report.view" aria-expanded="false"><span>Laporan transaksi</span><small>Transaksi, barang, kategori, add-on, stok</small><b>›</b></button>
+          <div id="sales-report-subnav" class="feature-subnav-panel">
+            <button data-page="reports-sales" data-target-page="reports" data-report-view="sales" class="feature-nav-item" data-permission="report.view"><span>Transaksi</span><small>Pendapatan, laba, dan riwayat struk</small></button>
+            <button data-page="reports-sales-products" data-target-page="reports" data-report-view="sales-products" class="feature-nav-item" data-permission="report.view"><span>Penjualan barang</span><small>Qty, pendapatan, dan keuntungan barang</small></button>
+            <button data-page="reports-sales-categories" data-target-page="reports" data-report-view="sales-categories" class="feature-nav-item" data-permission="report.view"><span>Penjualan kategori</span><small>Kinerja setiap kategori barang</small></button>
+            <button data-page="reports-sales-addons" data-target-page="reports" data-report-view="sales-addons" class="feature-nav-item" data-permission="report.view"><span>Add-on</span><small>Barang tambahan dalam transaksi</small></button>
+            <button data-page="reports-stock-flow" data-target-page="reports" data-report-view="stock-flow" class="feature-nav-item" data-permission="report.view"><span>Arus stok</span><small>Stok masuk, keluar, dan saldo</small></button>
+          </div>
+          <button data-page="reports-performance" data-target-page="reports" data-report-view="performance" class="feature-nav-item" data-permission="report.view"><span>Kinerja outlet</span><small>Kontribusi setiap cabang</small></button>
           <button data-page="reports-purchases" data-target-page="reports" data-report-view="purchases" class="feature-nav-item" data-permission="report.view"><span>Laporan pembelian</span><small>Nilai penerimaan per supplier</small></button>
           <button data-page="reports-purchases-history" data-target-page="reports" data-report-view="purchases-history" class="feature-nav-item" data-permission="report.view"><span>Riwayat pembelian</span><small>Daftar dan struk pembelian asli</small></button>
           <button data-page="reports-audit" data-target-page="reports" data-report-view="audit" class="feature-nav-item" data-permission="audit.view"><span>Audit log</span><small>Aktivitas sensitif</small></button>
@@ -170,7 +177,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Filter Penjualan · v2.9.7</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Laporan Transaksi · v2.10.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -469,6 +476,7 @@
         <div id="report-status" class="report-status muted">Memuat laporan...</div>
         <div id="report-cards" class="report-cards"></div>
         <section id="sales-metric-value" class="sales-metric-value hidden" aria-live="polite"></section>
+        <section id="sales-analysis-page" class="sales-analysis-page hidden"><div class="sales-analysis-tools"><label>Urutkan<select id="sales-analysis-sort"><option value="QTY_DESC">Jumlah penjualan terbesar</option><option value="QTY_ASC">Jumlah penjualan terkecil</option><option value="NAME">Nama barang</option><option value="PROFIT">Keuntungan</option><option value="REVENUE">Pendapatan</option></select></label><label class="sales-analysis-search">Cari<input id="sales-analysis-search" autocomplete="off" placeholder="Cari nama, SKU, atau kategori"></label></div><nav id="sales-analysis-periods" class="sales-analysis-periods" aria-label="Periode analisis"><button type="button" data-analysis-period="TODAY" class="active">Today</button><button type="button" data-analysis-period="MONTH">Bulan ini</button><button type="button" data-analysis-period="YEAR">Tahun ini</button><button type="button" data-analysis-period="CUSTOM">Khusus</button></nav><div id="sales-analysis-custom-period" class="sales-analysis-custom-period hidden"><label>Dari tanggal<input id="sales-analysis-from" type="date"></label><label>Sampai tanggal<input id="sales-analysis-to" type="date"></label><button id="apply-sales-analysis-period" class="button primary" type="button">Tampilkan</button></div><div id="sales-analysis-dashboard" class="sales-analysis-dashboard"></div><div id="sales-analysis-list" class="sales-analysis-list"></div></section>
         <section id="sales-period-breakdown" class="surface sales-period-breakdown hidden"><div id="sales-period-heading" class="report-section-heading"></div><div id="sales-period-list" class="sales-period-list"></div></section>
         <div id="report-sales-workspace" class="surface report-wide-section hidden"><div class="report-section-heading"><div><p class="eyebrow">RIWAYAT TRANSAKSI</p><h2>Struk pada periode terpilih</h2><p class="muted">Tekan transaksi untuk membuka struk asli. Maksimal 500 transaksi terbaru per periode.</p></div></div><div class="pos-history-search"><input id="pos-history-search" autocomplete="off" placeholder="Nomor struk, pelanggan, telepon, atau kasir"><button id="refresh-pos-history" class="button secondary" type="button">Muat ulang</button></div><div class="pos-history-layout report-sales-layout"><div id="pos-history-list" class="pos-history-list"></div><div id="pos-history-detail" class="pos-history-detail hidden" aria-hidden="true"></div></div></div>
         <div class="report-grid report-primary"><details class="surface report-trend-panel"><summary><span><small>TREN HARIAN OPSIONAL</small><strong>Bandingkan penjualan bersih dan laba antarhari</strong></span><b>⌄</b></summary><div id="daily-report" class="table-wrap"></div></details><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">KINERJA PRODUK</p><h2>Produk berdasarkan omzet bersih</h2></div></div><div id="best-products"></div></div></div>
@@ -903,6 +911,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=96"></script>
+  <script type="module" src="/app.js?v=97"></script>
 </body>
 </html>
