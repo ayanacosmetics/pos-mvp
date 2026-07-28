@@ -4104,14 +4104,26 @@ function openHistoryReceiptPage(sale){
   bindReceiptImageFallbacks(el('history-receipt-content'));renderReceiptVoucherQrs(el('history-receipt-content'));
   el('history-receipt-details').innerHTML=`<p class="eyebrow">RINCIAN TRANSAKSI</p><h2>${escapeHtml(sale.receiptNo)}</h2><div><span>Status</span><strong>${sale.status==='VOIDED'?'Dibatalkan':'Selesai'}</strong></div><div><span>Waktu</span><strong>${new Date(sale.occurredAt).toLocaleString('id-ID')}</strong></div><div><span>Outlet</span><strong>${escapeHtml(sale.outletName??'Outlet')}</strong></div><div><span>Kasir</span><strong>${escapeHtml(sale.cashier??'-')}</strong></div><div><span>Pelanggan</span><strong>${escapeHtml(sale.customer?.name??'Pelanggan umum')}</strong></div><div><span>Pembayaran</span><strong>${(sale.payments??[]).map((payment)=>escapeHtml(payment.method)).join(' + ')||'-'}</strong></div>${sale.notes?`<div><span>Catatan</span><strong>${escapeHtml(sale.notes)}</strong></div>`:''}${sale.voidReason?`<div><span>Alasan pembatalan</span><strong>${escapeHtml(sale.voidReason)}</strong></div>`:''}`;
   el('history-receipt-details').classList.add('hidden');
-  el('history-receipt-menu').classList.add('hidden');el('history-receipt-menu-toggle').setAttribute('aria-expanded','false');
+  closeHistoryReceiptMenu();
   el('report-sale-receipt-page').classList.remove('hidden');el('page-reports').classList.add('receipt-page-open');
+  document.body.classList.add('history-receipt-open');
   scrollTo({top:0,behavior:'auto'});
 }
 
 function closeHistoryReceiptPage(){
   el('page-reports').classList.remove('receipt-page-open');el('report-sale-receipt-page').classList.add('hidden');
-  el('history-receipt-menu').classList.add('hidden');state.historyReceiptSale=null;
+  document.body.classList.remove('history-receipt-open');closeHistoryReceiptMenu();state.historyReceiptSale=null;
+}
+
+function closeHistoryReceiptMenu(){
+  el('history-receipt-menu').classList.add('hidden');el('history-receipt-menu-backdrop').classList.add('hidden');
+  el('history-receipt-menu-toggle').setAttribute('aria-expanded','false');
+}
+
+function toggleHistoryReceiptMenu(){
+  const opening=el('history-receipt-menu').classList.contains('hidden');
+  el('history-receipt-menu').classList.toggle('hidden',!opening);el('history-receipt-menu-backdrop').classList.toggle('hidden',!opening);
+  el('history-receipt-menu-toggle').setAttribute('aria-expanded',String(opening));
 }
 
 async function printHistoryReceipt(sale){
@@ -4129,7 +4141,7 @@ async function shareHistoryReceipt(sale){
 
 async function handleHistoryReceiptAction(action){
   const sale=state.historyReceiptSale;if(!sale)return;
-  el('history-receipt-menu').classList.add('hidden');el('history-receipt-menu-toggle').setAttribute('aria-expanded','false');
+  closeHistoryReceiptMenu();
   if(action==='details'){el('history-receipt-details').classList.toggle('hidden');return;}
   if(action==='print'){await printHistoryReceipt(sale);return;}
   if(action==='share'){await shareHistoryReceipt(sale);return;}
@@ -4835,7 +4847,9 @@ el('refresh-pos-history').addEventListener('click',()=>loadPosSales(el('pos-hist
 el('pos-history-search').addEventListener('input',(event)=>{clearTimeout(event.currentTarget.searchTimer);event.currentTarget.searchTimer=setTimeout(()=>loadPosSales(event.currentTarget.value,{reportScope:true}),250);});
 el('pos-history-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-pos-sale-id]');if(!row)return;const sale=state.posSales.find((item)=>item.id===row.dataset.posSaleId);state.selectedPosSaleId=row.dataset.posSaleId;renderPosSales();if(state.reportView==='sales-history'&&sale)openHistoryReceiptPage(sale);});
 el('back-history-receipt').addEventListener('click',closeHistoryReceiptPage);
-el('history-receipt-menu-toggle').addEventListener('click',()=>{const menu=el('history-receipt-menu'),opening=menu.classList.contains('hidden');menu.classList.toggle('hidden',!opening);el('history-receipt-menu-toggle').setAttribute('aria-expanded',String(opening));});
+el('history-receipt-menu-toggle').addEventListener('click',toggleHistoryReceiptMenu);
+el('history-receipt-menu-backdrop').addEventListener('click',closeHistoryReceiptMenu);
+el('close-history-receipt-menu').addEventListener('click',closeHistoryReceiptMenu);
 el('history-receipt-menu').addEventListener('click',(event)=>{const button=event.target.closest('[data-history-receipt-action]');if(button)handleHistoryReceiptAction(button.dataset.historyReceiptAction);});
 el('refresh-purchase-report').addEventListener('click',loadPurchaseReportReceipts);
 el('purchase-report-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-purchase-report-id]');if(!row)return;const receipt=(state.purchaseReportReceipts||[]).find((item)=>item.id===row.dataset.purchaseReportId);if(receipt)openPurchaseReportReceipt(receipt);});

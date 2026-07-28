@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=89">
+  <link rel="stylesheet" href="/styles.css?v=90">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -171,7 +171,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Halaman Struk · v2.9.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Struk Layar Penuh · v2.9.1</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -464,7 +464,7 @@
 
       <section id="page-reports" class="page"><div class="content-width">
         <div class="page-title"><div><p class="eyebrow">LAPORAN OPERASIONAL</p><h1 id="report-page-title">Kinerja usaha</h1><p id="report-page-description" class="muted">Penjualan bersih dan laba sudah memperhitungkan retur pada periode terpilih.</p></div><div class="report-actions"><button id="export-report" class="button secondary">Ekspor CSV</button><button id="refresh-report" class="button secondary">Muat ulang</button></div></div>
-        <section id="report-sale-receipt-page" class="history-receipt-page hidden"><header class="history-receipt-toolbar"><button id="back-history-receipt" class="history-back-button" type="button" aria-label="Kembali ke riwayat penjualan">← <span>Kembali</span></button><div><small>STRUK PENJUALAN</small><strong id="history-receipt-number">-</strong></div><div class="history-receipt-menu"><button id="history-receipt-menu-toggle" class="history-menu-toggle" type="button" aria-label="Buka tindakan struk" aria-expanded="false">⋮</button><div id="history-receipt-menu" class="history-action-menu hidden"><button type="button" data-history-receipt-action="details">Rincian transaksi</button><button type="button" data-history-receipt-action="print">Cetak struk</button><button type="button" data-history-receipt-action="share">Bagikan</button><button type="button" data-history-receipt-action="return">Retur barang</button><button type="button" data-history-receipt-action="void">Batalkan transaksi</button><button type="button" data-history-receipt-action="edit">Edit transaksi</button><button type="button" data-history-receipt-action="delete" class="danger">Hapus transaksi</button></div></div></header><div class="history-receipt-layout"><article id="history-receipt-content" class="history-receipt-paper"></article><aside id="history-receipt-details" class="history-receipt-details hidden"></aside></div></section>
+        <section id="report-sale-receipt-page" class="history-receipt-page hidden"><header class="history-receipt-toolbar"><button id="back-history-receipt" class="history-back-button" type="button" aria-label="Kembali ke riwayat penjualan">← <span>Kembali</span></button><div><small>STRUK PENJUALAN</small><strong id="history-receipt-number">-</strong></div><div class="history-receipt-menu"><button id="history-receipt-menu-toggle" class="history-menu-toggle" type="button" aria-label="Buka tindakan struk" aria-expanded="false">⋮</button></div></header><button id="history-receipt-menu-backdrop" class="history-action-backdrop hidden" type="button" aria-label="Tutup menu tindakan"></button><div id="history-receipt-menu" class="history-action-menu hidden"><div class="history-action-heading"><span></span><strong>Tindakan struk</strong><button id="close-history-receipt-menu" type="button" aria-label="Tutup menu">×</button></div><button type="button" data-history-receipt-action="details">Rincian transaksi</button><button type="button" data-history-receipt-action="print">Cetak struk</button><button type="button" data-history-receipt-action="share">Bagikan</button><button type="button" data-history-receipt-action="return">Retur barang</button><button type="button" data-history-receipt-action="void">Batalkan transaksi</button><button type="button" data-history-receipt-action="edit">Edit transaksi</button><button type="button" data-history-receipt-action="delete" class="danger">Hapus transaksi</button></div><div class="history-receipt-layout"><article id="history-receipt-content" class="history-receipt-paper"></article><aside id="history-receipt-details" class="history-receipt-details hidden"></aside></div></section>
         <details id="report-filter-panel" class="report-filter-panel" open><summary><span>Filter laporan</span><strong id="report-filter-summary">30 hari terakhir · Semua outlet</strong></summary><div class="surface report-filter-bar"><label>Periode<select id="report-preset"><option value="TODAY">Hari ini</option><option value="WEEK">Minggu ini</option><option value="7D">7 hari terakhir</option><option value="MONTH">Bulan ini</option><option value="30D" selected>30 hari terakhir</option><option value="CUSTOM">Pilih tanggal</option></select></label><label>Dari tanggal<input id="report-from" type="date"></label><label>Sampai tanggal<input id="report-to" type="date"></label><label>Outlet<select id="report-outlet"><option value="">Semua outlet yang dapat diakses</option></select></label><button id="apply-report-filter" class="button primary">Tampilkan laporan</button></div></details>
         <div id="report-status" class="report-status muted">Memuat laporan...</div>
         <div id="report-cards" class="report-cards"></div>
@@ -901,6 +901,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=89"></script>
+  <script type="module" src="/app.js?v=90"></script>
 </body>
 </html>

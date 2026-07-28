@@ -34,6 +34,7 @@ test('klik penjualan membuka struk pelanggan asli', () => {
   assert.match(app, /openHistoryReceiptPage\(sale\)/);
   assert.match(html, /id="report-sale-receipt-page"/);
   assert.match(html, /id="back-history-receipt"/);
+  assert.match(html, /id="history-receipt-menu-backdrop"/);
   for (const action of ['details','print','share','return','void','edit','delete']) {
     assert.match(html, new RegExp(`data-history-receipt-action="${action}"`));
   }
@@ -41,6 +42,9 @@ test('klik penjualan membuka struk pelanggan asli', () => {
   assert.match(app, /Transaksi selesai tidak boleh dihapus permanen/);
   assert.match(css, /#page-reports\.receipt-page-open/);
   assert.match(css, /\.history-receipt-paper/);
+  assert.match(css, /\.history-receipt-page\{position:fixed;z-index:100;inset:0/);
+  assert.match(css, /\.history-action-menu\{position:fixed;z-index:115;[^}]*bottom:0/);
+  assert.match(app, /document\.body\.classList\.add\('history-receipt-open'\)/);
   assert.match(app, /if\(allowAutoPrint&&state\.deviceSettings\.autoPrint\)/);
   assert.match(css, /html:has\(dialog\[open\]\),body:has\(dialog\[open\]\)\{overflow:hidden\}/);
   assert.match(css, /#receipt-dialog \.receipt-dialog\{[^}]*overflow-y:auto[^}]*background:#fff/);
