@@ -1098,7 +1098,7 @@ function renderPromotionList() {
   el('promotion-list').innerHTML=rows.map((promo)=>{
     const active=promo.status==='PUBLISHED'&&new Date(promo.startsAt).getTime()<=now&&new Date(promo.endsAt).getTime()>=now;
     const usage=promo.usageLimitTotal?`${promo.usageCount??0}/${promo.usageLimitTotal} kali`:`${promo.usageCount??0} kali`;
-    return `<article class="promo-rule-card" data-promo-id="${escapeHtml(promo.id)}"><div class="promo-rule-head"><div><strong>${escapeHtml(promo.code)} · ${escapeHtml(promo.name)}</strong><small>v${promo.version} · ${escapeHtml(typeLabels[promo.reward?.type]??promo.reward?.type??'Promo')}</small></div><span class="status-badge ${active?'approved':promo.status==='RETIRED'?'inactive':'submitted'}">${active?'AKTIF':promo.status==='RETIRED'?'DIHENTIKAN':'TERJADWAL'}</span></div><div class="promo-rule-meta"><span>${new Date(promo.startsAt).toLocaleString('id-ID')}<br>hingga ${new Date(promo.endsAt).toLocaleString('id-ID')}</span><span>Prioritas ${promo.priority}<br>${promo.stackable?'Boleh digabung':'Tidak digabung'}</span><span>Dipakai ${usage}<br>Diskon ${money.format(promo.discountGiven??0)}</span></div>${promo.status==='PUBLISHED'?'<button class="button danger retire-promotion" type="button">Hentikan promo</button>':''}</article>`;
+    return `<article class="promo-rule-card" data-promo-id="${escapeHtml(promo.id)}"><div class="promo-rule-head"><div><strong>${escapeHtml(promo.code)} · ${escapeHtml(promo.name)}</strong><small>v${promo.version} · ${escapeHtml(typeLabels[promo.reward?.type]??promo.reward?.type??'Promo')}</small></div><span class="status-badge ${active?'approved':promo.status==='RETIRED'?'inactive':'submitted'}">${active?'AKTIF':promo.status==='RETIRED'?'DIHENTIKAN':'TERJADWAL'}</span></div><div class="promo-rule-meta"><span>${new Date(promo.startsAt).toLocaleString('id-ID')}<br>hingga ${new Date(promo.endsAt).toLocaleString('id-ID')}</span><span>Prioritas ${promo.priority}<br>${promo.stackable?'Boleh digabung':'Tidak digabung'}</span><span>Dipakai ${usage}<br>Diskon ${money.format(promo.discountGiven??0)}</span></div>${promo.status==='PUBLISHED'?'<div class="voucher-actions"><button class="button secondary edit-promotion" type="button">Edit</button><button class="button danger-button delete-promotion" type="button">Hapus</button></div>':''}</article>`;
   }).join('')||'<div class="empty-state compact">Belum ada versi promo pada filter ini.</div>';
   const activeCount=source.filter((promo)=>promo.status==='PUBLISHED'&&new Date(promo.startsAt).getTime()<=now&&new Date(promo.endsAt).getTime()>=now).length;
   el('promo-version').textContent=activeCount?`${activeCount} aturan aktif`:'Belum ada aturan aktif';
@@ -1170,14 +1170,47 @@ function renderLoyalty(){
   el('loyalty-inactivity-days').value=Number(settings.inactivity_days??90);
   el('loyalty-summary').textContent=`${state.loyalty.vouchers.filter((item)=>item.active).length} voucher aktif`;
   el('tier-list').innerHTML=state.loyalty.tiers.map((tier)=>`<span class="tier-chip" style="--tier-color:${escapeHtml(tier.color)}"><strong>${escapeHtml(tier.name)}</strong><small>mulai ${money.format(tier.min_lifetime_spend)} · ${Number(tier.points_multiplier)}× poin</small></span>`).join('');
-  el('voucher-list').innerHTML=state.loyalty.vouchers.map((voucher)=>`<article class="voucher-card" data-voucher-id="${escapeHtml(voucher.id)}"><div><strong>${escapeHtml(voucher.code)} · ${escapeHtml(voucher.name)}</strong><small>${voucher.discount_type==='PERCENT'?`${Number(voucher.discount_value)}%`:money.format(voucher.discount_value)} · min. ${money.format(voucher.min_purchase)} · ${escapeHtml(voucher.segment)}</small><small>${new Date(voucher.starts_at).toLocaleDateString('id-ID')}–${new Date(voucher.ends_at).toLocaleDateString('id-ID')} · dipakai ${voucher.usage_count}${voucher.usage_limit_total?`/${voucher.usage_limit_total}`:''}</small></div><button class="button ${voucher.active?'danger-button':'secondary'} voucher-status" data-active="${!voucher.active}" type="button">${voucher.active?'Hentikan':'Aktifkan'}</button></article>`).join('')||'<div class="empty-state compact">Belum ada voucher berkode.</div>';
-  el('receipt-voucher-campaign-list').innerHTML=(state.loyalty.receiptCampaigns??[]).map((campaign)=>`<article class="voucher-card" data-receipt-campaign-id="${escapeHtml(campaign.id)}"><div><strong>${escapeHtml(campaign.name)}</strong><small>Terbit mulai ${money.format(campaign.trigger_min_purchase)} · ${campaign.discount_type==='PERCENT'?`${Number(campaign.discount_value)}%`:money.format(campaign.discount_value)} · berlaku ${Number(campaign.valid_days)} hari</small><small>${Number(campaign.issued_count)} diterbitkan · ${Number(campaign.redeemed_count)} digunakan · ${Number(campaign.expired_count)} kedaluwarsa</small></div><button class="button ${campaign.active?'danger-button':'secondary'} receipt-voucher-status" data-active="${!campaign.active}" type="button">${campaign.active?'Hentikan':'Aktifkan'}</button></article>`).join('')||'<div class="empty-state compact">Belum ada program voucher otomatis.</div>';
+  el('voucher-list').innerHTML=state.loyalty.vouchers.filter((voucher)=>voucher.active).map((voucher)=>`<article class="voucher-card" data-voucher-id="${escapeHtml(voucher.id)}"><div><strong>${escapeHtml(voucher.code)} · ${escapeHtml(voucher.name)}</strong><small>${voucher.discount_type==='PERCENT'?`${Number(voucher.discount_value)}%`:money.format(voucher.discount_value)} · min. ${money.format(voucher.min_purchase)} · ${escapeHtml(voucher.segment)}</small><small>${new Date(voucher.starts_at).toLocaleDateString('id-ID')}–${new Date(voucher.ends_at).toLocaleDateString('id-ID')} · dipakai ${voucher.usage_count}${voucher.usage_limit_total?`/${voucher.usage_limit_total}`:''}</small></div><div class="voucher-actions"><button class="button secondary edit-voucher" type="button">Edit</button><button class="button danger-button delete-voucher" type="button">Hapus</button></div></article>`).join('')||'<div class="empty-state compact">Belum ada voucher berkode aktif.</div>';
+  el('receipt-voucher-campaign-list').innerHTML=(state.loyalty.receiptCampaigns??[]).filter((campaign)=>campaign.active).map((campaign)=>`<article class="voucher-card" data-receipt-campaign-id="${escapeHtml(campaign.id)}"><div><strong>${escapeHtml(campaign.name)}</strong><small>Terbit mulai ${money.format(campaign.trigger_min_purchase)} · ${campaign.discount_type==='PERCENT'?`${Number(campaign.discount_value)}%`:money.format(campaign.discount_value)} · berlaku ${Number(campaign.valid_days)} hari</small><small>${Number(campaign.issued_count)} diterbitkan · ${Number(campaign.redeemed_count)} digunakan · ${Number(campaign.expired_count)} kedaluwarsa</small></div><div class="voucher-actions"><button class="button secondary edit-receipt-voucher" type="button">Edit</button><button class="button danger-button delete-receipt-voucher" type="button">Hapus</button></div></article>`).join('')||'<div class="empty-state compact">Belum ada promo voucher otomatis aktif.</div>';
   if(!el('voucher-new-start').value){const start=new Date(),end=new Date(Date.now()+30*86400000);el('voucher-new-start').value=localDateTimeValue(start);el('voucher-new-end').value=localDateTimeValue(end);}
 }
 
 function showLoyaltyView(view){
   document.querySelectorAll('[data-loyalty-view]').forEach((button)=>button.classList.toggle('active',button.dataset.loyaltyView===view));
   document.querySelectorAll('.loyalty-detail').forEach((panel)=>panel.classList.toggle('hidden',panel.id!==`loyalty-view-${view}`));
+}
+
+function openVoucherForm(voucher=null){
+  const form=el('voucher-form');form.reset();form.dataset.voucherId=voucher?.id??'';
+  el('voucher-dialog-title').textContent=voucher?'Edit voucher berkode':'Tambah voucher berkode';
+  if(voucher){
+    el('voucher-new-code').value=voucher.code;el('voucher-new-name').value=voucher.name;
+    el('voucher-new-type').value=voucher.discount_type;el('voucher-new-value').value=Number(voucher.discount_value);
+    el('voucher-new-max').value=voucher.max_discount??'';el('voucher-new-min').value=Number(voucher.min_purchase);
+    el('voucher-new-start').value=localDateTimeValue(new Date(voucher.starts_at));el('voucher-new-end').value=localDateTimeValue(new Date(voucher.ends_at));
+    el('voucher-new-segment').value=voucher.segment;el('voucher-new-limit-total').value=voucher.usage_limit_total??'';
+    el('voucher-new-limit-customer').value=voucher.usage_limit_per_customer??'';el('voucher-new-once').checked=voucher.one_time;
+  }else{
+    const start=new Date(),end=new Date(Date.now()+30*86400000);
+    el('voucher-new-start').value=localDateTimeValue(start);el('voucher-new-end').value=localDateTimeValue(end);
+  }
+  el('voucher-form-error').textContent='';el('voucher-form-dialog').showModal();
+}
+
+function openReceiptVoucherCampaign(campaign=null){
+  const form=el('receipt-voucher-campaign-form');form.reset();form.dataset.campaignId=campaign?.id??'';
+  el('receipt-voucher-dialog-title').textContent=campaign?'Edit promo':'Tambah promo baru';
+  if(campaign){
+    el('receipt-voucher-name').value=campaign.name;el('receipt-voucher-trigger-min').value=Number(campaign.trigger_min_purchase);
+    el('receipt-voucher-type').value=campaign.discount_type;el('receipt-voucher-value').value=Number(campaign.discount_value);
+    el('receipt-voucher-max').value=campaign.max_discount??'';el('receipt-voucher-redemption-min').value=Number(campaign.redemption_min_purchase);
+    el('receipt-voucher-valid-after').value=Number(campaign.valid_after_days);el('receipt-voucher-valid-days').value=Number(campaign.valid_days);
+    el('receipt-voucher-customer-mode').value=campaign.customer_mode;el('receipt-voucher-priority').value=Number(campaign.priority);
+  }else{
+    el('receipt-voucher-trigger-min').value=100000;el('receipt-voucher-redemption-min').value=100000;
+    el('receipt-voucher-valid-after').value=1;el('receipt-voucher-valid-days').value=14;el('receipt-voucher-priority').value=0;
+  }
+  el('receipt-voucher-form-error').textContent='';el('receipt-voucher-campaign-dialog').showModal();
 }
 
 async function saveLoyaltySettings(event){
@@ -1193,7 +1226,8 @@ async function publishVoucher(event){
     startsAt:new Date(el('voucher-new-start').value).toISOString(),endsAt:new Date(el('voucher-new-end').value).toISOString(),
     segment:el('voucher-new-segment').value,usageLimitTotal:Number(el('voucher-new-limit-total').value)||null,
     usageLimitPerCustomer:Number(el('voucher-new-limit-customer').value)||null,oneTime:el('voucher-new-once').checked};
-  try{await request('/api/vouchers',{method:'POST',body:JSON.stringify(payload)});toast(`Voucher ${payload.code.toUpperCase()} diterbitkan`);form.reset();el('voucher-form-dialog').close();await loadPromotionManagement();}
+  const voucherId=form.dataset.voucherId;
+  try{await request(voucherId?`/api/vouchers/${voucherId}`:'/api/vouchers',{method:voucherId?'PUT':'POST',body:JSON.stringify(payload)});toast(voucherId?'Voucher diperbarui':`Voucher ${payload.code.toUpperCase()} diterbitkan`);form.reset();form.dataset.voucherId='';el('voucher-form-dialog').close();await loadPromotionManagement();}
   catch(error){el('voucher-form-error').textContent=error.message;}
 }
 
@@ -1205,20 +1239,44 @@ async function publishReceiptVoucherCampaign(event){
     validAfterDays:Number(el('receipt-voucher-valid-after').value),validDays:Number(el('receipt-voucher-valid-days').value),
     customerMode:el('receipt-voucher-customer-mode').value,priority:Number(el('receipt-voucher-priority').value)};
   try{
-    await request('/api/receipt-voucher-campaigns',{method:'POST',body:JSON.stringify(payload)});
-    toast('Program voucher struk sudah aktif');form.reset();
+    const campaignId=form.dataset.campaignId;
+    await request(campaignId?`/api/receipt-voucher-campaigns/${campaignId}`:'/api/receipt-voucher-campaigns',{method:campaignId?'PUT':'POST',body:JSON.stringify(payload)});
+    toast(campaignId?'Promo voucher struk diperbarui':'Program voucher struk sudah aktif');form.reset();form.dataset.campaignId='';
     el('receipt-voucher-trigger-min').value=100000;el('receipt-voucher-redemption-min').value=100000;
     el('receipt-voucher-valid-after').value=1;el('receipt-voucher-valid-days').value=14;
     el('receipt-voucher-campaign-dialog').close();await loadPromotionManagement();
   }catch(error){el('receipt-voucher-form-error').textContent=error.message;}
 }
 
+function editPromotion(versionId){
+  const promo=state.promotionVersions.find((item)=>item.id===versionId);if(!promo)return;
+  const condition=promo.condition??{},reward=promo.reward??{},schedule=condition.schedule??{};
+  el('promotion-form').dataset.editingPromoId=versionId;el('promo-code').value=promo.code;el('promo-name').value=promo.name;
+  el('promo-type').value=reward.type;el('promo-target-type').value=condition.productIds?.length?'PRODUCT':condition.categories?.length?'CATEGORY':condition.brands?.length?'BRAND':'ALL';
+  el('promo-target-product').value=condition.productIds?.[0]??'';el('promo-category').value=condition.categories?.[0]??'';el('promo-brand').value=condition.brands?.[0]??'';
+  el('promo-customer-group').value=condition.customerGroupIds?.[0]??'ANY';el('promo-min-qty').value=Number(condition.minBaseQty??0);
+  el('promo-min-basket').value=Number(condition.minBasketSubtotal??0);el('promo-value').value=Number(reward.value??0);
+  el('promo-max').value=reward.maxDiscount===Number.MAX_SAFE_INTEGER?'':reward.maxDiscount??'';
+  el('promo-buy-qty').value=Number(reward.buyQty??2);el('promo-free-qty').value=Number(reward.freeQty??1);
+  el('promo-reward-product').value=reward.productIds?.[0]??'';el('promo-repeat-mode').value=reward.repeatMode??'ONCE';el('promo-repeat-cap').value=reward.repeatCap??'';
+  el('promo-bundle-product-a').value=condition.bundle?.[0]?.productId??'';el('promo-bundle-qty-a').value=Number(condition.bundle?.[0]?.qty??1);
+  el('promo-bundle-product-b').value=condition.bundle?.[1]?.productId??'';el('promo-bundle-qty-b').value=Number(condition.bundle?.[1]?.qty??1);
+  el('promo-starts').value=localDateTimeValue(new Date(promo.startsAt));el('promo-ends').value=localDateTimeValue(new Date(promo.endsAt));
+  el('promo-time-start').value=schedule.timeStart??'';el('promo-time-end').value=schedule.timeEnd??'';
+  const days=new Set(schedule.daysOfWeek??[0,1,2,3,4,5,6]);el('promo-days').querySelectorAll('input').forEach((input)=>{input.checked=days.has(Number(input.value));});
+  el('promo-priority').value=Number(promo.priority??50);el('promo-limit-total').value=promo.usageLimitTotal??'';
+  el('promo-limit-customer').value=promo.usageLimitPerCustomer??'';el('promo-stackable').checked=Boolean(promo.stackable);
+  el('publish-promo').textContent='Simpan perubahan sebagai versi baru';syncPromotionForm();updatePromoSummary();
+  el('promotion-form').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
 async function publishPromotion(event) {
-  event?.preventDefault();
+  event?.preventDefault();const form=event?.currentTarget;
   const button=el('publish-promo');el('promotion-error').textContent='';button.disabled=true;
   try {
     const promo = await request('/api/promotions/publish', { method: 'POST', body: JSON.stringify(promoPayload()) });
-    toast(`${promo.code} versi ${promo.version} diterbitkan`); await refreshCatalog();await loadPromotionManagement();
+    toast(`${promo.code} versi ${promo.version} diterbitkan`);form.dataset.editingPromoId='';
+    el('publish-promo').textContent='Publikasikan aturan baru';await refreshCatalog();await loadPromotionManagement();
   } catch (error) { el('promotion-error').textContent=error.message; }
   finally{button.disabled=false;}
 }
@@ -1239,6 +1297,24 @@ async function simulatePromotion() {
 async function retirePromotion(versionId){
   if(!confirm('Hentikan promo ini? Transaksi berikutnya tidak akan menerima promo tersebut.'))return;
   try{await request(`/api/promotions/${versionId}/retire`,{method:'POST'});toast('Promo berhasil dihentikan');await refreshCatalog();await loadPromotionManagement();}
+  catch(error){toast(error.message);}
+}
+
+async function deletePromotion(versionId){
+  if(!confirm('Hapus promo ini? Promo yang memiliki riwayat transaksi akan diarsipkan agar laporan lama tetap utuh.'))return;
+  try{const result=await request(`/api/promotions/${versionId}`,{method:'DELETE'});toast(result.archived?'Promo diarsipkan karena sudah pernah digunakan':'Promo dihapus');await refreshCatalog();await loadPromotionManagement();}
+  catch(error){toast(error.message);}
+}
+
+async function deleteVoucher(voucherId){
+  if(!confirm('Hapus voucher ini? Riwayat penggunaan yang sudah terjadi tetap disimpan.'))return;
+  try{const result=await request(`/api/vouchers/${voucherId}`,{method:'DELETE'});toast(result.archived?'Voucher diarsipkan':'Voucher dihapus');await loadPromotionManagement();}
+  catch(error){toast(error.message);}
+}
+
+async function deleteReceiptVoucherCampaign(campaignId){
+  if(!confirm('Hapus promo voucher struk ini? Voucher yang sudah tercetak tetap tersimpan untuk riwayat.'))return;
+  try{const result=await request(`/api/receipt-voucher-campaigns/${campaignId}`,{method:'DELETE'});toast(result.archived?'Promo diarsipkan karena sudah menerbitkan voucher':'Promo dihapus');await loadPromotionManagement();}
   catch(error){toast(error.message);}
 }
 
@@ -5133,14 +5209,14 @@ el('supplier-payment-method').addEventListener('change',()=>el('supplier-payment
 el('promotion-form').addEventListener('submit', publishPromotion);
 el('loyalty-settings-form').addEventListener('submit',saveLoyaltySettings);
 document.querySelectorAll('[data-loyalty-view]').forEach((button)=>button.addEventListener('click',()=>showLoyaltyView(button.dataset.loyaltyView)));
-el('open-voucher-form').addEventListener('click',()=>el('voucher-form-dialog').showModal());
+el('open-voucher-form').addEventListener('click',()=>openVoucherForm());
 el('close-voucher-form').addEventListener('click',()=>el('voucher-form-dialog').close());
-el('open-receipt-voucher-campaign').addEventListener('click',()=>el('receipt-voucher-campaign-dialog').showModal());
+el('open-receipt-voucher-campaign').addEventListener('click',()=>openReceiptVoucherCampaign());
 el('close-receipt-voucher-campaign').addEventListener('click',()=>el('receipt-voucher-campaign-dialog').close());
 el('voucher-form').addEventListener('submit',publishVoucher);
 el('receipt-voucher-campaign-form').addEventListener('submit',publishReceiptVoucherCampaign);
-el('voucher-list').addEventListener('click',async(event)=>{const button=event.target.closest('.voucher-status');if(!button)return;try{await request(`/api/vouchers/${button.closest('[data-voucher-id]').dataset.voucherId}/status`,{method:'POST',body:JSON.stringify({active:button.dataset.active==='true'})});await loadPromotionManagement();}catch(error){toast(error.message);}});
-el('receipt-voucher-campaign-list').addEventListener('click',async(event)=>{const button=event.target.closest('.receipt-voucher-status');if(!button)return;try{await request(`/api/receipt-voucher-campaigns/${button.closest('[data-receipt-campaign-id]').dataset.receiptCampaignId}/status`,{method:'POST',body:JSON.stringify({active:button.dataset.active==='true'})});await loadPromotionManagement();}catch(error){toast(error.message);}});
+el('voucher-list').addEventListener('click',(event)=>{const card=event.target.closest('[data-voucher-id]');if(!card)return;const voucher=state.loyalty.vouchers.find((item)=>item.id===card.dataset.voucherId);if(event.target.closest('.edit-voucher'))openVoucherForm(voucher);if(event.target.closest('.delete-voucher'))deleteVoucher(card.dataset.voucherId);});
+el('receipt-voucher-campaign-list').addEventListener('click',(event)=>{const card=event.target.closest('[data-receipt-campaign-id]');if(!card)return;const campaign=state.loyalty.receiptCampaigns.find((item)=>item.id===card.dataset.receiptCampaignId);if(event.target.closest('.edit-receipt-voucher'))openReceiptVoucherCampaign(campaign);if(event.target.closest('.delete-receipt-voucher'))deleteReceiptVoucherCampaign(card.dataset.receiptCampaignId);});
 el('simulate-promo').addEventListener('click', simulatePromotion);
 el('promo-type').addEventListener('change',syncPromotionForm);
 el('promo-target-type').addEventListener('change',syncPromotionForm);
@@ -5149,7 +5225,7 @@ el('promo-repeat-mode').addEventListener('change',syncPromotionForm);
 ['promo-target-product','promo-customer-group','promo-reward-product','promo-bundle-product-a','promo-bundle-product-b','promo-stackable'].forEach((id)=>el(id).addEventListener('change',updatePromoSummary));
 el('promo-days').addEventListener('change',updatePromoSummary);
 el('promo-status-filter').addEventListener('change',renderPromotionList);
-el('promotion-list').addEventListener('click',(event)=>{const button=event.target.closest('.retire-promotion');if(button)retirePromotion(button.closest('[data-promo-id]').dataset.promoId);});
+el('promotion-list').addEventListener('click',(event)=>{const card=event.target.closest('[data-promo-id]');if(!card)return;if(event.target.closest('.edit-promotion'))editPromotion(card.dataset.promoId);if(event.target.closest('.delete-promotion'))deletePromotion(card.dataset.promoId);});
 el('open-shift').addEventListener('click', openShift);
 el('cash-movement').addEventListener('click', addCashMovement);
 el('close-shift').addEventListener('click', closeShift);

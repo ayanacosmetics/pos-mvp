@@ -957,7 +957,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.7.2-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.7.3-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1657,6 +1657,26 @@ async function routeRequest(request, response, route) {
     return send(response,200,await rpc('retire_promotion_version',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_version_id:versionId}));
   }
 
+  if(request.method==='DELETE'&&/^promotions\/[^/]+$/.test(route)){
+    requirePermission(session,'promotion.manage');
+    const versionId=route.split('/')[1],tenant=encodeURIComponent(context.tenantId),version=encodeURIComponent(versionId);
+    const versions=await rest('promotion_versions',`tenant_id=eq.${tenant}&id=eq.${version}&select=id,promotion_id&limit=1`);
+    if(!versions[0])throw Object.assign(new Error('Promo tidak ditemukan'),{status:404});
+    const promotionId=versions[0].promotion_id,promotion=encodeURIComponent(promotionId);
+    const used=await rest('promotion_redemptions',`tenant_id=eq.${tenant}&promotion_id=eq.${promotion}&select=id&limit=1`);
+    if(used.length){
+      await rest('promotion_versions',`tenant_id=eq.${tenant}&promotion_id=eq.${promotion}&status=eq.PUBLISHED`,{
+        method:'PATCH',prefer:'return=minimal',body:{status:'RETIRED'}
+      });
+      return send(response,200,{deleted:true,archived:true});
+    }
+    const rows=await rest('promotions',`tenant_id=eq.${tenant}&id=eq.${promotion}`,{
+      method:'DELETE',prefer:'return=representation'
+    });
+    if(!rows[0])throw Object.assign(new Error('Promo tidak ditemukan'),{status:404});
+    return send(response,200,{deleted:true,archived:false});
+  }
+
   if (request.method === 'POST' && route === 'promotions/simulate') {
     requirePermission(session, 'promotion.manage');
     const input = bodyOf(request);
@@ -1730,6 +1750,41 @@ async function routeRequest(request, response, route) {
     return send(response,201,rows[0]);
   }
 
+  if(request.method==='PUT'&&/^vouchers\/[^/]+$/.test(route)){
+    requirePermission(session,'promotion.manage');
+    const input=bodyOf(request),voucherId=route.split('/')[1];
+    const payload={outlet_id:input.outletId||null,code:String(input.code??'').trim().toUpperCase(),
+      name:String(input.name??'').trim(),discount_type:input.discountType,discount_value:Number(input.discountValue),
+      max_discount:input.maxDiscount?Number(input.maxDiscount):null,min_purchase:Number(input.minPurchase??0),
+      starts_at:input.startsAt,ends_at:input.endsAt,usage_limit_total:input.usageLimitTotal?Number(input.usageLimitTotal):null,
+      usage_limit_per_customer:input.usageLimitPerCustomer?Number(input.usageLimitPerCustomer):null,
+      segment:input.segment??'ALL',one_time:Boolean(input.oneTime)};
+    if(!payload.code||!payload.name)throw Object.assign(new Error('Kode dan nama voucher wajib diisi'),{status:400});
+    const rows=await rest('vouchers',`tenant_id=eq.${encodeURIComponent(context.tenantId)}&id=eq.${encodeURIComponent(voucherId)}&source=eq.MANUAL`,{
+      method:'PATCH',prefer:'return=representation',body:payload
+    });
+    if(!rows[0])throw Object.assign(new Error('Voucher tidak ditemukan'),{status:404});
+    return send(response,200,rows[0]);
+  }
+
+  if(request.method==='DELETE'&&/^vouchers\/[^/]+$/.test(route)){
+    requirePermission(session,'promotion.manage');
+    const voucherId=route.split('/')[1],tenant=encodeURIComponent(context.tenantId),voucher=encodeURIComponent(voucherId);
+    const used=await rest('voucher_redemptions',`tenant_id=eq.${tenant}&voucher_id=eq.${voucher}&select=id&limit=1`);
+    if(used.length){
+      const rows=await rest('vouchers',`tenant_id=eq.${tenant}&id=eq.${voucher}&source=eq.MANUAL`,{
+        method:'PATCH',prefer:'return=representation',body:{active:false}
+      });
+      if(!rows[0])throw Object.assign(new Error('Voucher tidak ditemukan'),{status:404});
+      return send(response,200,{deleted:true,archived:true});
+    }
+    const rows=await rest('vouchers',`tenant_id=eq.${tenant}&id=eq.${voucher}&source=eq.MANUAL`,{
+      method:'DELETE',prefer:'return=representation'
+    });
+    if(!rows[0])throw Object.assign(new Error('Voucher tidak ditemukan'),{status:404});
+    return send(response,200,{deleted:true,archived:false});
+  }
+
   if(request.method==='POST'&&/^vouchers\/[^/]+\/status$/.test(route)){
     requirePermission(session,'promotion.manage');
     const input=bodyOf(request),voucherId=route.split('/')[1];
@@ -1758,6 +1813,47 @@ async function routeRequest(request, response, route) {
     }
     const rows=await rest('receipt_voucher_campaigns','',{method:'POST',prefer:'return=representation',body:payload});
     return send(response,201,rows[0]);
+  }
+
+  if(request.method==='PUT'&&/^receipt-voucher-campaigns\/[^/]+$/.test(route)){
+    requirePermission(session,'promotion.manage');
+    const input=bodyOf(request),campaignId=route.split('/')[1];
+    const payload={outlet_id:input.outletId||null,name:String(input.name??'').trim(),
+      priority:Number(input.priority??0),trigger_min_purchase:Number(input.triggerMinPurchase??0),
+      discount_type:input.discountType,discount_value:Number(input.discountValue),
+      max_discount:input.maxDiscount?Number(input.maxDiscount):null,
+      redemption_min_purchase:Number(input.redemptionMinPurchase??0),
+      valid_after_days:Number(input.validAfterDays??1),valid_days:Number(input.validDays??14),
+      customer_mode:input.customerMode==='MEMBER'?'MEMBER':'BEARER',updated_at:new Date().toISOString()};
+    if(!payload.name||!['FIXED','PERCENT'].includes(payload.discount_type)||payload.discount_value<=0){
+      throw Object.assign(new Error('Nama, jenis, dan nilai voucher wajib diisi'),{status:400});
+    }
+    if(payload.discount_type==='PERCENT'&&payload.discount_value>100){
+      throw Object.assign(new Error('Persentase voucher maksimal 100%'),{status:400});
+    }
+    const rows=await rest('receipt_voucher_campaigns',`tenant_id=eq.${encodeURIComponent(context.tenantId)}&id=eq.${encodeURIComponent(campaignId)}`,{
+      method:'PATCH',prefer:'return=representation',body:payload
+    });
+    if(!rows[0])throw Object.assign(new Error('Promo voucher struk tidak ditemukan'),{status:404});
+    return send(response,200,rows[0]);
+  }
+
+  if(request.method==='DELETE'&&/^receipt-voucher-campaigns\/[^/]+$/.test(route)){
+    requirePermission(session,'promotion.manage');
+    const campaignId=route.split('/')[1],tenant=encodeURIComponent(context.tenantId),campaign=encodeURIComponent(campaignId);
+    const issued=await rest('vouchers',`tenant_id=eq.${tenant}&receipt_campaign_id=eq.${campaign}&source=eq.RECEIPT&select=id&limit=1`);
+    if(issued.length){
+      const rows=await rest('receipt_voucher_campaigns',`tenant_id=eq.${tenant}&id=eq.${campaign}`,{
+        method:'PATCH',prefer:'return=representation',body:{active:false,updated_at:new Date().toISOString()}
+      });
+      if(!rows[0])throw Object.assign(new Error('Promo voucher struk tidak ditemukan'),{status:404});
+      return send(response,200,{deleted:true,archived:true});
+    }
+    const rows=await rest('receipt_voucher_campaigns',`tenant_id=eq.${tenant}&id=eq.${campaign}`,{
+      method:'DELETE',prefer:'return=representation'
+    });
+    if(!rows[0])throw Object.assign(new Error('Promo voucher struk tidak ditemukan'),{status:404});
+    return send(response,200,{deleted:true,archived:false});
   }
 
   if(request.method==='POST'&&/^receipt-voucher-campaigns\/[^/]+\/status$/.test(route)){

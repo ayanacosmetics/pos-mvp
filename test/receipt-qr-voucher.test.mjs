@@ -42,7 +42,7 @@ test('thermal receipt contains native ESC POS QR commands and readable code',()=
 });
 
 test('loyalty starts as a compact menu and opens lists before creation forms',async()=>{
-  const [html,app]=await Promise.all([read('apps/web/index.html'),read('apps/web/app.js')]);
+  const [html,app,api]=await Promise.all([read('apps/web/index.html'),read('apps/web/app.js'),read('api/index.mjs')]);
   assert.match(html,/data-loyalty-view="receipt"/);
   assert.match(html,/id="loyalty-view-receipt" class="surface loyalty-detail hidden"/);
   assert.match(html,/id="open-receipt-voucher-campaign"/);
@@ -50,4 +50,11 @@ test('loyalty starts as a compact menu and opens lists before creation forms',as
   assert.match(html,/id="voucher-form-dialog"/);
   assert.match(app,/showLoyaltyView\(''\)/);
   assert.match(app,/receipt-voucher-campaign-dialog'\)\.showModal/);
+  assert.match(app,/edit-receipt-voucher/);
+  assert.match(app,/delete-receipt-voucher/);
+  assert.match(app,/edit-voucher/);
+  assert.match(app,/delete-promotion/);
+  assert.match(api,/request\.method==='PUT'&&\/\^vouchers/);
+  assert.match(api,/request\.method==='DELETE'&&\/\^receipt-voucher-campaigns/);
+  assert.match(api,/request\.method==='DELETE'&&\/\^promotions/);
 });
