@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=84">
+  <link rel="stylesheet" href="/styles.css?v=85">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -120,8 +120,8 @@
         <div data-nav-panel="insights" class="feature-nav-panel">
           <button data-page="reports-summary" data-target-page="reports" data-report-view="summary" class="feature-nav-item" data-permission="report.view"><span>Ringkasan</span><small>Omzet, laba, tren harian</small></button>
           <button data-page="reports-performance" data-target-page="reports" data-report-view="performance" class="feature-nav-item" data-permission="report.view"><span>Produk & outlet</span><small>Kinerja produk dan cabang</small></button>
-          <button data-page="reports-purchases" data-target-page="reports" data-report-view="purchases" class="feature-nav-item" data-permission="report.view"><span>Pembelian</span><small>Penerimaan per supplier</small></button>
-          <button data-page="reports-sales" data-target-page="reports" data-report-view="sales" class="feature-nav-item" data-permission="report.view"><span>Transaksi</span><small>Penjualan dan retur terbaru</small></button>
+          <button data-page="reports-sales" data-target-page="reports" data-report-view="sales" class="feature-nav-item" data-permission="report.view"><span>Laporan penjualan</span><small>Daftar dan struk penjualan asli</small></button>
+          <button data-page="reports-purchases" data-target-page="reports" data-report-view="purchases" class="feature-nav-item" data-permission="report.view"><span>Laporan pembelian</span><small>Daftar dan struk pembelian asli</small></button>
           <button data-page="reports-audit" data-target-page="reports" data-report-view="audit" class="feature-nav-item" data-permission="audit.view"><span>Audit log</span><small>Aktivitas sensitif</small></button>
           <button data-page="sync-review" class="feature-nav-item" data-permission="audit.view"><span>Sinkronisasi</span><small>Konflik transaksi offline <b id="sync-review-nav-count" class="nav-count hidden">0</b></small></button>
         </div>
@@ -169,7 +169,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Kelola Promo · v2.7.3</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Laporan Struk · v2.8.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -468,6 +468,7 @@
         <div class="report-grid report-primary"><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">TREN HARIAN</p><h2>Penjualan bersih dan laba</h2></div></div><div id="daily-report" class="table-wrap"></div></div><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">KINERJA PRODUK</p><h2>Produk berdasarkan omzet bersih</h2></div></div><div id="best-products"></div></div></div>
         <div class="report-grid"><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">KINERJA OUTLET</p><h2>Kontribusi per lokasi usaha</h2></div></div><div id="outlet-performance"></div></div><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">PEMBELIAN</p><h2>Nilai penerimaan per supplier</h2></div></div><div id="supplier-purchases"></div></div></div>
         <div id="report-sales-workspace" class="surface report-wide-section"><div class="report-section-heading"><div><p class="eyebrow">RIWAYAT TRANSAKSI</p><h2>Struk pada periode terpilih</h2><p class="muted">Tekan transaksi untuk melihat barang, pembayaran, cetak ulang, atau void. Maksimal 500 transaksi terbaru per periode.</p></div></div><div class="pos-history-search"><input id="pos-history-search" autocomplete="off" placeholder="Nomor struk, pelanggan, telepon, atau kasir"><button id="refresh-pos-history" class="button secondary" type="button">Muat ulang</button></div><div class="pos-history-layout report-sales-layout"><div id="pos-history-list" class="pos-history-list"></div><div id="pos-history-detail" class="pos-history-detail"><div class="empty-state compact">Pilih transaksi untuk melihat detail.</div></div></div></div>
+        <div id="report-purchase-workspace" class="surface report-wide-section hidden"><div class="report-section-heading"><div><p class="eyebrow">RIWAYAT PEMBELIAN</p><h2>Struk penerimaan pada periode terpilih</h2><p class="muted">Tekan pembelian untuk membuka dokumen asli berisi supplier, barang, modal, batch, dan EXP.</p></div><button id="refresh-purchase-report" class="button secondary" type="button">Muat ulang</button></div><div id="purchase-report-list" class="purchase-report-list"><div class="empty-state compact">Memuat pembelian...</div></div></div>
         <div class="surface report-wide-section"><div class="report-section-heading"><div><p class="eyebrow">AUDIT LOG</p><h2>Aktivitas sensitif terbaru</h2></div></div><div id="audit-logs"></div></div>
       </div></section>
 
@@ -868,6 +869,7 @@
   <dialog id="held-sales-dialog"><div class="dialog-card held-sales-dialog"><div class="comparison-heading"><div><p class="eyebrow">TRANSAKSI DITAHAN</p><h2>Lanjutkan keranjang</h2></div><button id="close-held-sales" class="icon-button" type="button">×</button></div><div id="held-sales-list"><div class="empty-state compact">Belum ada transaksi ditahan.</div></div></div></dialog>
   <dialog id="receipt-dialog"><div class="dialog-card receipt-dialog"><div id="receipt-content"></div><div class="button-row no-print"><button id="close-receipt" class="button secondary" type="button">Transaksi baru</button><button id="whatsapp-receipt" class="button secondary hidden" type="button">WhatsApp</button><button id="print-receipt" class="button primary" type="button">Cetak struk</button></div></div></dialog>
   <dialog id="purchase-order-dialog"><div class="dialog-card purchase-order-dialog"><div id="purchase-order-print-content"></div><div class="button-row no-print"><button id="close-purchase-order-print" class="button secondary" type="button">Tutup</button><button id="share-purchase-order" class="button secondary" type="button">Bagikan ke supplier</button><button id="print-purchase-order" class="button primary" type="button">Cetak / Simpan PDF</button></div></div></dialog>
+  <dialog id="purchase-report-dialog"><div class="dialog-card purchase-report-dialog"><div id="purchase-report-content"></div><div class="button-row no-print"><button id="close-purchase-report" class="button secondary" type="button">Tutup</button><button id="print-purchase-report" class="button primary" type="button">Cetak / Simpan PDF</button></div></div></dialog>
   <dialog id="product-dialog"><form id="product-form" class="dialog-card product-editor">
     <div class="comparison-heading"><div><p id="product-dialog-eyebrow" class="eyebrow">PRODUK BARU</p><h2 id="product-dialog-title">Tambah produk</h2><p class="muted">Setiap varian mempunyai SKU, barcode, harga, dan stok sendiri.</p></div><button id="close-product-dialog" class="icon-button" type="button">×</button></div>
     <input id="edit-product-id" type="hidden">
@@ -896,6 +898,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=84"></script>
+  <script type="module" src="/app.js?v=85"></script>
 </body>
 </html>
