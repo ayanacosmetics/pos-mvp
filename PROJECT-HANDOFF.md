@@ -45,6 +45,16 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.13.2 Startup Cepat
+
+- Cache katalog terakhir ditampilkan segera saat aplikasi dibuka, sementara
+  validasi sesi dan sinkronisasi data terbaru berjalan di belakang.
+- Katalog aktif langsung mengisi halaman Produk sehingga tidak lagi menampilkan
+  nol palsu selama master produk lengkap belum selesai dimuat.
+- Modul berat dimuat melalui antrean latar belakang maksimal tiga permintaan
+  bersamaan, bukan ditunggu satu per satu pada startup.
+- API `2.13.2-cloud` dan aset/cache PWA `v106`; tidak memerlukan SQL baru.
+
 ### Rilis v2.13.1 Refresh Sesi Permanen
 
 - Access token diperbarui otomatis sebelum kedaluwarsa menggunakan refresh

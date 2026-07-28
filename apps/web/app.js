@@ -75,6 +75,8 @@ let barcodeCameraTarget = null;
 let barcodeCameraControls = null;
 let barcodeCameraCompleting = false;
 let lastTelemetryAt = 0;
+let productManagementPromise = null;
+let deferredBootstrapRun = 0;
 
 function storeAuth(data) {
   const auth = saveAuth(data, state);
@@ -294,11 +296,15 @@ async function applyBootstrap(data, { offline = false } = {}) {
   state.deviceSettings = { ...state.deviceSettings, ...(data.deviceSettings ?? {}) };
   state.outlets = data.outlets ?? [];
   state.activeOutletId = data.activeOutletId ?? state.outlets[0]?.id ?? null;
-  state.products = data.products;
+  state.products = data.products ?? [];
+  // Katalog aktif dari bootstrap sudah cukup untuk langsung mengisi halaman
+  // Produk. Data master lengkap (termasuk produk nonaktif) menyusul di latar
+  // belakang agar pengguna tidak melihat angka nol palsu.
+  state.managedProducts = state.products.map((product)=>({...product,active:product.active!==false}));
   state.customerGroups = data.customerGroups?.length ? data.customerGroups : [{id:'retail',name:'Umum',isDefault:true}];
-  state.promotions = data.promotions;
-  state.customers = data.customers;
-  state.suppliers = data.suppliers;
+  state.promotions = data.promotions ?? [];
+  state.customers = data.customers ?? [];
+  state.suppliers = data.suppliers ?? [];
   state.locations = data.locations ?? [];
   state.currentShift = data.currentShift;
   renderOutletSwitcher();
@@ -323,35 +329,27 @@ async function applyBootstrap(data, { offline = false } = {}) {
   renderShift();
   renderImportLocations();
   await updateQuote();
-  if (!offline && state.session.permissions.includes('purchasing.view_cost')) await loadPurchaseOrders();
-  if (!offline && state.session.permissions.includes('purchasing.view_cost')) await loadRestockPlanning();
-  if (!offline && state.session.permissions.includes('purchasing.view_cost')) await loadRecentSupplierReturns();
-  if (!offline && state.session.permissions.includes('inventory.manage')) await loadInventory();
-  if (!offline && state.session.permissions.includes('report.view')) await loadReport();
-  if (!offline && state.session.permissions.includes('report.view')) await loadCrmDashboard();
-  if (!offline && state.session.permissions.includes('finance.owner')) await loadOwnerFinance();
-  if (!offline && state.session.permissions.includes('audit.view')) { await loadSyncReview(); await loadImportHistory(); }
-  if (!offline && state.session.permissions.includes('identity.manage')) await loadBackupHistory();
-  if (!offline && state.session.permissions.includes('identity.manage')) await loadSettings();
-  if (!offline && state.session.permissions.includes('identity.manage')) await loadSystemHealth();
-  if (!offline && state.session.permissions.includes('catalog.manage')) await loadProductManagement();
-  if (!offline && state.session.permissions.includes('promotion.manage')) await loadPromotionManagement();
-  if (!offline && state.session.permissions.includes('pos.sell')) await loadHeldSales();
-  if (!offline && state.session.permissions.includes('pos.sell')) await loadCustomerAging();
-  if (!offline && state.session.permissions.includes('workforce.self')) { await loadWorkforceOverview(); await loadApprovals(); }
-  if (!offline && state.session.permissions.includes('workforce.manage')) { await loadWorkforceActivity(); await loadWorkforceReconciliations(); }
+  if (!offline) startDeferredBootstrapLoads();
 }
 
 async function bootstrap({ reportError = false } = {}) {
+  const cached = localStorage.getItem('pos_bootstrap_cache');
+  let cacheApplied = false;
+  if (cached) {
+    try {
+      await applyBootstrap(JSON.parse(cached), { offline: true });
+      cacheApplied = true;
+    } catch {
+      localStorage.removeItem('pos_bootstrap_cache');
+    }
+  }
   try {
     const data = await request('/api/bootstrap');
     saveBootstrapCache(data);
     await applyBootstrap(data);
     recordLastSync();
   } catch (error) {
-    const cached = localStorage.getItem('pos_bootstrap_cache');
-    if (!error.status && cached) {
-      await applyBootstrap(JSON.parse(cached), { offline: true });
+    if (!error.status && cacheApplied) {
       toast('Mode offline aktif. Katalog terakhir siap digunakan.');
       return;
     }
@@ -388,6 +386,34 @@ async function refreshCatalog() {
   renderShift();
   renderImportLocations();
   if (state.session.permissions.includes('catalog.manage')) await loadProductManagement();
+}
+
+function startDeferredBootstrapLoads() {
+  const run = ++deferredBootstrapRun;
+  const can = (permission) => state.session?.permissions?.includes(permission);
+  const tasks = [
+    ...(can('catalog.manage') ? [loadProductManagement] : []),
+    ...(can('pos.sell') ? [loadHeldSales, loadCustomerAging] : []),
+    ...(can('purchasing.view_cost') ? [loadPurchaseOrders, loadRestockPlanning, loadRecentSupplierReturns] : []),
+    ...(can('inventory.manage') ? [loadInventory] : []),
+    ...(can('report.view') ? [loadReport, loadCrmDashboard] : []),
+    ...(can('promotion.manage') ? [loadPromotionManagement] : []),
+    ...(can('finance.owner') ? [loadOwnerFinance] : []),
+    ...(can('audit.view') ? [loadSyncReview, loadImportHistory] : []),
+    ...(can('identity.manage') ? [loadBackupHistory, loadSettings, loadSystemHealth] : []),
+    ...(can('workforce.self') ? [loadWorkforceOverview, loadApprovals] : []),
+    ...(can('workforce.manage') ? [loadWorkforceActivity, loadWorkforceReconciliations] : [])
+  ];
+  setTimeout(async () => {
+    let cursor = 0;
+    const worker = async () => {
+      while (run === deferredBootstrapRun && cursor < tasks.length) {
+        const task = tasks[cursor++];
+        await Promise.resolve().then(task).catch(() => {});
+      }
+    };
+    await Promise.all(Array.from({length:Math.min(3,tasks.length)}, worker));
+  }, 0);
 }
 
 function lastSyncStorageKey() {
@@ -503,14 +529,18 @@ function renderProducts(query = '') {
 }
 
 async function loadProductManagement() {
-  try {
-    const data=await request('/api/products/manage');
-    state.managedProducts=data.products??[];
-  } catch {
-    state.managedProducts=state.products.map((product)=>({...product,active:true}));
-  }
-  renderProductTable();
-  renderProductExportFilters();
+  if (productManagementPromise) return productManagementPromise;
+  productManagementPromise=(async()=>{
+    try {
+      const data=await request('/api/products/manage');
+      state.managedProducts=data.products??[];
+    } catch {
+      if(!state.managedProducts.length)state.managedProducts=state.products.map((product)=>({...product,active:true}));
+    }
+    renderProductTable();
+    renderProductExportFilters();
+  })().finally(()=>{productManagementPromise=null;});
+  return productManagementPromise;
 }
 
 function productExportFilters(){return {category:el('export-product-category')?.value??'',brand:el('export-product-brand')?.value??'',status:el('export-product-status')?.value??'ALL',sort:el('export-product-sort')?.value??'SKU_ASC'};}
@@ -5151,6 +5181,7 @@ function showPage(name) {
     el('sales-report-subnav-toggle').setAttribute('aria-expanded','true');
   }
   localStorage.setItem('pos_active_page',name);
+  if(target==='products')loadProductManagement().catch((error)=>toast(error.message));
   if(multioutletPages.has(name))loadMultiOutletWorkspace().catch((error)=>toast(error.message));
   if(accountingPages.has(name))loadAccounting({sync:!state.accounting}).catch((error)=>toast(error.message));
   if(pilotPages.has(name)&&name!=='pilot-sop')loadPilotDashboard().catch((error)=>toast(error.message));
