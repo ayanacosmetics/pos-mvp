@@ -45,6 +45,16 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.10.2 Jurnal Arus Stok
+
+- Arus stok tidak lagi mengakumulasi per produk. Setiap kejadian jurnal menjadi
+  satu baris: pergerakan masuk mengisi Masuk dan nol pada Keluar, sedangkan
+  pergerakan keluar mengisi Keluar dan nol pada Masuk.
+- Nama barang menampilkan waktu kejadian dan urutan awal adalah yang terbaru.
+- Nama lipatan `Laporan transaksi` diubah menjadi `Laporan penjualan` agar
+  serasi dan tidak rancu dengan Laporan pembelian.
+- API `2.10.2-cloud`, aset/cache PWA `v99`, tanpa migrasi SQL baru.
+
 ### Rilis v2.10.1 Laporan Kategori & Arus Stok
 
 - Penjualan kategori memiliki filter staff/pembayaran bersama, periode Today,

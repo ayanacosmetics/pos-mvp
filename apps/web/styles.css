@@ -666,6 +666,8 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
   .surface,.table-wrap{box-shadow:none}
 }
 
+.stock-flow-row>div{display:grid;gap:2px}.stock-flow-row small{color:var(--muted);font-size:9px}
+
 /* Receipt preview: opaque, independently scrollable, and never scrolls the page behind it. */
 html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
 #receipt-dialog{max-width:96vw;max-height:94dvh;overflow:hidden;background:#fff;overscroll-behavior:contain}

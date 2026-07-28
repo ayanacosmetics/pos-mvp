@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { buildSalesItemAnalytics, filteredSalesReport } from '../api/index.mjs';
+import { buildSalesItemAnalytics, buildStockFlowEntries, filteredSalesReport } from '../api/index.mjs';
 
 const [html, app, api, css] = await Promise.all([
   readFile(new URL('../apps/web/index.html', import.meta.url), 'utf8'),
@@ -35,7 +35,19 @@ test('analisis barang menghitung qty, pendapatan, keuntungan, kategori, dan add-
   assert.equal(result.products[0].currentStock,8);assert.equal(result.categories.length,2);assert.equal(result.addons.length,2);
 });
 
+test('arus stok menampilkan setiap kejadian tanpa mengakumulasi produk yang sama',()=>{
+  const ledger=[
+    {id:'l2',product_id:'p1',delta:-1,event_type:'SALE',reference_id:'s1',occurred_at:'2026-07-28T10:05:00+08:00'},
+    {id:'l1',product_id:'p1',delta:1,event_type:'PURCHASE_RECEIPT',reference_id:'r1',occurred_at:'2026-07-28T10:00:00+08:00'}
+  ];
+  const rows=buildStockFlowEntries(ledger,[{id:'p1',sku:'SKU-1',name:'Lip Tint',category:'Makeup'}]);
+  assert.equal(rows.length,2);
+  assert.deepEqual(rows.map(({stockIn,stockOut})=>({stockIn,stockOut})),[{stockIn:0,stockOut:1},{stockIn:1,stockOut:0}]);
+  assert.equal(rows[0].occurredAt,ledger[0].occurred_at);
+});
+
 test('laporan penjualan menyatukan ringkasan keuntungan dan riwayat struk', () => {
+  assert.match(html,/id="sales-report-subnav-toggle"[\s\S]*Laporan penjualan/);
   assert.match(html, /data-report-view="sales"[\s\S]*<span>Transaksi<\/span>/);
   assert.doesNotMatch(html, /data-report-view="sales-history"/);
   assert.match(html, /data-report-view="purchases"[\s\S]*Laporan pembelian/);

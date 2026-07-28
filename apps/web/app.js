@@ -3793,6 +3793,8 @@ function renderSalesAnalysis(){
   rows=rows.filter((row)=>!query||`${row.productName??''} ${row.sku??''} ${row.category??''}`.toLowerCase().includes(query));
   const qty=(row)=>Number(flow?row.stockOut:row.qtySold??row.addonTransactions??0);
   rows.sort((a,b)=>{
+    if(sort==='DATE_ASC')return new Date(a.occurredAt)-new Date(b.occurredAt);
+    if(sort==='DATE_DESC')return new Date(b.occurredAt)-new Date(a.occurredAt);
     if(sort==='QTY_ASC')return qty(a)-qty(b);
     if(sort==='NAME')return String(a.productName??a.category).localeCompare(String(b.productName??b.category),'id');
     if(sort==='PROFIT')return Number(b.grossProfit??b.netFlow)-Number(a.grossProfit??a.netFlow);
@@ -3805,7 +3807,7 @@ function renderSalesAnalysis(){
   }
   const content=rows.map((row)=>{
     if(view==='sales-categories')return`<article class="sales-analysis-row category"><span class="sales-analysis-avatar">${escapeHtml(String(row.category).slice(0,1).toUpperCase())}</span><div><strong>${escapeHtml(row.category)}</strong><small>${Number(row.productCount)} barang · Pendapatan ${money.format(row.netRevenue)} · Keuntungan ${money.format(row.grossProfit)}</small></div><aside><small>Terjual</small><strong>${Number(row.qtySold).toLocaleString('id-ID')} pcs</strong></aside></article>`;
-    if(flow)return`<article class="stock-flow-row"><strong>${escapeHtml(row.productName)}</strong><span>${escapeHtml(row.sku)}</span><b>${Number(row.stockIn).toLocaleString('id-ID')}</b><b>${Number(row.stockOut).toLocaleString('id-ID')}</b></article>`;
+    if(flow)return`<article class="stock-flow-row"><div><strong>${escapeHtml(row.productName)}</strong><small>${new Date(row.occurredAt).toLocaleString('id-ID')}</small></div><span>${escapeHtml(row.sku)}</span><b>${Number(row.stockIn).toLocaleString('id-ID')}</b><b>${Number(row.stockOut).toLocaleString('id-ID')}</b></article>`;
     const right=view==='sales-addons'?`${Number(row.addonTransactions).toLocaleString('id-ID')} transaksi`:`${Number(row.qtySold).toLocaleString('id-ID')} pcs`;
     return`<article class="sales-analysis-row">${productThumbnail({...row,name:row.productName})}<div><strong>${escapeHtml(row.productName)}</strong><small>${escapeHtml(row.sku)} · ${escapeHtml(row.category)}</small><small>Keuntungan ${money.format(row.grossProfit)} · Pendapatan ${money.format(row.netRevenue)}</small></div><aside><small>${view==='sales-addons'?'Terjual sebagai add-on':'Total terjual'}</small><strong>${right}</strong></aside></article>`;
   }).join('');
@@ -4669,7 +4671,7 @@ function showReportView(name='summary'){
     'sales-products':['Penjualan barang','Daftar barang terjual beserta qty, pendapatan, dan keuntungan.'],
     'sales-categories':['Penjualan kategori','Bandingkan qty, pendapatan, dan keuntungan setiap kategori.'],
     'sales-addons':['Add-on','Barang tambahan yang terjual bersama barang lain dalam satu transaksi.'],
-    'stock-flow':['Arus stok','Pantau stok masuk, keluar, perubahan bersih, dan saldo saat ini.'],
+    'stock-flow':['Arus stok','Pantau setiap kejadian stok masuk dan keluar secara berurutan.'],
     audit:['Jejak aktivitas','Tinjau aktivitas sensitif yang tercatat oleh sistem.']
   };
   el('report-page-title').textContent=headings[name]?.[0]??headings.summary[0];
@@ -4691,12 +4693,13 @@ function showReportView(name='summary'){
   if(name==='sales')state.salesReportOpen=false;
   if(['sales-products','sales-categories','sales-addons','stock-flow'].includes(name)){
     const switchingFlow=(name==='stock-flow')!==(state.salesAnalysis.view==='stock-flow');
-    if(switchingFlow)state.salesAnalysis.preset='TODAY';
+    if(switchingFlow){state.salesAnalysis.preset='TODAY';state.salesAnalysis.sort=name==='stock-flow'?'DATE_DESC':'QTY_DESC';}
     state.salesAnalysis.view=name;state.salesAnalysis.data=null;
     el('sales-analysis-periods').querySelectorAll('[data-analysis-period]').forEach((button)=>button.classList.toggle('active',button.dataset.analysisPeriod===state.salesAnalysis.preset));
     el('stock-flow-date-filter').querySelectorAll('[data-stock-flow-period]').forEach((button)=>button.classList.toggle('active',button.dataset.stockFlowPeriod===state.salesAnalysis.preset));
     el('stock-flow-date-label').textContent=state.salesAnalysis.preset==='YESTERDAY'?'Kemarin':state.salesAnalysis.preset==='CUSTOM'?'Kustom':'Today';
     el('sales-analysis-custom-period').classList.toggle('hidden',state.salesAnalysis.preset!=='CUSTOM');
+    el('sales-analysis-sort-menu').querySelectorAll('[data-analysis-sort]').forEach((button)=>button.classList.toggle('active',button.dataset.analysisSort===state.salesAnalysis.sort));
   }
   syncSalesReportShell();
   if(['sales-products','sales-categories','sales-addons','stock-flow'].includes(name)&&state.session)loadSalesAnalysis();

@@ -835,6 +835,20 @@ export function buildSalesItemAnalytics(sales,items,products,returnItems,balance
     dashboard:rows.reduce((sum,row)=>{sum.qtySold+=row.qtySold;sum.netRevenue+=row.netRevenue;sum.grossProfit+=row.grossProfit;return sum;},{qtySold:0,netRevenue:0,grossProfit:0})};
 }
 
+export function buildStockFlowEntries(ledger,products){
+  const productMap=new Map(products.map((product)=>[product.id,product]));
+  return ledger.map((item)=>{
+    const product=productMap.get(item.product_id)??{},delta=Number(item.delta);
+    return{
+      id:item.id,productId:item.product_id,sku:product.sku??'',productName:product.name??'Produk',
+      category:product.category??'Lainnya',imageUrl:product.image_url??null,
+      stockIn:delta>0?delta:0,stockOut:delta<0?Math.abs(delta):0,
+      netFlow:delta,eventType:item.event_type,referenceId:item.reference_id,
+      occurredAt:item.occurred_at
+    };
+  });
+}
+
 async function loadReturnablePurchase(context,{receiptId=null,documentNo=null,supplierId=null}={}) {
   const identifier=receiptId?`id=eq.${encodeURIComponent(receiptId)}`:`document_no=eq.${encodeURIComponent(String(documentNo??'').trim())}`;
   const supplierFilter=supplierId?`&supplier_id=eq.${encodeURIComponent(supplierId)}`:'';
@@ -1121,7 +1135,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.10.1-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.10.2-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -3170,16 +3184,11 @@ async function routeRequest(request, response, route) {
     const locations=context.locations.filter((location)=>outletIds.includes(location.outlet_id));
     if(!locations.length)return send(response,200,{rows:[],period:{from,to}});
     const timezone=context.outlet.timezone??'Asia/Makassar';
-    const ledger=await rest('stock_ledger',`tenant_id=eq.${context.tenantId}&location_id=${inFilter(locations.map((item)=>item.id))}&occurred_at=gte.${encodeURIComponent(`${shiftIsoDate(from,-1)}T00:00:00Z`)}&occurred_at=lt.${encodeURIComponent(`${shiftIsoDate(to,2)}T00:00:00Z`)}&select=product_id,delta,event_type,occurred_at&order=occurred_at.desc&limit=10000`);
+    const ledger=await rest('stock_ledger',`tenant_id=eq.${context.tenantId}&location_id=${inFilter(locations.map((item)=>item.id))}&occurred_at=gte.${encodeURIComponent(`${shiftIsoDate(from,-1)}T00:00:00Z`)}&occurred_at=lt.${encodeURIComponent(`${shiftIsoDate(to,2)}T00:00:00Z`)}&select=id,product_id,delta,event_type,reference_id,occurred_at&order=occurred_at.desc&limit=10000`);
     const scoped=ledger.filter((item)=>{const date=todayInTimeZone(new Date(item.occurred_at),timezone);return date>=from&&date<=to;});
     const productIds=[...new Set(scoped.map((item)=>item.product_id))];
-    const [products,balances]=await Promise.all([
-      productIds.length?rest('products',`tenant_id=eq.${context.tenantId}&id=${inFilter(productIds)}&select=id,sku,name,category,image_url`):[],
-      productIds.length?rest('stock_balances',`tenant_id=eq.${context.tenantId}&location_id=${inFilter(locations.map((item)=>item.id))}&product_id=${inFilter(productIds)}&select=product_id,quantity`):[]
-    ]);
-    const rows=[...scoped.reduce((map,item)=>{const product=products.find((row)=>row.id===item.product_id)??{};const row=map.get(item.product_id)??{productId:item.product_id,sku:product.sku??'',productName:product.name??'Produk',category:product.category??'Lainnya',imageUrl:product.image_url??null,stockIn:0,stockOut:0,netFlow:0,currentStock:0};const delta=Number(item.delta);if(delta>0)row.stockIn+=delta;else row.stockOut+=Math.abs(delta);row.netFlow+=delta;map.set(item.product_id,row);return map;},new Map()).values()];
-    for(const row of rows)row.currentStock=balances.filter((item)=>item.product_id===row.productId).reduce((sum,item)=>sum+Number(item.quantity),0);
-    return send(response,200,{rows,period:{from,to},truncated:ledger.length>=10000});
+    const products=productIds.length?await rest('products',`tenant_id=eq.${context.tenantId}&id=${inFilter(productIds)}&select=id,sku,name,category,image_url`):[];
+    return send(response,200,{rows:buildStockFlowEntries(scoped,products),period:{from,to},truncated:ledger.length>=10000});
   }
 
   if(request.method==='GET'&&route==='reports/sales-years'){
