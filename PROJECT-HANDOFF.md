@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat v2.14.0 Excel Produk Fleksibel
+### Rilis v2.14.0 Excel Produk Fleksibel
 
 - Tombol Import produk baru, Export/edit produk, dan Tipe produk berada langsung
   di header halaman Produk, sejajar dengan Tambah produk manual.
@@ -59,6 +59,8 @@ kode frontend, dokumentasi publik, atau chat.
   tingkat minimal pembelian yang sama.
 - API `2.14.0-cloud`, aset/cache PWA `v107`, migrasi SQL
   `202607290042_product_extension_imports.sql`.
+- Migrasi telah dijalankan dan rilis produksi telah diverifikasi pada 29 Juli
+  2026 di `kasir-nusa-pos.vercel.app`.
 
 ### Rilis v2.13.2 Startup Cepat
 
