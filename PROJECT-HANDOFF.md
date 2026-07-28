@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat v2.14.1 Produk Massal Aman
+### Rilis v2.14.1 Produk Massal Aman
 
 - Halaman Import produk baru dan Edit produk massal memiliki alur terpisah.
   Import baru hanya menerima SKU baru, sedangkan edit massal mewajibkan SKU
@@ -59,6 +59,8 @@ kode frontend, dokumentasi publik, atau chat.
   diubah.
 - API `2.14.1-cloud`, aset/cache PWA `v108`, migrasi SQL
   `202607290043_bulk_product_delete.sql`.
+- Migrasi telah dijalankan dan rilis produksi telah diverifikasi pada 29 Juli
+  2026 di `kasir-nusa-pos.vercel.app`.
 
 ### Rilis v2.14.0 Excel Produk Fleksibel
 
