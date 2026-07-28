@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { filteredSalesReport } from '../api/index.mjs';
 
 const [html, app, api, css] = await Promise.all([
   readFile(new URL('../apps/web/index.html', import.meta.url), 'utf8'),
@@ -8,6 +9,19 @@ const [html, app, api, css] = await Promise.all([
   readFile(new URL('../api/index.mjs', import.meta.url), 'utf8'),
   readFile(new URL('../apps/web/styles.css', import.meta.url), 'utf8'),
 ]);
+
+test('filter laporan membedakan tunai, piutang, dan multipayment',()=>{
+  const base={status:'COMPLETED',returnTotal:0,occurredAt:'2026-07-28T10:00:00+08:00',cashierId:'staff-1',cashier:'Ayu'};
+  const sales=[
+    {...base,id:'cash',netTotal:100000,netCost:60000,grossProfit:40000,quote:{grandTotal:100000},payments:[{method:'CASH',amount:100000}]},
+    {...base,id:'credit',netTotal:200000,netCost:100000,grossProfit:100000,quote:{grandTotal:200000},payments:[{method:'CREDIT',amount:200000}]},
+    {...base,id:'split',netTotal:300000,netCost:180000,grossProfit:120000,quote:{grandTotal:300000},payments:[{method:'CASH',amount:100000},{method:'CREDIT',amount:200000}]}
+  ];
+  const all=filteredSalesReport(sales,{timezone:'Asia/Makassar',paymentMethods:['CASH','CREDIT','MULTIPAYMENT']});
+  assert.equal(all.metrics.transactionCount,3);assert.equal(all.metrics.netSales,200000);assert.equal(all.metrics.grossProfit,260000);
+  const split=filteredSalesReport(sales,{timezone:'Asia/Makassar',paymentState:'CREDIT',paymentMethods:['MULTIPAYMENT'],includeCreditRevenue:true,includeCreditProfit:false});
+  assert.equal(split.metrics.transactionCount,1);assert.equal(split.metrics.netSales,300000);assert.equal(split.metrics.grossProfit,40000);
+});
 
 test('laporan penjualan menyatukan ringkasan keuntungan dan riwayat struk', () => {
   assert.match(html, /data-report-view="sales"[\s\S]*<span>Penjualan<\/span>/);
@@ -37,8 +51,17 @@ test('laporan penjualan menyatukan ringkasan keuntungan dan riwayat struk', () =
   assert.match(app,/function syncSalesReportShell\(\)/);
   assert.match(app,/function renderSelectedSalesMetric\(\)/);
   for(const metric of ['transactions','revenue','profit','returns'])assert.match(app,new RegExp(`data-sales-metric="\\$\\{key\\}"`));
-  assert.match(app,/\['transactions','Jumlah transaksi','receipt'\]/);
-  assert.match(app,/\['returns','Retur pelanggan','return'\]/);
+  assert.match(app,/\['transactions','Jumlah transaksi'\]/);
+  assert.match(app,/\['returns','Retur pelanggan'\]/);
+  assert.match(html,/id="sales-report-filters"/);
+  assert.match(html,/data-sales-payment-method="MULTIPAYMENT" checked/);
+  assert.match(html,/id="sales-include-credit-profit" type="checkbox" checked/);
+  assert.match(html,/id="sales-include-credit-revenue" type="checkbox"/);
+  assert.match(app,/function readSalesReportFilter\(\)/);
+  assert.match(app,/function filteredPosSales\(\)/);
+  assert.match(api,/route==='reports\/sales-filtered'/);
+  assert.match(api,/function filteredSalesReport/);
+  assert.match(api,/classification=payments\.length>1\?'MULTIPAYMENT'/);
   assert.match(app,/PENJUALAN PER BULAN/);
   assert.match(app,/TRANSAKSI PER HARI/);
   assert.match(app,/data-sales-drill-level/);
@@ -46,7 +69,7 @@ test('laporan penjualan menyatukan ringkasan keuntungan dan riwayat struk', () =
   assert.match(api,/route==='reports\/sales-years'/);
   assert.match(css,/#page-reports #report-cards:has\(\.sales-metric-button\)/);
   assert.match(css,/\.sales-metric-value\{/);
-  assert.match(css,/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css,/#page-reports #report-cards:has\(\.sales-metric-button\)\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   assert.match(app,/Nomor struk/);
   assert.match(app,/Waktu transaksi/);
 });

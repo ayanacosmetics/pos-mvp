@@ -597,7 +597,14 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
   const broadPeriod = from && to
     ? `&occurred_at=gte.${encodeURIComponent(`${shiftIsoDate(from,-1)}T00:00:00Z`)}&occurred_at=lt.${encodeURIComponent(`${shiftIsoDate(to,2)}T00:00:00Z`)}`
     : '';
-  let sales = await rest('sales', `tenant_id=eq.${context.tenantId}&outlet_id=${inFilter(outletIds)}&status=in.(COMPLETED,VOIDED)${broadPeriod}&select=*&order=occurred_at.desc&limit=${Math.min(500,Math.max(1,Number(limit)||50))}`);
+  const requestedLimit=Math.min(20000,Math.max(1,Number(limit)||50));
+  let sales=[];
+  for(let offset=0;offset<requestedLimit;offset+=1000){
+    const pageLimit=Math.min(1000,requestedLimit-offset);
+    const page=await rest('sales', `tenant_id=eq.${context.tenantId}&outlet_id=${inFilter(outletIds)}&status=in.(COMPLETED,VOIDED)${broadPeriod}&select=*&order=occurred_at.desc&limit=${pageLimit}&offset=${offset}`);
+    sales.push(...page);
+    if(page.length<pageLimit)break;
+  }
   if (from && to) {
     const timezone = context.outlet.timezone ?? 'Asia/Makassar';
     sales = sales.filter((sale) => {
@@ -682,9 +689,10 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
     const netTotal=sale.status==='VOIDED'?0:Math.max(0,Number(sale.grand_total)-returnTotal);
     const netCost=sale.status==='VOIDED'?0:Math.max(0,Number(sale.cost_total??0)-returnCost);
     return {
-      id:sale.id,receiptNo:sale.receipt_no,status:sale.status,occurredAt:sale.occurred_at,
+      id:sale.id,receiptNo:sale.receipt_no,status:sale.status,occurredAt:sale.occurred_at,cashierId:sale.cashier_id,
       cashier,outletName:context.outlets.find((outlet)=>outlet.id===sale.outlet_id)?.name??context.outlet.name,customer,
       customerGroupId:sale.customer_group_id??customer?.group_id??'retail',notes:sale.notes ?? '',
+      creditAmount:Number(sale.credit_amount??0),paidCreditAmount:Number(sale.paid_credit_amount??0),
       voidReason:sale.void_reason ?? '',voidedAt:sale.voided_at ?? null,
       returnStatus,returnTotal,returnCost,netTotal,netCost,grossProfit:netTotal-netCost,
       returns:saleReturns.map((returned)=>({id:returned.id,returnNo:returned.return_no,reason:returned.reason,
@@ -702,6 +710,83 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
       }))
     };
   }).filter((sale) => !normalized || `${sale.receiptNo} ${sale.cashier} ${sale.customer?.name ?? ''} ${sale.customer?.phone ?? ''}`.toLowerCase().includes(normalized));
+}
+
+export function filteredSalesReport(sales,{timezone,staffId='',paymentState='ALL',paymentMethods=[],includeCreditProfit=true,includeCreditRevenue=false}={}){
+  const canonical=(value)=>{
+    const method=String(value??'').trim().toUpperCase();
+    return ['TUNAI','CASH'].includes(method)?'CASH':method;
+  };
+  const staff=[...new Map(sales.filter((sale)=>sale.cashierId).map((sale)=>[sale.cashierId,{id:sale.cashierId,name:sale.cashier}])).values()]
+    .sort((a,b)=>a.name.localeCompare(b.name,'id'));
+  const allowed=new Set(paymentMethods);
+  const selected=sales.filter((sale)=>{
+    const payments=sale.payments??[];
+    const hasCredit=payments.some((payment)=>canonical(payment.method)==='CREDIT');
+    const classification=payments.length>1?'MULTIPAYMENT':canonical(payments[0]?.method);
+    if(staffId&&sale.cashierId!==staffId)return false;
+    if(paymentState==='PAID'&&hasCredit)return false;
+    if(paymentState==='CREDIT'&&!hasCredit)return false;
+    return allowed.has(classification);
+  });
+  const daily=new Map();
+  const metrics={netSales:0,grossProfit:0,returnTotal:0,transactionCount:0};
+  for(const sale of selected){
+    if(sale.status==='VOIDED')continue;
+    const total=Math.max(0,Number(sale.netTotal??0));
+    const cost=Math.max(0,Number(sale.netCost??0));
+    const nonCreditPaid=(sale.payments??[]).filter((payment)=>canonical(payment.method)!=='CREDIT').reduce((sum,payment)=>sum+Number(payment.amount??0),0);
+    const settledAmount=nonCreditPaid+Number(sale.paidCreditAmount??0);
+    const paidRatio=Number(sale.quote?.grandTotal)>0?Math.min(1,Math.max(0,settledAmount/Number(sale.quote.grandTotal))):1;
+    const revenue=includeCreditRevenue?total:total*paidRatio;
+    const profit=includeCreditProfit?total-cost:(total-cost)*paidRatio;
+    const date=todayInTimeZone(new Date(sale.occurredAt),timezone);
+    const row=daily.get(date)??{date,grossSales:0,returns:0,netSales:0,grossProfit:0,transactionCount:0,returnCount:0};
+    row.grossSales+=Number(sale.quote?.grandTotal??0);row.returns+=Number(sale.returnTotal??0);
+    row.netSales+=revenue;row.grossProfit+=profit;row.transactionCount+=1;
+    if(Number(sale.returnTotal)>0)row.returnCount+=1;
+    daily.set(date,row);
+    metrics.netSales+=revenue;metrics.grossProfit+=profit;metrics.returnTotal+=Number(sale.returnTotal??0);metrics.transactionCount+=1;
+  }
+  metrics.grossMarginPercent=metrics.netSales?metrics.grossProfit/metrics.netSales*100:0;
+  return{metrics,daily:[...daily.values()].sort((a,b)=>a.date.localeCompare(b.date)),staff,matchedSales:selected.length};
+}
+
+async function loadSalesReportSource(context,{outletIds,from,to,limit=10000}){
+  const broadPeriod=`&occurred_at=gte.${encodeURIComponent(`${shiftIsoDate(from,-1)}T00:00:00Z`)}&occurred_at=lt.${encodeURIComponent(`${shiftIsoDate(to,2)}T00:00:00Z`)}`;
+  let sales=[];
+  for(let offset=0;offset<limit;offset+=1000){
+    const pageLimit=Math.min(1000,limit-offset);
+    const page=await rest('sales',`tenant_id=eq.${context.tenantId}&outlet_id=${inFilter(outletIds)}&status=in.(COMPLETED,VOIDED)${broadPeriod}&select=id,cashier_id,grand_total,cost_total,credit_amount,paid_credit_amount,status,occurred_at&order=occurred_at.desc&limit=${pageLimit}&offset=${offset}`);
+    sales.push(...page);if(page.length<pageLimit)break;
+  }
+  const timezone=context.outlet.timezone??'Asia/Makassar';
+  sales=sales.filter((sale)=>{const date=todayInTimeZone(new Date(sale.occurred_at),timezone);return date>=from&&date<=to;});
+  if(!sales.length)return[];
+  const saleIds=sales.map((sale)=>sale.id);
+  const byChunks=async(table,column,ids,tail)=>(await Promise.all(
+    Array.from({length:Math.ceil(ids.length/80)},(_,index)=>ids.slice(index*80,index*80+80))
+      .map((chunk)=>rest(table,`tenant_id=eq.${context.tenantId}&${column}=${inFilter(chunk)}&${tail}`))
+  )).flat();
+  const [payments,returns,cashiers]=await Promise.all([
+    byChunks('payments','sale_id',saleIds,'select=sale_id,method,amount'),
+    byChunks('customer_returns','sale_id',saleIds,'status=eq.COMPLETED&select=id,sale_id,total'),
+    byChunks('profiles','user_id',[...new Set(sales.map((sale)=>sale.cashier_id).filter(Boolean))],'select=user_id,display_name')
+  ]);
+  const returnItems=returns.length?await byChunks('customer_return_items','return_id',returns.map((item)=>item.id),'select=return_id,base_qty,unit_cost'):[];
+  return sales.map((sale)=>{
+    const ownReturns=returns.filter((item)=>item.sale_id===sale.id),returnIds=new Set(ownReturns.map((item)=>item.id));
+    const returnTotal=ownReturns.reduce((sum,item)=>sum+Number(item.total),0);
+    const returnCost=returnItems.filter((item)=>returnIds.has(item.return_id)).reduce((sum,item)=>sum+Number(item.base_qty)*Number(item.unit_cost??0),0);
+    const netTotal=sale.status==='VOIDED'?0:Math.max(0,Number(sale.grand_total)-returnTotal);
+    const netCost=sale.status==='VOIDED'?0:Math.max(0,Number(sale.cost_total)-returnCost);
+    return{id:sale.id,status:sale.status,occurredAt:sale.occurred_at,cashierId:sale.cashier_id,
+      cashier:cashiers.find((item)=>item.user_id===sale.cashier_id)?.display_name??'Kasir',
+      creditAmount:Number(sale.credit_amount??0),paidCreditAmount:Number(sale.paid_credit_amount??0),
+      netTotal,netCost,grossProfit:netTotal-netCost,returnTotal,
+      quote:{grandTotal:Number(sale.grand_total)},
+      payments:payments.filter((item)=>item.sale_id===sale.id).map((item)=>({method:item.method,amount:Number(item.amount)}))};
+  });
 }
 
 async function loadReturnablePurchase(context,{receiptId=null,documentNo=null,supplierId=null}={}) {
@@ -990,7 +1075,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.9.6-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.9.7-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2968,6 +3053,32 @@ async function routeRequest(request, response, route) {
     const sale = await loadReturnableSale(context,{saleId});
     if (!sale) { const error = new Error('Transaksi penjualan tidak ditemukan'); error.status = 404; throw error; }
     return send(response, 200, { sale });
+  }
+
+  if(request.method==='GET'&&route==='reports/sales-filtered'){
+    requirePermission(session,'report.view');
+    const timezone=context.outlet.timezone??'Asia/Makassar';
+    const from=queryValue(request,'from'),to=queryValue(request,'to'),outletId=queryValue(request,'outletId');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(from??'')||!/^\d{4}-\d{2}-\d{2}$/.test(to??'')||from>to){
+      throw Object.assign(new Error('Periode laporan penjualan tidak valid'),{status:400});
+    }
+    if(outletId&&!context.outlets.some((outlet)=>outlet.id===outletId)){
+      throw Object.assign(new Error('User tidak memiliki akses ke outlet laporan'),{status:403});
+    }
+    const allowedMethods=['CASH','QRIS','TRANSFER','EDC','CREDIT','MULTIPAYMENT'];
+    const rawMethods=queryValue(request,'paymentMethods');
+    const paymentMethods=(rawMethods==null?allowedMethods:String(rawMethods).split(',').map((item)=>item.trim().toUpperCase()))
+      .filter((method)=>allowedMethods.includes(method));
+    const paymentState=['ALL','PAID','CREDIT'].includes(String(queryValue(request,'paymentState')).toUpperCase())
+      ? String(queryValue(request,'paymentState')).toUpperCase():'ALL';
+    const outletIds=outletId?[outletId]:context.outlets.map((outlet)=>outlet.id);
+    const sales=await loadSalesReportSource(context,{outletIds,from,to,limit:10000});
+    const report=filteredSalesReport(sales,{
+      timezone,staffId:String(queryValue(request,'staffId')??''),paymentState,paymentMethods,
+      includeCreditProfit:queryValue(request,'includeCreditProfit')!=='false',
+      includeCreditRevenue:queryValue(request,'includeCreditRevenue')==='true'
+    });
+    return send(response,200,{...report,period:{from,to},truncated:sales.length>=10000});
   }
 
   if(request.method==='GET'&&route==='reports/sales-years'){

@@ -45,6 +45,19 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.9.7 Filter Penjualan
+
+- Empat tombol metrik dipadatkan menjadi satu baris teks tanpa ikon.
+- Laporan penjualan memakai filter lipat staff, status lunas/piutang, urutan,
+  metode Tunai/QRIS/Transfer/EDC/Piutang/Multipayment, dan dasar pengakuan
+  pendapatan serta keuntungan.
+- Keuntungan sebelum piutang dibayar aktif secara default; pendapatan sebelum
+  piutang dibayar tidak aktif. Pelunasan piutang yang sudah diterima tetap
+  masuk ke pendapatan berbasis kas.
+- Filter tanggal manual disembunyikan dari laporan penjualan karena periode
+  dipilih dari menu hari, bulan, tahun, atau seluruh waktu.
+- API `2.9.7-cloud`, aset/cache PWA `v96`, 214 pengujian otomatis, tanpa SQL.
+
 ### Rilis v2.9.6 Laporan Penjualan Ringkas dikonfirmasi live
 
 - Halaman awal laporan penjualan hanya menampilkan pilihan hari, bulan, tahun,
