@@ -3488,7 +3488,7 @@ function storeDateToday() {
 function initializeOwnerFinanceFilters() {
   const today = storeDateToday();
   if (!el('owner-finance-to').value) el('owner-finance-to').value = today;
-  if (!el('owner-finance-from').value) el('owner-finance-from').value = shiftReportDate(today, -29);
+  if (!el('owner-finance-from').value) el('owner-finance-from').value = today;
   if (!el('expense-date').value) el('expense-date').value = today;
   const selected = el('owner-finance-outlet').value;
   const options = '<option value="">Semua outlet</option>' + state.outlets.map((outlet) => `<option value="${escapeHtml(outlet.id)}">${escapeHtml(outlet.name)}</option>`).join('');
@@ -3714,7 +3714,7 @@ async function loadReport() {
     const [report, audit] = await Promise.all([request(`/api/reports/summary?${params}`), request('/api/audit')]);
     state.report = report;
     renderOperationalReport(audit);
-    if(state.reportView==='sales-history')await loadPosSales('',{reportScope:true});
+    if(state.reportView==='sales')await loadPosSales('',{reportScope:true});
     if(state.reportView==='purchases-history')await loadPurchaseReportReceipts();
   } catch (error) {
     el('report-status').textContent = `Laporan belum dapat dimuat: ${error.message}`;
@@ -4360,8 +4360,7 @@ function showReportView(name='summary'){
     performance:['Kinerja produk & outlet','Bandingkan omzet, laba, jumlah terjual, dan kontribusi setiap outlet.'],
     purchases:['Laporan pembelian','Nilai penerimaan dan retur pembelian dirangkum per supplier.'],
     'purchases-history':['Riwayat pembelian','Buka setiap transaksi untuk melihat dan mencetak struk pembelian asli.'],
-    sales:['Laporan penjualan','Pantau omzet, laba, dan tren penjualan harian tanpa bercampur dengan daftar struk.'],
-    'sales-history':['Riwayat penjualan','Cari dan buka struk penjualan asli tanpa bercampur dengan grafik laporan.'],
+    sales:['Penjualan','Pendapatan, keuntungan, retur, dan seluruh riwayat struk dalam satu halaman.'],
     audit:['Jejak aktivitas','Tinjau aktivitas sensitif yang tercatat oleh sistem.']
   };
   el('report-page-title').textContent=headings[name]?.[0]??headings.summary[0];
@@ -4371,14 +4370,14 @@ function showReportView(name='summary'){
   products?.classList.toggle('hidden',name!=='performance');
   outlets?.classList.toggle('hidden',name!=='performance');
   purchases?.classList.toggle('hidden',name!=='purchases');
-  sales.classList.toggle('hidden',name!=='sales-history');
+  sales.classList.toggle('hidden',name!=='sales');
   purchaseWorkspace.classList.toggle('hidden',name!=='purchases-history');
   audit.classList.toggle('hidden',name!=='audit');
   primary?.classList.toggle('hidden',!['summary','performance','sales'].includes(name));
   secondary?.classList.toggle('hidden',!['performance','purchases'].includes(name));
   if(primary)primary.style.gridTemplateColumns='1fr';
   if(secondary)secondary.style.gridTemplateColumns='1fr';
-  if(name==='sales-history'&&state.session)loadPosSales('',{reportScope:true});
+  if(name==='sales'&&state.session)loadPosSales('',{reportScope:true});
   if(name==='purchases-history'&&state.session)loadPurchaseReportReceipts();
 }
 
@@ -4478,7 +4477,7 @@ const accountingTypeLabels={ASSET:'Aset',LIABILITY:'Kewajiban',EQUITY:'Modal',RE
 
 function initializeAccountingDates(){
   const today=storeDateToday();
-  if(!el('accounting-from').value)el('accounting-from').value=`${today.slice(0,4)}-01-01`;
+  if(!el('accounting-from').value)el('accounting-from').value=today;
   if(!el('accounting-to').value)el('accounting-to').value=today;
   if(!el('manual-journal-date').value)el('manual-journal-date').value=today;
   if(!el('accounting-period-start').value)el('accounting-period-start').value=`${today.slice(0,8)}01`;
@@ -4853,7 +4852,7 @@ el('mobile-cart-jump').addEventListener('click',()=>setMobilePosView('cart'));
 el('mobile-cart-back').addEventListener('click',()=>setMobilePosView('catalog'));
 el('refresh-pos-history').addEventListener('click',()=>loadPosSales(el('pos-history-search').value,{reportScope:true}));
 el('pos-history-search').addEventListener('input',(event)=>{clearTimeout(event.currentTarget.searchTimer);event.currentTarget.searchTimer=setTimeout(()=>loadPosSales(event.currentTarget.value,{reportScope:true}),250);});
-el('pos-history-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-pos-sale-id]');if(!row)return;const sale=state.posSales.find((item)=>item.id===row.dataset.posSaleId);state.selectedPosSaleId=row.dataset.posSaleId;renderPosSales();if(state.reportView==='sales-history'&&sale)openHistoryReceiptPage(sale);});
+el('pos-history-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-pos-sale-id]');if(!row)return;const sale=state.posSales.find((item)=>item.id===row.dataset.posSaleId);state.selectedPosSaleId=row.dataset.posSaleId;renderPosSales();if(state.reportView==='sales'&&sale)openHistoryReceiptPage(sale);});
 el('back-history-receipt').addEventListener('click',closeHistoryReceiptPage);
 el('history-receipt-menu-toggle').addEventListener('click',toggleHistoryReceiptMenu);
 el('history-receipt-menu-backdrop').addEventListener('click',closeHistoryReceiptMenu);
