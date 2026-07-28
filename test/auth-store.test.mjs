@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { clearStoredAuth, loadAuth, saveAuth } from '../apps/web/auth-store.mjs';
+import { clearStoredAuth, loadAuth, saveAuth, shouldRefreshAuth } from '../apps/web/auth-store.mjs';
 
 function memoryStorage(entries = {}) {
   const values = new Map(Object.entries(entries));
@@ -34,6 +34,22 @@ test('keluar menghapus sesi baru dan lama', () => {
   const storage = memoryStorage({ pos_auth_v2: '{}', pos_token: 'access', pos_refresh_token: 'refresh' });
   clearStoredAuth(storage);
   assert.deepEqual(loadAuth(storage), { token: null, refreshToken: null, expiresAt: null });
+});
+
+test('sesi diperbarui sebelum access token kedaluwarsa', () => {
+  assert.equal(shouldRefreshAuth({ token: 'access', refreshToken: 'refresh', expiresAt: 1060 }, 1000), true);
+  assert.equal(shouldRefreshAuth({ token: 'access', refreshToken: 'refresh', expiresAt: 1061 }, 1000), false);
+  assert.equal(shouldRefreshAuth({ token: null, refreshToken: 'refresh', expiresAt: null }, 1000), true);
+  assert.equal(shouldRefreshAuth({ token: 'access', refreshToken: null, expiresAt: 999 }, 1000), false);
+});
+
+test('permintaan API menyegarkan token secara proaktif dan mengulang respons 401', async () => {
+  const script = await readFile(new URL('../apps/web/app.js', import.meta.url), 'utf8');
+  const api = await readFile(new URL('../api/index.mjs', import.meta.url), 'utf8');
+  assert.match(script, /shouldRefreshAuth\(state\)/);
+  assert.match(script, /await refreshSession\(\)/);
+  assert.match(script, /response\.status === 401[\s\S]*return request\(path, options, false\)/);
+  assert.match(api, /\[401,403\]\.includes\(error\.status\)[\s\S]*error\.status = 401/);
 });
 
 test('form login disembunyikan selama aplikasi memulihkan sesi', async () => {

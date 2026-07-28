@@ -210,7 +210,19 @@ async function profileFor(userId) {
 async function sessionOf(request) {
   const token = request.headers.authorization?.replace(/^Bearer\s+/i, '');
   if (!token) return null;
-  const authenticatedUser = await supabase('/auth/v1/user', { token });
+  let authenticatedUser;
+  try {
+    authenticatedUser = await supabase('/auth/v1/user', { token });
+  } catch (error) {
+    // GoTrue dapat mengembalikan 403 untuk JWT kedaluwarsa/invalid. Di sisi
+    // aplikasi ini tetap berarti access token perlu di-refresh, bukan larangan
+    // hak akses.
+    if ([401,403].includes(error.status)) {
+      error.status = 401;
+      error.message = 'Sesi perlu diperbarui';
+    }
+    throw error;
+  }
   const authenticatedProfile = await profileFor(authenticatedUser.id);
   if (!authenticatedProfile?.active) return null;
   const requestedOwnerId = String(request.headers['x-owner-context-id'] ?? '').trim();
@@ -1179,7 +1191,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.13.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.13.1-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {

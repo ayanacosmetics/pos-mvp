@@ -45,6 +45,14 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.13.1 Refresh Sesi Permanen
+
+- Access token diperbarui otomatis sebelum kedaluwarsa menggunakan refresh
+  token permanen; permintaan pengguna tidak perlu gagal lebih dahulu.
+- Respons Supabase `401/403` saat JWT tidak berlaku dinormalisasi sebagai sesi
+  yang perlu diperbarui, lalu permintaan asli otomatis diulang satu kali.
+- API `2.13.1-cloud` dan aset/cache PWA `v105`; tidak memerlukan SQL baru.
+
 ### Rilis v2.13.0 Excel Data Massal
 
 - Halaman Import Data sekarang memakai workbook XLSX sederhana: sheet `Barang`

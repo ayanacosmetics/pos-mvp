@@ -52,6 +52,14 @@ export function saveAuth(data, previous = {}, storage = localStorage) {
   return auth;
 }
 
+export function shouldRefreshAuth(auth, nowSeconds = Math.floor(Date.now() / 1000), leewaySeconds = 60) {
+  if (!auth?.refreshToken) return false;
+  if (!auth.token) return true;
+  const expiresAt = Number(auth.expiresAt);
+  if (!Number.isFinite(expiresAt) || expiresAt <= 0) return false;
+  return expiresAt <= Number(nowSeconds) + Math.max(0, Number(leewaySeconds) || 0);
+}
+
 export function clearStoredAuth(storage = localStorage) {
   // Hapus kunci lama lebih dahulu agar tab lain tidak sempat memigrasikannya
   // kembali ketika menerima storage event untuk kunci utama.

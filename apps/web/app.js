@@ -1,7 +1,7 @@
 import { formatExpiryValue, parseExpiryDate } from './date.mjs';
 import { quoteBasket as quoteOffline } from './pricing.mjs';
 import { deviceIdentity, enqueueCommand, listCommands, migrateLegacyQueue, removeCommand, updateCommand } from './offline-store.mjs';
-import { clearStoredAuth, isAuthStorageEvent, loadAuth, saveAuth } from './auth-store.mjs';
+import { clearStoredAuth, isAuthStorageEvent, loadAuth, saveAuth, shouldRefreshAuth } from './auth-store.mjs';
 import { customerReceiptView } from './receipt.mjs';
 import { disconnectBluetoothPrinter, printEscPosReceipt, printEscPosTest, printerConnected, printerSelected, restoreGrantedPrinter, selectBluetoothPrinter, supportsBluetoothClassicPrinting } from './escpos-printer.mjs';
 import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, unitFitsStock } from './pos-units.mjs';
@@ -142,6 +142,15 @@ function reportClientTelemetry(eventType,path,{statusCode=null,durationMs=null}=
 
 async function request(path, options = {}, allowRefresh = true) {
   const started=globalThis.performance?.now?.()??Date.now();
+  const publicAuthPaths = ['/api/login','/api/register-owner','/api/refresh','/api/logout'];
+  if (allowRefresh && !publicAuthPaths.includes(path) && shouldRefreshAuth(state)) {
+    try {
+      await refreshSession();
+    } catch (error) {
+      if ([401,403].includes(error.status)) clearAuth();
+      throw error;
+    }
+  }
   const headers = { 'content-type': 'application/json', ...(options.headers ?? {}) };
   if (state.token) headers.authorization = `Bearer ${state.token}`;
   if (state.ownerContextId) headers['x-owner-context-id'] = state.ownerContextId;
@@ -160,7 +169,7 @@ async function request(path, options = {}, allowRefresh = true) {
   if(response.status>=500)reportClientTelemetry('HTTP_ERROR',path,{statusCode:response.status,durationMs});
   else if(durationMs>=2500)reportClientTelemetry('SLOW_REQUEST',path,{statusCode:response.status,durationMs});
   const data = await response.json().catch(() => ({}));
-  if (response.status === 401 && allowRefresh && !['/api/login','/api/register-owner','/api/refresh'].includes(path) && state.refreshToken) {
+  if (response.status === 401 && allowRefresh && !publicAuthPaths.includes(path) && state.refreshToken) {
     try { await refreshSession(); return request(path, options, false); }
     catch (error) { if ([401,403].includes(error.status)) clearAuth(); throw error; }
   }
