@@ -53,6 +53,26 @@ test('laporan cloud memakai RPC return-aware dengan periode dan outlet yang terv
   } finally { globalThis.fetch = originalFetch; restore(); }
 });
 
+test('laporan selama ini diringkas per tahun untuk alur detail bertingkat', async () => {
+  const originalFetch=globalThis.fetch;const restore=environment();const calls=[];
+  globalThis.fetch=async(url,options={})=>{
+    const target=String(url),body=options.body?JSON.parse(options.body):null;calls.push({target,body});
+    if(target.endsWith('/auth/v1/user'))return responseOf({id:ids.user});
+    if(target.includes('/rest/v1/profiles?user_id='))return responseOf([{user_id:ids.user,tenant_id:ids.tenant,display_name:'Owner',role:'OWNER',active:true}]);
+    if(target.includes('/rest/v1/outlets?'))return responseOf([{id:ids.outlet,name:'Toko Utama',timezone:'Asia/Makassar',active:true}]);
+    if(target.includes('/rest/v1/stock_locations?'))return responseOf([{id:ids.location,outlet_id:ids.outlet,kind:'STORE'}]);
+    if(target.includes('/rest/v1/sales?'))return responseOf([{occurred_at:'2025-04-10T10:00:00+08:00'}]);
+    if(target.endsWith('/rest/v1/rpc/report_operational_summary'))return responseOf({metrics:{netSales:100000,grossProfit:30000,returnTotal:5000,transactionCount:4}});
+    return responseOf({message:`Mock belum menangani ${target}`},500);
+  };
+  try{
+    const result=await invoke({route:'reports/sales-years',outletId:ids.outlet});
+    assert.equal(result.status,200);assert.equal(result.body.fromYear,2025);assert.equal(result.body.years.length,2);
+    const reportCalls=calls.filter((call)=>call.target.endsWith('/rpc/report_operational_summary'));
+    assert.equal(reportCalls[0].body.p_from,'2025-01-01');assert.equal(reportCalls[0].body.p_to,'2025-12-31');
+  }finally{globalThis.fetch=originalFetch;restore();}
+});
+
 test('fondasi laporan menghitung retur, pembelian, outlet scope, dan menyediakan ekspor CSV', async () => {
   const [migration, html, script, server] = await Promise.all([
     readFile(new URL('../supabase/migrations/202607210008_reporting_foundation.sql', import.meta.url), 'utf8'),

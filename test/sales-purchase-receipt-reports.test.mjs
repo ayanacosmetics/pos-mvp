@@ -23,10 +23,18 @@ test('laporan penjualan menyatukan ringkasan keuntungan dan riwayat struk', () =
   assert.match(css, /#page-reports \.page-title h1\{margin:0;font-size:25px/);
   assert.match(css, /\.report-filter-panel>summary\{display:flex/);
   assert.match(app, /el\('report-filter-panel'\)\.open=false/);
-  assert.match(app, /daily\?\.classList\.toggle\('hidden',!\['summary','sales'\]\.includes\(name\)\)/);
+  assert.match(app, /daily\?\.classList\.toggle\('hidden',name!=='summary'\)/);
   assert.match(app, /sales\.classList\.toggle\('hidden',name!=='sales'\)/);
   assert.match(app, /purchases\?\.classList\.toggle\('hidden',name!=='purchases'\)/);
   assert.match(app, /purchaseWorkspace\.classList\.toggle\('hidden',name!=='purchases-history'\)/);
+  for(const period of ['DAY','MONTH','YEAR','ALL'])assert.match(html,new RegExp(`data-sales-period="${period}"`));
+  assert.match(html,/id="sales-period-breakdown"/);
+  assert.match(app,/function selectSalesPeriod\(level,value=null,\{drill=false,back=false\}=\{\}\)/);
+  assert.match(app,/PENJUALAN PER BULAN/);
+  assert.match(app,/TRANSAKSI PER HARI/);
+  assert.match(app,/data-sales-drill-level/);
+  assert.match(app,/data-sales-period-back/);
+  assert.match(api,/route==='reports\/sales-years'/);
 });
 
 test('klik penjualan membuka struk pelanggan asli', () => {

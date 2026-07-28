@@ -987,7 +987,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.9.4-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.9.5-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2965,6 +2965,29 @@ async function routeRequest(request, response, route) {
     const sale = await loadReturnableSale(context,{saleId});
     if (!sale) { const error = new Error('Transaksi penjualan tidak ditemukan'); error.status = 404; throw error; }
     return send(response, 200, { sale });
+  }
+
+  if(request.method==='GET'&&route==='reports/sales-years'){
+    requirePermission(session,'report.view');
+    const timezone=context.outlet.timezone??'Asia/Makassar';
+    const today=todayInTimeZone(new Date(),timezone);
+    const outletId=queryValue(request,'outletId');
+    if(outletId&&!context.outlets.some((outlet)=>outlet.id===outletId)){
+      throw Object.assign(new Error('User tidak memiliki akses ke outlet laporan'),{status:403});
+    }
+    const outletIds=outletId?[outletId]:context.outlets.map((outlet)=>outlet.id);
+    const earliest=await rest('sales',`tenant_id=eq.${context.tenantId}&outlet_id=${inFilter(outletIds)}&status=in.(COMPLETED,VOIDED)&select=occurred_at&order=occurred_at.asc&limit=1`);
+    const firstYear=earliest[0]?Number(String(earliest[0].occurred_at).slice(0,4)):Number(today.slice(0,4));
+    const currentYear=Number(today.slice(0,4));
+    const years=await Promise.all(Array.from({length:Math.max(1,currentYear-firstYear+1)},(_,index)=>firstYear+index).map(async(year)=>{
+      const from=`${year}-01-01`,to=year===currentYear?today:`${year}-12-31`;
+      const report=await rpc('report_operational_summary',{
+        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_outlet_ids:outletIds,
+        p_from:from,p_to:to,p_timezone:timezone
+      });
+      return{year,from,to,metrics:report.metrics};
+    }));
+    return send(response,200,{fromYear:firstYear,toYear:currentYear,years:years.reverse()});
   }
 
   if (request.method === 'GET' && route === 'reports/summary') {
