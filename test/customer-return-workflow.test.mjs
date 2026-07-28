@@ -19,10 +19,10 @@ test('pencarian struk menghitung jumlah retur tersisa dan riwayat refund',async(
     if(target.includes('/rest/v1/profiles?'))return reply([{user_id:ids.user,tenant_id:ids.tenant,display_name:'Owner',role:'OWNER',active:true}]);
     if(target.includes('/rest/v1/outlets?'))return reply([{id:ids.outlet,name:'Toko Utama',active:true}]);
     if(target.includes('/rest/v1/stock_locations?'))return reply([{id:ids.location,outlet_id:ids.outlet,name:'Toko Utama',kind:'STORE'}]);
-    if(target.includes('/rest/v1/sales?'))return reply([{id:ids.sale,tenant_id:ids.tenant,outlet_id:ids.outlet,customer_id:null,cashier_id:ids.user,receipt_no:'UTM-000123',payment_method:'Tunai',grand_total:'50000',status:'COMPLETED',occurred_at:'2026-07-23T10:00:00+08:00'}]);
+    if(target.includes('/rest/v1/sales?'))return reply([{id:ids.sale,tenant_id:ids.tenant,outlet_id:ids.outlet,customer_id:null,cashier_id:ids.user,receipt_no:'UTM-000123',payment_method:'Tunai',grand_total:'50000',cost_total:'30000',status:'COMPLETED',occurred_at:'2026-07-23T10:00:00+08:00'}]);
     if(target.includes('/rest/v1/sale_items?'))return reply([{id:ids.line,tenant_id:ids.tenant,sale_id:ids.sale,product_id:ids.product,product_name:'Lip Tint',base_qty:'2',gross:'50000',discount:'0',total:'50000',cost_total:'30000'}]);
     if(target.includes('/rest/v1/customer_returns?'))return reply([{id:ids.returned,sale_id:ids.sale,return_no:'RTR-00001',reason:'Salah warna',total:'25000',refund_method:'CASH',refund_reference:null,occurred_at:'2026-07-23T11:00:00+08:00'}]);
-    if(target.includes('/rest/v1/customer_return_items?'))return reply([{return_id:ids.returned,sale_item_id:ids.line,product_id:ids.product,base_qty:'1',line_total:'25000',item_condition:'SALEABLE',restockable:true}]);
+    if(target.includes('/rest/v1/customer_return_items?'))return reply([{return_id:ids.returned,sale_item_id:ids.line,product_id:ids.product,base_qty:'1',unit_cost:'15000',line_total:'25000',item_condition:'SALEABLE',restockable:true}]);
     if(target.includes('/rest/v1/customer_refunds?'))return reply([{return_id:ids.returned,amount:'25000',method:'CASH',status:'COMPLETED'}]);
     if(target.includes('/rest/v1/payments?'))return reply([]);
     return reply({message:`Mock belum menangani ${target}`},500);
@@ -33,7 +33,7 @@ test('pencarian struk menghitung jumlah retur tersisa dan riwayat refund',async(
     assert.equal(response.statusCode,200);assert.equal(sale.receiptNo,'UTM-000123');assert.equal(sale.lines[0].soldQty,2);assert.equal(sale.lines[0].returnedQty,1);assert.equal(sale.lines[0].remainingQty,1);assert.equal(sale.refundableTotal,25000);assert.equal(sale.status,'PARTIALLY_RETURNED');assert.equal(sale.returns[0].refund.method,'CASH');
     payload='';const historyRequest={method:'GET',url:'/api/index?route=pos-sales',query:{route:'pos-sales'},headers:{authorization:'Bearer token'}};
     await handler(historyRequest,response);const historySale=JSON.parse(payload).sales[0];
-    assert.equal(response.statusCode,200);assert.equal(historySale.returnStatus,'PARTIALLY_RETURNED');assert.equal(historySale.returnTotal,25000);assert.equal(historySale.netTotal,25000);assert.equal(historySale.quote.lines[0].returnedQty,1);assert.equal(historySale.quote.lines[0].returnedTotal,25000);
+    assert.equal(response.statusCode,200);assert.equal(historySale.returnStatus,'PARTIALLY_RETURNED');assert.equal(historySale.returnTotal,25000);assert.equal(historySale.netTotal,25000);assert.equal(historySale.grossProfit,10000);assert.equal(historySale.quote.lines[0].returnedQty,1);assert.equal(historySale.quote.lines[0].returnedTotal,25000);
   }finally{globalThis.fetch=originalFetch;restore();}
 });
 

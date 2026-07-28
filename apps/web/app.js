@@ -18,6 +18,9 @@ state.restockPlanningLimit = 100;
 state.restockWizardStep = 'document';
 state.salesPeriodLevel = 'DAY';
 state.salesPeriodValue = null;
+state.salesReportOpen = false;
+state.salesMetricKey = 'transactions';
+state.salesMetrics = null;
 state.salesYears = [];
 state.salesPeriodTrail = [];
 const el = (id) => document.getElementById(id);
@@ -3694,12 +3697,31 @@ function salesMonthEnd(month){
 }
 
 function renderSalesMetricCards(metrics){
-  el('report-cards').innerHTML=[
-    ['Pendapatan / penjualan bersih',money.format(metrics.netSales??0),''],
-    ['Keuntungan / laba kotor',money.format(metrics.grossProfit??0),'profit-metric'],
-    ['Retur pelanggan',money.format(metrics.returnTotal??0),'return-metric'],
-    ['Transaksi',Number(metrics.transactionCount??0).toLocaleString('id-ID'),'']
-  ].map(([label,value,className])=>`<div class="metric ${className}"><span>${label}</span><strong>${value}</strong></div>`).join('');
+  state.salesMetrics=metrics;
+  const options=[
+    ['transactions','Jumlah transaksi','receipt'],
+    ['revenue','Pendapatan','revenue'],
+    ['profit','Keuntungan','profit'],
+    ['returns','Retur pelanggan','return']
+  ];
+  el('report-cards').innerHTML=options.map(([key,label,icon])=>`<button class="metric sales-metric-button ${state.salesMetricKey===key?'active':''}" type="button" data-sales-metric="${key}" aria-pressed="${state.salesMetricKey===key}"><span class="sales-metric-icon" aria-hidden="true">${icon==='receipt'?'#':icon==='revenue'?'Rp':icon==='profit'?'↗':'↩'}</span><strong>${label}</strong></button>`).join('');
+  renderSelectedSalesMetric();
+}
+
+function renderSelectedSalesMetric(){
+  const metrics=state.salesMetrics??{};
+  const values={
+    transactions:['Jumlah transaksi',Number(metrics.transactionCount??0).toLocaleString('id-ID'),'transaksi selesai pada periode ini'],
+    revenue:['Pendapatan',money.format(metrics.netSales??0),'penjualan bersih setelah retur'],
+    profit:['Keuntungan',money.format(metrics.grossProfit??0),'laba kotor setelah harga pokok dan retur'],
+    returns:['Retur pelanggan',money.format(metrics.returnTotal??0),'nilai barang yang dikembalikan pelanggan']
+  };
+  const [label,value,caption]=values[state.salesMetricKey]??values.transactions;
+  el('report-cards').querySelectorAll('[data-sales-metric]').forEach((button)=>{
+    const active=button.dataset.salesMetric===state.salesMetricKey;
+    button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));
+  });
+  el('sales-metric-value').innerHTML=`<small>${label}</small><strong>${value}</strong><span>${caption}</span>`;
 }
 
 function salesPeriodRow({label,caption,transactions,netSales,grossProfit,level,value}){
@@ -3761,6 +3783,7 @@ async function selectSalesPeriod(level,value=null,{drill=false,back=false}={}){
   if(drill)state.salesPeriodTrail.push({level:state.salesPeriodLevel,value:state.salesPeriodValue});
   else if(!back)state.salesPeriodTrail=[];
   state.salesPeriodLevel=level;state.salesPeriodValue=value;
+  el('sales-report-detail-title').textContent=salesPeriodTitle(level,value);
   el('sales-period-nav').querySelectorAll('[data-sales-period]').forEach((button)=>button.classList.toggle('active',button.dataset.salesPeriod===level));
   if(level==='ALL'){el('report-preset').value='CUSTOM';updateReportFilterSummary();return loadSalesAllTime();}
   let from=today,to=today;
@@ -4364,7 +4387,7 @@ function openPurchaseReportReceipt(receipt){
 }
 
 function renderPosSales(){
-  el('pos-history-list').innerHTML=state.posSales.length?state.posSales.map((sale)=>`<button class="pos-history-row ${sale.id===state.selectedPosSaleId?'active':''}" type="button" data-pos-sale-id="${sale.id}"><span><strong>${escapeHtml(sale.receiptNo)}</strong><small>${new Date(sale.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(sale.customer?.name??'Pelanggan umum')}</small></span><strong>${money.format(Number(sale.returnTotal)>0?sale.netTotal:sale.quote.grandTotal)}</strong><small>${escapeHtml(sale.cashier)} · ${escapeHtml(sale.outletName??'Outlet')}</small><span class="${sale.status==='VOIDED'?'void-label':sale.returnStatus!=='NONE'?'return-label':''}">${sale.status==='VOIDED'?'VOID':saleReturnLabel(sale)||'Selesai'}</span></button>`).join(''):'<div class="empty-state compact">Transaksi tidak ditemukan pada periode ini.</div>';
+  el('pos-history-list').innerHTML=state.posSales.length?state.posSales.map((sale)=>`<button class="pos-history-row sales-day-card ${sale.id===state.selectedPosSaleId?'active':''}" type="button" data-pos-sale-id="${sale.id}"><span class="sales-day-identity"><small>Nomor struk</small><strong>${escapeHtml(sale.receiptNo)}</strong><small>${escapeHtml(sale.customer?.name??'Pelanggan umum')} · ${escapeHtml(sale.cashier)}</small></span><span class="sales-day-metric"><small>Waktu transaksi</small><strong>${new Date(sale.occurredAt).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</strong></span><span class="sales-day-metric"><small>Pendapatan</small><strong>${money.format(sale.netTotal??sale.quote.grandTotal)}</strong></span><span class="sales-day-metric"><small>Keuntungan</small><strong>${money.format(sale.grossProfit??0)}</strong></span><span class="${sale.status==='VOIDED'?'void-label':sale.returnStatus!=='NONE'?'return-label':''}">${sale.status==='VOIDED'?'VOID':saleReturnLabel(sale)||'Selesai'}</span></button>`).join(''):'<div class="empty-state compact">Transaksi tidak ditemukan pada periode ini.</div>';
   const selected=state.posSales.find((sale)=>sale.id===state.selectedPosSaleId);
   if(selected)renderPosSaleDetail(selected);
   else el('pos-history-detail').innerHTML='<div class="empty-state compact">Pilih transaksi untuk melihat detail.</div>';
@@ -4462,6 +4485,26 @@ function showStockView(name='list'){
   el('ledger-table').classList.toggle('hidden',name!=='ledger');
 }
 
+function syncSalesReportShell(){
+  const salesActive=state.reportView==='sales';
+  const detailOpen=salesActive&&state.salesReportOpen;
+  el('sales-period-nav').classList.toggle('hidden',!salesActive||detailOpen);
+  el('sales-report-detail-toolbar').classList.toggle('hidden',!detailOpen);
+  el('sales-metric-value').classList.toggle('hidden',!detailOpen);
+  if(!salesActive){
+    el('report-filter-panel').classList.remove('hidden');
+    el('report-status').classList.remove('hidden');
+    return;
+  }
+  el('report-filter-panel').classList.toggle('hidden',!detailOpen);
+  el('report-status').classList.toggle('hidden',!detailOpen);
+  el('report-cards').classList.toggle('hidden',!detailOpen);
+  if(!detailOpen){
+    el('sales-period-breakdown').classList.add('hidden');
+    el('report-sales-workspace').classList.add('hidden');
+  }
+}
+
 function showReportView(name='summary'){
   const page=el('page-reports'),primary=page.querySelector('.report-grid.report-primary'),grids=[...page.querySelectorAll('.report-grid')],secondary=grids.find((grid)=>grid!==primary);
   if(page.classList.contains('receipt-page-open'))closeHistoryReceiptPage();
@@ -4478,21 +4521,21 @@ function showReportView(name='summary'){
   };
   el('report-page-title').textContent=headings[name]?.[0]??headings.summary[0];
   el('report-page-description').textContent=headings[name]?.[1]??headings.summary[1];
-  el('sales-period-nav').classList.toggle('hidden',name!=='sales');
   if(name!=='sales')el('sales-period-breakdown').classList.add('hidden');
   cards.classList.toggle('hidden',!['summary','sales'].includes(name));
   daily?.classList.toggle('hidden',name!=='summary');
   products?.classList.toggle('hidden',name!=='performance');
   outlets?.classList.toggle('hidden',name!=='performance');
   purchases?.classList.toggle('hidden',name!=='purchases');
-  sales.classList.toggle('hidden',name!=='sales');
+  sales.classList.add('hidden');
   purchaseWorkspace.classList.toggle('hidden',name!=='purchases-history');
   audit.classList.toggle('hidden',name!=='audit');
   primary?.classList.toggle('hidden',!['summary','performance'].includes(name));
   secondary?.classList.toggle('hidden',!['performance','purchases'].includes(name));
   if(primary)primary.style.gridTemplateColumns='1fr';
   if(secondary)secondary.style.gridTemplateColumns='1fr';
-  if(name==='sales'&&state.session)selectSalesPeriod(state.salesPeriodLevel??'DAY',state.salesPeriodValue);
+  if(name==='sales')state.salesReportOpen=false;
+  syncSalesReportShell();
   if(name==='purchases-history'&&state.session)loadPurchaseReportReceipts();
 }
 
@@ -5252,12 +5295,26 @@ el('apply-report-filter').addEventListener('click',()=>{
     if(state.salesPeriodLevel==='ALL'&&preset==='CUSTOM')return loadSalesAllTime();
     state.salesPeriodLevel=preset==='TODAY'?'DAY':preset==='MONTH'?'MONTH':'RANGE';
     state.salesPeriodValue=preset==='TODAY'?storeDateToday():preset==='MONTH'?storeDateToday().slice(0,7):null;
+    el('sales-report-detail-title').textContent=salesPeriodTitle(state.salesPeriodLevel,state.salesPeriodValue);
     el('sales-period-nav').querySelectorAll('[data-sales-period]').forEach((button)=>button.classList.toggle('active',button.dataset.salesPeriod===state.salesPeriodLevel));
   }
   loadReport();
 });
 el('report-preset').addEventListener('change', applyReportPreset);
-el('sales-period-nav').addEventListener('click',(event)=>{const button=event.target.closest('[data-sales-period]');if(button)selectSalesPeriod(button.dataset.salesPeriod);});
+el('sales-period-nav').addEventListener('click',(event)=>{
+  const button=event.target.closest('[data-sales-period]');
+  if(!button)return;
+  state.salesReportOpen=true;state.salesMetricKey='transactions';syncSalesReportShell();
+  selectSalesPeriod(button.dataset.salesPeriod);
+});
+el('close-sales-report-detail').addEventListener('click',()=>{
+  state.salesReportOpen=false;state.salesPeriodTrail=[];syncSalesReportShell();
+});
+el('report-cards').addEventListener('click',(event)=>{
+  const button=event.target.closest('[data-sales-metric]');
+  if(!button||state.reportView!=='sales')return;
+  state.salesMetricKey=button.dataset.salesMetric;renderSelectedSalesMetric();
+});
 el('sales-period-breakdown').addEventListener('click',(event)=>{
   const detail=event.target.closest('[data-sales-drill-level]');
   if(detail){selectSalesPeriod(detail.dataset.salesDrillLevel,detail.dataset.salesDrillValue,{drill:true});return;}

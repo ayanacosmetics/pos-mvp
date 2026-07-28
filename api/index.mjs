@@ -675,15 +675,18 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
       : null;
     const issued=issuedVouchers.find((voucher)=>voucher.source_sale_id===sale.id);
     const returnTotal=saleReturns.reduce((sum,returned)=>sum+Number(returned.total),0);
+    const returnCost=saleReturnItems.reduce((sum,item)=>sum+Number(item.base_qty)*Number(item.unit_cost??0),0);
     const returnedBaseQty=lines.reduce((sum,line)=>sum+line.returnedBaseQty,0);
     const soldBaseQty=lines.reduce((sum,line)=>sum+line.baseQty,0);
     const returnStatus=!saleReturns.length?'NONE':returnedBaseQty>=soldBaseQty?'FULLY_RETURNED':'PARTIALLY_RETURNED';
+    const netTotal=sale.status==='VOIDED'?0:Math.max(0,Number(sale.grand_total)-returnTotal);
+    const netCost=sale.status==='VOIDED'?0:Math.max(0,Number(sale.cost_total??0)-returnCost);
     return {
       id:sale.id,receiptNo:sale.receipt_no,status:sale.status,occurredAt:sale.occurred_at,
       cashier,outletName:context.outlets.find((outlet)=>outlet.id===sale.outlet_id)?.name??context.outlet.name,customer,
       customerGroupId:sale.customer_group_id??customer?.group_id??'retail',notes:sale.notes ?? '',
       voidReason:sale.void_reason ?? '',voidedAt:sale.voided_at ?? null,
-      returnStatus,returnTotal,netTotal:Math.max(0,Number(sale.grand_total)-returnTotal),
+      returnStatus,returnTotal,returnCost,netTotal,netCost,grossProfit:netTotal-netCost,
       returns:saleReturns.map((returned)=>({id:returned.id,returnNo:returned.return_no,reason:returned.reason,
         total:Number(returned.total),refundMethod:returned.refund_method,occurredAt:returned.occurred_at})),
       quote:{
@@ -987,7 +990,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.9.5-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.9.6-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {

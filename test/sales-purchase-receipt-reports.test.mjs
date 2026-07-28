@@ -24,17 +24,31 @@ test('laporan penjualan menyatukan ringkasan keuntungan dan riwayat struk', () =
   assert.match(css, /\.report-filter-panel>summary\{display:flex/);
   assert.match(app, /el\('report-filter-panel'\)\.open=false/);
   assert.match(app, /daily\?\.classList\.toggle\('hidden',name!=='summary'\)/);
-  assert.match(app, /sales\.classList\.toggle\('hidden',name!=='sales'\)/);
+  assert.match(app, /sales\.classList\.add\('hidden'\)/);
   assert.match(app, /purchases\?\.classList\.toggle\('hidden',name!=='purchases'\)/);
   assert.match(app, /purchaseWorkspace\.classList\.toggle\('hidden',name!=='purchases-history'\)/);
   for(const period of ['DAY','MONTH','YEAR','ALL'])assert.match(html,new RegExp(`data-sales-period="${period}"`));
+  assert.match(html,/id="sales-report-detail-toolbar"/);
+  assert.match(html,/id="close-sales-report-detail"/);
+  assert.match(html,/id="sales-metric-value"/);
   assert.match(html,/id="sales-period-breakdown"/);
   assert.match(app,/function selectSalesPeriod\(level,value=null,\{drill=false,back=false\}=\{\}\)/);
+  assert.match(app,/state\.salesReportOpen = false/);
+  assert.match(app,/function syncSalesReportShell\(\)/);
+  assert.match(app,/function renderSelectedSalesMetric\(\)/);
+  for(const metric of ['transactions','revenue','profit','returns'])assert.match(app,new RegExp(`data-sales-metric="\\$\\{key\\}"`));
+  assert.match(app,/\['transactions','Jumlah transaksi','receipt'\]/);
+  assert.match(app,/\['returns','Retur pelanggan','return'\]/);
   assert.match(app,/PENJUALAN PER BULAN/);
   assert.match(app,/TRANSAKSI PER HARI/);
   assert.match(app,/data-sales-drill-level/);
   assert.match(app,/data-sales-period-back/);
   assert.match(api,/route==='reports\/sales-years'/);
+  assert.match(css,/#page-reports #report-cards:has\(\.sales-metric-button\)/);
+  assert.match(css,/\.sales-metric-value\{/);
+  assert.match(css,/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(app,/Nomor struk/);
+  assert.match(app,/Waktu transaksi/);
 });
 
 test('klik penjualan membuka struk pelanggan asli', () => {
