@@ -24,7 +24,7 @@ state.salesMetrics = null;
 state.salesYears = [];
 state.salesPeriodTrail = [];
 state.salesReportFilter = {staffId:'',paymentState:'ALL',sort:'DESC',paymentMethods:['CASH','QRIS','TRANSFER','EDC','CREDIT','MULTIPAYMENT'],includeCreditProfit:true,includeCreditRevenue:false};
-state.salesAnalysis = {preset:'TODAY',data:null,view:'sales-products'};
+state.salesAnalysis = {preset:'TODAY',sort:'QTY_DESC',data:null,view:'sales-products'};
 const el = (id) => document.getElementById(id);
 const posDevice = deviceIdentity();
 const roleLabels = { OWNER: 'Owner', ADMIN: 'Admin', MANAGER: 'Manajer Outlet', CASHIER: 'Kasir', PURCHASING: 'Pembelian', WAREHOUSE: 'Gudang' };
@@ -3769,21 +3769,26 @@ async function loadFilteredSalesReport(){
 
 function salesAnalysisRange(){
   const today=storeDateToday(),preset=state.salesAnalysis.preset;
+  if(preset==='YESTERDAY'){const yesterday=shiftReportDate(today,-1);return{from:yesterday,to:yesterday};}
+  if(preset==='7D')return{from:shiftReportDate(today,-6),to:today};
   if(preset==='MONTH')return{from:`${today.slice(0,7)}-01`,to:today};
   if(preset==='YEAR')return{from:`${today.slice(0,4)}-01-01`,to:today};
+  if(preset==='ALL')return{from:'2000-01-01',to:today};
   if(preset==='CUSTOM')return{from:el('sales-analysis-from').value,to:el('sales-analysis-to').value};
   return{from:today,to:today};
 }
 
 function renderSalesAnalysis(){
-  const view=state.salesAnalysis.view,data=state.salesAnalysis.data??{},query=el('sales-analysis-search').value.trim().toLowerCase(),sort=el('sales-analysis-sort').value;
+  const view=state.salesAnalysis.view,data=state.salesAnalysis.data??{},query=el('sales-analysis-search').value.trim().toLowerCase(),sort=state.salesAnalysis.sort;
   const flow=view==='stock-flow';
+  el('sales-analysis-periods').classList.toggle('hidden',flow);
+  el('stock-flow-date-filter').classList.toggle('hidden',!flow);
+  el('sales-analysis-dashboard').classList.toggle('hidden',flow);
+  el('sales-category-chart').classList.toggle('hidden',view!=='sales-categories');
   const dashboard=flow
     ? (data.rows??[]).reduce((sum,row)=>{sum.qtySold+=Number(row.stockOut);sum.netRevenue+=Number(row.stockIn);sum.grossProfit+=Number(row.netFlow);return sum;},{qtySold:0,netRevenue:0,grossProfit:0})
     : data.dashboard??{qtySold:0,netRevenue:0,grossProfit:0};
-  el('sales-analysis-dashboard').innerHTML=flow
-    ? `<article class="primary"><span>Stok keluar</span><strong>${Number(dashboard.qtySold).toLocaleString('id-ID')} pcs</strong></article><article><span>Stok masuk</span><strong>${Number(dashboard.netRevenue).toLocaleString('id-ID')} pcs</strong></article><article><span>Perubahan bersih</span><strong>${Number(dashboard.grossProfit).toLocaleString('id-ID')} pcs</strong></article>`
-    : `<article class="primary"><span>Qty terjual</span><strong>${Number(dashboard.qtySold).toLocaleString('id-ID')} pcs</strong></article><article><span>Pendapatan</span><strong>${money.format(dashboard.netRevenue)}</strong></article><article><span>Keuntungan</span><strong>${money.format(dashboard.grossProfit)}</strong></article>`;
+  el('sales-analysis-dashboard').innerHTML=`<article class="primary"><span>Qty terjual</span><strong>${Number(dashboard.qtySold).toLocaleString('id-ID')} pcs</strong></article><article><span>Pendapatan</span><strong>${money.format(dashboard.netRevenue)}</strong></article><article><span>Keuntungan</span><strong>${money.format(dashboard.grossProfit)}</strong></article>`;
   let rows=view==='sales-categories'?data.categories??[]:view==='sales-addons'?data.addons??[]:view==='stock-flow'?data.rows??[]:data.products??[];
   rows=rows.filter((row)=>!query||`${row.productName??''} ${row.sku??''} ${row.category??''}`.toLowerCase().includes(query));
   const qty=(row)=>Number(flow?row.stockOut:row.qtySold??row.addonTransactions??0);
@@ -3794,12 +3799,17 @@ function renderSalesAnalysis(){
     if(sort==='REVENUE')return Number(b.netRevenue??b.stockIn)-Number(a.netRevenue??a.stockIn);
     return qty(b)-qty(a);
   });
-  el('sales-analysis-list').innerHTML=rows.map((row)=>{
+  if(view==='sales-categories'){
+    const maximum=Math.max(1,...rows.map((row)=>Number(row.netRevenue)));
+    el('sales-category-chart-bars').innerHTML=rows.map((row)=>`<div class="sales-category-bar"><span><strong>${escapeHtml(row.category)}</strong><small>${money.format(row.netRevenue)} · untung ${money.format(row.grossProfit)}</small></span><i><b style="width:${Math.max(2,Number(row.netRevenue)/maximum*100)}%"></b></i></div>`).join('')||'<div class="empty-state compact">Belum ada data kategori.</div>';
+  }
+  const content=rows.map((row)=>{
     if(view==='sales-categories')return`<article class="sales-analysis-row category"><span class="sales-analysis-avatar">${escapeHtml(String(row.category).slice(0,1).toUpperCase())}</span><div><strong>${escapeHtml(row.category)}</strong><small>${Number(row.productCount)} barang · Pendapatan ${money.format(row.netRevenue)} · Keuntungan ${money.format(row.grossProfit)}</small></div><aside><small>Terjual</small><strong>${Number(row.qtySold).toLocaleString('id-ID')} pcs</strong></aside></article>`;
-    if(flow)return`<article class="sales-analysis-row">${productThumbnail({...row,name:row.productName})}<div><strong>${escapeHtml(row.productName)}</strong><small>${escapeHtml(row.sku)} · ${escapeHtml(row.category)}</small><small>Masuk ${Number(row.stockIn).toLocaleString('id-ID')} · Keluar ${Number(row.stockOut).toLocaleString('id-ID')} · Bersih ${Number(row.netFlow).toLocaleString('id-ID')}</small></div><aside><small>Stok sekarang</small><strong>${Number(row.currentStock).toLocaleString('id-ID')} pcs</strong></aside></article>`;
+    if(flow)return`<article class="stock-flow-row"><strong>${escapeHtml(row.productName)}</strong><span>${escapeHtml(row.sku)}</span><b>${Number(row.stockIn).toLocaleString('id-ID')}</b><b>${Number(row.stockOut).toLocaleString('id-ID')}</b></article>`;
     const right=view==='sales-addons'?`${Number(row.addonTransactions).toLocaleString('id-ID')} transaksi`:`${Number(row.qtySold).toLocaleString('id-ID')} pcs`;
     return`<article class="sales-analysis-row">${productThumbnail({...row,name:row.productName})}<div><strong>${escapeHtml(row.productName)}</strong><small>${escapeHtml(row.sku)} · ${escapeHtml(row.category)}</small><small>Keuntungan ${money.format(row.grossProfit)} · Pendapatan ${money.format(row.netRevenue)}</small></div><aside><small>${view==='sales-addons'?'Terjual sebagai add-on':'Total terjual'}</small><strong>${right}</strong></aside></article>`;
-  }).join('')||'<div class="empty-state compact">Belum ada data yang sesuai.</div>';
+  }).join('');
+  el('sales-analysis-list').innerHTML=flow&&content?`<div class="stock-flow-head"><span>Nama barang</span><span>Kode barang</span><span>Masuk</span><span>Keluar</span></div>${content}`:content||'<div class="empty-state compact">Belum ada data yang sesuai.</div>';
   bindProductImageFallbacks(el('sales-analysis-list'));
 }
 
@@ -4680,7 +4690,13 @@ function showReportView(name='summary'){
   if(secondary)secondary.style.gridTemplateColumns='1fr';
   if(name==='sales')state.salesReportOpen=false;
   if(['sales-products','sales-categories','sales-addons','stock-flow'].includes(name)){
+    const switchingFlow=(name==='stock-flow')!==(state.salesAnalysis.view==='stock-flow');
+    if(switchingFlow)state.salesAnalysis.preset='TODAY';
     state.salesAnalysis.view=name;state.salesAnalysis.data=null;
+    el('sales-analysis-periods').querySelectorAll('[data-analysis-period]').forEach((button)=>button.classList.toggle('active',button.dataset.analysisPeriod===state.salesAnalysis.preset));
+    el('stock-flow-date-filter').querySelectorAll('[data-stock-flow-period]').forEach((button)=>button.classList.toggle('active',button.dataset.stockFlowPeriod===state.salesAnalysis.preset));
+    el('stock-flow-date-label').textContent=state.salesAnalysis.preset==='YESTERDAY'?'Kemarin':state.salesAnalysis.preset==='CUSTOM'?'Kustom':'Today';
+    el('sales-analysis-custom-period').classList.toggle('hidden',state.salesAnalysis.preset!=='CUSTOM');
   }
   syncSalesReportShell();
   if(['sales-products','sales-categories','sales-addons','stock-flow'].includes(name)&&state.session)loadSalesAnalysis();
@@ -5114,7 +5130,13 @@ el('nav').addEventListener('click', (event) => {
   if(target==='loyalty')showLoyaltyView('');
   if(['promotions','loyalty'].includes(target))loadPromotionManagement();
 });
-el('sales-analysis-sort').addEventListener('change',renderSalesAnalysis);
+el('sales-analysis-sort-menu').addEventListener('click',(event)=>{
+  const button=event.target.closest('[data-analysis-sort]');if(!button)return;
+  state.salesAnalysis.sort=button.dataset.analysisSort;
+  el('sales-analysis-sort-menu').querySelectorAll('[data-analysis-sort]').forEach((item)=>item.classList.toggle('active',item===button));
+  el('sales-analysis-sort-menu').open=false;
+  renderSalesAnalysis();
+});
 el('sales-analysis-search').addEventListener('input',renderSalesAnalysis);
 el('sales-analysis-periods').addEventListener('click',(event)=>{
   const button=event.target.closest('[data-analysis-period]');if(!button)return;
@@ -5126,6 +5148,18 @@ el('sales-analysis-periods').addEventListener('click',(event)=>{
     if(!el('sales-analysis-to').value)el('sales-analysis-to').value=storeDateToday();
   }
   if(state.salesAnalysis.preset!=='CUSTOM')loadSalesAnalysis();
+});
+el('stock-flow-date-filter').addEventListener('click',(event)=>{
+  const button=event.target.closest('[data-stock-flow-period]');if(!button)return;
+  state.salesAnalysis.preset=button.dataset.stockFlowPeriod;
+  el('stock-flow-date-filter').querySelectorAll('[data-stock-flow-period]').forEach((item)=>item.classList.toggle('active',item===button));
+  el('stock-flow-date-label').textContent=state.salesAnalysis.preset==='YESTERDAY'?'Kemarin':state.salesAnalysis.preset==='CUSTOM'?'Kustom':'Today';
+  el('stock-flow-date-filter').open=false;
+  el('sales-analysis-custom-period').classList.toggle('hidden',state.salesAnalysis.preset!=='CUSTOM');
+  if(state.salesAnalysis.preset==='CUSTOM'){
+    if(!el('sales-analysis-from').value)el('sales-analysis-from').value=storeDateToday();
+    if(!el('sales-analysis-to').value)el('sales-analysis-to').value=storeDateToday();
+  }else loadSalesAnalysis();
 });
 el('apply-sales-analysis-period').addEventListener('click',loadSalesAnalysis);
 el('sidebar-toggle').addEventListener('click', () => setSidebarOpen(!el('app-view').classList.contains('sidebar-open'), { restoreFocus:true }));

@@ -88,6 +88,18 @@ test('laporan penjualan menyatukan ringkasan keuntungan dan riwayat struk', () =
   assert.match(app,/Waktu transaksi/);
   assert.match(html,/id="sales-analysis-dashboard"/);
   assert.match(html,/id="sales-analysis-list"/);
+  assert.match(html,/id="sales-analysis-sort-menu"/);
+  assert.doesNotMatch(html,/id="sales-analysis-sort"/);
+  for(const period of ['TODAY','7D','MONTH','YEAR','ALL','CUSTOM'])assert.match(html,new RegExp(`data-analysis-period="${period}"`));
+  assert.match(html,/id="sales-category-chart"/);
+  assert.match(html,/id="sales-category-chart-bars"/);
+  for(const period of ['TODAY','YESTERDAY','CUSTOM'])assert.match(html,new RegExp(`data-stock-flow-period="${period}"`));
+  assert.match(app,/data-analysis-sort/);
+  assert.match(app,/data-stock-flow-period/);
+  assert.match(app,/Nama barang<\/span><span>Kode barang<\/span><span>Masuk<\/span><span>Keluar/);
+  assert.match(css,/\.sales-analysis-periods\{display:flex;[^}]*overflow-x:auto/);
+  assert.match(css,/\.sales-category-chart\{/);
+  assert.match(css,/\.stock-flow-head,\.stock-flow-row\{/);
 });
 
 test('klik penjualan membuka struk pelanggan asli', () => {

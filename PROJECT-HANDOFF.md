@@ -45,6 +45,20 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.10.1 Laporan Kategori & Arus Stok
+
+- Penjualan kategori memiliki filter staff/pembayaran bersama, periode Today,
+  7 hari, bulan, tahun, seluruh waktu, dan khusus dalam satu baris yang dapat
+  digeser pada layar sempit.
+- Diagram kategori membandingkan pendapatan dan menampilkan keuntungan setiap
+  kategori; daftar di bawahnya tetap memuat qty terjual, pendapatan, dan laba.
+- Tombol urutkan laporan barang dipadatkan menjadi satu ikon dengan menu lipat.
+- Arus stok memakai jurnal stok yang sudah ada, dengan pencarian, urutan,
+  filter Today/Kemarin/Kustom, dan kolom Nama barang, Kode barang, Masuk, Keluar.
+- Add-on tetap didefinisikan sebagai barang yang ikut terjual bersama barang
+  lain dalam satu transaksi, tanpa menambah tipe produk atau migrasi SQL.
+- API `2.10.1-cloud`, aset/cache PWA `v98`, tanpa migrasi SQL baru.
+
 ### Rilis v2.10.0 Laporan Transaksi
 
 - Modul `Analitik` berganti nama menjadi `Laporan`.
