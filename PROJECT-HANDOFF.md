@@ -55,7 +55,7 @@ kode frontend, dokumentasi publik, atau chat.
 - Produk yang belum aman mendapat rekomendasi kenaikan Harga Umum minimum.
 - Kebijakan tersimpan dan diterapkan ulang ketika Harga Umum, modal, atau impor
   produk berubah. Harga yang menjadi tidak aman otomatis tidak dipakai.
-- API `2.12.0-cloud`, aset/cache PWA `v102`, migrasi SQL
+- API `2.12.0-cloud`, aset/cache PWA `v103` (hotfix validasi nominal potongan), migrasi SQL
   `202607280040_safe_customer_price_policy.sql`.
 
 ### Rilis v2.11.0 Harga Bertingkat per Tipe Pelanggan

@@ -57,4 +57,5 @@ test('database, API, dan UI menyediakan kebijakan harga aman yang selalu diperba
   assert.match(html,/id="open-price-policy"/);
   assert.match(html,/id="price-policy-preview"/);
   assert.match(app,/Saran: naikkan Harga Umum minimal/);
+  assert.match(app,/policy-rule-discount" type="number" min="1" step="any"/);
 });

@@ -680,7 +680,7 @@ function renderPricePolicyRules(){
   el('price-policy-rules').innerHTML=state.pricePolicyRules.map((rule,index)=>`<div class="price-policy-rule" data-index="${index}">
     <label>Tipe pelanggan<select class="policy-rule-group">${options}</select></label>
     <label>Minimal pembelian<input class="policy-rule-qty" type="number" min="1" step="1" value="${Number(rule.minBaseQty)||1}" required></label>
-    <label>Kurangi Harga Umum<input class="policy-rule-discount" type="number" min="1" step="100" value="${Number(rule.discountAmount)||500}" required></label>
+    <label>Kurangi Harga Umum<input class="policy-rule-discount" type="number" min="1" step="any" value="${Number(rule.discountAmount)||500}" required></label>
     <button class="icon-button remove-price-policy-rule" type="button" aria-label="Hapus aturan" ${state.pricePolicyRules.length===1?'disabled':''}>×</button>
   </div>`).join('');
   [...el('price-policy-rules').querySelectorAll('.policy-rule-group')].forEach((select,index)=>{select.value=state.pricePolicyRules[index].customerGroupId;});
