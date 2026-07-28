@@ -117,6 +117,7 @@ textarea{font:inherit;width:100%;resize:vertical;border:1px solid var(--line);bo
   color:var(--ink);
   background:var(--paper);
 }
+.receipt-return-status{padding:4px 8px;border:1px solid #9f372f;border-radius:5px;color:#9f372f}.receipt-line-returned{background:#fff4f1}.receipt-returned-note,.returned-line-detail{color:#a13d34!important;font-weight:800}.receipt-return-deduction{color:#a13d34}.receipt-return-summary{display:grid;gap:3px;margin:8px 0;padding:9px;border:1px dashed #a13d34;text-align:center;color:#7f2d27}.pos-history-row .return-label{color:#a13d34;font-weight:800}.return-summary-display{border:1px solid #e0aaa4;background:#fff4f1;color:#7f2d27}
 html{scroll-behavior:smooth}
 body{background:var(--paper);color:var(--ink);line-height:1.5;text-rendering:optimizeLegibility}
 button,input,select,textarea{font:inherit}

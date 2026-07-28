@@ -163,6 +163,8 @@ export function buildEscPosReceipt(receipt, payments = [], settings = {}, contex
   if(layout.showDate)bytes.push(...lineBytes(occurredAt));
   if(layout.showReceiptNumber)bytes.push(ESC, 0x45, 0x01, ...lineBytes(receipt.receiptNo || 'STRUK TES'), ESC, 0x45, 0x00);
   if (receipt.status === 'VOIDED') bytes.push(...lineBytes('VOID / DIBATALKAN'));
+  const returnLabel=receipt.returnStatus==='FULLY_RETURNED'?'DIRETUR PENUH':receipt.returnStatus==='PARTIALLY_RETURNED'?'DIRETUR SEBAGIAN':'';
+  if(returnLabel)bytes.push(ESC,0x45,0x01,...lineBytes(returnLabel),ESC,0x45,0x00);
   bytes.push(ESC, 0x61, 0x00, ...lineBytes(separator));
   if(layout.showCashier)bytes.push(...lineBytes(columns('Kasir', receipt.cashier || '-', width)));
   if (layout.showCustomer&&customer?.name) bytes.push(...lineBytes(columns('Pelanggan', customer.name, width)));
@@ -171,11 +173,17 @@ export function buildEscPosReceipt(receipt, payments = [], settings = {}, contex
     for (const row of wrap(line.productName, width)) bytes.push(...lineBytes(row));
     if (layout.showPriceType&&priceLabel) bytes.push(...lineBytes(priceLabel));
     bytes.push(...lineBytes(columns(`${line.qty} ${line.unitName} x ${rupiah(line.customerUnitPrice)}`, rupiah(line.total), width)));
+    if(Number(line.returnedQty)>0)bytes.push(...lineBytes(`  Diretur ${Number(line.returnedQty).toLocaleString('id-ID')} ${line.unitName}: -${rupiah(line.returnedTotal)}`));
   }
   bytes.push(...lineBytes(separator));
   bytes.push(...lineBytes(columns('Subtotal', rupiah(quote.subtotal), width)));
   if (Math.abs(Number(quote.discountTotal)) > 0.01) bytes.push(...lineBytes(columns('Promo & diskon', `-${rupiah(Math.abs(quote.discountTotal))}`, width)));
-  bytes.push(ESC, 0x45, 0x01, ...lineBytes(columns('TOTAL', rupiah(quote.grandTotal), width)), ESC, 0x45, 0x00);
+  const returnTotal=Number(receipt.returnTotal??0);
+  if(returnTotal){
+    bytes.push(...lineBytes(columns('TOTAL AWAL',rupiah(quote.grandTotal),width)));
+    bytes.push(...lineBytes(columns('RETUR / REFUND',`-${rupiah(returnTotal)}`,width)));
+    bytes.push(ESC,0x45,0x01,...lineBytes(columns('TOTAL SETELAH RETUR',rupiah(receipt.netTotal??Math.max(0,quote.grandTotal-returnTotal)),width)),ESC,0x45,0x00);
+  }else bytes.push(ESC, 0x45, 0x01, ...lineBytes(columns('TOTAL', rupiah(quote.grandTotal), width)), ESC, 0x45, 0x00);
   if(layout.showPaymentDetail)for (const payment of payments) bytes.push(...lineBytes(columns(payment.method || 'Pembayaran', rupiah(payment.amount), width)));
   if (layout.showPaymentDetail&&change) bytes.push(...lineBytes(columns('Kembalian', rupiah(change), width)));
   if (layout.showTransactionNote&&receipt.notes) {

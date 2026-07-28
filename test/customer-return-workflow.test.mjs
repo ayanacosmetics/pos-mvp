@@ -24,12 +24,16 @@ test('pencarian struk menghitung jumlah retur tersisa dan riwayat refund',async(
     if(target.includes('/rest/v1/customer_returns?'))return reply([{id:ids.returned,sale_id:ids.sale,return_no:'RTR-00001',reason:'Salah warna',total:'25000',refund_method:'CASH',refund_reference:null,occurred_at:'2026-07-23T11:00:00+08:00'}]);
     if(target.includes('/rest/v1/customer_return_items?'))return reply([{return_id:ids.returned,sale_item_id:ids.line,product_id:ids.product,base_qty:'1',line_total:'25000',item_condition:'SALEABLE',restockable:true}]);
     if(target.includes('/rest/v1/customer_refunds?'))return reply([{return_id:ids.returned,amount:'25000',method:'CASH',status:'COMPLETED'}]);
+    if(target.includes('/rest/v1/payments?'))return reply([]);
     return reply({message:`Mock belum menangani ${target}`},500);
   };
   try{
     let payload='';const route='sales/lookup';const request={method:'GET',url:'/api/index?route=sales%2Flookup&receiptNo=UTM-000123',query:{route,receiptNo:'UTM-000123'},headers:{authorization:'Bearer token'}};const response={statusCode:0,setHeader(){},end(value){payload=value;}};
     await handler(request,response);const sale=JSON.parse(payload).sale;
     assert.equal(response.statusCode,200);assert.equal(sale.receiptNo,'UTM-000123');assert.equal(sale.lines[0].soldQty,2);assert.equal(sale.lines[0].returnedQty,1);assert.equal(sale.lines[0].remainingQty,1);assert.equal(sale.refundableTotal,25000);assert.equal(sale.status,'PARTIALLY_RETURNED');assert.equal(sale.returns[0].refund.method,'CASH');
+    payload='';const historyRequest={method:'GET',url:'/api/index?route=pos-sales',query:{route:'pos-sales'},headers:{authorization:'Bearer token'}};
+    await handler(historyRequest,response);const historySale=JSON.parse(payload).sales[0];
+    assert.equal(response.statusCode,200);assert.equal(historySale.returnStatus,'PARTIALLY_RETURNED');assert.equal(historySale.returnTotal,25000);assert.equal(historySale.netTotal,25000);assert.equal(historySale.quote.lines[0].returnedQty,1);assert.equal(historySale.quote.lines[0].returnedTotal,25000);
   }finally{globalThis.fetch=originalFetch;restore();}
 });
 
@@ -41,4 +45,5 @@ test('fondasi retur membedakan stok layak jual, barang rusak, dan refund kas',as
   ]);
   assert.match(migration,/process_customer_return_v2/);assert.match(migration,/role in \('OWNER','ADMIN'\)/);assert.match(migration,/item_condition in \('SALEABLE','OPENED','DAMAGED','EXPIRED'\)/);assert.match(migration,/case when v_restockable then v_unit_cost else 0 end/);assert.match(migration,/movement_type,amount,note,actor_id,reference_type,reference_id/);assert.match(migration,/Jumlah retur melebihi sisa pada baris penjualan/);
   assert.match(html,/id="page-returns"/);assert.match(html,/id="return-receipt-search"/);assert.match(html,/Barang terbuka, rusak, atau kedaluwarsa/);assert.match(script,/effectiveRefundMethod/);assert.match(script,/\.return-condition/);
+  assert.match(script,/DIRETUR SEBAGIAN/);assert.match(script,/Total setelah retur/);assert.match(script,/receipt-returned-note/);
 });

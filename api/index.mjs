@@ -619,6 +619,12 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
     customerIds.length ? byChunks('customers','id',customerIds,'select=id,name,phone,notes,group_id') : [],
     cashierIds.length ? byChunks('profiles','user_id',cashierIds,'select=user_id,display_name') : []
   ]);
+  let customerReturns=[];let customerReturnItems=[];
+  try{
+    customerReturns=await byChunks('customer_returns','sale_id',saleIds,'status=eq.COMPLETED&select=*&order=occurred_at');
+    const returnIds=customerReturns.map((returned)=>returned.id);
+    if(returnIds.length)customerReturnItems=await byChunks('customer_return_items','return_id',returnIds,'select=*');
+  }catch{}
   let issuedVouchers=[];
   try{issuedVouchers=await byChunks('vouchers','source_sale_id',saleIds,'source=eq.RECEIPT&select=*');}catch{}
   const adjustmentIds=[...new Set(items.flatMap((item)=>
@@ -633,13 +639,30 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
   return sales.map((sale) => {
     const customer = customers.find((item) => item.id === sale.customer_id) ?? null;
     const cashier = cashiers.find((item) => item.user_id === sale.cashier_id)?.display_name ?? 'Kasir';
-    const lines = items.filter((item) => item.sale_id === sale.id).map((item) => ({
-      productId:item.product_id,productName:item.product_name,
-      qty:Number(item.pricing_snapshot?.qty ?? item.base_qty),
-      unitName:item.pricing_snapshot?.unitName ?? 'pcs',baseQty:Number(item.base_qty),
-      gross:Number(item.gross),discount:Number(item.discount),total:Number(item.total),
-      promotions:item.promotion_snapshot ?? []
-    }));
+    const saleReturns=customerReturns.filter((returned)=>returned.sale_id===sale.id);
+    const saleReturnIds=new Set(saleReturns.map((returned)=>returned.id));
+    const saleReturnItems=customerReturnItems.filter((item)=>saleReturnIds.has(item.return_id));
+    const legacyReturnedByProduct=new Map();
+    for(const returned of saleReturnItems){
+      if(!returned.sale_item_id)legacyReturnedByProduct.set(returned.product_id,(legacyReturnedByProduct.get(returned.product_id)??0)+Number(returned.base_qty));
+    }
+    const lines = items.filter((item) => item.sale_id === sale.id).map((item) => {
+      const baseQty=Number(item.base_qty),qty=Number(item.pricing_snapshot?.qty ?? item.base_qty);
+      const directReturned=saleReturnItems.filter((returned)=>returned.sale_item_id===item.id).reduce((sum,returned)=>sum+Number(returned.base_qty),0);
+      const legacyAvailable=legacyReturnedByProduct.get(item.product_id)??0;
+      const legacyUsed=Math.min(Math.max(0,baseQty-directReturned),legacyAvailable);
+      legacyReturnedByProduct.set(item.product_id,Math.max(0,legacyAvailable-legacyUsed));
+      const returnedBaseQty=directReturned+legacyUsed;
+      const returnedQty=baseQty?returnedBaseQty*(qty/baseQty):0;
+      const returnedTotal=baseQty?Number(item.total)*(returnedBaseQty/baseQty):0;
+      return {
+        saleItemId:item.id,productId:item.product_id,productName:item.product_name,
+        qty,unitName:item.pricing_snapshot?.unitName ?? 'pcs',baseQty,
+        returnedBaseQty,returnedQty,returnedTotal,
+        gross:Number(item.gross),discount:Number(item.discount),total:Number(item.total),
+        promotions:item.promotion_snapshot ?? []
+      };
+    });
     const adjustmentId=lines.flatMap((line)=>line.promotions)
       .find((promotion)=>promotion.manual&&promotion.id)?.id;
     const savedAdjustment=adjustments.find((adjustment)=>adjustment.id===adjustmentId);
@@ -651,11 +674,18 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
         }
       : null;
     const issued=issuedVouchers.find((voucher)=>voucher.source_sale_id===sale.id);
+    const returnTotal=saleReturns.reduce((sum,returned)=>sum+Number(returned.total),0);
+    const returnedBaseQty=lines.reduce((sum,line)=>sum+line.returnedBaseQty,0);
+    const soldBaseQty=lines.reduce((sum,line)=>sum+line.baseQty,0);
+    const returnStatus=!saleReturns.length?'NONE':returnedBaseQty>=soldBaseQty?'FULLY_RETURNED':'PARTIALLY_RETURNED';
     return {
       id:sale.id,receiptNo:sale.receipt_no,status:sale.status,occurredAt:sale.occurred_at,
       cashier,outletName:context.outlets.find((outlet)=>outlet.id===sale.outlet_id)?.name??context.outlet.name,customer,
       customerGroupId:sale.customer_group_id??customer?.group_id??'retail',notes:sale.notes ?? '',
       voidReason:sale.void_reason ?? '',voidedAt:sale.voided_at ?? null,
+      returnStatus,returnTotal,netTotal:Math.max(0,Number(sale.grand_total)-returnTotal),
+      returns:saleReturns.map((returned)=>({id:returned.id,returnNo:returned.return_no,reason:returned.reason,
+        total:Number(returned.total),refundMethod:returned.refund_method,occurredAt:returned.occurred_at})),
       quote:{
         lines,subtotal:Number(sale.subtotal),discountTotal:Number(sale.discount_total),
         grandTotal:Number(sale.grand_total),...(manualAdjustment?{manualAdjustment}:{})
@@ -957,7 +987,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.9.2-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.9.3-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {

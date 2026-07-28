@@ -46,6 +46,9 @@ test('klik penjualan membuka struk pelanggan asli', () => {
   assert.match(css, /\.history-action-menu\{position:fixed;z-index:115;[^}]*bottom:0/);
   assert.match(app, /document\.body\.classList\.add\('history-receipt-open'\)/);
   assert.match(app, /if\(allowAutoPrint&&state\.deviceSettings\.autoPrint\)/);
+  assert.match(app, /function saleReturnLabel\(sale\)/);
+  assert.match(app, /Diretur \$\{Number\(line\.returnedQty\)/);
+  assert.match(app, /Total setelah retur/);
   assert.match(css, /html:has\(dialog\[open\]\),body:has\(dialog\[open\]\)\{overflow:hidden\}/);
   assert.match(css, /#receipt-dialog \.receipt-dialog\{[^}]*overflow-y:auto[^}]*background:#fff/);
 });
