@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=86">
+  <link rel="stylesheet" href="/styles.css?v=87">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -171,7 +171,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Laporan Terpisah · v2.8.1</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Pratinjau Struk · v2.8.2</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -469,7 +469,7 @@
         <div id="report-cards" class="report-cards"></div>
         <div class="report-grid report-primary"><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">TREN HARIAN</p><h2>Penjualan bersih dan laba</h2></div></div><div id="daily-report" class="table-wrap"></div></div><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">KINERJA PRODUK</p><h2>Produk berdasarkan omzet bersih</h2></div></div><div id="best-products"></div></div></div>
         <div class="report-grid"><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">KINERJA OUTLET</p><h2>Kontribusi per lokasi usaha</h2></div></div><div id="outlet-performance"></div></div><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">PEMBELIAN</p><h2>Nilai penerimaan per supplier</h2></div></div><div id="supplier-purchases"></div></div></div>
-        <div id="report-sales-workspace" class="surface report-wide-section hidden"><div class="report-section-heading"><div><p class="eyebrow">RIWAYAT TRANSAKSI</p><h2>Struk pada periode terpilih</h2><p class="muted">Tekan transaksi untuk melihat barang, pembayaran, cetak ulang, atau void. Maksimal 500 transaksi terbaru per periode.</p></div></div><div class="pos-history-search"><input id="pos-history-search" autocomplete="off" placeholder="Nomor struk, pelanggan, telepon, atau kasir"><button id="refresh-pos-history" class="button secondary" type="button">Muat ulang</button></div><div class="pos-history-layout report-sales-layout"><div id="pos-history-list" class="pos-history-list"></div><div id="pos-history-detail" class="pos-history-detail"><div class="empty-state compact">Pilih transaksi untuk melihat detail.</div></div></div></div>
+        <div id="report-sales-workspace" class="surface report-wide-section hidden"><div class="report-section-heading"><div><p class="eyebrow">RIWAYAT TRANSAKSI</p><h2>Struk pada periode terpilih</h2><p class="muted">Tekan transaksi untuk membuka struk asli. Maksimal 500 transaksi terbaru per periode.</p></div></div><div class="pos-history-search"><input id="pos-history-search" autocomplete="off" placeholder="Nomor struk, pelanggan, telepon, atau kasir"><button id="refresh-pos-history" class="button secondary" type="button">Muat ulang</button></div><div class="pos-history-layout report-sales-layout"><div id="pos-history-list" class="pos-history-list"></div><div id="pos-history-detail" class="pos-history-detail hidden" aria-hidden="true"></div></div></div>
         <div id="report-purchase-workspace" class="surface report-wide-section hidden"><div class="report-section-heading"><div><p class="eyebrow">RIWAYAT PEMBELIAN</p><h2>Struk penerimaan pada periode terpilih</h2><p class="muted">Tekan pembelian untuk membuka dokumen asli berisi supplier, barang, modal, batch, dan EXP.</p></div><button id="refresh-purchase-report" class="button secondary" type="button">Muat ulang</button></div><div id="purchase-report-list" class="purchase-report-list"><div class="empty-state compact">Memuat pembelian...</div></div></div>
         <div class="surface report-wide-section"><div class="report-section-heading"><div><p class="eyebrow">AUDIT LOG</p><h2>Aktivitas sensitif terbaru</h2></div></div><div id="audit-logs"></div></div>
       </div></section>
@@ -900,6 +900,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=86"></script>
+  <script type="module" src="/app.js?v=87"></script>
 </body>
 </html>

@@ -16,6 +16,8 @@ test('analitik memisahkan laporan penjualan dan pembelian', () => {
   assert.match(html, /data-report-view="purchases-history"[\s\S]*Riwayat pembelian/);
   assert.match(html, /id="report-purchase-workspace"/);
   assert.match(html, /id="purchase-report-list"/);
+  assert.match(html, /id="pos-history-detail" class="pos-history-detail hidden"/);
+  assert.match(css, /\.report-sales-layout\{display:block;min-height:0\}/);
   assert.match(app, /daily\?\.classList\.toggle\('hidden',!\['summary','sales'\]\.includes\(name\)\)/);
   assert.match(app, /sales\.classList\.toggle\('hidden',name!=='sales-history'\)/);
   assert.match(app, /purchases\?\.classList\.toggle\('hidden',name!=='purchases'\)/);
@@ -24,7 +26,10 @@ test('analitik memisahkan laporan penjualan dan pembelian', () => {
 
 test('klik penjualan membuka struk pelanggan asli', () => {
   assert.match(app, /state\.reportView==='sales-history'&&sale/);
-  assert.match(app, /renderReceipt\(sale,sale\.payments\|\|\[\]\)/);
+  assert.match(app, /renderReceipt\(sale,sale\.payments\|\|\[\],\{allowAutoPrint:false,closeLabel:'Tutup'\}\)/);
+  assert.match(app, /if\(allowAutoPrint&&state\.deviceSettings\.autoPrint\)/);
+  assert.match(css, /html:has\(dialog\[open\]\),body:has\(dialog\[open\]\)\{overflow:hidden\}/);
+  assert.match(css, /#receipt-dialog \.receipt-dialog\{[^}]*overflow-y:auto[^}]*background:#fff/);
 });
 
 test('laporan pembelian memakai data penerimaan tersimpan dan membuka dokumen asli', () => {

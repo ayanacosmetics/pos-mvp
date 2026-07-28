@@ -661,6 +661,19 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
   .surface,.table-wrap{box-shadow:none}
 }
 
+/* Receipt preview: opaque, independently scrollable, and never scrolls the page behind it. */
+html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
+#receipt-dialog{max-width:96vw;max-height:94dvh;overflow:hidden;background:#fff;overscroll-behavior:contain}
+#receipt-dialog::backdrop{background:rgba(8,25,30,.72)}
+#receipt-dialog .receipt-dialog{width:min(390px,94vw);max-height:94dvh;overflow-y:auto;overscroll-behavior:contain;background:#fff;opacity:1}
+#receipt-dialog #receipt-content{background:#fff}
+#receipt-dialog .button-row{position:sticky;z-index:2;bottom:-24px;margin:18px -24px -24px;padding:14px 24px max(14px,env(safe-area-inset-bottom));border-top:1px solid var(--line);background:#fff}
+@media(max-width:480px){
+  #receipt-dialog{width:calc(100vw - 24px);max-height:calc(100dvh - 32px)}
+  #receipt-dialog .receipt-dialog{width:100%;max-height:calc(100dvh - 32px);padding:22px}
+  #receipt-dialog .button-row{bottom:-22px;margin-right:-22px;margin-bottom:-22px;margin-left:-22px;padding-right:22px;padding-left:22px}
+}
+
 /* POS unit selection */
 .unit-picker-dialog{width:min(500px,92vw)}
 .unit-picker-options{display:grid;gap:8px;margin-top:18px}
@@ -1030,7 +1043,8 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
   .product-image-field{grid-column:auto}
   .product-photo-editor{grid-column:1/-1;grid-template-columns:82px minmax(0,1fr)}.product-photo-preview{width:82px;height:82px}
 }
-.report-sales-layout{min-height:440px}
+.report-sales-layout{display:block;min-height:0}
+#report-sales-workspace .pos-history-list{width:100%;max-height:none}
 .permission-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-height:360px;overflow:auto;padding:2px}
 .permission-option{display:flex;grid-template-columns:none;align-items:flex-start;gap:10px;margin:0;padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
 .permission-option:has(input:checked){border-color:#8eb8b2;background:var(--brand-2)}
