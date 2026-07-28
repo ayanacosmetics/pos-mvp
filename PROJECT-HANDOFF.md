@@ -45,6 +45,23 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.13.0 Excel Data Massal
+
+- Halaman Import Data sekarang memakai workbook XLSX sederhana: sheet `Barang`
+  dan `Panduan`; CSV lama tetap dapat dibaca.
+- SKU/no. barang boleh kosong untuk produk baru dan dibuat otomatis berurutan.
+  Reservasi SKU terikat idempotency key sehingga percobaan ulang tidak membuat
+  barang ganda atau memakai nomor berbeda.
+- Satu file dapat berisi sampai 10.000 baris dan API membaginya otomatis per
+  500 baris; pengguna tidak perlu memecah file sendiri.
+- Export barang memiliki filter kategori, merek, status, serta urutan SKU,
+  barcode, nama, dan stok. File dapat diedit lalu diimpor kembali memakai SKU.
+- Edit massal hanya mengganti Harga Umum dan data dasar; harga Member, Grosir,
+  serta tingkat pelanggan lain tidak dihapus. Stok barang lama juga tidak dapat
+  ditimpa melalui kolom stok awal.
+- API `2.13.0-cloud`, aset/cache PWA `v104`, migrasi SQL
+  `202607280041_excel_product_import.sql`.
+
 ### Rilis v2.12.0 Harga Aman Otomatis
 
 - Halaman Produk memiliki `Aturan harga massal` untuk membentuk harga Member,

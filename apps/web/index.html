@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=103">
+  <link rel="stylesheet" href="/styles.css?v=104">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -176,7 +176,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Harga Aman Otomatis · v2.12.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Excel Data Massal · v2.13.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -363,19 +363,24 @@
       </div></section>
 
       <section id="page-imports" class="page"><div class="content-width">
-        <div class="page-title"><div><p class="eyebrow">PERSIAPAN DATA USAHA</p><h1>Impor data awal</h1><p class="muted">Masukkan data dari Excel melalui CSV. Sistem memeriksa seluruh baris sebelum menyimpan.</p></div><button id="download-import-template" class="button secondary">Unduh contoh CSV</button></div>
+        <div class="page-title"><div><p class="eyebrow">DATA MASSAL</p><h1>Export dan import Excel</h1><p class="muted">Masukkan barang baru atau edit barang lama tanpa mengisi ulang satu per satu.</p></div><button id="download-import-template" class="button secondary">Unduh template Excel</button></div>
         <div class="import-guide surface">
-          <div><span>1</span><strong>Unduh contoh</strong><small>Gunakan susunan kolom yang sudah disiapkan.</small></div>
-          <div><span>2</span><strong>Isi di Excel</strong><small>Simpan kembali dengan format CSV.</small></div>
-          <div><span>3</span><strong>Periksa & simpan</strong><small>Baris bermasalah ditandai sebelum impor.</small></div>
+          <div><span>1</span><strong>Unduh template</strong><small>SKU boleh kosong untuk barang baru.</small></div>
+          <div><span>2</span><strong>Isi atau edit</strong><small>Satu sheet Barang yang sederhana.</small></div>
+          <div><span>3</span><strong>Periksa & simpan</strong><small>Ribuan baris diproses bertahap otomatis.</small></div>
+        </div>
+        <div class="surface product-export-panel">
+          <div class="import-preview-heading"><div><p class="eyebrow">EXPORT BARANG</p><h2>Edit massal di Excel</h2><p class="muted">Pertahankan SKU hasil export agar produk diperbarui, bukan dibuat ganda.</p></div><button id="export-products-xlsx" class="button primary" type="button">Export barang</button></div>
+          <div class="product-export-filters"><label>Kategori<select id="export-product-category"><option value="">Semua kategori</option></select></label><label>Merek<select id="export-product-brand"><option value="">Semua merek</option></select></label><label>Status<select id="export-product-status"><option value="ALL">Semua status</option><option value="ACTIVE">Aktif</option><option value="INACTIVE">Nonaktif</option></select></label><label>Urutan<select id="export-product-sort"><option value="SKU_ASC">No. barang / SKU terkecil</option><option value="SKU_DESC">No. barang / SKU terbesar</option><option value="NAME_ASC">Nama barang A-Z</option><option value="BARCODE_ASC">Barcode</option><option value="STOCK_ASC">Stok paling sedikit</option><option value="STOCK_DESC">Stok paling banyak</option></select></label></div>
+          <small id="export-product-count" class="muted">Memuat daftar barang...</small>
         </div>
         <div class="import-workspace">
           <div class="surface import-control">
             <p class="eyebrow">FILE YANG AKAN DIPERIKSA</p>
-            <label>Jenis data<select id="import-kind"><option value="PRODUCTS">Produk, harga, satuan & stok awal</option><option value="CUSTOMERS">Pelanggan</option><option value="SUPPLIERS">Supplier</option></select></label>
+            <label>Jenis data<select id="import-kind"><option value="PRODUCTS">Barang, harga umum, satuan & stok awal</option><option value="CUSTOMERS">Pelanggan</option><option value="SUPPLIERS">Supplier</option></select></label>
             <label id="import-location-label">Lokasi stok awal<select id="import-location"></select><small class="muted">Stok awal hanya untuk produk yang belum pernah bertransaksi.</small></label>
-            <label class="import-dropzone" for="import-file"><strong>Pilih file CSV</strong><small id="import-file-name">Belum ada file dipilih</small><input id="import-file" type="file" accept=".csv,text/csv"></label>
-            <p id="import-message" class="muted">Unduh contoh CSV, isi datanya, lalu unggah di sini.</p>
+            <label class="import-dropzone" for="import-file"><strong>Pilih file Excel</strong><small id="import-file-name">Belum ada file dipilih</small><input id="import-file" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"></label>
+            <p id="import-message" class="muted">Format utama XLSX. CSV lama tetap dapat dibaca.</p>
             <button id="commit-import" class="button primary full" disabled>Simpan data yang sudah valid</button>
           </div>
           <div class="surface import-preview-panel">
@@ -908,6 +913,7 @@
   <dialog id="create-user-dialog"><form id="create-user-form" class="dialog-card wide user-editor"><div class="comparison-heading"><div><p class="eyebrow">STAFF BARU</p><h2>Tambah staff</h2><p class="muted">Buat akun login dan pilih hanya akses yang diperlukan.</p></div><button id="close-create-user" class="icon-button" type="button" aria-label="Tutup">×</button></div><div class="form-grid compact"><label>Nama lengkap<input id="new-user-name" autocomplete="name" required placeholder="Contoh: Sari Kasir"></label><label>Email login<input id="new-user-email" type="email" autocomplete="off" required placeholder="sari@tokosaya.com"></label><label>Kata sandi sementara<input id="new-user-password" type="password" minlength="8" autocomplete="new-password" required placeholder="Minimal 8 karakter"></label><label>Peran<select id="new-user-role"><option value="CASHIER">Kasir</option><option value="PURCHASING">Pembelian</option><option value="WAREHOUSE">Gudang</option><option value="MANAGER">Manajer Outlet</option><option value="ADMIN">Admin</option></select></label></div><fieldset><legend>Hak akses fitur</legend><div id="new-user-permissions" class="permission-options"></div><small class="muted">Centang hanya fitur yang diperlukan. Hak akses diperiksa kembali oleh server.</small></fieldset><fieldset><legend>Penempatan outlet</legend><div id="new-user-outlets" class="outlet-options"></div><small class="muted">Pilih minimal satu outlet tempat staff bekerja.</small></fieldset><p id="create-user-error" class="error" role="alert"></p><div class="button-row"><button id="cancel-create-user" class="button secondary" type="button">Batal</button><button id="create-user" class="button primary" type="submit">Buat akun staff</button></div></form></dialog>
   <dialog id="edit-user-dialog"><form id="edit-user-form" class="dialog-card wide user-editor"><div class="comparison-heading"><div><p class="eyebrow">HAK AKSES STAFF</p><h2 id="edit-user-title">Ubah staff</h2><p id="edit-user-email" class="muted"></p></div><button id="close-user-editor" class="icon-button" type="button">×</button></div><input id="edit-user-id" type="hidden"><div class="form-grid compact"><label>Nama lengkap<input id="edit-user-name" required></label><label>Peran<select id="edit-user-role"><option value="CASHIER">Kasir</option><option value="PURCHASING">Pembelian</option><option value="WAREHOUSE">Gudang</option><option value="MANAGER">Manajer Outlet</option><option value="ADMIN">Admin</option></select></label></div><fieldset><legend>Hak akses fitur</legend><div id="edit-user-permissions" class="permission-options"></div><small class="muted">Perubahan berlaku pada login berikutnya atau setelah akun memuat ulang sesi.</small></fieldset><fieldset><legend>Penempatan outlet</legend><div id="edit-user-outlets" class="outlet-options"></div><small class="muted">Pilih outlet tempat staff bekerja.</small></fieldset><label class="switch-row"><input id="edit-user-active" type="checkbox"><span><strong>Akun aktif</strong><small>Staff dapat masuk dan bekerja sesuai hak akses yang dicentang.</small></span></label><p id="edit-user-error" class="error" role="alert"></p><div class="button-row"><button id="cancel-user-edit" class="button secondary" type="button">Batal</button><button id="save-user" class="button primary" type="submit">Simpan perubahan</button></div></form></dialog>
   <div id="toast" class="toast" role="status"></div>
+  <script src="/vendor/xlsx.full.min.js"></script>
   <script src="/vendor/zxing-browser.min.js" defer></script>
   <script>
     window.setTimeout(() => {
@@ -922,6 +928,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=103"></script>
+  <script type="module" src="/app.js?v=104"></script>
 </body>
 </html>

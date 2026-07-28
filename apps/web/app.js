@@ -6,6 +6,7 @@ import { customerReceiptView } from './receipt.mjs';
 import { disconnectBluetoothPrinter, printEscPosReceipt, printEscPosTest, printerConnected, printerSelected, restoreGrantedPrinter, selectBluetoothPrinter, supportsBluetoothClassicPrinting } from './escpos-printer.mjs';
 import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, unitFitsStock } from './pos-units.mjs';
 import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
+import { createProductExportWorkbook, createTemplateWorkbook, productExportRows, workbookMatrix, workbookTemplates } from './product-workbook.mjs';
 
 const storedAuth = loadAuth();
 const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
@@ -500,6 +501,31 @@ async function loadProductManagement() {
     state.managedProducts=state.products.map((product)=>({...product,active:true}));
   }
   renderProductTable();
+  renderProductExportFilters();
+}
+
+function productExportFilters(){return {category:el('export-product-category')?.value??'',brand:el('export-product-brand')?.value??'',status:el('export-product-status')?.value??'ALL',sort:el('export-product-sort')?.value??'SKU_ASC'};}
+
+function renderProductExportFilters(){
+  if(!el('export-product-category'))return;
+  const products=state.managedProducts,categories=[...new Set(products.map((product)=>product.category).filter(Boolean))].sort(),brands=[...new Set(products.map((product)=>product.brand).filter(Boolean))].sort();
+  const category=el('export-product-category').value,brand=el('export-product-brand').value;
+  el('export-product-category').innerHTML=`<option value="">Semua kategori</option>${categories.map((value)=>`<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('')}`;
+  el('export-product-brand').innerHTML=`<option value="">Semua merek</option>${brands.map((value)=>`<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('')}`;
+  if(categories.includes(category))el('export-product-category').value=category;if(brands.includes(brand))el('export-product-brand').value=brand;
+  updateProductExportCount();
+}
+
+function updateProductExportCount(){if(el('export-product-count'))el('export-product-count').textContent=`${productExportRows(state.managedProducts,productExportFilters()).length.toLocaleString('id-ID')} barang akan diexport.`;}
+
+function exportProductsXlsx(){
+  try{
+    if(!window.XLSX)throw new Error('Komponen Excel belum siap. Muat ulang aplikasi.');
+    const {workbook,count}=createProductExportWorkbook(window.XLSX,state.managedProducts,productExportFilters());
+    if(!count)throw new Error('Tidak ada barang yang cocok dengan filter export');
+    window.XLSX.writeFile(workbook,`barang-kasir-nusa-${new Date().toISOString().slice(0,10)}.xlsx`,{compression:true});
+    toast(`${count.toLocaleString('id-ID')} barang berhasil diexport`);
+  }catch(error){toast(error.message);}
 }
 
 function customerGroup(groupId) {
@@ -994,34 +1020,11 @@ async function recordSupplierPayment(event){
   }catch(error){el('supplier-payment-error').textContent=error.message;}
 }
 
-const importTemplates = {
-  PRODUCTS: {
-    file: 'contoh-impor-produk.csv',
-    headers: ['sku','nama','kategori','merek','satuan_dasar','barcode_dasar','harga_ecer','harga_grosir','min_qty_grosir','harga_per_pcs_grosir','satuan_besar','isi_satuan_besar','barcode_satuan_besar','stok_awal','modal_awal','nomor_batch','tanggal_exp'],
-    example: ['KOS-001','Lip Tint Rose','Lip Tint','Nusa Beauty','pcs','899000000001','25000','23000','12','21000','lusin','12','899000000012','24','15000','BATCH-A1','2027-12-31']
-  },
-  CUSTOMERS: {
-    file: 'contoh-impor-pelanggan.csv',
-    headers: ['kode','nama','telepon','kelompok'],
-    example: ['PLG-0002','Toko Cantik','081234567890','grosir']
-  },
-  SUPPLIERS: {
-    file: 'contoh-impor-supplier.csv',
-    headers: ['kode','nama','telepon','alamat'],
-    example: ['SUP-001','Distributor Kosmetik Nusantara','081234567890','Makassar']
-  }
-};
-
 const importAliases = {
-  PRODUCTS: { sku:'sku',nama:'name',kategori:'category',merek:'brand',satuan_dasar:'baseUnit',barcode_dasar:'baseBarcode',harga_ecer:'retailPrice',harga_grosir:'wholesalePrice',min_qty_grosir:'tierQty',harga_per_pcs_grosir:'tierPrice',satuan_besar:'bulkUnit',isi_satuan_besar:'bulkFactor',barcode_satuan_besar:'bulkBarcode',stok_awal:'openingQty',modal_awal:'openingCost',nomor_batch:'batchNo',tanggal_exp:'expiresOn' },
+  PRODUCTS: { no_barang_sku:'sku',sku:'sku',nama_barang:'name',nama:'name',kategori:'category',merek:'brand',satuan_terkecil:'baseUnit',satuan_dasar:'baseUnit',barcode_satuan_terkecil:'baseBarcode',barcode_dasar:'baseBarcode',harga_umum:'retailPrice',harga_ecer:'retailPrice',harga_grosir:'wholesalePrice',min_qty_grosir:'tierQty',harga_per_pcs_grosir:'tierPrice',satuan_besar:'bulkUnit',isi_dalam_pcs:'bulkFactor',isi_satuan_besar:'bulkFactor',barcode_satuan_besar:'bulkBarcode',stok_awal:'openingQty',modal_per_pcs:'openingCost',modal_awal:'openingCost',nomor_batch:'batchNo',tanggal_exp:'expiresOn',stok_minimum:'minimumStock',pantau_exp:'trackExpiry' },
   CUSTOMERS: { kode:'code',nama:'name',telepon:'phone',kelompok:'groupId' },
   SUPPLIERS: { kode:'code',nama:'name',telepon:'phone',alamat:'address' }
 };
-
-function importCsvCell(value) {
-  const text = String(value ?? '');
-  return /[",\n;]/.test(text) ? `"${text.replaceAll('"','""')}"` : text;
-}
 
 function parseCsv(text) {
   const source = text.replace(/^\uFEFF/,'');
@@ -1055,11 +1058,11 @@ function renderImportLocations() {
 }
 
 function downloadImportTemplate() {
-  const template = importTemplates[el('import-kind').value];
-  const csv = `\uFEFF${template.headers.map(importCsvCell).join(',')}\r\n${template.example.map(importCsvCell).join(',')}\r\n`;
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  link.download = template.file; link.click(); URL.revokeObjectURL(link.href);
+  try{
+    const kind=el('import-kind').value,template=workbookTemplates[kind];
+    if(!window.XLSX)throw new Error('Komponen Excel belum siap. Muat ulang aplikasi.');
+    window.XLSX.writeFile(createTemplateWorkbook(window.XLSX,kind),template.file,{compression:true});
+  }catch(error){toast(error.message);}
 }
 
 function resetImportPreview(message = 'Pilih file untuk melihat data sebelum disimpan.') {
@@ -1077,7 +1080,7 @@ function mapCsvRows(kind, matrix) {
   const aliases = importAliases[kind];
   const headers = matrix[0].map((header) => String(header).trim().toLowerCase().replaceAll(' ','_'));
   const mappedHeaders = headers.map((header) => aliases[header] ?? null);
-  const required = kind === 'PRODUCTS' ? ['sku','name','retailPrice'] : ['code','name'];
+  const required = kind === 'PRODUCTS' ? ['name','retailPrice'] : ['code','name'];
   const missing = required.filter((field) => !mappedHeaders.includes(field));
   if (missing.length) throw new Error('Susunan kolom tidak cocok. Gunakan file contoh yang disediakan.');
   return matrix.slice(1).map((cells) => Object.fromEntries(mappedHeaders.map((field,index) => [field,cells[index] ?? '']).filter(([field]) => field)));
@@ -1091,8 +1094,8 @@ function renderImportPreview(preview) {
   el('import-validity').className = `pill ${preview.valid ? 'success' : ''}`;
   el('import-validity').textContent = preview.valid ? 'Siap disimpan' : 'Perlu diperbaiki';
   el('import-errors').innerHTML = preview.errors.length ? `<div class="import-error-list"><strong>${preview.errors.length} hal perlu diperbaiki</strong>${preview.errors.slice(0,20).map((error) => `<p>Baris ${error.row || '—'} · ${escapeHtml(error.message)}</p>`).join('')}</div>` : '';
-  const keys = preview.kind === 'PRODUCTS' ? ['sku','name','retailPrice','wholesalePrice','bulkUnit','openingQty','expiresOn'] : preview.kind === 'CUSTOMERS' ? ['code','name','phone','groupId'] : ['code','name','phone','address'];
-  const labels = { sku:'SKU',name:'Nama',retailPrice:'Harga ecer',wholesalePrice:'Harga grosir',bulkUnit:'Satuan besar',openingQty:'Stok awal',expiresOn:'EXP',code:'Kode',phone:'Telepon',groupId:'Kelompok',address:'Alamat' };
+  const keys = preview.kind === 'PRODUCTS' ? ['sku','name','retailPrice','bulkUnit','openingQty','minimumStock','trackExpiry'] : preview.kind === 'CUSTOMERS' ? ['code','name','phone','groupId'] : ['code','name','phone','address'];
+  const labels = { sku:'No. barang / SKU',name:'Nama',retailPrice:'Harga umum',bulkUnit:'Satuan besar',openingQty:'Stok awal',minimumStock:'Stok minimum',trackExpiry:'Pantau EXP',code:'Kode',phone:'Telepon',groupId:'Kelompok',address:'Alamat' };
   el('import-preview').innerHTML = `<table><thead><tr><th>Baris</th>${keys.map((key) => `<th>${labels[key]}</th>`).join('')}</tr></thead><tbody>${preview.rows.slice(0,50).map((row,index) => `<tr><td>${index+2}</td>${keys.map((key) => `<td>${escapeHtml(row[key] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table>${preview.rows.length>50?'<p class="muted import-more">Menampilkan 50 baris pertama.</p>':''}`;
   el('commit-import').disabled = !preview.valid;
   el('import-message').textContent = preview.valid ? `${summary.total} baris sudah lolos pemeriksaan dan belum disimpan.` : 'Perbaiki file sesuai pesan, lalu pilih kembali file tersebut.';
@@ -1106,7 +1109,10 @@ async function inspectImportFile() {
   el('commit-import').disabled = true;
   try {
     const kind = el('import-kind').value;
-    const rows = mapCsvRows(kind, parseCsv(await file.text()));
+    const isCsv=file.name.toLowerCase().endsWith('.csv');
+    if(!isCsv&&!window.XLSX)throw new Error('Komponen Excel belum siap. Muat ulang aplikasi.');
+    const matrix=isCsv?parseCsv(await file.text()):workbookMatrix(window.XLSX,await file.arrayBuffer(),kind);
+    const rows = mapCsvRows(kind,matrix);
     const input = { kind, locationId: kind === 'PRODUCTS' ? el('import-location').value : null, rows };
     const preview = await request('/api/imports/preview', { method:'POST', body:JSON.stringify(input) });
     state.importDraft = { ...input, rows: preview.rows, fileName: file.name, idempotencyKey: crypto.randomUUID(), valid: preview.valid };
@@ -5856,6 +5862,8 @@ el('product-price-tiers').addEventListener('click',(event)=>{
 });
 el('product-admin-search').addEventListener('input',renderProductTable);
 el('product-admin-status').addEventListener('change',renderProductTable);
+el('export-products-xlsx').addEventListener('click',exportProductsXlsx);
+['export-product-category','export-product-brand','export-product-status','export-product-sort'].forEach((id)=>el(id).addEventListener('change',updateProductExportCount));
 el('product-table').addEventListener('click',(event)=>{
   const row=event.target.closest('[data-product-id]');if(!row)return;
   if(event.target.closest('.edit-product'))openProductEditor(row.dataset.productId);

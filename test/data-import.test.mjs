@@ -38,7 +38,7 @@ test('pratinjau impor memisahkan produk baru dan produk yang diperbarui tanpa me
   try{
     const result=await callApi('POST','imports/preview',{kind:'PRODUCTS',locationId:ids.location,rows:[
       {sku:'KOS-001',name:'Lip Tint',retailPrice:'25000'},
-      {sku:'KOS-002',name:'Bedak',retailPrice:'30000'}
+      {sku:'',name:'Bedak',retailPrice:'30000'}
     ]});
     assert.equal(result.status,200);
     assert.equal(result.body.valid,true);
@@ -76,15 +76,54 @@ test('impor tervalidasi diteruskan ke transaksi database dengan idempotensi', as
   }
 });
 
-test('fondasi impor memiliki audit, perlindungan stok berjalan, dan UI pratinjau', async () => {
+test('commit produk mengalokasikan SKU kosong dan memisahkan barang baru dari edit aman',async()=>{
+  const originalFetch=globalThis.fetch,previous={url:process.env.SUPABASE_URL,anon:process.env.SUPABASE_ANON_KEY,service:process.env.SUPABASE_SERVICE_ROLE_KEY};
+  process.env.SUPABASE_URL='https://project.supabase.test';process.env.SUPABASE_ANON_KEY='anon';process.env.SUPABASE_SERVICE_ROLE_KEY='service';
+  const rpcs=[];
+  globalThis.fetch=async(url,options={})=>{
+    const target=String(url),body=options.body?JSON.parse(options.body):null;
+    if(target.endsWith('/auth/v1/user'))return responseOf({id:ids.user});
+    if(target.includes('/rest/v1/profiles?'))return responseOf([{user_id:ids.user,tenant_id:ids.tenant,display_name:'Owner',role:'OWNER',active:true}]);
+    if(target.includes('/rest/v1/outlets?'))return responseOf([{id:ids.outlet,name:'Toko Utama',active:true}]);
+    if(target.includes('/rest/v1/stock_locations?'))return responseOf([{id:ids.location,outlet_id:ids.outlet,name:'Toko Utama',kind:'STORE'}]);
+    if(target.includes('/rest/v1/products?'))return responseOf(target.includes('select=sku')?[{sku:'KOS-001'}]:[{id:ids.product,sku:'KOS-001'}]);
+    if(target.includes('/rest/v1/product_units?'))return responseOf([]);
+    if(target.includes('/rest/v1/rpc/')){
+      const name=target.split('/').pop();rpcs.push({name,body});
+      if(name==='allocate_product_skus_v1')return responseOf(['000001']);
+      if(name==='import_initial_data')return responseOf({created:1,updated:0,duplicate:false});
+      if(name==='update_import_products_v1')return responseOf({created:0,updated:1,duplicate:false});
+      return responseOf(name==='apply_import_product_settings_v1'?1:{});
+    }
+    return responseOf({message:`Mock belum menangani ${target}`},500);
+  };
+  try{
+    const result=await callApi('POST','imports/commit',{kind:'PRODUCTS',fileName:'barang.xlsx',locationId:ids.location,rows:[{sku:'',name:'Baru',retailPrice:10000},{sku:'KOS-001',name:'Lip Tint Edit',retailPrice:26000}]},{'idempotency-key':'excel-1'});
+    assert.equal(result.status,201);assert.deepEqual(result.body,{kind:'PRODUCTS',total:2,created:1,updated:1,duplicate:false,chunks:2});
+    assert.equal(rpcs.find((call)=>call.name==='import_initial_data').body.p_rows[0].sku,'000001');
+    assert.equal(rpcs.find((call)=>call.name==='update_import_products_v1').body.p_rows[0].sku,'KOS-001');
+  }finally{
+    globalThis.fetch=originalFetch;
+    for(const [key,value] of Object.entries(previous)){const envKey={url:'SUPABASE_URL',anon:'SUPABASE_ANON_KEY',service:'SUPABASE_SERVICE_ROLE_KEY'}[key];if(value===undefined)delete process.env[envKey];else process.env[envKey]=value;}
+  }
+});
+
+test('fondasi impor memiliki audit, perlindungan stok berjalan, dan UI pratinjau Excel', async () => {
   const migration=await readFile(new URL('../supabase/migrations/202607230011_initial_data_import.sql',import.meta.url),'utf8');
   const html=await readFile(new URL('../apps/web/index.html',import.meta.url),'utf8');
   const script=await readFile(new URL('../apps/web/app.js',import.meta.url),'utf8');
+  const api=await readFile(new URL('../api/index.mjs',import.meta.url),'utf8');
   assert.match(migration,/create table if not exists public\.import_jobs/i);
   assert.match(migration,/sudah memiliki riwayat transaksi/i);
   assert.match(migration,/INITIAL_DATA_IMPORTED/);
   assert.match(migration,/unique\(tenant_id,idempotency_key\)/i);
   assert.match(html,/id="page-imports"/);
   assert.match(script,/imports\/preview/);
-  assert.match(html,/Unduh contoh CSV/);
+  const excelMigration=await readFile(new URL('../supabase/migrations/202607280041_excel_product_import.sql',import.meta.url),'utf8');
+  assert.match(html,/Unduh template Excel/);
+  assert.match(html,/xlsx\.full\.min\.js/);
+  assert.match(api,/allocate_product_skus_v1/);
+  assert.match(api,/update_import_products_v1/);
+  assert.match(excelMigration,/product_import_sku_reservations/);
+  assert.match(excelMigration,/PRODUCTS_MASS_UPDATED/);
 });

@@ -701,6 +701,7 @@ td:nth-last-child(-n+2),.document-amount,.planning-fact strong{font-variant-nume
   html{scroll-behavior:auto}
   *,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}
 }
+.product-export-panel{margin-bottom:18px}.product-export-filters{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:12px;margin:16px 0 10px}.product-export-filters label{margin:0}@media(max-width:900px){.product-export-filters{grid-template-columns:repeat(2,1fr)}}@media(max-width:600px){.product-export-filters{grid-template-columns:1fr}.product-export-panel .import-preview-heading{display:grid}.product-export-panel .button{width:100%}}
 @media print{
   .sidebar,.topbar,.mobile-cart-jump{display:none!important}
   .app{display:block}

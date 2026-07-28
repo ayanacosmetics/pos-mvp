@@ -932,11 +932,20 @@ function importNumber(value) {
   return Number.isFinite(number) ? number : NaN;
 }
 
+function importBoolean(value){
+  if(typeof value==='boolean')return value;
+  const normalized=String(value??'').trim().toLowerCase();
+  if(!normalized)return false;
+  if(['ya','yes','y','true','1','aktif'].includes(normalized))return true;
+  if(['tidak','no','n','false','0','nonaktif'].includes(normalized))return false;
+  return null;
+}
+
 function normalizeImportRows(kind, rawRows) {
   const rows = [], errors = [], seenCodes = new Set(), seenBarcodes = new Set();
   const addError = (row, field, message) => errors.push({ row, field, message });
   if (!Array.isArray(rawRows) || !rawRows.length) return { rows, errors: [{ row: 0, field: 'file', message: 'File tidak memiliki data' }] };
-  if (rawRows.length > 500) return { rows, errors: [{ row: 0, field: 'file', message: 'Maksimal 500 baris per impor' }] };
+  if (rawRows.length > 10000) return { rows, errors: [{ row: 0, field: 'file', message: 'Maksimal 10.000 baris per file' }] };
 
   rawRows.forEach((raw, index) => {
     const rowNo = index + 2;
@@ -950,12 +959,12 @@ function normalizeImportRows(kind, rawRows) {
         bulkUnit: String(raw.bulkUnit ?? '').trim(), bulkFactor: importNumber(raw.bulkFactor),
         bulkBarcode: String(raw.bulkBarcode ?? '').trim(), openingQty: importNumber(raw.openingQty),
         openingCost: importNumber(raw.openingCost), batchNo: String(raw.batchNo ?? '').trim(),
-        expiresOn: String(raw.expiresOn ?? '').trim()
+        expiresOn: String(raw.expiresOn ?? '').trim(), minimumStock: importNumber(raw.minimumStock) ?? 0,
+        trackExpiry: importBoolean(raw.trackExpiry)
       };
-      if (!row.sku) addError(rowNo, 'sku', 'SKU wajib diisi');
       if (!row.name) addError(rowNo, 'name', 'Nama produk wajib diisi');
       if (!(row.retailPrice > 0)) addError(rowNo, 'retailPrice', 'Harga ecer harus lebih dari nol');
-      if (seenCodes.has(row.sku)) addError(rowNo, 'sku', `SKU ${row.sku} muncul lebih dari sekali`);
+      if (row.sku && seenCodes.has(row.sku)) addError(rowNo, 'sku', `SKU ${row.sku} muncul lebih dari sekali`);
       if (row.sku) seenCodes.add(row.sku);
       for (const [field, barcode] of [['baseBarcode',row.baseBarcode],['bulkBarcode',row.bulkBarcode]]) {
         if (barcode && seenBarcodes.has(barcode)) addError(rowNo, field, `Barcode ${barcode} muncul lebih dari sekali`);
@@ -967,6 +976,8 @@ function normalizeImportRows(kind, rawRows) {
       if (row.openingQty !== null && !(row.openingQty >= 0)) addError(rowNo, 'openingQty', 'Stok awal tidak valid');
       if (row.openingQty > 0 && !(row.openingCost >= 0)) addError(rowNo, 'openingCost', 'Modal awal wajib diisi');
       if (row.expiresOn && !/^\d{4}-\d{2}-\d{2}$/.test(row.expiresOn)) addError(rowNo, 'expiresOn', 'Tanggal EXP harus YYYY-MM-DD');
+      if (!(row.minimumStock >= 0)) addError(rowNo, 'minimumStock', 'Stok minimum tidak valid');
+      if (row.trackExpiry === null) addError(rowNo, 'trackExpiry', 'Pantau EXP harus YA atau TIDAK');
       rows.push(row);
       return;
     }
@@ -1007,15 +1018,9 @@ async function previewImport(context, input) {
         if (barcode && owner && owner !== row.sku) normalized.errors.push({ row: index+2, field, message: `Barcode sudah digunakan SKU ${owner}` });
       }
     });
-    const existingIds = normalized.rows.map((row) => existing.find((item) => String(item.sku).toUpperCase() === row.sku)?.id).filter(Boolean);
-    if (locationId && existingIds.length) {
-      const ledger = await rest('stock_ledger', `tenant_id=eq.${context.tenantId}&location_id=eq.${locationId}&product_id=${inFilter(existingIds)}&select=product_id`);
-      const withHistory = new Set(ledger.map((row) => row.product_id));
-      normalized.rows.forEach((row,index) => {
-        const productId = existing.find((item) => String(item.sku).toUpperCase() === row.sku)?.id;
-        if (row.openingQty !== null && productId && withHistory.has(productId)) normalized.errors.push({ row: index+2, field: 'openingQty', message: 'Produk sudah memiliki transaksi; gunakan stok opname, bukan stok awal' });
-      });
-    }
+    normalized.rows.forEach((row,index) => {
+      if(row.openingQty!==null&&existingCodes.has(row.sku))normalized.errors.push({row:index+2,field:'openingQty',message:'Kosongkan stok awal saat mengedit barang; gunakan stok opname atau restok'});
+    });
   }
   const summary = {
     total: normalized.rows.length,
@@ -1174,7 +1179,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.12.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.13.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1814,14 +1819,32 @@ async function routeRequest(request, response, route) {
     if (!preview.valid) { const error = new Error(`Masih ada ${preview.errors.length} kesalahan pada data impor`); error.status = 400; throw error; }
     const key = request.headers['idempotency-key'] || input.idempotencyKey;
     if (!key) { const error = new Error('Identitas proses impor tidak tersedia'); error.status = 400; throw error; }
-    const result = await rpc('import_initial_data', {
-      p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_idempotency_key: key,
-      p_kind: preview.kind, p_file_name: input.fileName ?? null, p_location_id: preview.locationId, p_rows: preview.rows
-    });
-    if(preview.kind==='PRODUCTS')await rpc('refresh_safe_customer_prices_v1',{
-      p_tenant_id:context.tenantId,p_product_id:null
-    });
-    return send(response, 201, result);
+    let rows=preview.rows.map((row)=>({...row}));
+    if(preview.kind==='PRODUCTS'){
+      const blankCount=rows.filter((row)=>!row.sku).length;
+      if(blankCount){
+        const allocated=await rpc('allocate_product_skus_v1',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:key,p_count:blankCount});
+        let cursor=0;rows=rows.map((row)=>row.sku?row:{...row,sku:allocated[cursor++]});
+      }
+    }
+    const tasks=[];
+    const addChunks=(type,items)=>{for(let index=0;index<items.length;index+=500)tasks.push({type,rows:items.slice(index,index+500)});};
+    if(preview.kind==='PRODUCTS'){
+      const products=await rest('products',`tenant_id=eq.${context.tenantId}&select=sku`),existing=new Set(products.map((product)=>String(product.sku).toUpperCase()));
+      addChunks('CREATE',rows.filter((row)=>!existing.has(row.sku)));
+      addChunks('UPDATE',rows.filter((row)=>existing.has(row.sku)));
+    }else addChunks('STANDARD',rows);
+    const results=[];
+    for(let index=0;index<tasks.length;index+=1){
+      const task=tasks[index],chunkKey=tasks.length===1?key:`${key}:${index+1}`;
+      const result=task.type==='UPDATE'
+        ?await rpc('update_import_products_v1',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:chunkKey,p_file_name:input.fileName??null,p_rows:task.rows})
+        :await rpc('import_initial_data',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:chunkKey,p_kind:preview.kind,p_file_name:input.fileName??null,p_location_id:preview.locationId,p_rows:task.rows});
+      if(preview.kind==='PRODUCTS'&&task.type==='CREATE')await rpc('apply_import_product_settings_v1',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_rows:task.rows});
+      results.push(result);
+    }
+    if(preview.kind==='PRODUCTS')await rpc('refresh_safe_customer_prices_v1',{p_tenant_id:context.tenantId,p_product_id:null});
+    return send(response,201,{kind:preview.kind,total:rows.length,created:results.reduce((sum,item)=>sum+Number(item.created??0),0),updated:results.reduce((sum,item)=>sum+Number(item.updated??0),0),duplicate:results.length>0&&results.every((item)=>item.duplicate),chunks:results.length});
   }
 
   if (request.method === 'GET' && route === 'imports') {
