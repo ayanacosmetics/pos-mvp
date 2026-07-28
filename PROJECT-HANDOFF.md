@@ -45,6 +45,18 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.9.6 Laporan Penjualan Ringkas dikonfirmasi live
+
+- Halaman awal laporan penjualan hanya menampilkan pilihan hari, bulan, tahun,
+  dan seluruh waktu; pilihan membuka halaman rincian bertingkat.
+- Empat tombol metrik mengganti satu panel nilai bersama untuk jumlah transaksi,
+  pendapatan, keuntungan, dan retur pelanggan.
+- Riwayat harian menampilkan nomor struk, waktu, pendapatan, serta keuntungan;
+  angka retur dan void ikut dihitung dengan benar.
+- API `2.9.6-cloud`, aset/cache PWA `v95`, dan 213 pengujian otomatis lulus.
+- Commit fitur `e298008` sudah didorong ke `origin/main`; alias produksi aktif.
+- Tidak memerlukan migrasi SQL baru.
+
 ### Rilis v2.6.3 Header & Footer dikonfirmasi live
 
 - Editor struk menyediakan keterangan header dan footer tambahan yang mendukung
