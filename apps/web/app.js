@@ -25,6 +25,9 @@ state.salesYears = [];
 state.salesPeriodTrail = [];
 state.salesReportFilter = {staffId:'',paymentState:'ALL',sort:'DESC',paymentMethods:['CASH','QRIS','TRANSFER','EDC','CREDIT','MULTIPAYMENT'],includeCreditProfit:true,includeCreditRevenue:false};
 state.salesAnalysis = {preset:'TODAY',sort:'QTY_DESC',data:null,view:'sales-products'};
+state.purchaseReportOpen = false;
+state.purchaseReportPeriod = 'TODAY';
+state.purchaseReportReceipts = [];
 const el = (id) => document.getElementById(id);
 const posDevice = deviceIdentity();
 const roleLabels = { OWNER: 'Owner', ADMIN: 'Admin', MANAGER: 'Manajer Outlet', CASHIER: 'Kasir', PURCHASING: 'Pembelian', WAREHOUSE: 'Gudang' };
@@ -3995,7 +3998,6 @@ async function loadReport() {
       renderSalesPeriodBreakdown();
       if(['DAY','RANGE'].includes(state.salesPeriodLevel))await loadPosSales('',{reportScope:true});
     }
-    if(state.reportView==='purchases-history')await loadPurchaseReportReceipts();
   } catch (error) {
     el('report-status').textContent = `Laporan belum dapat dimuat: ${error.message}`;
     toast(error.message);
@@ -4512,22 +4514,52 @@ async function loadPosSales(query='',{reportScope=false}={}) {
   }
 }
 
+function purchaseReportRange(period=state.purchaseReportPeriod){
+  const today=storeDateToday();
+  if(period==='MONTH')return{from:`${today.slice(0,7)}-01`,to:today,title:'Bulan ini'};
+  if(period==='YEAR')return{from:`${today.slice(0,4)}-01-01`,to:today,title:'Tahun ini'};
+  if(period==='ALL')return{from:'2000-01-01',to:today,title:'Selama ini'};
+  return{from:today,to:today,title:'Hari ini'};
+}
+
+function renderPurchaseReportReceipts(){
+  const query=el('purchase-report-search').value.trim().toLowerCase();
+  const receipts=(state.purchaseReportReceipts??[]).filter((receipt)=>!query||`${receipt.documentNo} ${receipt.supplierName} ${receipt.outletName} ${receipt.receiver}`.toLowerCase().includes(query));
+  const metrics=(state.purchaseReportReceipts??[]).reduce((sum,receipt)=>{
+    sum.total+=Number(receipt.total);sum.qty+=receipt.lines.reduce((qty,line)=>qty+Number(line.qty),0);sum.suppliers.add(receipt.supplierId??receipt.supplierName);return sum;
+  },{total:0,qty:0,suppliers:new Set()});
+  el('purchase-report-metrics').innerHTML=`<article><small>Jumlah transaksi</small><strong>${Number(state.purchaseReportReceipts?.length??0).toLocaleString('id-ID')}</strong></article><article><small>Total pembelian</small><strong>${money.format(metrics.total)}</strong></article><article><small>Qty diterima</small><strong>${metrics.qty.toLocaleString('id-ID')} pcs</strong></article><article><small>Supplier</small><strong>${metrics.suppliers.size.toLocaleString('id-ID')}</strong></article>`;
+  el('purchase-report-list').innerHTML=receipts.length?receipts.map((receipt)=>`<button class="purchase-report-row" type="button" data-purchase-report-id="${escapeHtml(receipt.id)}"><span><small>Nomor struk</small><strong>${escapeHtml(receipt.documentNo)}</strong><small>${escapeHtml(receipt.supplierName)}</small></span><span><small>Waktu transaksi</small><strong>${new Date(receipt.occurredAt).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</strong><small>${new Date(receipt.occurredAt).toLocaleDateString('id-ID')}</small></span><span><small>Total pembelian</small><strong>${money.format(receipt.total)}</strong><small>${receipt.lines.length} jenis · ${escapeHtml(receipt.outletName)}</small></span><b>›</b></button>`).join(''):'<div class="empty-state compact">Pembelian tidak ditemukan pada periode ini.</div>';
+}
+
 async function loadPurchaseReportReceipts(){
   if(!navigator.onLine)return;
-  const params=new URLSearchParams({from:el('report-from').value,to:el('report-to').value});
+  const range=purchaseReportRange(),params=new URLSearchParams({from:range.from,to:range.to});
   if(el('report-outlet').value)params.set('outletId',el('report-outlet').value);
   el('purchase-report-list').innerHTML='<div class="empty-state compact">Memuat pembelian...</div>';
   try{
     const data=await request(`/api/purchase-receipts/report?${params}`);
     state.purchaseReportReceipts=data.receipts??[];
-    el('purchase-report-list').innerHTML=state.purchaseReportReceipts.length?state.purchaseReportReceipts.map((receipt)=>`<button class="purchase-report-row" type="button" data-purchase-report-id="${escapeHtml(receipt.id)}"><span><strong>${escapeHtml(receipt.documentNo)}</strong><small>${new Date(receipt.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(receipt.supplierName)}</small></span><span><strong>${money.format(receipt.total)}</strong><small>${receipt.lines.length} jenis · ${escapeHtml(receipt.outletName)}</small></span><b>›</b></button>`).join(''):'<div class="empty-state compact">Belum ada pembelian pada periode ini.</div>';
+    renderPurchaseReportReceipts();
   }catch(error){el('purchase-report-list').innerHTML=`<div class="empty-state compact">${escapeHtml(error.message)}</div>`;}
 }
 
 function openPurchaseReportReceipt(receipt){
   if(!receipt)return;
-  el('purchase-report-content').innerHTML=`<article class="purchase-original-document"><header><p class="eyebrow">STRUK PEMBELIAN</p><h1>${escapeHtml(state.business.name??'Kasir Nusa POS')}</h1><strong>${escapeHtml(receipt.documentNo)}</strong><small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small></header><section class="purchase-original-meta"><div><span>Supplier</span><strong>${escapeHtml(receipt.supplierName)}</strong></div><div><span>Outlet</span><strong>${escapeHtml(receipt.outletName)}</strong></div><div><span>Lokasi penerimaan</span><strong>${escapeHtml(receipt.locationName)}</strong></div><div><span>Diterima oleh</span><strong>${escapeHtml(receipt.receiver)}</strong></div></section><table><thead><tr><th>Barang</th><th>Jumlah</th><th>Modal</th><th>Total</th></tr></thead><tbody>${receipt.lines.map((line)=>`<tr><td><strong>${escapeHtml(line.productName)}</strong><small>${escapeHtml(line.sku)}${line.batchNo?` · Batch ${escapeHtml(line.batchNo)}`:''}${line.expiresOn?` · EXP ${new Date(`${line.expiresOn}T00:00:00`).toLocaleDateString('id-ID')}`:''}</small></td><td>${Number(line.qty).toLocaleString('id-ID')} ${escapeHtml(line.unitName)}</td><td>${money.format(line.unitCost)}</td><td>${money.format(line.total)}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="3">TOTAL PEMBELIAN</td><td>${money.format(receipt.total)}</td></tr></tfoot></table><footer><small>Dokumen ini merupakan catatan penerimaan barang sesuai data yang tersimpan pada sistem.</small></footer></article>`;
-  el('purchase-report-dialog').showModal();
+  state.activePurchaseReportReceipt=receipt;
+  el('purchase-report-number').textContent=receipt.documentNo;
+  el('purchase-report-content').innerHTML=`<header><p class="eyebrow">STRUK PEMBELIAN</p><h1>${escapeHtml(state.business.name??'Kasir Nusa POS')}</h1><strong>${escapeHtml(receipt.documentNo)}</strong><small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small></header><section class="purchase-original-meta"><div><span>Supplier</span><strong>${escapeHtml(receipt.supplierName)}</strong></div><div><span>Outlet</span><strong>${escapeHtml(receipt.outletName)}</strong></div><div><span>Lokasi penerimaan</span><strong>${escapeHtml(receipt.locationName)}</strong></div><div><span>Diterima oleh</span><strong>${escapeHtml(receipt.receiver)}</strong></div></section><section class="purchase-receipt-lines"><div class="purchase-receipt-line heading"><span>Barang</span><span>Jumlah</span><span>Modal</span><span>Total</span></div>${receipt.lines.map((line)=>`<div class="purchase-receipt-line"><span><strong>${escapeHtml(line.productName)}</strong><small>${escapeHtml(line.sku)}${line.batchNo?` · Batch ${escapeHtml(line.batchNo)}`:''}${line.expiresOn?` · EXP ${new Date(`${line.expiresOn}T00:00:00`).toLocaleDateString('id-ID')}`:''}</small></span><span data-label="Jumlah">${Number(line.qty).toLocaleString('id-ID')} ${escapeHtml(line.unitName)}</span><span data-label="Modal">${money.format(line.unitCost)}</span><strong data-label="Total">${money.format(line.total)}</strong></div>`).join('')}<div class="purchase-receipt-total"><span>TOTAL PEMBELIAN</span><strong>${money.format(receipt.total)}</strong></div></section><footer><small>Dokumen ini merupakan catatan penerimaan barang sesuai data yang tersimpan pada sistem.</small></footer>`;
+  el('purchase-report-receipt-page').classList.remove('hidden');
+  el('page-reports').classList.add('purchase-receipt-open');
+  document.body.classList.add('purchase-receipt-open');
+  window.scrollTo({top:0,behavior:'instant'});
+}
+
+function closePurchaseReportReceipt(){
+  el('purchase-report-receipt-page').classList.add('hidden');
+  el('page-reports').classList.remove('purchase-receipt-open');
+  document.body.classList.remove('purchase-receipt-open');
+  state.activePurchaseReportReceipt=null;
 }
 
 function renderPosSales(){
@@ -4656,9 +4688,22 @@ function syncSalesReportShell(){
   }
 }
 
+function syncPurchaseReportShell(){
+  const active=state.reportView==='purchases-history',detail=active&&state.purchaseReportOpen;
+  el('purchase-period-nav').classList.toggle('hidden',!active||detail);
+  el('purchase-report-detail-toolbar').classList.toggle('hidden',!detail);
+  el('report-purchase-workspace').classList.toggle('hidden',!detail);
+  if(!active)return;
+  el('report-filter-panel').classList.add('hidden');
+  el('report-status').classList.add('hidden');
+  el('report-cards').classList.add('hidden');
+  el('sales-metric-value').classList.add('hidden');
+}
+
 function showReportView(name='summary'){
   const page=el('page-reports'),primary=page.querySelector('.report-grid.report-primary'),grids=[...page.querySelectorAll('.report-grid')],secondary=grids.find((grid)=>grid!==primary);
   if(page.classList.contains('receipt-page-open'))closeHistoryReceiptPage();
+  if(page.classList.contains('purchase-receipt-open'))closePurchaseReportReceipt();
   const cards=el('report-cards'),daily=primary?.children[0],products=primary?.children[1],outlets=secondary?.children[0],purchases=secondary?.children[1];
   const sales=el('report-sales-workspace'),purchaseWorkspace=el('report-purchase-workspace'),audit=el('audit-logs').closest('.surface');
   state.reportView=name;
@@ -4666,7 +4711,7 @@ function showReportView(name='summary'){
     summary:['Kinerja usaha','Pendapatan bersih dan laba sudah memperhitungkan retur pada periode terpilih.'],
     performance:['Kinerja produk & outlet','Bandingkan omzet, laba, jumlah terjual, dan kontribusi setiap outlet.'],
     purchases:['Laporan pembelian','Nilai penerimaan dan retur pembelian dirangkum per supplier.'],
-    'purchases-history':['Riwayat pembelian','Buka setiap transaksi untuk melihat dan mencetak struk pembelian asli.'],
+    'purchases-history':['Laporan pembelian','Pilih periode untuk melihat nilai, supplier, dan struk pembelian asli.'],
     sales:['Transaksi','Pendapatan, keuntungan, retur, dan seluruh riwayat struk dalam satu halaman.'],
     'sales-products':['Penjualan barang','Daftar barang terjual beserta qty, pendapatan, dan keuntungan.'],
     'sales-categories':['Penjualan kategori','Bandingkan qty, pendapatan, dan keuntungan setiap kategori.'],
@@ -4676,7 +4721,8 @@ function showReportView(name='summary'){
   };
   el('report-page-title').textContent=headings[name]?.[0]??headings.summary[0];
   el('report-page-description').textContent=headings[name]?.[1]??headings.summary[1];
-  el('export-report').classList.toggle('hidden',['sales-products','sales-categories','sales-addons','stock-flow'].includes(name));
+  el('export-report').classList.toggle('hidden',['sales-products','sales-categories','sales-addons','stock-flow','purchases-history'].includes(name));
+  el('refresh-report').classList.toggle('hidden',name==='purchases-history');
   if(name!=='sales')el('sales-period-breakdown').classList.add('hidden');
   cards.classList.toggle('hidden',!['summary','sales'].includes(name));
   daily?.classList.toggle('hidden',name!=='summary');
@@ -4691,6 +4737,7 @@ function showReportView(name='summary'){
   if(primary)primary.style.gridTemplateColumns='1fr';
   if(secondary)secondary.style.gridTemplateColumns='1fr';
   if(name==='sales')state.salesReportOpen=false;
+  if(name==='purchases-history')state.purchaseReportOpen=false;
   if(['sales-products','sales-categories','sales-addons','stock-flow'].includes(name)){
     const switchingFlow=(name==='stock-flow')!==(state.salesAnalysis.view==='stock-flow');
     if(switchingFlow){state.salesAnalysis.preset='TODAY';state.salesAnalysis.sort=name==='stock-flow'?'DATE_DESC':'QTY_DESC';}
@@ -4702,8 +4749,8 @@ function showReportView(name='summary'){
     el('sales-analysis-sort-menu').querySelectorAll('[data-analysis-sort]').forEach((button)=>button.classList.toggle('active',button.dataset.analysisSort===state.salesAnalysis.sort));
   }
   syncSalesReportShell();
+  syncPurchaseReportShell();
   if(['sales-products','sales-categories','sales-addons','stock-flow'].includes(name)&&state.session)loadSalesAnalysis();
-  if(name==='purchases-history'&&state.session)loadPurchaseReportReceipts();
 }
 
 function showSettingsView(name='business'){
@@ -5226,8 +5273,20 @@ el('history-receipt-menu-backdrop').addEventListener('click',closeHistoryReceipt
 el('close-history-receipt-menu').addEventListener('click',closeHistoryReceiptMenu);
 el('history-receipt-menu').addEventListener('click',(event)=>{const button=event.target.closest('[data-history-receipt-action]');if(button)handleHistoryReceiptAction(button.dataset.historyReceiptAction);});
 el('refresh-purchase-report').addEventListener('click',loadPurchaseReportReceipts);
+el('purchase-period-nav').addEventListener('click',(event)=>{
+  const button=event.target.closest('[data-purchase-period]');if(!button)return;
+  state.purchaseReportPeriod=button.dataset.purchasePeriod;
+  state.purchaseReportOpen=true;
+  el('purchase-report-detail-title').textContent=purchaseReportRange().title;
+  syncPurchaseReportShell();
+  loadPurchaseReportReceipts();
+});
+el('close-purchase-report-detail').addEventListener('click',()=>{
+  state.purchaseReportOpen=false;syncPurchaseReportShell();
+});
+el('purchase-report-search').addEventListener('input',renderPurchaseReportReceipts);
 el('purchase-report-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-purchase-report-id]');if(!row)return;const receipt=(state.purchaseReportReceipts||[]).find((item)=>item.id===row.dataset.purchaseReportId);if(receipt)openPurchaseReportReceipt(receipt);});
-el('close-purchase-report').addEventListener('click',()=>el('purchase-report-dialog').close());
+el('back-purchase-report').addEventListener('click',closePurchaseReportReceipt);
 el('print-purchase-report').addEventListener('click',()=>{document.body.classList.add('purchase-report-print');window.print();});
 window.addEventListener('afterprint',()=>document.body.classList.remove('purchase-report-print','history-receipt-print'));
 el('pos-history-detail').addEventListener('click',(event)=>{

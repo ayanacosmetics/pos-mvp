@@ -43,5 +43,5 @@ test('pilot features use separate pages and safe recovery drill',async()=>{
   assert.equal(html.includes('Pulihkan database sekarang'),false);
   assert.ok(api.includes("route==='pilot/telemetry'"));
   assert.ok(api.includes("detail_json:{online:input.online!==false,platform:"));
-  assert.ok(api.includes("version: '2.10.2-cloud'"));
+  assert.ok(api.includes("version: '2.10.3-cloud'"));
 });

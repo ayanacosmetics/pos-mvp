@@ -45,6 +45,18 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.10.3 Laporan Pembelian
+
+- Laporan pembelian memakai halaman awal seperti laporan transaksi penjualan:
+  pilihan hari ini, bulan ini, tahun ini, dan selama ini membuka rincian periode.
+- Rincian menampilkan jumlah transaksi, total pembelian, qty diterima, jumlah
+  supplier, pencarian, dan daftar struk penerimaan.
+- Laporan pembelian dan riwayat pembelian lama digabung menjadi satu tujuan agar
+  tidak ada menu ganda.
+- Struk pembelian kini dibuka sebagai halaman penuh dengan tombol kembali dan
+  cetak. Baris barang responsif di mobile tanpa tabel yang harus digeser.
+- API `2.10.3-cloud`, aset/cache PWA `v100`, tanpa migrasi SQL baru.
+
 ### Rilis v2.10.2 Jurnal Arus Stok
 
 - Arus stok tidak lagi mengakumulasi per produk. Setiap kejadian jurnal menjadi
