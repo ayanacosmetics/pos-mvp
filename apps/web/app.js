@@ -3707,8 +3707,8 @@ async function loadReport() {
     const [report, audit] = await Promise.all([request(`/api/reports/summary?${params}`), request('/api/audit')]);
     state.report = report;
     renderOperationalReport(audit);
-    if(state.reportView==='sales')await loadPosSales('',{reportScope:true});
-    if(state.reportView==='purchases')await loadPurchaseReportReceipts();
+    if(state.reportView==='sales-history')await loadPosSales('',{reportScope:true});
+    if(state.reportView==='purchases-history')await loadPurchaseReportReceipts();
   } catch (error) {
     el('report-status').textContent = `Laporan belum dapat dimuat: ${error.message}`;
     toast(error.message);
@@ -4272,8 +4272,10 @@ function showReportView(name='summary'){
   const headings={
     summary:['Kinerja usaha','Pendapatan bersih dan laba sudah memperhitungkan retur pada periode terpilih.'],
     performance:['Kinerja produk & outlet','Bandingkan omzet, laba, jumlah terjual, dan kontribusi setiap outlet.'],
-    purchases:['Laporan pembelian','Buka setiap transaksi untuk melihat dan mencetak struk pembelian asli.'],
-    sales:['Laporan penjualan','Lihat pendapatan dan buka struk penjualan asli dari setiap transaksi.'],
+    purchases:['Laporan pembelian','Nilai penerimaan dan retur pembelian dirangkum per supplier.'],
+    'purchases-history':['Riwayat pembelian','Buka setiap transaksi untuk melihat dan mencetak struk pembelian asli.'],
+    sales:['Laporan penjualan','Pantau omzet, laba, dan tren penjualan harian tanpa bercampur dengan daftar struk.'],
+    'sales-history':['Riwayat penjualan','Cari dan buka struk penjualan asli tanpa bercampur dengan grafik laporan.'],
     audit:['Jejak aktivitas','Tinjau aktivitas sensitif yang tercatat oleh sistem.']
   };
   el('report-page-title').textContent=headings[name]?.[0]??headings.summary[0];
@@ -4282,16 +4284,16 @@ function showReportView(name='summary'){
   daily?.classList.toggle('hidden',!['summary','sales'].includes(name));
   products?.classList.toggle('hidden',name!=='performance');
   outlets?.classList.toggle('hidden',name!=='performance');
-  purchases?.classList.add('hidden');
-  sales.classList.toggle('hidden',name!=='sales');
-  purchaseWorkspace.classList.toggle('hidden',name!=='purchases');
+  purchases?.classList.toggle('hidden',name!=='purchases');
+  sales.classList.toggle('hidden',name!=='sales-history');
+  purchaseWorkspace.classList.toggle('hidden',name!=='purchases-history');
   audit.classList.toggle('hidden',name!=='audit');
   primary?.classList.toggle('hidden',!['summary','performance','sales'].includes(name));
-  secondary?.classList.toggle('hidden',name!=='performance');
+  secondary?.classList.toggle('hidden',!['performance','purchases'].includes(name));
   if(primary)primary.style.gridTemplateColumns='1fr';
   if(secondary)secondary.style.gridTemplateColumns='1fr';
-  if(name==='sales'&&state.session)loadPosSales('',{reportScope:true});
-  if(name==='purchases'&&state.session)loadPurchaseReportReceipts();
+  if(name==='sales-history'&&state.session)loadPosSales('',{reportScope:true});
+  if(name==='purchases-history'&&state.session)loadPurchaseReportReceipts();
 }
 
 function showSettingsView(name='business'){
@@ -4766,7 +4768,7 @@ el('mobile-cart-jump').addEventListener('click',()=>setMobilePosView('cart'));
 el('mobile-cart-back').addEventListener('click',()=>setMobilePosView('catalog'));
 el('refresh-pos-history').addEventListener('click',()=>loadPosSales(el('pos-history-search').value,{reportScope:true}));
 el('pos-history-search').addEventListener('input',(event)=>{clearTimeout(event.currentTarget.searchTimer);event.currentTarget.searchTimer=setTimeout(()=>loadPosSales(event.currentTarget.value,{reportScope:true}),250);});
-el('pos-history-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-pos-sale-id]');if(!row)return;const sale=state.posSales.find((item)=>item.id===row.dataset.posSaleId);state.selectedPosSaleId=row.dataset.posSaleId;renderPosSales();if(state.reportView==='sales'&&sale){state.lastReceipt=sale;renderReceipt(sale,sale.payments||[]);}});
+el('pos-history-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-pos-sale-id]');if(!row)return;const sale=state.posSales.find((item)=>item.id===row.dataset.posSaleId);state.selectedPosSaleId=row.dataset.posSaleId;renderPosSales();if(state.reportView==='sales-history'&&sale){state.lastReceipt=sale;renderReceipt(sale,sale.payments||[]);}});
 el('refresh-purchase-report').addEventListener('click',loadPurchaseReportReceipts);
 el('purchase-report-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-purchase-report-id]');if(!row)return;const receipt=(state.purchaseReportReceipts||[]).find((item)=>item.id===row.dataset.purchaseReportId);if(receipt)openPurchaseReportReceipt(receipt);});
 el('close-purchase-report').addEventListener('click',()=>el('purchase-report-dialog').close());

@@ -35,7 +35,7 @@ test('fitur gabungan dipisahkan menjadi tujuan halaman sendiri', async () => {
   assert.match(html,/data-page="outlet-in-transit"/);
   for (const view of ['planning','documents','receipt','supplier-return']) assert.match(html, new RegExp(`data-purchase-view-target="${view}"`));
   assert.match(html, /id="purchase-view-order"/);
-  for (const view of ['summary','performance','purchases','sales','audit']) assert.match(html, new RegExp(`data-report-view="${view}"`));
+  for (const view of ['summary','performance','purchases','purchases-history','sales','sales-history','audit']) assert.match(html, new RegExp(`data-report-view="${view}"`));
   for (const view of ['business','outlets','locations','device','health']) assert.match(html, new RegExp(`data-settings-view="${view}"`));
   assert.match(script, /function showStockView/);
   assert.match(script, /function showReportView/);

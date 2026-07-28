@@ -59,7 +59,7 @@ test('POS menyediakan produk cepat dan riwayat berpindah ke laporan transaksi',a
   assert.match(script,/function handlePosShortcut/);
   assert.match(script,/event\.key==='F9'/);
   assert.match(script,/reprint-pos-sale/);
-  assert.match(script,/state\.reportView==='sales'/);
+  assert.match(script,/state\.reportView==='sales-history'/);
   assert.match(script,/reportScope:true/);
   assert.match(script,/notes:el\('sale-note'\)\.value\.trim\(\)/);
   assert.match(api,/route === 'pos-sales'/);

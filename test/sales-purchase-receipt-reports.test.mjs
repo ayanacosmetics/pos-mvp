@@ -11,13 +11,19 @@ const [html, app, api, css] = await Promise.all([
 
 test('analitik memisahkan laporan penjualan dan pembelian', () => {
   assert.match(html, /data-report-view="sales"[\s\S]*Laporan penjualan/);
+  assert.match(html, /data-report-view="sales-history"[\s\S]*Riwayat penjualan/);
   assert.match(html, /data-report-view="purchases"[\s\S]*Laporan pembelian/);
+  assert.match(html, /data-report-view="purchases-history"[\s\S]*Riwayat pembelian/);
   assert.match(html, /id="report-purchase-workspace"/);
   assert.match(html, /id="purchase-report-list"/);
+  assert.match(app, /daily\?\.classList\.toggle\('hidden',!\['summary','sales'\]\.includes\(name\)\)/);
+  assert.match(app, /sales\.classList\.toggle\('hidden',name!=='sales-history'\)/);
+  assert.match(app, /purchases\?\.classList\.toggle\('hidden',name!=='purchases'\)/);
+  assert.match(app, /purchaseWorkspace\.classList\.toggle\('hidden',name!=='purchases-history'\)/);
 });
 
 test('klik penjualan membuka struk pelanggan asli', () => {
-  assert.match(app, /state\.reportView==='sales'&&sale/);
+  assert.match(app, /state\.reportView==='sales-history'&&sale/);
   assert.match(app, /renderReceipt\(sale,sale\.payments\|\|\[\]\)/);
 });
 
