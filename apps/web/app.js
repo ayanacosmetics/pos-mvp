@@ -8,7 +8,7 @@ import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, uni
 import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], productPriceTiers: {}, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -659,6 +659,104 @@ async function selectPosCustomer(customerId) {
   syncCustomerSearchLabel();
   await updateQuote();
   if (el('pos-customer-dialog')?.open) el('pos-customer-dialog').close();
+}
+
+function defaultPricePolicyRules(){
+  const groups=customCustomerGroups();
+  const member=groups.find((group)=>group.id==='member'||group.name.toLowerCase().includes('member'));
+  const wholesale=groups.find((group)=>group.id==='wholesale'||group.name.toLowerCase().includes('grosir'));
+  const rules=[];
+  if(member)rules.push({customerGroupId:member.id,minBaseQty:1,discountAmount:500});
+  if(wholesale){
+    rules.push({customerGroupId:wholesale.id,minBaseQty:1,discountAmount:500});
+    rules.push({customerGroupId:wholesale.id,minBaseQty:3,discountAmount:1000});
+  }
+  if(!rules.length&&groups[0])rules.push({customerGroupId:groups[0].id,minBaseQty:1,discountAmount:500});
+  return rules;
+}
+
+function renderPricePolicyRules(){
+  const options=customCustomerGroups().map((group)=>`<option value="${escapeHtml(group.id)}">${escapeHtml(group.name)}</option>`).join('');
+  el('price-policy-rules').innerHTML=state.pricePolicyRules.map((rule,index)=>`<div class="price-policy-rule" data-index="${index}">
+    <label>Tipe pelanggan<select class="policy-rule-group">${options}</select></label>
+    <label>Minimal pembelian<input class="policy-rule-qty" type="number" min="1" step="1" value="${Number(rule.minBaseQty)||1}" required></label>
+    <label>Kurangi Harga Umum<input class="policy-rule-discount" type="number" min="1" step="100" value="${Number(rule.discountAmount)||500}" required></label>
+    <button class="icon-button remove-price-policy-rule" type="button" aria-label="Hapus aturan" ${state.pricePolicyRules.length===1?'disabled':''}>×</button>
+  </div>`).join('');
+  [...el('price-policy-rules').querySelectorAll('.policy-rule-group')].forEach((select,index)=>{select.value=state.pricePolicyRules[index].customerGroupId;});
+}
+
+function readPricePolicyInput(){
+  const rules=[...document.querySelectorAll('.price-policy-rule')].map((row)=>({
+    customerGroupId:row.querySelector('.policy-rule-group').value,
+    minBaseQty:Number(row.querySelector('.policy-rule-qty').value),
+    discountAmount:Number(row.querySelector('.policy-rule-discount').value)
+  }));
+  state.pricePolicyRules=rules;
+  return {
+    minProfit:Number(el('price-policy-min-profit').value),
+    category:el('price-policy-category').value,
+    brand:el('price-policy-brand').value,
+    rules
+  };
+}
+
+function invalidatePricePolicyPreview(){
+  state.pricePolicyPreview=null;
+  el('apply-price-policy').disabled=true;
+  el('price-policy-preview').classList.add('hidden');
+}
+
+function renderPricePolicyPreview(preview){
+  const {summary,rows}=preview;
+  el('price-policy-metrics').innerHTML=[
+    ['Produk diperiksa',summary.products],['Semua aman',summary.fullySafe],
+    ['Sebagian aman',summary.partiallySafe],['Perlu naik harga',summary.recommendations]
+  ].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
+  el('price-policy-results').innerHTML=rows.length?rows.slice(0,100).map((row)=>{
+    const safe=row.results.filter((result)=>result.safe);
+    const rejected=row.results.filter((result)=>!result.safe);
+    const status=row.safeCount===preview.policy.rules.length?'Aman':row.safeCount>0?'Sebagian':'Ditolak';
+    return `<article class="price-policy-result"><div><strong>${escapeHtml(row.name)}</strong><small>${escapeHtml(row.sku)} · ${row.costKnown?`Modal tertinggi ${money.format(row.cost)}`:'Modal belum tersedia'} · Umum ${money.format(row.retailPrice)}</small></div><span class="badge ${status==='Aman'?'ok':status==='Sebagian'?'warning':'danger'}">${status}</span><div class="price-policy-result-rules">${safe.map((rule)=>`<span>${escapeHtml(customerGroupName(rule.customerGroupId))} min. ${rule.minBaseQty}: <strong>${money.format(rule.proposedPrice)}</strong></span>`).join('')}${rejected.map((rule)=>`<span class="rejected">${escapeHtml(customerGroupName(rule.customerGroupId))} min. ${rule.minBaseQty}: ${rule.reason==='NO_COST'?'modal belum tersedia':rule.reason==='LOSS'?'rugi':rule.reason==='BEP'?'BEP':'di bawah laba minimum'}</span>`).join('')}</div>${row.recommendedIncrease>0?`<small class="price-recommendation">Saran: naikkan Harga Umum minimal ${money.format(row.recommendedIncrease)} agar tingkat pertama aman.</small>`:''}</article>`;
+  }).join(''):'<div class="empty-state compact">Tidak ada produk aktif pada cakupan ini.</div>';
+  el('price-policy-preview').classList.remove('hidden');
+  el('apply-price-policy').disabled=!rows.length;
+}
+
+async function openPricePolicy(){
+  el('price-policy-error').textContent='';invalidatePricePolicyPreview();
+  const categories=[...new Set(state.managedProducts.map((product)=>product.category).filter(Boolean))].sort();
+  const brands=[...new Set(state.managedProducts.map((product)=>product.brand).filter(Boolean))].sort();
+  el('price-policy-category').innerHTML='<option value="">Semua kategori</option>'+categories.map((value)=>`<option>${escapeHtml(value)}</option>`).join('');
+  el('price-policy-brand').innerHTML='<option value="">Semua merek</option>'+brands.map((value)=>`<option>${escapeHtml(value)}</option>`).join('');
+  try{
+    const data=await request('/api/price-policy');
+    const policy=data.policy;
+    state.pricePolicyRules=policy?.rules?.length?policy.rules:defaultPricePolicyRules();
+    el('price-policy-min-profit').value=policy?.minProfit??500;
+    el('price-policy-category').value=policy?.category??'';
+    el('price-policy-brand').value=policy?.brand??'';
+    renderPricePolicyRules();el('price-policy-dialog').showModal();
+  }catch(error){toast(error.message);}
+}
+
+async function previewPricePolicy(){
+  el('price-policy-error').textContent='';
+  try{
+    const preview=await request('/api/price-policy/preview',{method:'POST',body:JSON.stringify(readPricePolicyInput())});
+    state.pricePolicyPreview=preview;renderPricePolicyPreview(preview);
+  }catch(error){el('price-policy-error').textContent=error.message;invalidatePricePolicyPreview();}
+}
+
+async function applyPricePolicy(event){
+  event.preventDefault();el('price-policy-error').textContent='';
+  const button=el('apply-price-policy');button.disabled=true;button.textContent='Menerapkan...';
+  try{
+    const result=await request('/api/price-policy/apply',{method:'POST',body:JSON.stringify(readPricePolicyInput())});
+    toast(`${result.safeRules} harga aman diterapkan; ${result.skippedRules} aturan BEP/rugi dilewati.`);
+    el('price-policy-dialog').close();await refreshCatalog();
+  }catch(error){el('price-policy-error').textContent=error.message;}
+  finally{button.textContent='Terapkan harga aman';button.disabled=!state.pricePolicyPreview;}
 }
 
 function openPosCustomerPicker() {
@@ -5710,6 +5808,24 @@ el('edit-user-form').addEventListener('submit', saveUser);
 el('close-user-editor').addEventListener('click', () => el('edit-user-dialog').close());
 el('cancel-user-edit').addEventListener('click', () => el('edit-user-dialog').close());
 el('open-product-dialog').addEventListener('click', () => openProductEditor());
+el('open-price-policy').addEventListener('click',openPricePolicy);
+el('close-price-policy').addEventListener('click',()=>el('price-policy-dialog').close());
+el('preview-price-policy').addEventListener('click',previewPricePolicy);
+el('price-policy-form').addEventListener('submit',applyPricePolicy);
+el('price-policy-form').addEventListener('input',invalidatePricePolicyPreview);
+el('price-policy-form').addEventListener('change',invalidatePricePolicyPreview);
+el('add-price-policy-rule').addEventListener('click',()=>{
+  readPricePolicyInput();
+  const group=customCustomerGroups()[0];if(!group)return;
+  state.pricePolicyRules.push({customerGroupId:group.id,minBaseQty:1,discountAmount:500});
+  renderPricePolicyRules();invalidatePricePolicyPreview();
+});
+el('price-policy-rules').addEventListener('click',(event)=>{
+  const button=event.target.closest('.remove-price-policy-rule');if(!button)return;
+  const index=Number(button.closest('.price-policy-rule').dataset.index);
+  readPricePolicyInput();if(state.pricePolicyRules.length>1)state.pricePolicyRules.splice(index,1);
+  renderPricePolicyRules();invalidatePricePolicyPreview();
+});
 el('cancel-product').addEventListener('click', () => el('product-dialog').close());
 el('close-product-dialog').addEventListener('click', () => el('product-dialog').close());
 el('add-product-unit').addEventListener('click',()=>{state.productUnitsDraft.push({id:null,name:'',factor:12,barcode:''});renderProductUnitEditor();});

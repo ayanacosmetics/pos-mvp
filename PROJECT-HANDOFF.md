@@ -45,6 +45,19 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.12.0 Harga Aman Otomatis
+
+- Halaman Produk memiliki `Aturan harga massal` untuk membentuk harga Member,
+  Grosir, dan tipe lain sebagai potongan dari Harga Umum.
+- Pratinjau memakai modal rata-rata tertinggi seluruh outlet dan keuntungan
+  minimum yang dapat diatur. Tingkat aman diterapkan, sedangkan tingkat BEP,
+  rugi, di bawah keuntungan minimum, atau tanpa modal dilewati.
+- Produk yang belum aman mendapat rekomendasi kenaikan Harga Umum minimum.
+- Kebijakan tersimpan dan diterapkan ulang ketika Harga Umum, modal, atau impor
+  produk berubah. Harga yang menjadi tidak aman otomatis tidak dipakai.
+- API `2.12.0-cloud`, aset/cache PWA `v102`, migrasi SQL
+  `202607280040_safe_customer_price_policy.sql`.
+
 ### Rilis v2.11.0 Harga Bertingkat per Tipe Pelanggan
 
 - Editor produk tidak lagi memakai satu harga bertingkat global yang bercampur

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=101">
+  <link rel="stylesheet" href="/styles.css?v=102">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -176,7 +176,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Harga Bertingkat · v2.11.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Harga Aman Otomatis · v2.12.0</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -354,7 +354,7 @@
       </section>
 
       <section id="page-products" class="page"><div class="content-width">
-        <div class="page-title"><div><p class="eyebrow">MASTER KATALOG</p><h1>Produk dan varian</h1><p class="muted">Kelola SKU, barcode, satuan, harga, batas stok, dan status jual.</p></div><button id="open-product-dialog" class="button primary">Tambah produk</button></div>
+        <div class="page-title"><div><p class="eyebrow">MASTER KATALOG</p><h1>Produk dan varian</h1><p class="muted">Kelola SKU, barcode, satuan, harga, batas stok, dan status jual.</p></div><div class="page-title-actions"><button id="open-price-policy" class="button secondary">Aturan harga massal</button><button id="open-product-dialog" class="button primary">Tambah produk</button></div></div>
         <div id="product-metrics" class="product-metrics"></div>
         <div class="surface product-directory">
           <div class="product-directory-head"><div><p class="eyebrow">DIREKTORI PRODUK</p><h2>Semua barang</h2></div><div class="product-filters"><input id="product-admin-search" type="search" placeholder="Cari SKU, produk, merek, atau barcode"><select id="product-admin-status"><option value="ACTIVE">Produk aktif</option><option value="ALL">Semua status</option><option value="INACTIVE">Produk nonaktif</option><option value="LOW_STOCK">Stok menipis</option></select></div></div>
@@ -892,6 +892,16 @@
     <section class="product-editor-section"><p class="eyebrow">HARGA JUAL</p><div id="product-price-tiers" class="product-price-tiers"></div><small>Setiap tipe dimulai dari minimal 1 pcs. Tambahkan tingkat 3, 6, 12, atau jumlah lain bila harganya berubah. Harga tipe pelanggan yang kosong akan memakai harga Umum.</small></section>
     <p id="product-error" class="error"></p><div class="button-row"><button id="cancel-product" type="button" class="button secondary">Batal</button><button id="save-product-button" type="submit" class="button primary">Simpan produk</button></div>
   </form></dialog>
+  <dialog id="price-policy-dialog"><form id="price-policy-form" class="dialog-card price-policy-dialog">
+    <div class="comparison-heading"><div><p class="eyebrow">HARGA OTOMATIS YANG AMAN</p><h2>Aturan harga massal</h2><p class="muted">Harga tipe hanya dibuat jika masih menyisakan keuntungan minimum berdasarkan modal tertinggi.</p></div><button id="close-price-policy" class="icon-button" type="button">Ã—</button></div>
+    <section class="price-policy-settings"><label>Keuntungan minimum setelah potongan<input id="price-policy-min-profit" type="number" min="0" step="100" value="500" required></label><label>Kategori<select id="price-policy-category"><option value="">Semua kategori</option></select></label><label>Merek<select id="price-policy-brand"><option value="">Semua merek</option></select></label></section>
+    <div class="price-policy-heading"><div><p class="eyebrow">TINGKAT HARGA</p><strong>Potongan dari Harga Umum per pcs</strong></div><button id="add-price-policy-rule" class="button secondary" type="button">Tambah aturan</button></div>
+    <div id="price-policy-rules" class="price-policy-rules"></div>
+    <div class="price-policy-note"><strong>Selalu mengikuti Harga Umum dan modal</strong><small>Harga tipe pada cakupan terpilih diganti oleh aturan ini. Jika modal naik atau Harga Umum berubah, aturan BEP/rugi otomatis dilewati.</small></div>
+    <p id="price-policy-error" class="error"></p>
+    <div class="button-row"><button id="preview-price-policy" class="button secondary" type="button">Lihat pratinjau</button><button id="apply-price-policy" class="button primary" type="submit" disabled>Terapkan harga aman</button></div>
+    <section id="price-policy-preview" class="price-policy-preview hidden"><div id="price-policy-metrics" class="product-metrics"></div><div id="price-policy-results" class="price-policy-results"></div></section>
+  </form></dialog>
   <dialog id="supplier-comparison-dialog"><div class="dialog-card comparison-dialog"><div class="comparison-heading"><div><p class="eyebrow">PERBANDINGAN SUPPLIER</p><h2 id="comparison-product-name">Histori harga</h2></div><button id="close-supplier-comparison" class="icon-button" type="button">×</button></div><div id="supplier-comparison-content"></div></div></dialog>
   <dialog id="planning-item-dialog"><form id="planning-item-form" class="dialog-card planning-item-dialog"><div class="comparison-heading"><div><p class="eyebrow">JUMLAH RESTOK</p><h2 id="planning-item-name">Pilih barang</h2><p id="planning-item-sku" class="muted"></p></div><button id="close-planning-item" class="icon-button" type="button" aria-label="Tutup">×</button></div><input id="planning-item-product-id" type="hidden"><div class="planning-item-summary"><div><span>Harga jual</span><strong id="planning-item-price">Rp0</strong></div><div><span>Stok sekarang</span><strong id="planning-item-stock">0 pcs</strong></div></div><label class="planning-item-quantity">Jumlah yang ingin dipesan<input id="planning-item-qty" type="number" min="0.000001" step="any" inputmode="decimal" required><small>Dalam satuan terkecil (pcs).</small></label><div id="planning-item-suggestion" class="planning-item-suggestion"></div><div class="planning-item-tools"><button id="planning-item-policy" class="link-button" type="button">Atur saran otomatis</button><button id="planning-item-compare" class="link-button hidden" type="button">Cek harga supplier</button></div><p id="planning-item-error" class="error"></p><div class="button-row"><button id="remove-planning-item" class="button secondary hidden" type="button">Hapus pilihan</button><button id="cancel-planning-item" class="button secondary" type="button">Batal</button><button id="save-planning-item" class="button primary" type="submit">Pilih barang</button></div></form></dialog>
   <dialog id="restock-policy-dialog"><form id="restock-policy-form" class="dialog-card"><div class="comparison-heading"><div><p class="eyebrow">KEBIJAKAN RESTOK</p><h2 id="restock-policy-product">Atur barang</h2><p class="muted">Berlaku untuk kombinasi lokasi, produk, dan supplier ini.</p></div><button id="close-restock-policy" class="icon-button" type="button">×</button></div><input id="restock-policy-product-id" type="hidden"><div class="form-grid compact"><label>Supplier<select id="restock-policy-supplier" required></select></label><label>Stok minimum<input id="restock-policy-minimum" type="number" min="0" step="any" required></label><label>Stok maksimum<input id="restock-policy-maximum" type="number" min="0" step="any" required></label><label>Safety stock<input id="restock-policy-safety" type="number" min="0" step="any" required></label><label>Lead time supplier<input id="restock-policy-lead" type="number" min="0" max="365" required><small>Perkiraan hari sampai barang datang.</small></label></div><label class="switch-row"><input id="restock-policy-preferred" type="checkbox" checked><span><strong>Supplier utama</strong><small>Dipakai sebagai pilihan utama rekomendasi produk ini.</small></span></label><p id="restock-policy-error" class="error"></p><div class="button-row"><button id="cancel-restock-policy" class="button secondary" type="button">Batal</button><button class="button primary" type="submit">Simpan kebijakan</button></div></form></dialog>
@@ -912,6 +922,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=101"></script>
+  <script type="module" src="/app.js?v=102"></script>
 </body>
 </html>

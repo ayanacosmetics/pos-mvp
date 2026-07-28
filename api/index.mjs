@@ -5,6 +5,7 @@ import { applySaleAdjustment, normalizeSaleAdjustment, saleAdjustmentFingerprint
 import { applyVoucher } from '../packages/domain/src/loyalty.mjs';
 import { calculateEmployeeCommission } from '../packages/domain/src/employee-operations.mjs';
 import { validateJournalLines } from '../packages/domain/src/ledger.mjs';
+import { evaluateSafePricePolicy, normalizeSafePricePolicy } from '../packages/domain/src/safe-price-policy.mjs';
 
 const PERMISSIONS = {
   OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner','multioutlet.view','multioutlet.manage','pilot.manage','sale.adjust','sale.void'],
@@ -371,6 +372,39 @@ function normalizeProductInput(input,id=null) {
     if(unit.barcode)barcodes.add(unit.barcode);
   }
   return normalized;
+}
+
+async function previewSafePricePolicy(tenantId,input) {
+  const policy=normalizeSafePricePolicy(input);
+  const [products,balances,groups]=await Promise.all([
+    loadManagedProducts(tenantId),
+    rest('stock_balances',`tenant_id=eq.${encodeURIComponent(tenantId)}&select=product_id,avg_cost`),
+    loadCustomerPriceGroups(tenantId)
+  ]);
+  const validGroups=new Set(groups.map((group)=>group.id));
+  for(const rule of policy.rules)if(!validGroups.has(rule.customerGroupId)){
+    const error=new Error(`Tipe pelanggan ${rule.customerGroupId} tidak aktif`);error.status=400;throw error;
+  }
+  const rows=products.filter((product)=>product.active
+    &&(!policy.category||product.category===policy.category)
+    &&(!policy.brand||product.brand===policy.brand)
+  ).map((product)=>{
+    const retailPrice=product.priceRules.find((rule)=>rule.customerGroupId==='retail'&&rule.minBaseQty===1)?.unitPriceBase??0;
+    const productCosts=balances.filter((balance)=>balance.product_id===product.id).map((balance)=>Number(balance.avg_cost??0));
+    const cost=Math.max(0,...productCosts);
+    const evaluation=evaluateSafePricePolicy({retailPrice,cost,costKnown:productCosts.some((value)=>value>0),rules:policy.rules,minProfit:policy.minProfit});
+    return {productId:product.id,sku:product.sku,name:product.name,category:product.category,brand:product.brand,...evaluation};
+  });
+  return {
+    policy,rows,
+    summary:{
+      products:rows.length,
+      fullySafe:rows.filter((row)=>row.safeCount===policy.rules.length).length,
+      partiallySafe:rows.filter((row)=>row.safeCount>0&&row.safeCount<policy.rules.length).length,
+      rejected:rows.filter((row)=>row.safeCount===0).length,
+      recommendations:rows.filter((row)=>row.recommendedIncrease>0).length
+    }
+  };
 }
 
 async function loadPromotions(tenantId, outletId = null) {
@@ -1140,7 +1174,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.11.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.12.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1743,7 +1777,7 @@ async function routeRequest(request, response, route) {
   if (request.method === 'POST' && route === 'products') {
     requirePermission(session, 'catalog.manage');
     const input = normalizeProductInput(bodyOf(request));
-    return send(response, 201, await rpc('save_product_v5', { p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_product: input }));
+    return send(response, 201, await rpc('save_product_v6', { p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_product: input }));
   }
 
   if (request.method === 'GET' && route === 'products/manage') {
@@ -1755,7 +1789,7 @@ async function routeRequest(request, response, route) {
     requirePermission(session, 'catalog.manage');
     const productId=route.split('/')[1];
     const input=normalizeProductInput(bodyOf(request),productId);
-    return send(response,200,await rpc('save_product_v5',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_product:input}));
+    return send(response,200,await rpc('save_product_v6',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_product:input}));
   }
 
   if (request.method === 'POST' && /^products\/[^/]+\/status$/.test(route)) {
@@ -1783,6 +1817,9 @@ async function routeRequest(request, response, route) {
     const result = await rpc('import_initial_data', {
       p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_idempotency_key: key,
       p_kind: preview.kind, p_file_name: input.fileName ?? null, p_location_id: preview.locationId, p_rows: preview.rows
+    });
+    if(preview.kind==='PRODUCTS')await rpc('refresh_safe_customer_prices_v1',{
+      p_tenant_id:context.tenantId,p_product_id:null
     });
     return send(response, 201, result);
   }
@@ -1838,6 +1875,31 @@ async function routeRequest(request, response, route) {
     requirePermission(session,'promotion.manage');
     const versionId=route.split('/')[1];
     return send(response,200,await rpc('retire_promotion_version',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_version_id:versionId}));
+  }
+
+  if(request.method==='GET'&&route==='price-policy'){
+    requirePermission(session,'catalog.manage');
+    const rows=await rest('safe_customer_price_policies',`tenant_id=eq.${encodeURIComponent(context.tenantId)}&select=*&limit=1`);
+    const policy=rows[0];
+    return send(response,200,{policy:policy?{
+      minProfit:Number(policy.min_profit),category:policy.category??'',brand:policy.brand??'',
+      rules:policy.rules_json??[],active:policy.active,updatedAt:policy.updated_at
+    }:null});
+  }
+
+  if(request.method==='POST'&&route==='price-policy/preview'){
+    requirePermission(session,'catalog.manage');
+    return send(response,200,await previewSafePricePolicy(context.tenantId,bodyOf(request)));
+  }
+
+  if(request.method==='POST'&&route==='price-policy/apply'){
+    requirePermission(session,'catalog.manage');
+    if(!['OWNER','ADMIN'].includes(session.profile.role)){const error=new Error('Hanya Owner atau Admin yang dapat menerapkan harga massal');error.status=403;throw error;}
+    const preview=await previewSafePricePolicy(context.tenantId,bodyOf(request));
+    const result=await rpc('apply_safe_price_policy_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_policy:preview.policy
+    });
+    return send(response,200,{...result,preview});
   }
 
   if(request.method==='DELETE'&&/^promotions\/[^/]+$/.test(route)){
