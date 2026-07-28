@@ -1175,6 +1175,11 @@ function renderLoyalty(){
   if(!el('voucher-new-start').value){const start=new Date(),end=new Date(Date.now()+30*86400000);el('voucher-new-start').value=localDateTimeValue(start);el('voucher-new-end').value=localDateTimeValue(end);}
 }
 
+function showLoyaltyView(view){
+  document.querySelectorAll('[data-loyalty-view]').forEach((button)=>button.classList.toggle('active',button.dataset.loyaltyView===view));
+  document.querySelectorAll('.loyalty-detail').forEach((panel)=>panel.classList.toggle('hidden',panel.id!==`loyalty-view-${view}`));
+}
+
 async function saveLoyaltySettings(event){
   event.preventDefault();
   try{await request('/api/loyalty/settings',{method:'PUT',body:JSON.stringify({earnAmountPerPoint:Number(el('loyalty-earn-amount').value),inactivityDays:Number(el('loyalty-inactivity-days').value),enabled:true})});toast('Aturan poin disimpan');await loadPromotionManagement();}
@@ -1182,13 +1187,13 @@ async function saveLoyaltySettings(event){
 }
 
 async function publishVoucher(event){
-  event.preventDefault();el('voucher-form-error').textContent='';
+  event.preventDefault();const form=event.currentTarget;el('voucher-form-error').textContent='';
   const payload={code:el('voucher-new-code').value,name:el('voucher-new-name').value,discountType:el('voucher-new-type').value,
     discountValue:Number(el('voucher-new-value').value),maxDiscount:Number(el('voucher-new-max').value)||null,minPurchase:Number(el('voucher-new-min').value||0),
     startsAt:new Date(el('voucher-new-start').value).toISOString(),endsAt:new Date(el('voucher-new-end').value).toISOString(),
     segment:el('voucher-new-segment').value,usageLimitTotal:Number(el('voucher-new-limit-total').value)||null,
     usageLimitPerCustomer:Number(el('voucher-new-limit-customer').value)||null,oneTime:el('voucher-new-once').checked};
-  try{await request('/api/vouchers',{method:'POST',body:JSON.stringify(payload)});toast(`Voucher ${payload.code.toUpperCase()} diterbitkan`);event.currentTarget.reset();await loadPromotionManagement();}
+  try{await request('/api/vouchers',{method:'POST',body:JSON.stringify(payload)});toast(`Voucher ${payload.code.toUpperCase()} diterbitkan`);form.reset();el('voucher-form-dialog').close();await loadPromotionManagement();}
   catch(error){el('voucher-form-error').textContent=error.message;}
 }
 
@@ -1203,7 +1208,8 @@ async function publishReceiptVoucherCampaign(event){
     await request('/api/receipt-voucher-campaigns',{method:'POST',body:JSON.stringify(payload)});
     toast('Program voucher struk sudah aktif');form.reset();
     el('receipt-voucher-trigger-min').value=100000;el('receipt-voucher-redemption-min').value=100000;
-    el('receipt-voucher-valid-after').value=1;el('receipt-voucher-valid-days').value=14;await loadPromotionManagement();
+    el('receipt-voucher-valid-after').value=1;el('receipt-voucher-valid-days').value=14;
+    el('receipt-voucher-campaign-dialog').close();await loadPromotionManagement();
   }catch(error){el('receipt-voucher-form-error').textContent=error.message;}
 }
 
@@ -4606,6 +4612,7 @@ el('nav').addEventListener('click', (event) => {
   if(target==='sync-review')loadSyncReview();
   if(target==='returns')loadRecentReturns();
   if(target==='settings')loadSettingsWorkspace();
+  if(target==='loyalty')showLoyaltyView('');
   if(['promotions','loyalty'].includes(target))loadPromotionManagement();
 });
 el('sidebar-toggle').addEventListener('click', () => setSidebarOpen(!el('app-view').classList.contains('sidebar-open'), { restoreFocus:true }));
@@ -5125,6 +5132,11 @@ el('supplier-payment-form').addEventListener('submit',recordSupplierPayment);
 el('supplier-payment-method').addEventListener('change',()=>el('supplier-payment-reference-wrap').classList.toggle('hidden',el('supplier-payment-method').value==='CASH'));
 el('promotion-form').addEventListener('submit', publishPromotion);
 el('loyalty-settings-form').addEventListener('submit',saveLoyaltySettings);
+document.querySelectorAll('[data-loyalty-view]').forEach((button)=>button.addEventListener('click',()=>showLoyaltyView(button.dataset.loyaltyView)));
+el('open-voucher-form').addEventListener('click',()=>el('voucher-form-dialog').showModal());
+el('close-voucher-form').addEventListener('click',()=>el('voucher-form-dialog').close());
+el('open-receipt-voucher-campaign').addEventListener('click',()=>el('receipt-voucher-campaign-dialog').showModal());
+el('close-receipt-voucher-campaign').addEventListener('click',()=>el('receipt-voucher-campaign-dialog').close());
 el('voucher-form').addEventListener('submit',publishVoucher);
 el('receipt-voucher-campaign-form').addEventListener('submit',publishReceiptVoucherCampaign);
 el('voucher-list').addEventListener('click',async(event)=>{const button=event.target.closest('.voucher-status');if(!button)return;try{await request(`/api/vouchers/${button.closest('[data-voucher-id]').dataset.voucherId}/status`,{method:'POST',body:JSON.stringify({active:button.dataset.active==='true'})});await loadPromotionManagement();}catch(error){toast(error.message);}});

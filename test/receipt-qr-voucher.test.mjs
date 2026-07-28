@@ -40,3 +40,14 @@ test('thermal receipt contains native ESC POS QR commands and readable code',()=
   assert.match(text,/VOUCHER BELANJA BERIKUTNYA/);
   assert.ok(bytes.some((value,index)=>value===0x1d&&bytes[index+1]===0x28&&bytes[index+2]===0x6b));
 });
+
+test('loyalty starts as a compact menu and opens lists before creation forms',async()=>{
+  const [html,app]=await Promise.all([read('apps/web/index.html'),read('apps/web/app.js')]);
+  assert.match(html,/data-loyalty-view="receipt"/);
+  assert.match(html,/id="loyalty-view-receipt" class="surface loyalty-detail hidden"/);
+  assert.match(html,/id="open-receipt-voucher-campaign"/);
+  assert.match(html,/id="receipt-voucher-campaign-dialog"/);
+  assert.match(html,/id="voucher-form-dialog"/);
+  assert.match(app,/showLoyaltyView\(''\)/);
+  assert.match(app,/receipt-voucher-campaign-dialog'\)\.showModal/);
+});

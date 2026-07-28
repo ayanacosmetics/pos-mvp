@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=82">
+  <link rel="stylesheet" href="/styles.css?v=83">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -169,7 +169,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Voucher QR Struk · v2.7.1</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Loyalitas Ringkas · v2.7.2</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -816,35 +816,31 @@
       </div></section>
 
       <section id="page-loyalty" class="page"><div class="content-width">
-        <div class="page-title"><div><p class="eyebrow">LOYALITAS & CRM</p><h1>Loyalitas pelanggan</h1><p class="muted">Kelola poin, tier member, voucher berkode, dan segmentasi tanpa bercampur dengan aturan promo katalog.</p></div><div id="loyalty-summary" class="pill success">Memuat...</div></div>
-        <section class="surface loyalty-workspace">
-          <div class="settings-section-head"><div><p class="eyebrow">ATURAN MEMBER</p><h2>Tier dan voucher rahasia</h2><p class="muted">Voucher hanya tampil saat dimasukkan kasir dan tidak dipublikasikan ke katalog.</p></div></div>
-          <div class="loyalty-grid">
-            <form id="loyalty-settings-form"><h3>Perolehan poin</h3><label>Belanja untuk 1 poin<input id="loyalty-earn-amount" type="number" min="1" value="10000"></label><label>Dianggap tidak aktif setelah<input id="loyalty-inactivity-days" type="number" min="1" value="90"><small>hari tanpa transaksi</small></label><button class="button secondary" type="submit">Simpan aturan</button></form>
-            <form id="voucher-form"><h3>Voucher berkode</h3><div class="form-grid compact"><label>Kode<input id="voucher-new-code" maxlength="30" required placeholder="ULTAH25"></label><label>Nama<input id="voucher-new-name" required placeholder="Voucher ulang tahun"></label><label>Jenis<select id="voucher-new-type"><option value="FIXED">Potongan rupiah</option><option value="PERCENT">Persentase</option></select></label><label>Nilai<input id="voucher-new-value" type="number" min="1" required></label><label>Maksimum diskon<input id="voucher-new-max" type="number" min="1"></label><label>Minimal belanja<input id="voucher-new-min" type="number" min="0" value="0"></label><label>Mulai<input id="voucher-new-start" type="datetime-local" required></label><label>Berakhir<input id="voucher-new-end" type="datetime-local" required></label><label>Segmen<select id="voucher-new-segment"><option value="ALL">Semua member</option><option value="ACTIVE">Member aktif</option><option value="INACTIVE">Member tidak aktif</option><option value="HIGH_VALUE">Nilai tinggi</option><option value="BIRTHDAY">Ulang tahun</option></select></label><label>Batas total<input id="voucher-new-limit-total" type="number" min="1"></label><label>Batas per member<input id="voucher-new-limit-customer" type="number" min="1"></label><label class="switch-row"><input id="voucher-new-once" type="checkbox"><span><strong>Satu kali/member</strong></span></label></div><p id="voucher-form-error" class="error"></p><button class="button primary" type="submit">Terbitkan voucher</button></form>
-          </div>
-          <div id="tier-list" class="tier-list"></div><div id="voucher-list" class="voucher-list"></div>
-          <section class="receipt-voucher-workspace">
-            <div class="settings-section-head"><div><p class="eyebrow">VOUCHER OTOMATIS DI STRUK</p><h2>Program belanja berikutnya</h2><p class="muted">Setelah transaksi memenuhi syarat, struk mencetak QR dan kode acak 10 karakter. Kode hanya dapat dipakai satu kali.</p></div></div>
-            <form id="receipt-voucher-campaign-form">
-              <div class="form-grid compact">
-                <label>Nama program<input id="receipt-voucher-name" required placeholder="Voucher kembali belanja"></label>
-                <label>Terbit jika total minimal<input id="receipt-voucher-trigger-min" type="number" min="0" value="100000" required></label>
-                <label>Jenis diskon<select id="receipt-voucher-type"><option value="FIXED">Potongan rupiah</option><option value="PERCENT">Persentase</option></select></label>
-                <label>Nilai diskon<input id="receipt-voucher-value" type="number" min="1" required></label>
-                <label>Maksimum diskon<input id="receipt-voucher-max" type="number" min="1" placeholder="Untuk persen"></label>
-                <label>Minimal belanja saat ditukar<input id="receipt-voucher-redemption-min" type="number" min="0" value="100000"></label>
-                <label>Mulai berlaku setelah<input id="receipt-voucher-valid-after" type="number" min="0" max="365" value="1"><small>hari setelah struk terbit</small></label>
-                <label>Masa berlaku<input id="receipt-voucher-valid-days" type="number" min="1" max="3650" value="14"><small>hari</small></label>
-                <label>Penerima<select id="receipt-voucher-customer-mode"><option value="BEARER">Siapa pun yang membawa struk</option><option value="MEMBER">Hanya member pada struk</option></select></label>
-                <label>Prioritas<input id="receipt-voucher-priority" type="number" value="0"><small>Angka lebih besar dipilih dulu</small></label>
-              </div>
-              <p id="receipt-voucher-form-error" class="error"></p>
-              <button class="button primary" type="submit">Aktifkan program voucher struk</button>
-            </form>
-            <div id="receipt-voucher-campaign-list" class="voucher-list"></div>
-          </section>
+        <div class="page-title"><div><p class="eyebrow">LOYALITAS & CRM</p><h1>Loyalitas pelanggan</h1><p class="muted">Pilih bagian yang ingin dikelola. Formulir hanya dibuka saat dibutuhkan.</p></div><div id="loyalty-summary" class="pill success">Memuat...</div></div>
+        <div class="loyalty-menu-grid">
+          <button class="loyalty-menu-card" data-loyalty-view="receipt" type="button"><span class="loyalty-menu-icon">QR</span><span><strong>Promo voucher struk</strong><small>Program QR untuk kunjungan berikutnya</small></span><b>›</b></button>
+          <button class="loyalty-menu-card" data-loyalty-view="codes" type="button"><span class="loyalty-menu-icon">%</span><span><strong>Voucher berkode</strong><small>Kode promo khusus member</small></span><b>›</b></button>
+          <button class="loyalty-menu-card" data-loyalty-view="points" type="button"><span class="loyalty-menu-icon">★</span><span><strong>Poin & tier member</strong><small>Perolehan poin dan tingkatan pelanggan</small></span><b>›</b></button>
+        </div>
+        <section id="loyalty-view-receipt" class="surface loyalty-detail hidden">
+          <div class="settings-section-head"><div><p class="eyebrow">PROMO AKTIF</p><h2>Promo voucher struk</h2><p class="muted">QR unik dicetak setelah transaksi memenuhi syarat dan hanya dapat dipakai sekali.</p></div><button id="open-receipt-voucher-campaign" class="button primary" type="button">+ Tambah promo</button></div>
+          <div id="receipt-voucher-campaign-list" class="voucher-list"></div>
         </section>
+        <section id="loyalty-view-codes" class="surface loyalty-detail hidden">
+          <div class="settings-section-head"><div><p class="eyebrow">VOUCHER MEMBER</p><h2>Voucher berkode aktif</h2><p class="muted">Kasir memasukkan kode ketika melayani pelanggan yang memenuhi syarat.</p></div><button id="open-voucher-form" class="button primary" type="button">+ Tambah voucher</button></div>
+          <div id="voucher-list" class="voucher-list"></div>
+        </section>
+        <section id="loyalty-view-points" class="surface loyalty-detail hidden">
+          <div class="settings-section-head"><div><p class="eyebrow">POIN & TIER</p><h2>Aturan member</h2></div></div>
+          <form id="loyalty-settings-form" class="loyalty-points-form"><label>Belanja untuk 1 poin<input id="loyalty-earn-amount" type="number" min="1" value="10000"></label><label>Dianggap tidak aktif setelah<input id="loyalty-inactivity-days" type="number" min="1" value="90"><small>hari tanpa transaksi</small></label><button class="button secondary" type="submit">Simpan aturan</button></form>
+          <div id="tier-list" class="tier-list"></div>
+        </section>
+
+        <dialog id="voucher-form-dialog"><form id="voucher-form" class="dialog-card loyalty-form-dialog"><div class="comparison-heading"><div><p class="eyebrow">VOUCHER MEMBER</p><h2>Tambah voucher berkode</h2></div><button id="close-voucher-form" class="icon-button" type="button" aria-label="Tutup">×</button></div><div class="form-grid compact"><label>Kode<input id="voucher-new-code" maxlength="30" required placeholder="ULTAH25"></label><label>Nama<input id="voucher-new-name" required placeholder="Voucher ulang tahun"></label><label>Jenis<select id="voucher-new-type"><option value="FIXED">Potongan rupiah</option><option value="PERCENT">Persentase</option></select></label><label>Nilai<input id="voucher-new-value" type="number" min="1" required></label><label>Maksimum diskon<input id="voucher-new-max" type="number" min="1"></label><label>Minimal belanja<input id="voucher-new-min" type="number" min="0" value="0"></label><label>Mulai<input id="voucher-new-start" type="datetime-local" required></label><label>Berakhir<input id="voucher-new-end" type="datetime-local" required></label><label>Segmen<select id="voucher-new-segment"><option value="ALL">Semua member</option><option value="ACTIVE">Member aktif</option><option value="INACTIVE">Member tidak aktif</option><option value="HIGH_VALUE">Nilai tinggi</option><option value="BIRTHDAY">Ulang tahun</option></select></label><label>Batas total<input id="voucher-new-limit-total" type="number" min="1"></label><label>Batas per member<input id="voucher-new-limit-customer" type="number" min="1"></label><label class="switch-row"><input id="voucher-new-once" type="checkbox"><span><strong>Satu kali/member</strong></span></label></div><p id="voucher-form-error" class="error"></p><button class="button primary full" type="submit">Terbitkan voucher</button></form></dialog>
+
+        <dialog id="receipt-voucher-campaign-dialog"><form id="receipt-voucher-campaign-form" class="dialog-card loyalty-form-dialog"><div class="comparison-heading"><div><p class="eyebrow">PROMO VOUCHER STRUK</p><h2>Tambah promo baru</h2></div><button id="close-receipt-voucher-campaign" class="icon-button" type="button" aria-label="Tutup">×</button></div><div class="form-grid compact">
+          <label>Nama program<input id="receipt-voucher-name" required placeholder="Voucher kembali belanja"></label><label>Terbit jika total minimal<input id="receipt-voucher-trigger-min" type="number" min="0" value="100000" required></label><label>Jenis diskon<select id="receipt-voucher-type"><option value="FIXED">Potongan rupiah</option><option value="PERCENT">Persentase</option></select></label><label>Nilai diskon<input id="receipt-voucher-value" type="number" min="1" required></label><label>Maksimum diskon<input id="receipt-voucher-max" type="number" min="1" placeholder="Untuk persen"></label><label>Minimal belanja saat ditukar<input id="receipt-voucher-redemption-min" type="number" min="0" value="100000"></label><label>Mulai berlaku setelah<input id="receipt-voucher-valid-after" type="number" min="0" max="365" value="1"><small>hari setelah struk terbit</small></label><label>Masa berlaku<input id="receipt-voucher-valid-days" type="number" min="1" max="3650" value="14"><small>hari</small></label><label>Penerima<select id="receipt-voucher-customer-mode"><option value="BEARER">Siapa pun yang membawa struk</option><option value="MEMBER">Hanya member pada struk</option></select></label><label>Prioritas<input id="receipt-voucher-priority" type="number" value="0"><small>Angka lebih besar dipilih dulu</small></label>
+        </div><p id="receipt-voucher-form-error" class="error"></p><button class="button primary full" type="submit">Aktifkan promo voucher struk</button></form></dialog>
       </div></section>
     </main>
   </div>
@@ -900,6 +896,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=82"></script>
+  <script type="module" src="/app.js?v=83"></script>
 </body>
 </html>
