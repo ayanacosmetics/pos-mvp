@@ -17,7 +17,12 @@ test('analitik memisahkan laporan penjualan dan pembelian', () => {
   assert.match(html, /id="report-purchase-workspace"/);
   assert.match(html, /id="purchase-report-list"/);
   assert.match(html, /id="pos-history-detail" class="pos-history-detail hidden"/);
+  assert.match(html, /id="report-filter-panel" class="report-filter-panel"/);
+  assert.match(html, /id="report-filter-summary"/);
   assert.match(css, /\.report-sales-layout\{display:block;min-height:0\}/);
+  assert.match(css, /#page-reports \.page-title h1\{margin:0;font-size:25px/);
+  assert.match(css, /\.report-filter-panel>summary\{display:flex/);
+  assert.match(app, /el\('report-filter-panel'\)\.open=false/);
   assert.match(app, /daily\?\.classList\.toggle\('hidden',!\['summary','sales'\]\.includes\(name\)\)/);
   assert.match(app, /sales\.classList\.toggle\('hidden',name!=='sales-history'\)/);
   assert.match(app, /purchases\?\.classList\.toggle\('hidden',name!=='purchases'\)/);

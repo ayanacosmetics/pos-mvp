@@ -3659,12 +3659,21 @@ function applyReportPreset() {
   if (preset === '7D') el('report-from').value = shiftReportDate(today, -6);
   if (preset === '30D') el('report-from').value = shiftReportDate(today, -29);
   if (preset === 'MONTH') el('report-from').value = `${today.slice(0, 8)}01`;
+  updateReportFilterSummary();
+}
+
+function updateReportFilterSummary(){
+  const preset=el('report-preset'),outlet=el('report-outlet');
+  const period=preset.options[preset.selectedIndex]?.textContent??'Periode';
+  const outletName=outlet.value?(outlet.options[outlet.selectedIndex]?.textContent??'Outlet'):'Semua outlet';
+  el('report-filter-summary').textContent=`${period} · ${outletName}`;
 }
 
 function renderReportOutletOptions() {
   const selected = el('report-outlet').value;
   el('report-outlet').innerHTML = '<option value="">Semua outlet yang dapat diakses</option>' + state.outlets.map((outlet) => `<option value="${escapeHtml(outlet.id)}">${escapeHtml(outlet.name)}</option>`).join('');
   if (state.outlets.some((outlet) => outlet.id === selected)) el('report-outlet').value = selected;
+  updateReportFilterSummary();
 }
 
 function reportTable(headers, rows) {
@@ -5042,8 +5051,9 @@ el('purge-telemetry').addEventListener('click',async()=>{
   }catch(error){toast(error.message);}
 });
 el('refresh-report').addEventListener('click', loadReport);
-el('apply-report-filter').addEventListener('click', loadReport);
+el('apply-report-filter').addEventListener('click',()=>{if(matchMedia('(max-width:760px)').matches)el('report-filter-panel').open=false;loadReport();});
 el('report-preset').addEventListener('change', applyReportPreset);
+el('report-outlet').addEventListener('change',updateReportFilterSummary);
 el('export-report').addEventListener('click', exportReportCsv);
 el('refresh-owner-finance').addEventListener('click',loadOwnerFinance);
 el('apply-owner-finance').addEventListener('click',loadOwnerFinance);
@@ -5323,4 +5333,6 @@ async function restoreAppSession() {
 }
 
 setLoginPortal(state.loginPortal);
+if(matchMedia('(max-width:760px)').matches)el('report-filter-panel').open=false;
+updateReportFilterSummary();
 restoreAppSession();

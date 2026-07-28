@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=87">
+  <link rel="stylesheet" href="/styles.css?v=88">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -171,7 +171,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Pratinjau Struk · v2.8.2</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Laporan Ringkas · v2.8.3</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -464,7 +464,7 @@
 
       <section id="page-reports" class="page"><div class="content-width">
         <div class="page-title"><div><p class="eyebrow">LAPORAN OPERASIONAL</p><h1 id="report-page-title">Kinerja usaha</h1><p id="report-page-description" class="muted">Penjualan bersih dan laba sudah memperhitungkan retur pada periode terpilih.</p></div><div class="report-actions"><button id="export-report" class="button secondary">Ekspor CSV</button><button id="refresh-report" class="button secondary">Muat ulang</button></div></div>
-        <div class="surface report-filter-bar"><label>Periode<select id="report-preset"><option value="TODAY">Hari ini</option><option value="WEEK">Minggu ini</option><option value="7D">7 hari terakhir</option><option value="MONTH">Bulan ini</option><option value="30D" selected>30 hari terakhir</option><option value="CUSTOM">Pilih tanggal</option></select></label><label>Dari tanggal<input id="report-from" type="date"></label><label>Sampai tanggal<input id="report-to" type="date"></label><label>Outlet<select id="report-outlet"><option value="">Semua outlet yang dapat diakses</option></select></label><button id="apply-report-filter" class="button primary">Tampilkan laporan</button></div>
+        <details id="report-filter-panel" class="report-filter-panel" open><summary><span>Filter laporan</span><strong id="report-filter-summary">30 hari terakhir · Semua outlet</strong></summary><div class="surface report-filter-bar"><label>Periode<select id="report-preset"><option value="TODAY">Hari ini</option><option value="WEEK">Minggu ini</option><option value="7D">7 hari terakhir</option><option value="MONTH">Bulan ini</option><option value="30D" selected>30 hari terakhir</option><option value="CUSTOM">Pilih tanggal</option></select></label><label>Dari tanggal<input id="report-from" type="date"></label><label>Sampai tanggal<input id="report-to" type="date"></label><label>Outlet<select id="report-outlet"><option value="">Semua outlet yang dapat diakses</option></select></label><button id="apply-report-filter" class="button primary">Tampilkan laporan</button></div></details>
         <div id="report-status" class="report-status muted">Memuat laporan...</div>
         <div id="report-cards" class="report-cards"></div>
         <div class="report-grid report-primary"><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">TREN HARIAN</p><h2>Penjualan bersih dan laba</h2></div></div><div id="daily-report" class="table-wrap"></div></div><div class="surface"><div class="report-section-heading"><div><p class="eyebrow">KINERJA PRODUK</p><h2>Produk berdasarkan omzet bersih</h2></div></div><div id="best-products"></div></div></div>
@@ -900,6 +900,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=87"></script>
+  <script type="module" src="/app.js?v=88"></script>
 </body>
 </html>
