@@ -4091,6 +4091,60 @@ function renderReceipt(receipt,payments,{allowAutoPrint=true,closeLabel='Transak
   if(allowAutoPrint&&state.deviceSettings.autoPrint)setTimeout(()=>printReceiptDirect(receipt,payments,{automatic:true}),250);
 }
 
+function historyReceiptShareText(sale){
+  const lines=(sale.quote?.lines??[]).map((line)=>`${line.qty} ${line.unitName} ${line.productName}: ${money.format(line.total)}`).join('\n');
+  return `${state.business.name??'Kasir Nusa POS'}\nStruk ${sale.receiptNo}\n${new Date(sale.occurredAt).toLocaleString('id-ID')}\n\n${lines}\n\nTotal: ${money.format(sale.quote?.grandTotal??0)}\nTerima kasih.`;
+}
+
+function openHistoryReceiptPage(sale){
+  if(!sale)return;
+  state.historyReceiptSale=sale;state.lastReceipt=sale;
+  el('history-receipt-number').textContent=sale.receiptNo;
+  el('history-receipt-content').innerHTML=buildReceiptMarkup(sale,sale.payments??[]);
+  bindReceiptImageFallbacks(el('history-receipt-content'));renderReceiptVoucherQrs(el('history-receipt-content'));
+  el('history-receipt-details').innerHTML=`<p class="eyebrow">RINCIAN TRANSAKSI</p><h2>${escapeHtml(sale.receiptNo)}</h2><div><span>Status</span><strong>${sale.status==='VOIDED'?'Dibatalkan':'Selesai'}</strong></div><div><span>Waktu</span><strong>${new Date(sale.occurredAt).toLocaleString('id-ID')}</strong></div><div><span>Outlet</span><strong>${escapeHtml(sale.outletName??'Outlet')}</strong></div><div><span>Kasir</span><strong>${escapeHtml(sale.cashier??'-')}</strong></div><div><span>Pelanggan</span><strong>${escapeHtml(sale.customer?.name??'Pelanggan umum')}</strong></div><div><span>Pembayaran</span><strong>${(sale.payments??[]).map((payment)=>escapeHtml(payment.method)).join(' + ')||'-'}</strong></div>${sale.notes?`<div><span>Catatan</span><strong>${escapeHtml(sale.notes)}</strong></div>`:''}${sale.voidReason?`<div><span>Alasan pembatalan</span><strong>${escapeHtml(sale.voidReason)}</strong></div>`:''}`;
+  el('history-receipt-details').classList.add('hidden');
+  el('history-receipt-menu').classList.add('hidden');el('history-receipt-menu-toggle').setAttribute('aria-expanded','false');
+  el('report-sale-receipt-page').classList.remove('hidden');el('page-reports').classList.add('receipt-page-open');
+  scrollTo({top:0,behavior:'auto'});
+}
+
+function closeHistoryReceiptPage(){
+  el('page-reports').classList.remove('receipt-page-open');el('report-sale-receipt-page').classList.add('hidden');
+  el('history-receipt-menu').classList.add('hidden');state.historyReceiptSale=null;
+}
+
+async function printHistoryReceipt(sale){
+  if(supportsBluetoothClassicPrinting())return printReceiptDirect(sale,sale.payments??[]);
+  document.body.classList.add('history-receipt-print');window.print();
+}
+
+async function shareHistoryReceipt(sale){
+  const text=historyReceiptShareText(sale);
+  try{
+    if(navigator.share){await navigator.share({title:`Struk ${sale.receiptNo}`,text});return;}
+    await navigator.clipboard.writeText(text);toast('Rincian struk disalin dan siap dibagikan.');
+  }catch(error){if(error.name!=='AbortError')toast('Struk belum dapat dibagikan dari perangkat ini.');}
+}
+
+async function handleHistoryReceiptAction(action){
+  const sale=state.historyReceiptSale;if(!sale)return;
+  el('history-receipt-menu').classList.add('hidden');el('history-receipt-menu-toggle').setAttribute('aria-expanded','false');
+  if(action==='details'){el('history-receipt-details').classList.toggle('hidden');return;}
+  if(action==='print'){await printHistoryReceipt(sale);return;}
+  if(action==='share'){await shareHistoryReceipt(sale);return;}
+  if(action==='return'){
+    if(sale.status==='VOIDED')return toast('Transaksi yang sudah dibatalkan tidak dapat diretur.');
+    closeHistoryReceiptPage();showPage('returns');el('return-receipt-search').value=sale.receiptNo;await findReturnSale();return;
+  }
+  if(action==='void'){
+    if(sale.status==='VOIDED')return toast('Transaksi ini sudah dibatalkan.');
+    closeHistoryReceiptPage();openVoidSale(sale);return;
+  }
+  if(action==='edit')return toast('Transaksi selesai tidak dapat diedit langsung. Batalkan lalu buat transaksi pengganti, atau gunakan retur.');
+  if(action==='delete')return toast('Transaksi selesai tidak boleh dihapus permanen. Gunakan Batalkan transaksi agar audit, stok, dan laporan tetap benar.');
+}
+
 function shareReceiptWhatsApp(){
   const receipt=state.lastReceipt,customer=receipt?.customer;
   if(!receipt||!customer?.phone||!customer.whatsapp_consent)return toast('Pelanggan belum memberi izin WhatsApp.');
@@ -4276,6 +4330,7 @@ function showStockView(name='list'){
 
 function showReportView(name='summary'){
   const page=el('page-reports'),primary=page.querySelector('.report-grid.report-primary'),grids=[...page.querySelectorAll('.report-grid')],secondary=grids.find((grid)=>grid!==primary);
+  if(page.classList.contains('receipt-page-open'))closeHistoryReceiptPage();
   const cards=el('report-cards'),daily=primary?.children[0],products=primary?.children[1],outlets=secondary?.children[0],purchases=secondary?.children[1];
   const sales=el('report-sales-workspace'),purchaseWorkspace=el('report-purchase-workspace'),audit=el('audit-logs').closest('.surface');
   state.reportView=name;
@@ -4778,12 +4833,15 @@ el('mobile-cart-jump').addEventListener('click',()=>setMobilePosView('cart'));
 el('mobile-cart-back').addEventListener('click',()=>setMobilePosView('catalog'));
 el('refresh-pos-history').addEventListener('click',()=>loadPosSales(el('pos-history-search').value,{reportScope:true}));
 el('pos-history-search').addEventListener('input',(event)=>{clearTimeout(event.currentTarget.searchTimer);event.currentTarget.searchTimer=setTimeout(()=>loadPosSales(event.currentTarget.value,{reportScope:true}),250);});
-el('pos-history-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-pos-sale-id]');if(!row)return;const sale=state.posSales.find((item)=>item.id===row.dataset.posSaleId);state.selectedPosSaleId=row.dataset.posSaleId;renderPosSales();if(state.reportView==='sales-history'&&sale){state.lastReceipt=sale;renderReceipt(sale,sale.payments||[],{allowAutoPrint:false,closeLabel:'Tutup'});}});
+el('pos-history-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-pos-sale-id]');if(!row)return;const sale=state.posSales.find((item)=>item.id===row.dataset.posSaleId);state.selectedPosSaleId=row.dataset.posSaleId;renderPosSales();if(state.reportView==='sales-history'&&sale)openHistoryReceiptPage(sale);});
+el('back-history-receipt').addEventListener('click',closeHistoryReceiptPage);
+el('history-receipt-menu-toggle').addEventListener('click',()=>{const menu=el('history-receipt-menu'),opening=menu.classList.contains('hidden');menu.classList.toggle('hidden',!opening);el('history-receipt-menu-toggle').setAttribute('aria-expanded',String(opening));});
+el('history-receipt-menu').addEventListener('click',(event)=>{const button=event.target.closest('[data-history-receipt-action]');if(button)handleHistoryReceiptAction(button.dataset.historyReceiptAction);});
 el('refresh-purchase-report').addEventListener('click',loadPurchaseReportReceipts);
 el('purchase-report-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-purchase-report-id]');if(!row)return;const receipt=(state.purchaseReportReceipts||[]).find((item)=>item.id===row.dataset.purchaseReportId);if(receipt)openPurchaseReportReceipt(receipt);});
 el('close-purchase-report').addEventListener('click',()=>el('purchase-report-dialog').close());
 el('print-purchase-report').addEventListener('click',()=>{document.body.classList.add('purchase-report-print');window.print();});
-window.addEventListener('afterprint',()=>document.body.classList.remove('purchase-report-print'));
+window.addEventListener('afterprint',()=>document.body.classList.remove('purchase-report-print','history-receipt-print'));
 el('pos-history-detail').addEventListener('click',(event)=>{
   const sale=state.posSales.find((item)=>item.id===state.selectedPosSaleId);if(!sale)return;
   if(event.target.closest('.reprint-pos-sale')){state.lastReceipt=sale;renderReceipt(sale,sale.payments,{allowAutoPrint:false,closeLabel:'Tutup'});}

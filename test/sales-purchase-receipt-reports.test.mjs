@@ -31,7 +31,16 @@ test('analitik memisahkan laporan penjualan dan pembelian', () => {
 
 test('klik penjualan membuka struk pelanggan asli', () => {
   assert.match(app, /state\.reportView==='sales-history'&&sale/);
-  assert.match(app, /renderReceipt\(sale,sale\.payments\|\|\[\],\{allowAutoPrint:false,closeLabel:'Tutup'\}\)/);
+  assert.match(app, /openHistoryReceiptPage\(sale\)/);
+  assert.match(html, /id="report-sale-receipt-page"/);
+  assert.match(html, /id="back-history-receipt"/);
+  for (const action of ['details','print','share','return','void','edit','delete']) {
+    assert.match(html, new RegExp(`data-history-receipt-action="${action}"`));
+  }
+  assert.match(app, /Transaksi selesai tidak dapat diedit langsung/);
+  assert.match(app, /Transaksi selesai tidak boleh dihapus permanen/);
+  assert.match(css, /#page-reports\.receipt-page-open/);
+  assert.match(css, /\.history-receipt-paper/);
   assert.match(app, /if\(allowAutoPrint&&state\.deviceSettings\.autoPrint\)/);
   assert.match(css, /html:has\(dialog\[open\]\),body:has\(dialog\[open\]\)\{overflow:hidden\}/);
   assert.match(css, /#receipt-dialog \.receipt-dialog\{[^}]*overflow-y:auto[^}]*background:#fff/);

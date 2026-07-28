@@ -1045,6 +1045,25 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
 }
 .report-sales-layout{display:block;min-height:0}
 #report-sales-workspace .pos-history-list{width:100%;max-height:none}
+#page-reports.receipt-page-open>.content-width>:not(#report-sale-receipt-page){display:none!important}
+.history-receipt-page{max-width:760px;margin:0 auto}
+.history-receipt-toolbar{position:sticky;z-index:5;top:0;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;margin:0 0 18px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.96);box-shadow:0 8px 24px rgba(8,25,30,.08);backdrop-filter:blur(12px)}
+.history-receipt-toolbar>div:nth-child(2){display:grid;gap:2px;text-align:center}.history-receipt-toolbar small{color:var(--muted);font-size:8px;font-weight:850;letter-spacing:.1em}.history-receipt-toolbar strong{font-size:12px}
+.history-back-button,.history-menu-toggle{border:0;background:transparent;color:var(--ink);font-weight:850}.history-back-button{justify-self:start;padding:9px}.history-menu-toggle{justify-self:end;width:42px;height:42px;border:1px solid var(--line);border-radius:10px;font-size:25px;line-height:1}
+.history-receipt-menu{position:relative;justify-self:end}.history-action-menu{position:absolute;z-index:10;top:48px;right:0;display:grid;width:230px;padding:6px;border:1px solid var(--line);border-radius:12px;background:#fff;box-shadow:0 18px 48px rgba(8,25,30,.2)}
+.history-action-menu button{padding:11px 12px;border:0;border-radius:8px;background:transparent;color:var(--ink);font-size:12px;font-weight:750;text-align:left}.history-action-menu button:hover{background:var(--paper)}.history-action-menu button.danger{color:var(--danger)}
+.history-receipt-layout{display:grid;gap:14px;justify-items:center}.history-receipt-paper{width:min(390px,100%);padding:26px;border:1px solid #d7dddb;border-radius:4px;background:#fff;box-shadow:0 14px 40px rgba(8,25,30,.09)}
+.history-receipt-details{width:min(520px,100%);padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}.history-receipt-details h2{margin:0 0 12px}.history-receipt-details>div{display:flex;justify-content:space-between;gap:18px;padding:9px 0;border-bottom:1px solid var(--line)}.history-receipt-details span{color:var(--muted);font-size:11px}.history-receipt-details strong{text-align:right;font-size:12px}
+@media(max-width:560px){.history-receipt-toolbar{top:6px;margin-bottom:10px}.history-back-button span{display:none}.history-receipt-paper{padding:22px 18px;border-radius:10px}.history-action-menu{position:fixed;top:auto;right:12px;bottom:max(12px,env(safe-area-inset-bottom));left:12px;width:auto;padding:8px}.history-action-menu button{min-height:44px;font-size:13px}}
+@media print{
+  body.history-receipt-print>*{display:none!important}
+  body.history-receipt-print>#app-view{display:block!important}
+  body.history-receipt-print #app-view>.sidebar,body.history-receipt-print #app-view>.sidebar-backdrop,body.history-receipt-print .topbar{display:none!important}
+  body.history-receipt-print #page-reports,body.history-receipt-print #report-sale-receipt-page,body.history-receipt-print .history-receipt-layout,body.history-receipt-print .history-receipt-paper{display:block!important}
+  body.history-receipt-print .history-receipt-toolbar,body.history-receipt-print .history-receipt-details{display:none!important}
+  body.history-receipt-print .content-width{padding:0!important}
+  body.history-receipt-print .history-receipt-paper{width:80mm!important;max-width:80mm!important;margin:0!important;padding:2mm!important;border:0!important;box-shadow:none!important}
+}
 .report-filter-panel{margin-bottom:12px}
 .report-filter-panel>summary{display:none}
 @media(min-width:761px){.report-filter-panel>.report-filter-bar{display:grid!important}}
