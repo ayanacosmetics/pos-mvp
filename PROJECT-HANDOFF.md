@@ -61,6 +61,9 @@ kode frontend, dokumentasi publik, atau chat.
   ditimpa melalui kolom stok awal.
 - API `2.13.0-cloud`, aset/cache PWA `v104`, migrasi SQL
   `202607280041_excel_product_import.sql`.
+- Migrasi SQL dikonfirmasi berhasil diterapkan pada 28 Juli 2026. Produksi
+  `kasir-nusa-pos.vercel.app`, aset SheetJS, dan cache PWA telah diverifikasi;
+  seluruh 225 pengujian otomatis lulus.
 
 ### Rilis v2.12.0 Harga Aman Otomatis
 
