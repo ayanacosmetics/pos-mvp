@@ -48,7 +48,7 @@ const BACKUP_TABLES = [
   'backup_exports','pilot_runs','pilot_check_results','production_incidents','recovery_drills',
   'expense_categories','outlet_expenses','chart_of_accounts','accounting_periods','journal_entries','journal_lines',
   'purchase_planning_settings','restock_policies','purchase_orders','purchase_order_items','purchase_receipts','purchase_receipt_items','supplier_returns','supplier_return_items',
-  'stock_balances','stock_ledger','inventory_batches','inventory_batch_movements',
+  'stock_balances','stock_ledger','inventory_batches','inventory_batch_movements','sale_stock_allocations','stock_adjustments',
   'stock_transfers','stock_transfer_items','transfer_requests','transfer_request_items','transfer_request_batches','outlet_price_overrides','promotion_outlets','operational_notifications','stock_counts','stock_count_items',
   'customer_returns','customer_return_items','customer_refunds',
   'pos_devices','sync_commands','document_sequences','audit_logs','import_jobs'
@@ -1291,7 +1291,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.11-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.12-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2727,11 +2727,82 @@ async function routeRequest(request, response, route) {
 
   if (request.method === 'GET' && route === 'inventory') {
     requirePermission(session, 'inventory.manage');
-    const [balances, ledger] = await Promise.all([
+    const [balances, ledger, products] = await Promise.all([
       rest('stock_balances', `tenant_id=eq.${context.tenantId}&location_id=${inFilter(context.locationIds)}&select=*&order=location_id`),
-      rest('stock_ledger', `tenant_id=eq.${context.tenantId}&location_id=${inFilter(context.locationIds)}&select=*&order=occurred_at.desc&limit=50`)
+      rest('stock_ledger', `tenant_id=eq.${context.tenantId}&location_id=${inFilter(context.locationIds)}&select=*&order=occurred_at.desc&limit=50`),
+      rest('products', `tenant_id=eq.${context.tenantId}&select=id,sku,name,category,brand,image_url,minimum_stock,track_expiry,active&order=name`)
     ]);
-    return send(response, 200, { balances, ledger });
+    const canViewCost=session.permissions.includes('purchasing.view_cost');
+    return send(response, 200, {
+      balances:canViewCost?balances:balances.map(({ avg_cost, ...balance })=>balance),
+      ledger:canViewCost?ledger:ledger.map(({ unit_cost, ...entry })=>entry),
+      products
+    });
+  }
+
+  const inventoryAdjustmentMatch=route.match(/^inventory-products\/([^/]+)\/adjustments$/);
+  if(request.method==='POST'&&inventoryAdjustmentMatch){
+    requirePermission(session,'inventory.manage');
+    const input=bodyOf(request),key=request.headers['idempotency-key'];
+    if(!key)throw Object.assign(new Error('Idempotency-Key wajib diisi'),{status:400});
+    requireLocationAccess(context,input.locationId);
+    const direction=String(input.direction??'').trim().toUpperCase();
+    const quantity=moneyInput(input.quantity,'Jumlah stok');
+    const canViewCost=session.permissions.includes('purchasing.view_cost');
+    const unitCost=direction==='IN'&&canViewCost?moneyInput(input.unitCost,'Modal per pcs',{allowZero:true}):null;
+    const expiresOn=String(input.expiresOn??'').trim()||null;
+    if(expiresOn&&!/^\d{4}-\d{2}-\d{2}$/.test(expiresOn))throw Object.assign(new Error('Tanggal EXP tidak valid'),{status:400});
+    const result=await rpc('adjust_product_stock_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:key,
+      p_location_id:input.locationId,p_product_id:inventoryAdjustmentMatch[1],
+      p_direction:direction,p_quantity:quantity,p_unit_cost:unitCost,
+      p_batch_no:String(input.batchNo??'').trim()||null,p_expires_on:expiresOn,
+      p_reason:String(input.reason??'').trim()
+    });
+    return send(response,result.duplicate?200:201,result);
+  }
+
+  const inventoryProductMatch=route.match(/^inventory-products\/([^/]+)$/);
+  if(request.method==='GET'&&inventoryProductMatch){
+    requirePermission(session,'inventory.manage');
+    const productId=inventoryProductMatch[1],scope=`tenant_id=eq.${context.tenantId}&product_id=eq.${encodeURIComponent(productId)}`;
+    const [products,balances,batches,ledger,allocations]=await Promise.all([
+      rest('products',`tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(productId)}&select=id,sku,name,category,brand,image_url,minimum_stock,track_expiry,active&limit=1`),
+      rest('stock_balances',`${scope}&location_id=${inFilter(context.locationIds)}&select=*&order=location_id`),
+      rest('inventory_batches',`${scope}&location_id=${inFilter(context.locationIds)}&select=*&order=received_at.desc&limit=200`),
+      rest('stock_ledger',`${scope}&location_id=${inFilter(context.locationIds)}&select=*&order=occurred_at.desc&limit=200`),
+      rest('sale_stock_allocations',`${scope}&select=*&order=occurred_at.desc&limit=200`).catch(()=>[])
+    ]);
+    if(!products[0])throw Object.assign(new Error('Produk tidak ditemukan'),{status:404});
+    const canViewCost=session.permissions.includes('purchasing.view_cost');
+    const locations=new Map(context.locations.map((location)=>[location.id,location]));
+    const visibleLedgerIds=new Set(ledger.map((item)=>item.id));
+    const visibleBatches=batches.map((batch)=>({
+      id:batch.id,locationId:batch.location_id,locationName:locations.get(batch.location_id)?.name??'Lokasi',
+      batchNo:batch.batch_no??'-',expiresOn:batch.expires_on,receivedAt:batch.received_at,
+      receivedQty:Number(batch.received_qty),availableQty:Number(batch.available_qty),
+      supplierName:batch.supplier_name??'-',
+      ...(canViewCost?{unitCost:Number(batch.unit_cost),stockValue:Number(batch.available_qty)*Number(batch.unit_cost)}:{})
+    }));
+    return send(response,200,{
+      product:products[0],canViewCost,
+      balances:balances.map((balance)=>({
+        locationId:balance.location_id,locationName:locations.get(balance.location_id)?.name??'Lokasi',
+        quantity:Number(balance.quantity),...(canViewCost?{averageCost:Number(balance.avg_cost)}:{})
+      })),
+      batches:visibleBatches,
+      ledger:ledger.map((item)=>({
+        id:item.id,locationId:item.location_id,locationName:locations.get(item.location_id)?.name??'Lokasi',
+        delta:Number(item.delta),balanceAfter:Number(item.balance_after),eventType:item.event_type,
+        referenceId:item.reference_id,note:item.note,occurredAt:item.occurred_at,
+        ...(canViewCost?{unitCost:Number(item.unit_cost)}:{})
+      })),
+      allocations:canViewCost?allocations.filter((item)=>visibleLedgerIds.has(item.stock_ledger_id)).map((item)=>({
+        id:item.id,saleId:item.sale_id,batchId:item.batch_id,lineIndex:item.line_index,
+        quantity:Number(item.base_qty),unitCost:Number(item.unit_cost),costTotal:Number(item.cost_total),
+        occurredAt:item.occurred_at
+      })):[]
+    });
   }
 
   if (request.method === 'GET' && route === 'expiry-dashboard') {

@@ -10,7 +10,7 @@ import { createProductExportWorkbook, createTemplateWorkbook, productExportRows,
 import { barcodeModuleCount, barcodeSvg, labelSize, normalizeCode128Text } from './product-labels.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -3153,6 +3153,218 @@ function renderExpiryDashboard() {
   document.querySelectorAll('[data-expiry-filter]').forEach((button) => button.addEventListener('click', () => { el('expiry-filter').value = button.dataset.expiryFilter; renderExpiryDashboard(); }));
 }
 
+function canViewInventoryCost() {
+  return Boolean(state.session?.permissions?.includes('purchasing.view_cost'));
+}
+
+function inventoryProductBalance(productId) {
+  const balances = state.inventory.filter((item) => item.product_id === productId);
+  return {
+    balances,
+    total: balances.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0),
+    value: balances.reduce((sum, item) => sum + (Number(item.quantity ?? 0) * Number(item.avg_cost ?? 0)), 0)
+  };
+}
+
+function renderStockManagement() {
+  const query = el('stock-management-search').value.trim().toLocaleLowerCase('id-ID');
+  const filter = el('stock-management-filter').value;
+  const canViewCost = canViewInventoryCost();
+  const products = state.inventoryProducts.filter((product) => {
+    const stock = inventoryProductBalance(product.id);
+    const minimum = Number(product.minimumStock ?? 0);
+    const matchesSearch = !query || `${product.name} ${product.sku} ${product.category} ${product.brand}`.toLocaleLowerCase('id-ID').includes(query);
+    const matchesFilter = filter === 'ALL'
+      || (filter === 'LOW' && stock.total > 0 && stock.total <= minimum)
+      || (filter === 'EMPTY' && stock.total <= 0)
+      || (filter === 'ACTIVE' && product.active !== false)
+      || (filter === 'INACTIVE' && product.active === false);
+    return matchesSearch && matchesFilter;
+  });
+  el('inventory-table').innerHTML = products.map((product) => {
+    const stock = inventoryProductBalance(product.id);
+    const minimum = Number(product.minimumStock ?? 0);
+    const locationSummary = stock.balances
+      .map((balance) => `${escapeHtml(locationName(balance.location_id))}: ${Number(balance.quantity).toLocaleString('id-ID')}`)
+      .join(' · ') || 'Belum ada stok di lokasi';
+    const tone = product.active === false ? 'inactive' : stock.total <= 0 ? 'empty' : stock.total <= minimum ? 'low' : 'safe';
+    const status = product.active === false ? 'Nonaktif' : stock.total <= 0 ? 'Habis' : stock.total <= minimum ? 'Menipis' : 'Aman';
+    return `<button type="button" class="stock-management-row" data-stock-product-id="${product.id}">
+      ${productThumbnail(product)}
+      <span class="stock-management-identity"><small>${escapeHtml(product.category || 'Tanpa kategori')} · ${escapeHtml(product.brand || 'Tanpa merek')}</small><strong>${escapeHtml(product.name)}</strong><span>SKU ${escapeHtml(product.sku)}</span></span>
+      <span class="stock-management-location"><small>Per lokasi</small><strong>${locationSummary}</strong></span>
+      <span class="stock-management-fact"><small>Total stok</small><strong>${stock.total.toLocaleString('id-ID')} pcs</strong><span>Minimum ${minimum.toLocaleString('id-ID')}</span></span>
+      ${canViewCost ? `<span class="stock-management-fact"><small>Nilai stok</small><strong>${money.format(stock.value)}</strong><span>Detail modal per batch</span></span>` : ''}
+      <span class="stock-status ${tone}">${status}</span><b aria-hidden="true">›</b>
+    </button>`;
+  }).join('') || '<div class="empty-state compact">Tidak ada barang yang sesuai pencarian atau filter.</div>';
+  bindProductImageFallbacks(el('inventory-table'));
+}
+
+function stockEventLabel(eventType) {
+  return ({
+    PURCHASE_RECEIPT:'Penerimaan pembelian',
+    STOCK_ADJUSTMENT_IN:'Tambah stok manual',
+    STOCK_ADJUSTMENT_OUT:'Kurangi stok manual',
+    MANUAL_IN:'Tambah stok manual',
+    MANUAL_OUT:'Kurangi stok manual',
+    SALE:'Penjualan',
+    SALE_VOID:'Void penjualan',
+    CUSTOMER_RETURN:'Retur pelanggan',
+    SUPPLIER_RETURN:'Retur supplier',
+    STOCK_COUNT:'Stok opname',
+    TRANSFER_IN:'Transfer masuk',
+    TRANSFER_OUT:'Transfer keluar',
+    OPENING_BALANCE:'Saldo awal'
+  })[eventType] ?? String(eventType ?? 'Pergerakan stok').replaceAll('_', ' ');
+}
+
+function renderStockProductOverview() {
+  const detail = state.stockProductDetail;
+  if (!detail) return;
+  const total = detail.balances.reduce((sum, balance) => sum + Number(balance.quantity), 0);
+  const activeBatches = detail.batches.filter((batch) => Number(batch.availableQty) > 0);
+  const stockValue = activeBatches.reduce((sum, batch) => sum + Number(batch.stockValue ?? 0), 0);
+  el('stock-product-summary').innerHTML = [
+    ['Total stok', `${total.toLocaleString('id-ID')} pcs`],
+    ['Lokasi berisi', `${detail.balances.filter((item) => Number(item.quantity) > 0).length} lokasi`],
+    ['Batch aktif', `${activeBatches.length} batch`],
+    ...(detail.canViewCost ? [['Nilai batch tersisa', money.format(stockValue)]] : [])
+  ].map(([label, value]) => `<article><small>${label}</small><strong>${value}</strong></article>`).join('');
+  const balances = detail.balances.map((balance) => `<article class="stock-location-row"><span><strong>${escapeHtml(balance.locationName)}</strong><small>${Number(balance.quantity) > 0 ? 'Stok tersedia' : 'Belum ada stok'}</small></span><span><strong>${Number(balance.quantity).toLocaleString('id-ID')} pcs</strong>${detail.canViewCost ? `<small>Modal rata-rata saldo ${money.format(balance.averageCost)}</small>` : ''}</span></article>`).join('');
+  const batches = detail.batches.map((batch) => {
+    const depleted = Number(batch.availableQty) <= 0;
+    return `<article class="stock-batch-row ${depleted ? 'depleted' : ''}">
+      <span><strong>Batch ${escapeHtml(batch.batchNo)}</strong><small>${escapeHtml(batch.locationName)} · diterima ${new Date(batch.receivedAt).toLocaleDateString('id-ID')}</small></span>
+      <span><small>${batch.expiresOn ? `EXP ${displayExpiryDate(batch.expiresOn)} · FEFO` : 'Tanpa EXP · FIFO'}</small><strong>${Number(batch.availableQty).toLocaleString('id-ID')} / ${Number(batch.receivedQty).toLocaleString('id-ID')} pcs</strong></span>
+      <span><small>${escapeHtml(batch.supplierName || '-')}</small>${detail.canViewCost ? `<strong>${money.format(batch.unitCost)} / pcs</strong>` : ''}</span>
+    </article>`;
+  }).join('');
+  el('stock-product-overview').innerHTML = `<section class="stock-detail-section"><header><div><p class="eyebrow">STOK PER LOKASI</p><h3>Saldo yang tersedia</h3></div></header><div class="stock-location-list">${balances || '<div class="empty-state compact">Belum ada saldo stok.</div>'}</div></section>
+    <section class="stock-detail-section"><header><div><p class="eyebrow">RIWAYAT LAPISAN STOK</p><h3>Stok lama dan stok baru tidak dicampur</h3><small>Batch bertanggal keluar dengan FEFO; batch tanpa EXP keluar dengan FIFO. Modal transaksi baru mengikuti batch yang benar-benar keluar.</small></div></header><div class="stock-batch-list">${batches || '<div class="empty-state compact">Belum ada penerimaan atau batch stok.</div>'}</div></section>`;
+}
+
+function renderStockProductLog() {
+  const detail = state.stockProductDetail;
+  if (!detail) return;
+  const batches = new Map(detail.batches.map((batch) => [batch.id, batch]));
+  const rows = detail.ledger.map((entry) => {
+    const allocations = detail.allocations.filter((allocation) => allocation.saleId === entry.referenceId);
+    const layerText = allocations.map((allocation) => {
+      const batch = batches.get(allocation.batchId);
+      return `Batch ${escapeHtml(batch?.batchNo ?? '-')} ${Number(allocation.quantity).toLocaleString('id-ID')} pcs × ${money.format(allocation.unitCost)}`;
+    }).join(' · ');
+    return `<article class="stock-log-row">
+      <span class="stock-log-delta ${Number(entry.delta) >= 0 ? 'in' : 'out'}">${Number(entry.delta) >= 0 ? '+' : ''}${Number(entry.delta).toLocaleString('id-ID')}</span>
+      <span><strong>${escapeHtml(stockEventLabel(entry.eventType))}</strong><small>${new Date(entry.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(entry.locationName)}</small>${entry.note ? `<small>${escapeHtml(entry.note)}</small>` : ''}${layerText ? `<small class="stock-layer-cost">${layerText}</small>` : ''}</span>
+      <span><small>Saldo setelahnya</small><strong>${Number(entry.balanceAfter).toLocaleString('id-ID')} pcs</strong>${detail.canViewCost && entry.unitCost != null ? `<small>Modal ${money.format(entry.unitCost)} / pcs</small>` : ''}</span>
+    </article>`;
+  }).join('');
+  el('stock-product-log').innerHTML = `<section class="stock-detail-section"><header><div><p class="eyebrow">LOG BARANG</p><h3>Semua pergerakan stok</h3><small>Penerimaan, penjualan, retur, opname, transfer, dan penyesuaian tampil berurutan.</small></div></header><div class="stock-log-list">${rows || '<div class="empty-state compact">Belum ada pergerakan stok.</div>'}</div></section>`;
+}
+
+function syncStockAdjustmentLocationCost() {
+  const detail = state.stockProductDetail;
+  if (!detail?.canViewCost || state.stockProductView !== 'add') return;
+  const balance = detail.balances.find((item) => item.locationId === el('stock-adjustment-location').value);
+  if (balance && !el('stock-adjustment-unit-cost').dataset.edited) el('stock-adjustment-unit-cost').value = Number(balance.averageCost ?? 0);
+}
+
+function showStockProductView(view = 'overview') {
+  if (!state.stockProductDetail) return;
+  state.stockProductView = view;
+  const adjustment = ['add', 'subtract'].includes(view);
+  const incoming = view === 'add';
+  el('stock-product-overview').classList.toggle('hidden', view !== 'overview');
+  el('stock-product-log').classList.toggle('hidden', view !== 'log');
+  el('stock-adjustment-form').classList.toggle('hidden', !adjustment);
+  document.querySelectorAll('[data-stock-product-view]').forEach((button) => button.classList.toggle('active', button.dataset.stockProductView === view));
+  if (!adjustment) return;
+  el('stock-adjustment-direction').value = incoming ? 'IN' : 'OUT';
+  el('stock-adjustment-cost-field').classList.toggle('hidden', !incoming || !state.stockProductDetail.canViewCost);
+  el('stock-adjustment-batch-field').classList.toggle('hidden', !incoming);
+  el('stock-adjustment-expiry-field').classList.toggle('hidden', !incoming);
+  el('stock-adjustment-help').textContent = incoming
+    ? 'Stok masuk dibuat sebagai batch baru. Isi modal pembelian agar keuntungan penjualan dihitung tepat.'
+    : 'Stok akan dikurangi dari batch EXP terdekat (FEFO), lalu dari stok terlama tanpa EXP (FIFO).';
+  el('submit-stock-adjustment').textContent = incoming ? 'Tambah stok' : 'Kurangi stok';
+  el('stock-adjustment-error').textContent = '';
+  el('stock-adjustment-quantity').focus();
+  syncStockAdjustmentLocationCost();
+}
+
+async function openStockProduct(productId) {
+  state.stockProductId = productId;
+  state.stockProductDetail = null;
+  const product = state.inventoryProducts.find((item) => item.id === productId);
+  el('stock-product-title').textContent = product?.name ?? 'Detail stok';
+  el('stock-product-subtitle').textContent = product ? `${product.sku} · ${product.category || 'Tanpa kategori'}` : 'Memuat barang...';
+  el('stock-product-summary').innerHTML = '<div class="empty-state compact">Memuat ringkasan stok...</div>';
+  el('stock-product-overview').innerHTML = '<div class="empty-state compact">Memuat batch dan lokasi...</div>';
+  el('stock-product-log').innerHTML = '';
+  el('stock-adjustment-form').reset();
+  el('stock-adjustment-unit-cost').dataset.edited = '';
+  el('edit-stock-product').classList.toggle('hidden', !state.session.permissions.includes('catalog.manage'));
+  if (!el('stock-product-dialog').open) el('stock-product-dialog').showModal();
+  try {
+    const detail = await request(`/api/inventory-products/${productId}`);
+    detail.product = {
+      ...detail.product,
+      minimumStock: Number(detail.product.minimum_stock ?? 0),
+      trackExpiry: Boolean(detail.product.track_expiry),
+      imageUrl: detail.product.image_url ?? ''
+    };
+    state.stockProductDetail = detail;
+    el('stock-product-title').textContent = detail.product.name;
+    el('stock-product-subtitle').textContent = `${detail.product.sku} · ${detail.product.category || 'Tanpa kategori'} · ${detail.product.active === false ? 'Nonaktif' : 'Aktif'}`;
+    const locationIds = new Set(detail.balances.map((balance) => balance.locationId));
+    const locations = [...state.locations.filter((location) => locationIds.has(location.id)), ...state.locations.filter((location) => !locationIds.has(location.id))];
+    el('stock-adjustment-location').innerHTML = locations.map((location) => `<option value="${location.id}">${escapeHtml(location.name)}</option>`).join('');
+    renderStockProductOverview();
+    renderStockProductLog();
+    showStockProductView('overview');
+  } catch (error) {
+    el('stock-product-summary').innerHTML = '';
+    el('stock-product-overview').innerHTML = `<div class="empty-state compact"><strong>Detail stok gagal dimuat</strong><small>${escapeHtml(error.message)}</small></div>`;
+  }
+}
+
+async function submitStockAdjustment(event) {
+  event.preventDefault();
+  if (!state.stockProductId || !state.stockProductDetail) return;
+  const button = el('submit-stock-adjustment');
+  const direction = el('stock-adjustment-direction').value;
+  el('stock-adjustment-error').textContent = '';
+  button.disabled = true;
+  button.textContent = 'Menyimpan...';
+  try {
+    const payload = {
+      direction,
+      locationId: el('stock-adjustment-location').value,
+      quantity: Number(el('stock-adjustment-quantity').value),
+      reason: el('stock-adjustment-reason').value.trim(),
+      ...(direction === 'IN' ? {
+        unitCost: Number(el('stock-adjustment-unit-cost').value || 0),
+        batchNo: el('stock-adjustment-batch').value.trim() || null,
+        expiresOn: el('stock-adjustment-expiry').value || null
+      } : {})
+    };
+    await request(`/api/inventory-products/${state.stockProductId}/adjustments`, {
+      method:'POST',
+      headers:{'idempotency-key':crypto.randomUUID()},
+      body:JSON.stringify(payload)
+    });
+    toast(direction === 'IN' ? 'Stok berhasil ditambahkan' : 'Stok berhasil dikurangi');
+    await Promise.all([loadInventory(), refreshCatalog()]);
+    await openStockProduct(state.stockProductId);
+  } catch (error) {
+    el('stock-adjustment-error').textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = direction === 'IN' ? 'Tambah stok' : 'Kurangi stok';
+  }
+}
+
 async function loadInventory() {
   const [data, expiry] = await Promise.all([
     request('/api/inventory'),
@@ -3160,22 +3372,21 @@ async function loadInventory() {
   ]);
   state.inventory = data.balances;
   state.ledger = data.ledger;
+  state.inventoryProducts = (data.products ?? state.products).map((product) => ({
+    ...product,
+    minimumStock: Number(product.minimum_stock ?? product.minimumStock ?? 0),
+    trackExpiry: Boolean(product.track_expiry ?? product.trackExpiry),
+    imageUrl: product.image_url ?? product.imageUrl ?? '',
+    active: product.active !== false
+  }));
   state.expiryBatches = expiry.batches ?? [];
   state.expiryMetrics = expiry.metrics ?? null;
   state.expiryError = expiry.error ?? null;
   const storeLocation = state.locations.find((location) => location.kind === 'STORE');
-  const warehouseLocation = state.locations.find((location) => location.kind === 'WAREHOUSE');
-  const rows = state.products.map((product) => {
-    const outlet = state.inventory.find((item) => item.location_id === storeLocation?.id && item.product_id === product.id);
-    const warehouse = state.inventory.find((item) => item.location_id === warehouseLocation?.id && item.product_id === product.id);
-    const outletQty=Number(outlet?.quantity??0),warehouseQty=Number(warehouse?.quantity??0);
-    return `<article class="inventory-product-row">${productThumbnail(product)}<div class="inventory-product-copy"><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)} · ${escapeHtml(product.category)}</small></div><div class="inventory-product-fact"><small>Toko</small><strong>${outletQty.toLocaleString('id-ID')} pcs</strong></div><div class="inventory-product-fact"><small>Gudang</small><strong>${warehouseQty.toLocaleString('id-ID')} pcs</strong></div><div class="inventory-product-fact inventory-total"><small>Total stok</small><strong>${(outletQty+warehouseQty).toLocaleString('id-ID')} pcs</strong></div><div class="inventory-product-fact inventory-cost"><small>Modal rata-rata</small><strong>${money.format(outlet?.avg_cost??0)}</strong></div></article>`;
-  }).join('');
-  el('inventory-table').innerHTML = `<div class="inventory-list-heading"><span>Produk</span><span>Toko</span><span>Gudang</span><span>Total</span><span>Modal</span></div><div class="inventory-product-list">${rows||'<div class="empty-state compact">Belum ada produk.</div>'}</div>`;
-  bindProductImageFallbacks(el('inventory-table'));
-  el('count-fields').innerHTML = state.products.map((product) => {
+  renderStockManagement();
+  el('count-fields').innerHTML = state.inventoryProducts.map((product) => {
     const balance = state.inventory.find((item) => item.location_id === storeLocation?.id && item.product_id === product.id);
-    return `<label class="count-field"><span>${product.name}</span><input data-count-product="${product.id}" type="number" min="0" value="${balance?.quantity ?? 0}"></label>`;
+    return `<label class="count-field"><span>${escapeHtml(product.name)}</span><input data-count-product="${product.id}" type="number" min="0" value="${balance?.quantity ?? 0}"></label>`;
   }).join('');
   el('ledger-table').innerHTML = `<table><thead><tr><th>Waktu</th><th>Lokasi</th><th>Produk</th><th>Jenis</th><th>Perubahan</th><th>Saldo</th></tr></thead><tbody>${state.ledger.map((item) => `<tr><td>${new Date(item.occurred_at).toLocaleString('id-ID')}</td><td>${locationName(item.location_id)}</td><td>${productName(item.product_id)}</td><td>${item.event_type.replaceAll('_', ' ')}</td><td>${item.delta > 0 ? '+' : ''}${item.delta}</td><td>${item.balance_after}</td></tr>`).join('') || '<tr><td colspan="6">Belum ada pergerakan stok.</td></tr>'}</tbody></table>`;
   renderExpiryDashboard();
@@ -5117,11 +5328,20 @@ function trapSidebarFocus(event) {
 
 function showStockView(name='list'){
   const page=el('page-stock'),workspace=page.querySelector('.stock-workspace'),parts=[...workspace.children];
+  const headings={
+    list:['PERSEDIAAN','Manajemen stok','Tekan barang untuk menambah, mengurangi, melihat batch, atau memeriksa log stok.'],
+    expiry:['BATCH & EXP','Batch dan kedaluwarsa','Pantau urutan FEFO, stok tanpa tanggal EXP, dan risiko kedaluwarsa.'],
+    count:['STOK OPNAME','Stok opname','Catat jumlah fisik; setiap selisih masuk jurnal dan audit.'],
+    ledger:['JURNAL STOK','Jurnal stok','Jejak pergerakan stok terbaru di seluruh barang dan lokasi.']
+  };
+  const [eyebrow,title,description]=headings[name]??headings.list;
+  el('stock-page-eyebrow').textContent=eyebrow;
+  el('stock-page-title').textContent=title;
+  el('stock-page-description').textContent=description;
   page.querySelector('.expiry-dashboard').classList.toggle('hidden',name!=='expiry');
-  workspace.classList.toggle('hidden',!['transfer','count'].includes(name));
-  parts[0]?.classList.toggle('hidden',name!=='transfer');
-  parts[1]?.classList.toggle('hidden',name!=='count');
-  el('inventory-table').classList.toggle('hidden',name!=='list');
+  workspace.classList.toggle('hidden',name!=='count');
+  parts[0]?.classList.toggle('hidden',name!=='count');
+  el('stock-management-panel').classList.toggle('hidden',name!=='list');
   page.querySelector('.ledger-title').classList.toggle('hidden',name!=='ledger');
   el('ledger-table').classList.toggle('hidden',name!=='ledger');
 }
@@ -5910,6 +6130,29 @@ el('restock-supplier').addEventListener('change', async () => {
   el('restock-history').innerHTML = '<p class="eyebrow">HISTORI MODAL</p><p class="muted">Supplier berubah. Klik “Riwayat” untuk melihat histori supplier ini.</p>';
 });
 el('refresh-inventory').addEventListener('click', loadInventory);
+el('stock-management-search').addEventListener('input', renderStockManagement);
+el('stock-management-filter').addEventListener('change', renderStockManagement);
+el('inventory-table').addEventListener('click', (event) => {
+  const row = event.target.closest('[data-stock-product-id]');
+  if (row) openStockProduct(row.dataset.stockProductId);
+});
+el('close-stock-product-dialog').addEventListener('click', () => el('stock-product-dialog').close());
+el('stock-product-dialog').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-stock-product-view]');
+  if (button) showStockProductView(button.dataset.stockProductView);
+});
+el('stock-adjustment-location').addEventListener('change', () => {
+  el('stock-adjustment-unit-cost').dataset.edited = '';
+  syncStockAdjustmentLocationCost();
+});
+el('stock-adjustment-unit-cost').addEventListener('input', () => { el('stock-adjustment-unit-cost').dataset.edited = 'true'; });
+el('stock-adjustment-form').addEventListener('submit', submitStockAdjustment);
+el('edit-stock-product').addEventListener('click', async () => {
+  if (!state.stockProductId || !state.session.permissions.includes('catalog.manage')) return;
+  await loadProductManagement();
+  el('stock-product-dialog').close();
+  openProductEditor(state.stockProductId);
+});
 el('expiry-search').addEventListener('input', renderExpiryDashboard);
 el('expiry-filter').addEventListener('change', renderExpiryDashboard);
 el('count-button').addEventListener('click', postStockCount);

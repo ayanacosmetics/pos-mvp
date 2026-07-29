@@ -40,12 +40,14 @@ test('petugas gudang hanya menerima stok dari outlet yang ditugaskan', async () 
     if (target.includes('/rest/v1/stock_locations?')) return responseOf([{ id: ids.locationA, outlet_id: ids.outletA, kind: 'WAREHOUSE' }, { id: ids.locationB, outlet_id: ids.outletB, kind: 'WAREHOUSE' }]);
     if (target.includes('/rest/v1/stock_balances?')) return responseOf([{ location_id: ids.locationA, product_id: ids.product, quantity: '10', avg_cost: '1000' }]);
     if (target.includes('/rest/v1/stock_ledger?')) return responseOf([]);
+    if (target.includes('/rest/v1/products?')) return responseOf([{ id:ids.product, sku:'SKU-1', name:'Barang A', category:'Umum', active:true }]);
     return responseOf({ message: `Mock belum menangani ${target}` }, 500);
   };
   try {
     const result = await invoke('GET', 'inventory');
     assert.equal(result.status, 200);
     assert.equal(result.body.balances[0].location_id, ids.locationA);
+    assert.equal(Object.hasOwn(result.body.balances[0], 'avg_cost'), false);
     const balanceQuery = calls.find((target) => target.includes('/rest/v1/stock_balances?'));
     assert.match(balanceQuery, new RegExp(`location_id=in\\.\\(${ids.locationA}\\)`));
     assert.equal(balanceQuery.includes(ids.locationB), false);

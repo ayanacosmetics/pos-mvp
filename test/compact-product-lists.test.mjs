@@ -13,11 +13,11 @@ test('Kasir, restok, dan stok memakai daftar produk memanjang dengan thumbnail',
   assert.match(script, /loading="lazy" decoding="async"/);
   assert.match(script, /class="product-card[^"]*"[\s\S]*productThumbnail\(product\)/);
   assert.match(script, /class="planning-compact-row[\s\S]*productThumbnail\(product \?\?/);
-  assert.match(script, /class="inventory-product-row"[\s\S]*productThumbnail\(product\)/);
+  assert.match(script, /class="stock-management-row"[\s\S]*productThumbnail\(product\)/);
   assert.match(css, /\.product-grid\{display:grid;grid-template-columns:minmax\(0,1fr\)!important/);
   assert.match(css, /\.product-card-shell \.product-card\{display:grid;grid-template-columns:60px minmax\(0,1fr\) auto/);
   assert.match(css, /\.planning-compact-row\{grid-template-columns:60px minmax\(200px,1fr\)/);
-  assert.match(css, /\.inventory-list-heading,\.inventory-product-row\{display:grid/);
+  assert.match(css, /\.stock-management-row\{display:grid/);
 });
 
 test('foto produk dapat dipilih dari galeri dan gambar rusak kembali ke placeholder', async () => {

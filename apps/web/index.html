@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=122">
+  <link rel="stylesheet" href="/styles.css?v=123">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -84,7 +84,7 @@
         <button data-nav-group="inventory" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 8 8-4 8 4-8 4zM4 8v8l8 4 8-4V8M12 12v8"/></svg></span><span>Barang & Stok<small>Produk dan persediaan</small></span><b>›</b></button>
         <div data-nav-panel="inventory" class="feature-nav-panel">
           <button data-page="products" class="feature-nav-item" data-permission="catalog.manage"><span>Produk</span><small>Master, satuan, barcode, harga</small></button>
-          <button data-page="stock-list" data-target-page="stock" data-stock-view="list" class="feature-nav-item" data-permission="inventory.manage"><span>Daftar stok</span><small>Saldo per lokasi</small></button>
+          <button data-page="stock-list" data-target-page="stock" data-stock-view="list" class="feature-nav-item" data-permission="inventory.manage"><span>Manajemen stok</span><small>Kelola dan pantau per barang</small></button>
           <button data-page="stock-expiry" data-target-page="stock" data-stock-view="expiry" class="feature-nav-item" data-permission="inventory.manage"><span>Batch & EXP</span><small>FEFO dan kedaluwarsa</small></button>
           <button data-page="stock-count" data-target-page="stock" data-stock-view="count" class="feature-nav-item" data-permission="inventory.manage"><span>Stok opname</span><small>Jumlah fisik dan selisih</small></button>
           <button data-page="stock-ledger" data-target-page="stock" data-stock-view="ledger" class="feature-nav-item" data-permission="inventory.manage"><span>Jurnal stok</span><small>Jejak pergerakan terbaru</small></button>
@@ -176,7 +176,7 @@
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Jarak Label Presisi · v2.16.11</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Manajemen Stok · v2.16.12</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -427,7 +427,7 @@
       </div></section>
 
       <section id="page-stock" class="page"><div class="content-width">
-        <div class="page-title"><div><p class="eyebrow">PERSEDIAAN</p><h1>Stok per lokasi</h1></div><button id="refresh-inventory" class="button secondary">Muat ulang</button></div>
+        <div class="page-title"><div><p id="stock-page-eyebrow" class="eyebrow">PERSEDIAAN</p><h1 id="stock-page-title">Manajemen stok</h1><p id="stock-page-description" class="muted">Tekan barang untuk menambah, mengurangi, melihat batch, atau memeriksa log stok.</p></div><button id="refresh-inventory" class="button secondary">Muat ulang</button></div>
         <section class="expiry-dashboard surface">
           <div class="expiry-heading">
             <div><p class="eyebrow">KONTROL BATCH & EXP</p><h2>Prioritas jual FEFO</h2><p class="muted">Batch dengan tanggal kedaluwarsa terdekat muncul paling awal.</p></div>
@@ -437,7 +437,7 @@
           <div id="expiry-batch-list" class="expiry-batch-list"><div class="empty-state compact">Memuat kontrol kedaluwarsa...</div></div>
         </section>
         <div class="stock-workspace"><div class="surface"><p class="eyebrow">STOK OPNAME TOKO</p><p class="muted">Isi jumlah fisik. Selisih akan masuk jurnal dan audit log.</p><div id="count-fields" class="count-fields"></div><button id="count-button" class="button primary">Posting opname</button></div></div>
-        <div id="inventory-table" class="surface inventory-list-surface"></div>
+        <section id="stock-management-panel"><div class="surface stock-management-toolbar"><input id="stock-management-search" type="search" placeholder="Cari nama, SKU, kategori, atau merek"><select id="stock-management-filter"><option value="ALL">Semua barang</option><option value="LOW">Stok menipis</option><option value="EMPTY">Stok habis</option><option value="ACTIVE">Produk aktif</option><option value="INACTIVE">Produk nonaktif</option></select></div><div id="inventory-table" class="stock-management-list"></div></section>
         <div class="page-title ledger-title"><div><p class="eyebrow">JEJAK PERGERAKAN</p><h2>Jurnal stok terbaru</h2></div></div><div id="ledger-table" class="surface table-wrap"></div>
       </div></section>
 
@@ -905,6 +905,7 @@
     <div class="product-label-calibration-heading"><strong>Margin & kalibrasi printer</strong><small>Pratinjau di bawah memakai raster yang sama persis dengan data cetak.</small></div><div class="product-label-settings calibration-settings"><label>Lebar printer<select id="product-label-printer-width"><option value="58">58 mm</option><option value="80">80 mm</option></select><small>Label otomatis dipusatkan pada lebar printhead.</small></label><label>Margin horizontal (mm)<input id="product-label-margin-x" type="number" min="0" max="10" step="0.1" value="0.5"></label><label>Margin vertikal (mm)<input id="product-label-margin-y" type="number" min="0" max="10" step="0.1" value="0.25"></label><label>Geser mendatar (mm)<input id="product-label-offset-x" type="number" min="-10" max="10" step="0.1" value="0"><small>Negatif ke kiri, positif ke kanan.</small></label><label>Geser vertikal (mm)<input id="product-label-offset-y" type="number" min="-10" max="10" step="0.1" value="0"><small>Negatif ke atas, positif ke bawah.</small></label><label>Rata vertikal<select id="product-label-vertical-align"><option value="TOP">Atas</option><option value="CENTER">Tengah</option><option value="BOTTOM">Bawah</option></select></label></div></details>
     <section class="product-label-copy-editor"><div class="product-label-copy-heading"><div><strong>Jumlah label setiap barang</strong><small>Sesuaikan dengan stok fisik yang masih perlu ditempeli.</small></div><div><button id="product-label-all-one" class="button secondary" type="button">Semua 1</button><button id="product-label-use-stock" class="button secondary" type="button">Ikuti stok</button></div></div><div id="product-label-copy-list"></div></section>
     <div class="product-label-options"><label><input id="product-label-show-name" type="checkbox" checked> Nama barang</label><label><input id="product-label-show-price" type="checkbox" checked> Harga Umum</label><label><input id="product-label-show-code" type="checkbox" checked> Angka barcode</label><label><input id="product-label-show-sku" type="checkbox"> SKU</label></div><div id="product-label-warning" class="product-label-warning"></div><div class="product-label-preview-heading"><strong>Pratinjau langsung</strong><small id="product-label-preview-note">33 × 15 mm · 1 kolom × 1 baris · diperbesar 2×</small></div><div id="product-label-preview" class="product-label-preview"></div><div class="button-row"><button id="cancel-product-label" class="button secondary" type="button">Batal</button><button class="button primary" type="submit">Cetak label</button></div></form></dialog>
+  <dialog id="stock-product-dialog"><div class="dialog-card stock-product-dialog"><div class="comparison-heading"><div><p class="eyebrow">MANAJEMEN STOK BARANG</p><h2 id="stock-product-title">Detail stok</h2><p id="stock-product-subtitle" class="muted"></p></div><button id="close-stock-product-dialog" class="icon-button" type="button" aria-label="Tutup">Ã—</button></div><div id="stock-product-summary" class="stock-product-summary"></div><div class="stock-product-menu"><button class="button secondary active" type="button" data-stock-product-view="overview">Lihat stok</button><button class="button primary" type="button" data-stock-product-view="add">Tambah stok</button><button class="button danger-button" type="button" data-stock-product-view="subtract">Kurangi stok</button><button class="button secondary" type="button" data-stock-product-view="log">Log barang</button><button id="edit-stock-product" class="button secondary" type="button">Edit produk</button></div><div id="stock-product-overview" class="stock-product-workspace"></div><form id="stock-adjustment-form" class="stock-adjustment-form hidden"><input id="stock-adjustment-direction" type="hidden"><div class="form-grid compact"><label>Lokasi<select id="stock-adjustment-location" required></select></label><label>Jumlah pcs<input id="stock-adjustment-quantity" type="number" min="0.000001" step="any" value="1" required></label><label id="stock-adjustment-cost-field">Modal per pcs<input id="stock-adjustment-unit-cost" type="number" min="0" step="any" value="0"></label><label id="stock-adjustment-batch-field">Nomor batch<input id="stock-adjustment-batch" maxlength="80" placeholder="Opsional; dibuat otomatis jika kosong"></label><label id="stock-adjustment-expiry-field">Tanggal EXP<input id="stock-adjustment-expiry" type="date"></label></div><label>Alasan penyesuaian<textarea id="stock-adjustment-reason" minlength="5" maxlength="240" required placeholder="Contoh: stok awal belum tercatat atau barang rusak"></textarea></label><p id="stock-adjustment-help" class="muted"></p><p id="stock-adjustment-error" class="error"></p><div class="button-row"><button class="button secondary" type="button" data-stock-product-view="overview">Batal</button><button id="submit-stock-adjustment" class="button primary" type="submit">Simpan penyesuaian</button></div></form><div id="stock-product-log" class="stock-product-workspace hidden"></div></div></dialog>
   <div id="product-label-print-root" aria-hidden="true"></div>
   <dialog id="product-dialog"><form id="product-form" class="dialog-card product-editor">
     <div class="comparison-heading"><div><p id="product-dialog-eyebrow" class="eyebrow">PRODUK BARU</p><h2 id="product-dialog-title">Tambah produk</h2><p class="muted">Setiap varian mempunyai SKU, barcode, harga, dan stok sendiri.</p></div><button id="close-product-dialog" class="icon-button" type="button">×</button></div>
@@ -945,6 +946,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=122"></script>
+  <script type="module" src="/app.js?v=123"></script>
 </body>
 </html>

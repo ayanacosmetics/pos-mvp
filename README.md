@@ -223,6 +223,11 @@ Untuk rilis v2.4.6, jalankan satu file
 Migrasi ini menambahkan URL foto produk dan transaksi penyimpanan produk v3.
 Jangan deploy source v2.4.6 sebelum migrasi berhasil.
 
+Untuk rilis v2.16.12, jalankan
+`supabase/migrations/202607290044_stock_management_fifo_cost.sql` sebelum
+deployment. Migrasi ini menambahkan penyesuaian stok per barang, log alokasi
+batch, HPP penjualan sesuai FEFO/FIFO, dan pemulihan lapisan modal saat void.
+
 Klik dua kali `Deploy-Kasir-Nusa.cmd` dan tunggu sampai muncul tulisan **Deployment berhasil**.
 
 Rahasia Supabase hanya boleh tersimpan di pengaturan Environment Variables Vercel. Jangan menaruh `SUPABASE_SERVICE_ROLE_KEY` di browser, screenshot, chat, atau repository.
