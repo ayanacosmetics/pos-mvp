@@ -637,7 +637,7 @@ function renderProductTable() {
   el('product-brand-options').innerHTML=brands.map((value)=>`<option value="${escapeHtml(value)}">`).join('');
   const allVisibleSelected=list.length>0&&list.every((product)=>state.selectedProductIds.has(product.id));
   if(state.productActionId&&!list.some((product)=>product.id===state.productActionId))state.productActionId=null;
-  const canViewCost=can('purchasing.view_cost');
+  const canViewCost=state.session?.permissions?.includes('purchasing.view_cost')??false;
   const columnCount=canViewCost?12:11;
   el('product-table').innerHTML=list.length?`<table class="product-admin-table ${canViewCost?'cost-visible':''}"><thead><tr><th class="product-select-cell product-col-select"><input id="select-all-products" type="checkbox" aria-label="Pilih semua barang yang tampil" ${allVisibleSelected?'checked':''}></th><th class="product-col-sku">SKU</th><th class="product-col-barcode">Barcode</th><th class="product-col-name">Nama produk</th><th class="product-col-type">Tipe barang</th><th class="product-col-category">Kategori</th><th class="product-col-brand">Merek</th><th class="product-col-price">Harga umum</th>${canViewCost?'<th class="product-col-cost" title="Modal rata-rata tertimbang seluruh stok">Modal</th>':''}<th class="product-col-stock">Stok</th><th class="product-col-minimum">Min. stok</th><th class="product-col-status">Status</th></tr></thead><tbody>${list.map((product)=>{
     const prices=productPrices(product);

@@ -71,7 +71,7 @@ test('direktori produk memakai kolom umum, barcode utuh, tipe barang, dan detail
   assert.doesNotMatch(script,/>Varian<\/th>|>Satuan<\/th>/);
   assert.match(script,/hasVariant&&hasMultipleUnits\?'Varian \+ Multisatuan'/);
   assert.match(script,/hasMultipleUnits\?`<div class="product-detail-units"/);
-  assert.match(script,/can\('purchasing\.view_cost'\)/);
+  assert.match(script,/const canViewCost=state\.session\?\.permissions\?\.includes\('purchasing\.view_cost'\)\?\?false/);
   assert.match(script,/>Modal<\/th>/);
   assert.doesNotMatch(script,/<th>Aksi<\/th>/);
   assert.match(script,/productActionId:null/);
