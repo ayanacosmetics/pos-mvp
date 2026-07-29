@@ -45,11 +45,24 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.15.1 Barcode Label Ringkas
+
+- Barcode yang seluruhnya angka dan berjumlah digit genap otomatis memakai
+  Code 128C, sehingga dua digit dikemas per simbol dan garis tidak terlalu
+  rapat pada label kecil 33×15 mm.
+- Barcode campuran huruf/angka tetap memakai Code 128B agar SKU dan kode khusus
+  tetap dapat dicetak.
+- Rilis memakai API `2.15.1-cloud`, aset/cache PWA `v110`, tanpa migrasi SQL.
+- Seluruh 235 pengujian otomatis lulus dan produksi telah diverifikasi pada
+  `kasir-nusa-pos.vercel.app`.
+
 ### Rilis v2.15.0 Label Produk
 
 - Direktori Produk dapat mencetak label massal dari barang yang dicentang.
 - Label memakai barcode Code 128 SVG lokal agar tetap tersedia offline. Barcode
   satuan dasar dipakai bila tersedia; SKU menjadi cadangan yang terlihat jelas.
+- Kode angka dengan jumlah digit genap memakai Code 128C agar garis lebih
+  renggang dan aman dipindai pada label kecil 33×15 mm.
 - Pengguna dapat mengisi lebar dan tinggi label bebas dalam milimeter, dengan
   default 33×15 mm, jumlah salinan per barang, serta menampilkan/menyembunyikan
   nama, SKU, dan Harga Umum.

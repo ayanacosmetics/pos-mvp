@@ -17,9 +17,13 @@ export function normalizeCode128Text(value){
 export function code128Values(value){
   const text=normalizeCode128Text(value);
   if(!text)throw new Error('Kode barcode tidak boleh kosong.');
-  const data=[...text].map((character)=>character.charCodeAt(0)-32);
-  const checksum=(104+data.reduce((sum,item,index)=>sum+item*(index+1),0))%103;
-  return [104,...data,checksum,106];
+  const numeric=/^\d+$/.test(text)&&text.length%2===0;
+  const start=numeric?105:104;
+  const data=numeric
+    ?text.match(/\d{2}/g).map(Number)
+    :[...text].map((character)=>character.charCodeAt(0)-32);
+  const checksum=(start+data.reduce((sum,item,index)=>sum+item*(index+1),0))%103;
+  return [start,...data,checksum,106];
 }
 
 export function code128Modules(value){

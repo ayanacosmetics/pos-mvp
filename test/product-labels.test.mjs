@@ -10,6 +10,11 @@ test('Code 128B membentuk checksum dan stop pattern yang valid',()=>{
   assert.doesNotMatch(code128Svg('A"><script>'),/aria-label="[^"]*<script>/);
 });
 
+test('barcode angka genap memakai Code 128C agar garis tidak terlalu rapat',()=>{
+  assert.deepEqual(code128Values('899000000001'),[105,89,90,0,0,0,1,71,106]);
+  assert.ok(code128Modules('899000000001').length<code128Modules('A899000000001').length);
+});
+
 test('kode label dinormalisasi aman dan ukuran hanya dari preset',()=>{
   assert.equal(normalizeCode128Text(' SKU-1\n'),'SKU-1');
   assert.deepEqual(labelSize(33,15),{width:33,height:15});
