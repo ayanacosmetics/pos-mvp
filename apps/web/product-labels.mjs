@@ -108,6 +108,19 @@ export function barcodeModuleCount(value,type='AUTO'){
   return [...code128ModulesFor(value,mode)].reduce((total,width)=>total+Number(width),0)+20;
 }
 
+export function barcodeRasterBits(value,type='AUTO'){
+  const resolved=barcodeTypeFor(value,type);
+  if(resolved==='EAN13'||resolved==='EAN8'){
+    const bits=eanBits(value,resolved);
+    return resolved==='EAN13'?`${'0'.repeat(11)}${bits}${'0'.repeat(7)}`:`${'0'.repeat(9)}${bits}${'0'.repeat(9)}`;
+  }
+  const mode=resolved==='CODE128B'?'B':resolved==='CODE128C'?'C':'AUTO';
+  const modules=code128ModulesFor(value,mode);
+  let bars='';
+  for(let index=0;index<modules.length;index+=1)bars+=(index%2===0?'1':'0').repeat(Number(modules[index]));
+  return `${'0'.repeat(10)}${bars}${'0'.repeat(10)}`;
+}
+
 export function labelSize(width=33,height=15){
   const safe=(value,fallback)=>Math.min(200,Math.max(10,Number(value)||fallback));
   return {width:safe(width,33),height:safe(height,15)};

@@ -3,7 +3,7 @@ import { quoteBasket as quoteOffline } from './pricing.mjs';
 import { deviceIdentity, enqueueCommand, listCommands, migrateLegacyQueue, removeCommand, updateCommand } from './offline-store.mjs';
 import { clearStoredAuth, isAuthStorageEvent, loadAuth, saveAuth, shouldRefreshAuth } from './auth-store.mjs';
 import { customerReceiptView } from './receipt.mjs';
-import { disconnectBluetoothPrinter, printEscPosReceipt, printEscPosTest, printerConnected, printerSelected, restoreGrantedPrinter, selectBluetoothPrinter, supportsBluetoothClassicPrinting } from './escpos-printer.mjs';
+import { disconnectBluetoothPrinter, printEscPosProductLabels, printEscPosReceipt, printEscPosTest, printerConnected, printerSelected, restoreGrantedPrinter, selectBluetoothPrinter, supportsBluetoothClassicPrinting } from './escpos-printer.mjs';
 import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, unitFitsStock } from './pos-units.mjs';
 import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
 import { createProductExportWorkbook, createTemplateWorkbook, productExportRows, productExtensionExportRows, workbookMatrix, workbookTemplates } from './product-workbook.mjs';
@@ -676,7 +676,8 @@ function productLabelBarcode(product,source='BARCODE'){
 }
 
 function productLabelNumber(id,fallback,min,max){
-  return Math.min(max,Math.max(min,Number(el(id).value)||fallback));
+  const raw=el(id).value.trim(),value=raw===''?fallback:Number(raw);
+  return Math.min(max,Math.max(min,Number.isFinite(value)?value:fallback));
 }
 
 function productLabelConfig(){
@@ -692,6 +693,7 @@ function productLabelConfig(){
     codeSize:productLabelNumber('product-label-code-size',1.55,1,8),
     barcodeHeight:productLabelNumber('product-label-barcode-height',4.8,3,40),
     moduleWidth:productLabelNumber('product-label-module-width',.26,.2,.6),
+    gap:productLabelNumber('product-label-gap',2,0,10),
     showName:el('product-label-show-name').checked,showPrice:el('product-label-show-price').checked,
     showCode:el('product-label-show-code').checked,showSku:el('product-label-show-sku').checked
   };
@@ -761,20 +763,45 @@ function setProductLabelCopies(mode){
   renderProductLabelSheet(el('product-label-preview'),{preview:true});
 }
 
-function printProductLabels(event){
+async function printProductLabels(event){
   event.preventDefault();
+  const button=event.submitter??event.currentTarget.querySelector('[type="submit"]');
   const result=renderProductLabelSheet(el('product-label-print-root'));
   if(!result.count)return toast('Pilih minimal satu barang.');
   if(result.errors.length){el('product-label-print-root').replaceChildren();return toast('Periksa jenis barcode: ada kode yang tidak valid.');}
   const nativeAndroid=/KasirNusaAndroid\//.test(navigator.userAgent);
-  const nativeSystemPrint=typeof window.KasirNusaAndroid?.printCurrentPage==='function';
-  if(nativeAndroid&&!nativeSystemPrint){
+  const nativeDirectPrint=typeof window.KasirNusaAndroid?.printBase64==='function';
+  if(nativeAndroid&&!nativeDirectPrint){
     el('product-label-print-root').replaceChildren();
-    return toast('Perbarui aplikasi Kasir Nusa Android ke v1.2.1 untuk mencetak label.');
+    return toast('Perbarui aplikasi Kasir Nusa Android untuk mencetak label Bluetooth.');
   }
-  el('product-label-dialog').close();
-  if(nativeSystemPrint)window.KasirNusaAndroid.printCurrentPage('Label produk Kasir Nusa');
-  else window.print();
+  if(!nativeAndroid){
+    el('product-label-dialog').close();
+    window.print();
+    return;
+  }
+  const config=productLabelConfig();
+  const labels=selectedProductLabels().flatMap((product)=>Array.from(
+    {length:state.productLabelCopies.get(product.id)??1},
+    ()=>({
+      name:product.name,sku:product.sku,
+      barcode:productLabelBarcode(product,config.source),
+      priceText:money.format(productPrices(product).retail)
+    })
+  ));
+  button.disabled=true;button.textContent='Mengirim label…';
+  try{
+    if(!printerSelected())await selectBluetoothPrinter();
+    await printEscPosProductLabels(labels,{...config,width:config.size.width,height:config.size.height,paperWidth:state.deviceSettings.paperWidth});
+    el('product-label-dialog').close();
+    toast(`${labels.length.toLocaleString('id-ID')} label berhasil dikirim langsung ke printer Bluetooth.`);
+  }catch(error){
+    toast(error.message||'Label gagal dikirim ke printer.');
+  }finally{
+    button.disabled=false;button.textContent='Cetak label';
+    el('product-label-print-root').replaceChildren();
+    renderPrinterStatus();
+  }
 }
 
 function applyProductLabelPreset(){

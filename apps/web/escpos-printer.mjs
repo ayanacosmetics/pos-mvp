@@ -1,4 +1,5 @@
 import { customerReceiptView } from './receipt.mjs';
+import { barcodeRasterBits } from './product-labels.mjs';
 
 const encoder = new TextEncoder();
 let activePort = null;
@@ -230,6 +231,102 @@ async function write(bytes) {
   } finally {
     writer.releaseLock();
   }
+}
+
+export const LABEL_DOTS_PER_MM=8;
+
+export function productLabelRasterLayout(label,config={}){
+  const widthMm=Math.max(10,Math.min(200,Number(config.width)||33));
+  const heightMm=Math.max(10,Math.min(200,Number(config.height)||15));
+  const widthDots=Math.max(80,Math.round(widthMm*LABEL_DOTS_PER_MM));
+  const heightDots=Math.max(80,Math.round(heightMm*LABEL_DOTS_PER_MM));
+  const bits=barcodeRasterBits(label.barcode,config.type||'AUTO');
+  const horizontalPadding=Math.max(4,Math.round(LABEL_DOTS_PER_MM*.5));
+  const requestedModuleDots=Math.max(1,Math.round((Number(config.moduleWidth)||.26)*LABEL_DOTS_PER_MM));
+  const moduleDots=Math.min(requestedModuleDots,Math.floor((widthDots-horizontalPadding*2)/bits.length));
+  if(moduleDots<2)throw new Error(`Barcode ${label.barcode} terlalu padat untuk label ${widthMm} mm. Perpendek kode atau lebarkan label.`);
+  const barcodeWidth=bits.length*moduleDots;
+  const barcodeHeight=Math.max(24,Math.min(heightDots-16,Math.round((Number(config.barcodeHeight)||4.8)*LABEL_DOTS_PER_MM)));
+  return {widthMm,heightMm,widthDots,heightDots,bits,moduleDots,barcodeWidth,barcodeHeight};
+}
+
+function fittedFont(context,text,{family='sans-serif',weight='700',size,maxWidth}){
+  let pixels=Math.max(7,Math.round(size));
+  while(pixels>7){
+    context.font=`${weight} ${pixels}px ${family}`;
+    if(context.measureText(text).width<=maxWidth)break;
+    pixels-=1;
+  }
+  return {font:`${weight} ${pixels}px ${family}`,height:Math.ceil(pixels*1.15)};
+}
+
+function rasterCommand(canvas,gapMm=0){
+  const context=canvas.getContext('2d',{willReadFrequently:true});
+  const pixels=context.getImageData(0,0,canvas.width,canvas.height).data;
+  const bytesPerRow=Math.ceil(canvas.width/8);
+  const raster=new Uint8Array(bytesPerRow*canvas.height);
+  for(let y=0;y<canvas.height;y+=1)for(let x=0;x<canvas.width;x+=1){
+    const index=(y*canvas.width+x)*4;
+    const luminance=.299*pixels[index]+.587*pixels[index+1]+.114*pixels[index+2];
+    if(pixels[index+3]>40&&luminance<180)raster[y*bytesPerRow+(x>>3)]|=0x80>>(x&7);
+  }
+  const feedDots=Math.max(0,Math.min(255,Math.round((Number(gapMm)||0)*LABEL_DOTS_PER_MM)));
+  return new Uint8Array([
+    ESC,0x40,ESC,0x61,0x01,
+    GS,0x76,0x30,0x00,bytesPerRow&0xff,(bytesPerRow>>8)&0xff,canvas.height&0xff,(canvas.height>>8)&0xff,
+    ...raster,
+    ...(feedDots?[ESC,0x4a,feedDots]:[]),
+    ESC,0x61,0x00
+  ]);
+}
+
+export function buildEscPosProductLabel(label,config={}){
+  if(typeof document==='undefined')throw new Error('Renderer label hanya tersedia pada perangkat cetak.');
+  const layout=productLabelRasterLayout(label,config);
+  const canvas=document.createElement('canvas');
+  canvas.width=layout.widthDots;canvas.height=layout.heightDots;
+  const context=canvas.getContext('2d',{alpha:false,willReadFrequently:true});
+  context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);
+  context.fillStyle='#000';context.textBaseline='top';
+  const maxWidth=canvas.width-8;
+  const align=config.align==='left'?'left':config.align==='right'?'right':'center';
+  const textX=align==='left'?4:align==='right'?canvas.width-4:canvas.width/2;
+  context.textAlign=align;
+  const name=String(label.name??'').trim(),price=String(label.priceText??'').trim();
+  const code=[config.showSku?label.sku:'',config.showCode?label.barcode:''].filter(Boolean).join(' · ');
+  const nameFont=fittedFont(context,name,{size:(Number(config.nameSize)||2)*LABEL_DOTS_PER_MM,maxWidth});
+  const priceFont=fittedFont(context,price,{size:(Number(config.priceSize)||2.7)*LABEL_DOTS_PER_MM,maxWidth});
+  const codeFont=fittedFont(context,code,{family:'monospace',weight:'400',size:(Number(config.codeSize)||1.55)*LABEL_DOTS_PER_MM,maxWidth});
+  const textLines=[
+    ...(config.showName&&name?[{text:name,...nameFont}]:[]),
+    ...(config.showPrice&&price?[{text:price,...priceFont}]:[])
+  ];
+  const graphicLines=[
+    {barcode:true,height:layout.barcodeHeight},
+    ...(code?[{text:code,...codeFont}]:[])
+  ];
+  const ordered=config.position==='BELOW'?[...graphicLines,...textLines]:[...textLines,...graphicLines];
+  const gap=2,totalHeight=ordered.reduce((sum,item)=>sum+item.height,0)+Math.max(0,ordered.length-1)*gap;
+  if(totalHeight>canvas.height-4)throw new Error(`Isi label melebihi tinggi ${layout.heightMm} mm. Kecilkan tulisan atau barcode.`);
+  let y=Math.max(2,Math.floor((canvas.height-totalHeight)/2));
+  for(const item of ordered){
+    if(item.barcode){
+      const startX=Math.floor((canvas.width-layout.barcodeWidth)/2);
+      for(let index=0;index<layout.bits.length;index+=1)if(layout.bits[index]==='1'){
+        context.fillRect(startX+index*layout.moduleDots,y,layout.moduleDots,item.height);
+      }
+    }else{
+      context.font=item.font;
+      context.fillText(item.text,textX,y,maxWidth);
+    }
+    y+=item.height+gap;
+  }
+  return rasterCommand(canvas,config.gap);
+}
+
+export async function printEscPosProductLabels(labels,config={}){
+  if(!Array.isArray(labels)||!labels.length)throw new Error('Tidak ada label yang akan dicetak.');
+  for(const label of labels)await write(buildEscPosProductLabel(label,config));
 }
 
 export async function restoreGrantedPrinter() {

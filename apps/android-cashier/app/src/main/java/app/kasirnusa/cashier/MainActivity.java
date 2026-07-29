@@ -16,9 +16,6 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.print.PrintAttributes;
-import android.print.PrintDocumentAdapter;
-import android.print.PrintManager;
 import android.util.Base64;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -102,7 +99,7 @@ public final class MainActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setSupportMultipleWindows(false);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " KasirNusaAndroid/1.2.1");
+        settings.setUserAgentString(settings.getUserAgentString() + " KasirNusaAndroid/1.2.2");
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
@@ -217,28 +214,6 @@ public final class MainActivity extends Activity {
             });
         }
 
-        @JavascriptInterface
-        public boolean supportsSystemPrint() {
-            return true;
-        }
-
-        @JavascriptInterface
-        public void printCurrentPage(String requestedName) {
-            runOnUiThread(() -> {
-                try {
-                    PrintManager manager = getSystemService(PrintManager.class);
-                    if (manager == null) throw new IllegalStateException("Layanan cetak Android tidak tersedia.");
-                    String jobName = requestedName == null || requestedName.trim().isEmpty()
-                            ? "Label produk Kasir Nusa"
-                            : requestedName.trim();
-                    PrintDocumentAdapter adapter = webView.createPrintDocumentAdapter(jobName);
-                    manager.print(jobName, adapter, new PrintAttributes.Builder().build());
-                } catch (Exception error) {
-                    Toast.makeText(MainActivity.this, printerError(error), Toast.LENGTH_LONG).show();
-                }
-            });
-        }
-
     }
 
     private boolean hasBluetoothConnectPermission() {
@@ -314,7 +289,7 @@ public final class MainActivity extends Activity {
             if (printerSocket != null && printerSocket.isConnected()) return printerSocket;
         }
         String address = preferences.getString(PRINTER_ADDRESS, "");
-        if (address.isEmpty()) throw new IOException("Pilih printer WP58D terlebih dahulu.");
+        if (address.isEmpty()) throw new IOException("Pilih printer Bluetooth terlebih dahulu.");
         BluetoothDevice device = bluetoothAdapter.getRemoteDevice(address);
         connectSocket(device);
         synchronized (socketLock) {

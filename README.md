@@ -242,7 +242,7 @@ verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 ## Aplikasi kasir Android
 
 Unduh dan instal pembaruan APK dari
-<https://kasir-nusa-pos.vercel.app/downloads/Kasir-Nusa-POS-1.2.0.apk>.
+<https://kasir-nusa-pos.vercel.app/downloads/Kasir-Nusa-POS-1.2.2.apk>.
 Printer dihubungkan dari halaman Perangkat. Scanner dipasangkan sebagai
 keyboard/HID melalui Pengaturan Bluetooth Android, bukan dari aplikasi. Setelah
 tersambung, barcode diteruskan otomatis ke halaman Kasir dan scanner sebaiknya

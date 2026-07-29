@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {barcodeModuleCount,barcodeSvg,barcodeTypeFor,code128Modules,code128Svg,code128Values,eanBits,labelSize,normalizeCode128Text,validEan} from '../apps/web/product-labels.mjs';
+import {barcodeModuleCount,barcodeRasterBits,barcodeSvg,barcodeTypeFor,code128Modules,code128Svg,code128Values,eanBits,labelSize,normalizeCode128Text,validEan} from '../apps/web/product-labels.mjs';
+import {productLabelRasterLayout} from '../apps/web/escpos-printer.mjs';
 
 test('Code 128B membentuk checksum dan stop pattern yang valid',()=>{
   assert.deepEqual(code128Values('ABC'),[104,33,34,35,1,106]);
@@ -31,6 +32,20 @@ test('EAN-13 dan EAN-8 tervalidasi serta dapat dipilih otomatis',()=>{
   assert.throws(()=>barcodeSvg('00000002',{type:'EAN8'}),/bukan EAN-8/);
 });
 
+test('raster label 33 x 15 mm menjaga quiet zone dan garis minimal dua dot',()=>{
+  const bits=barcodeRasterBits('8999908509109');
+  assert.equal(bits.length,113);
+  assert.ok(bits.startsWith('0'.repeat(11)));
+  assert.ok(bits.endsWith('0'.repeat(7)));
+  const layout=productLabelRasterLayout({barcode:'8999908509109'},{width:33,height:15,moduleWidth:.26,barcodeHeight:4.8});
+  assert.equal(layout.widthDots,264);
+  assert.equal(layout.heightDots,120);
+  assert.equal(layout.moduleDots,2);
+  assert.equal(layout.barcodeWidth,226);
+  assert.equal(layout.barcodeHeight,38);
+  assert.throws(()=>productLabelRasterLayout({barcode:'X'.repeat(40)},{width:33,height:15,type:'CODE128B',moduleWidth:.26}),/terlalu padat/);
+});
+
 test('kode label dinormalisasi aman dan ukuran hanya dari preset',()=>{
   assert.equal(normalizeCode128Text(' SKU-1\n'),'SKU-1');
   assert.deepEqual(labelSize(33,15),{width:33,height:15});
@@ -51,11 +66,13 @@ test('UI produk menyediakan seleksi dan dialog cetak label',async()=>{
   assert.match(html,/id="product-label-width"[^>]*value="33"/);
   assert.match(html,/id="product-label-height"[^>]*value="15"/);
   assert.match(script,/barcodeSvg/);
-  for(const id of ['product-label-preset','product-label-source','product-label-type','product-label-columns','product-label-rows','product-label-name-size','product-label-price-size','product-label-code-size','product-label-barcode-height','product-label-module-width','product-label-text-position','product-label-align','product-label-copy-list','product-label-use-stock'])assert.match(html,new RegExp(`id="${id}"`));
+  for(const id of ['product-label-preset','product-label-source','product-label-type','product-label-columns','product-label-rows','product-label-name-size','product-label-price-size','product-label-code-size','product-label-barcode-height','product-label-module-width','product-label-gap','product-label-text-position','product-label-align','product-label-copy-list','product-label-use-stock'])assert.match(html,new RegExp(`id="${id}"`));
   assert.match(script,/productLabelCopies:new Map/);
   assert.match(script,/setProductLabelCopies\('STOCK'\)/);
   assert.match(script,/function productLabelStock/);
   assert.match(script,/barcodeModuleCount/);
+  assert.match(script,/printEscPosProductLabels/);
+  assert.match(script,/window\.KasirNusaAndroid\?\.printBase64/);
   assert.match(html,/id="product-label-module-width"[^>]*value="0\.26"/);
   assert.match(css,/@page\{margin:4mm\}/);
   assert.match(worker,/product-labels\.mjs/);

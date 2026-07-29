@@ -71,7 +71,7 @@
                                     ]
                     },
                     {
-                        "source":  "/downloads/Kasir-Nusa-POS-1.2.1.apk",
+                        "source":  "/downloads/Kasir-Nusa-POS-1.2.2.apk",
                         "headers":  [
                                         {
                                             "key":  "Content-Type",
@@ -79,7 +79,7 @@
                                         },
                                         {
                                             "key":  "Content-Disposition",
-                                            "value":  "attachment; filename=Kasir-Nusa-POS-1.2.1.apk"
+                                            "value":  "attachment; filename=Kasir-Nusa-POS-1.2.2.apk"
                                         },
                                         {
                                             "key":  "Cache-Control",

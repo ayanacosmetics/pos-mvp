@@ -7,10 +7,10 @@ const css = await readFile(new URL('../apps/web/styles.css', import.meta.url), '
 const worker = await readFile(new URL('../apps/web/service-worker.js', import.meta.url), 'utf8');
 
 test('Nusa Commerce memakai identitas rilis dan aset shell terbaru', () => {
-  assert.match(html, /Hotfix Sesi Produk .* v2\.16\.6/);
-  assert.match(html, /styles\.css\?v=117/);
-  assert.match(html, /app\.js\?v=117/);
-  assert.match(worker, /nusa-pos-shell-v117/);
+  assert.match(html, /Cetak Label Bluetooth .* v2\.16\.7/);
+  assert.match(html, /styles\.css\?v=118/);
+  assert.match(html, /app\.js\?v=118/);
+  assert.match(worker, /nusa-pos-shell-v118/);
 });
 
 test('login memiliki hierarki brand profesional tanpa aset eksternal', () => {
