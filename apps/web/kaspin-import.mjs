@@ -41,7 +41,7 @@ export function parseKaspinProductWorkbook(XLSX,arrayBuffer,{useCodeAsBarcode=tr
   if(!source)return null;
   const indexes=Object.fromEntries(source.headers.map((header,index)=>[header,index]));
   const get=(row,key)=>row[indexes[key]]??'';
-  const rows=[],issues=[],types={},serviceRows=[];
+  const rows=[],issues=[],deferred=[],types={},serviceRows=[];
   source.matrix.slice(2).forEach((cells,index)=>{
     if(!cells.some((value)=>text(value)!==''))return;
     const excelRow=index+3;
@@ -53,6 +53,10 @@ export function parseKaspinProductWorkbook(XLSX,arrayBuffer,{useCodeAsBarcode=tr
     const productType=text(get(cells,'tipe_barang'))||'Default';
     types[productType]=(types[productType]??0)+1;
     if(text(get(cells,'barang_jasa_edit'))==='1')serviceRows.push(excelRow);
+    if(!(retailPrice>0)&&productType.toLowerCase()!=='default'){
+      deferred.push({row:excelRow,sku,name,productType,message:`induk ${productType}; gunakan file detail tipe produk`});
+      return;
+    }
     const reasons=[];
     if(!sku)reasons.push('kode barang kosong');
     if(!name)reasons.push('nama barang kosong');
@@ -82,10 +86,9 @@ export function parseKaspinProductWorkbook(XLSX,arrayBuffer,{useCodeAsBarcode=tr
   return {
     rows,
     report:{
-      source:'KASPIN',sheetName:source.sheetName,total:rows.length+issues.length,
-      mapped:rows.length,skipped:issues.length,issues,types,
+      source:'KASPIN',sheetName:source.sheetName,total:rows.length+issues.length+deferred.length,
+      mapped:rows.length,skipped:issues.length,deferred:deferred.length,issues,deferredRows:deferred,types,
       detailedTypeRows,serviceRows:serviceRows.length,useCodeAsBarcode
     }
   };
 }
-

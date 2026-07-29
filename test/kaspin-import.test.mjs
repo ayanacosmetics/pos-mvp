@@ -17,7 +17,8 @@ function kaspinWorkbook(XLSX){
     headers,guide,
     ['',8993137697170,'Produk Angka',0,0,12000,7000,2,5,0,0,'',0,'','','Kosmetik','Default'],
     ['','0000000000001','Produk Nol',0,0,5000,3000,0,1,0,0,'pcs',0,'','','Snack','Multi Satuan'],
-    ['',8990000000002,'Harga Kosong',0,0,0,0,0,2,0,0,'',0,'','','Kosmetik','Varian']
+    ['',8990000000002,'Induk Varian',0,0,0,0,0,2,0,0,'',0,'','','Kosmetik','Varian'],
+    ['',8990000000003,'Harga Kosong Default',0,0,0,0,0,2,0,0,'',0,'','','Kosmetik','Default']
   ];
   const workbook=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet(rows),'barang');
@@ -28,10 +29,12 @@ test('parser Kaspin mempertahankan seluruh digit kode dan melewati baris invalid
   const XLSX=await sheetJs();
   const parsed=parseKaspinProductWorkbook(XLSX,kaspinWorkbook(XLSX));
   assert.equal(parsed.report.source,'KASPIN');
-  assert.equal(parsed.report.total,3);
+  assert.equal(parsed.report.total,4);
   assert.equal(parsed.report.mapped,2);
   assert.equal(parsed.report.skipped,1);
-  assert.equal(parsed.report.issues[0].row,5);
+  assert.equal(parsed.report.deferred,1);
+  assert.equal(parsed.report.deferredRows[0].row,5);
+  assert.equal(parsed.report.issues[0].row,6);
   assert.equal(parsed.rows[0].sku,'8993137697170');
   assert.equal(parsed.rows[0].baseBarcode,'8993137697170');
   assert.equal(parsed.rows[1].sku,'0000000000001');

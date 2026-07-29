@@ -58,7 +58,7 @@ test('kamera PWA memakai BarcodeDetector dengan fallback ZXing lokal dan kebijak
   assert.match(script, /NotAllowedError/);
   assert.match(script, /barcode-camera-dialog'\)\.addEventListener\('close', stopBarcodeCamera\)/);
   assert.match(script, /window\.addEventListener\('pagehide', stopBarcodeCamera\)/);
-  assert.match(worker, /nusa-pos-shell-v130/);
+  assert.match(worker, /nusa-pos-shell-v131/);
   assert.match(worker, /\/vendor\/zxing-browser\.min\.js/);
   const vercel = JSON.parse(vercelText);
   assert.ok(vercel.headers.some((entry) => entry.headers?.some((header) => header.key === 'Permissions-Policy' && header.value === 'camera=(self)')));

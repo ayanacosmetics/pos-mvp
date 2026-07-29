@@ -1420,6 +1420,7 @@ function renderImportSourceReport(report){
   const typeSummary=Object.entries(report.types??{}).map(([type,count])=>`${type}: ${count}`).join(' · ');
   const notes=[];
   if(report.skipped)notes.push(`${report.skipped} baris dilewati: ${report.issues.slice(0,3).map((issue)=>`baris ${issue.row} (${issue.message})`).join('; ')}`);
+  if(report.deferred)notes.push(`${report.deferred} induk varian/multisatuan belum diimpor dari file ini dan menunggu file detail tipe produk Kaspin.`);
   if(report.detailedTypeRows)notes.push(`${report.detailedTypeRows} barang bertipe selain Default dibuat sebagai barang utama dahulu; detail varian/multisatuan memerlukan file tipe produk Kaspin.`);
   if(report.serviceRows)notes.push(`${report.serviceRows} barang bertanda jasa/tanpa batas stok dibawa sebagai produk dengan stok sesuai file.`);
   return `<div class="import-source-report ${notes.length?'warning':''}"><strong>Export Kasir Pintar terdeteksi · sheet ${escapeHtml(report.sheetName)}</strong><p>${report.mapped} dari ${report.total} barang siap diperiksa · ${escapeHtml(typeSummary)}</p>${notes.map((note)=>`<p>${escapeHtml(note)}</p>`).join('')}</div>`;

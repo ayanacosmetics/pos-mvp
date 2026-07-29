@@ -1,6 +1,6 @@
 {
   "name": "pos-retail-mvp",
-  "version": "2.16.19",
+  "version": "2.16.20",
   "private": true,
   "type": "module",
   "scripts": {
