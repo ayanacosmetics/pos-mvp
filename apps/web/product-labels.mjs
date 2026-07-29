@@ -47,12 +47,10 @@ export function code128Svg(value,{height=46,mode='AUTO'}={}){
   const text=normalizeCode128Text(value),modules=code128ModulesFor(text,mode);
   const label=text.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;');
   let x=10,bars='';
-  for(const pattern of modules){
-    for(let index=0;index<pattern.length;index+=1){
-      const width=Number(pattern[index]);
-      if(index%2===0)bars+=`<rect x="${x}" y="0" width="${width}" height="${height}"/>`;
-      x+=width;
-    }
+  for(let index=0;index<modules.length;index+=1){
+    const width=Number(modules[index]);
+    if(index%2===0)bars+=`<rect x="${x}" y="0" width="${width}" height="${height}"/>`;
+    x+=width;
   }
   return `<svg class="product-label-barcode" viewBox="0 0 ${x+10} ${height}" role="img" aria-label="Barcode ${label}" preserveAspectRatio="none" shape-rendering="crispEdges">${bars}</svg>`;
 }

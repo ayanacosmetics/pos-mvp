@@ -45,6 +45,17 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.16.2 Barcode Batang-Ruang
+
+- Encoder Code 128 diperbaiki agar segmen bergantian benar antara batang hitam
+  dan ruang putih. Sebelumnya seluruh segmen keliru digambar sebagai batang,
+  sehingga pratinjau dapat menjadi kotak hitam penuh.
+- Tes regresi memeriksa jumlah batang, posisi ruang pertama, dan memastikan
+  segmen ruang tidak pernah menghasilkan elemen batang SVG.
+- Rilis memakai API `2.16.2-cloud`, aset/cache PWA `v113`, tanpa migrasi SQL.
+- Seluruh 236 pengujian otomatis lulus. Produksi dan alias utama diverifikasi
+  setelah deployment otomatis dari commit hotfix.
+
 ### Rilis v2.16.1 Label Tajam & Sesuai Stok
 
 - Barcode tidak lagi diregangkan sembarang sampai memenuhi label. Lebarnya

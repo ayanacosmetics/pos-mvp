@@ -4,9 +4,13 @@ import {barcodeModuleCount,barcodeSvg,barcodeTypeFor,code128Modules,code128Svg,c
 
 test('Code 128B membentuk checksum dan stop pattern yang valid',()=>{
   assert.deepEqual(code128Values('ABC'),[104,33,34,35,1,106]);
-  assert.ok(code128Modules('ABC').endsWith('2331112'));
-  assert.match(code128Svg('ABC'),/<svg/);
-  assert.match(code128Svg('ABC'),/<rect/);
+  const modules=code128Modules('ABC'),svg=code128Svg('ABC');
+  assert.ok(modules.endsWith('2331112'));
+  assert.match(svg,/<svg/);
+  assert.equal((svg.match(/<rect/g)??[]).length,Math.ceil(modules.length/2));
+  assert.match(svg,/<rect x="10"[^>]*width="2"/);
+  assert.match(svg,/<rect x="13"[^>]*width="1"/);
+  assert.doesNotMatch(svg,/<rect x="12"/);
   assert.doesNotMatch(code128Svg('A"><script>'),/aria-label="[^"]*<script>/);
 });
 
