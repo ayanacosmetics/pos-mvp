@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {barcodeModuleCount,barcodeRasterBits,barcodeSvg,barcodeTypeFor,code128Modules,code128Svg,code128Values,eanBits,labelSize,normalizeCode128Text,validEan} from '../apps/web/product-labels.mjs';
-import {productLabelRasterLayout} from '../apps/web/escpos-printer.mjs';
+import {productLabelPrinterWidthDots,productLabelRasterLayout,productLabelRasterPlacement} from '../apps/web/escpos-printer.mjs';
 
 test('Code 128B membentuk checksum dan stop pattern yang valid',()=>{
   assert.deepEqual(code128Values('ABC'),[104,33,34,35,1,106]);
@@ -40,9 +40,15 @@ test('raster label 33 x 15 mm menjaga quiet zone dan garis minimal dua dot',()=>
   const layout=productLabelRasterLayout({barcode:'8999908509109'},{width:33,height:15,moduleWidth:.26,barcodeHeight:4.8});
   assert.equal(layout.widthDots,264);
   assert.equal(layout.heightDots,120);
+  assert.equal(layout.contentLeft,4);
+  assert.equal(layout.contentTop,2);
   assert.equal(layout.moduleDots,2);
   assert.equal(layout.barcodeWidth,226);
   assert.equal(layout.barcodeHeight,38);
+  assert.equal(productLabelPrinterWidthDots(58),384);
+  assert.equal(productLabelPrinterWidthDots(80),576);
+  assert.deepEqual(productLabelRasterPlacement(264,58),{rasterWidth:384,startX:60});
+  assert.deepEqual(productLabelRasterPlacement(264,80),{rasterWidth:576,startX:156});
   assert.throws(()=>productLabelRasterLayout({barcode:'X'.repeat(40)},{width:33,height:15,type:'CODE128B',moduleWidth:.26}),/terlalu padat/);
 });
 
@@ -66,15 +72,17 @@ test('UI produk menyediakan seleksi dan dialog cetak label',async()=>{
   assert.match(html,/id="product-label-width"[^>]*value="33"/);
   assert.match(html,/id="product-label-height"[^>]*value="15"/);
   assert.match(script,/barcodeSvg/);
-  for(const id of ['product-label-preset','product-label-source','product-label-type','product-label-columns','product-label-rows','product-label-name-size','product-label-price-size','product-label-code-size','product-label-barcode-height','product-label-module-width','product-label-gap','product-label-text-position','product-label-align','product-label-copy-list','product-label-use-stock'])assert.match(html,new RegExp(`id="${id}"`));
+  for(const id of ['product-label-preset','product-label-source','product-label-type','product-label-columns','product-label-rows','product-label-name-size','product-label-price-size','product-label-code-size','product-label-barcode-height','product-label-module-width','product-label-gap','product-label-text-position','product-label-align','product-label-printer-width','product-label-margin-x','product-label-margin-y','product-label-offset-x','product-label-offset-y','product-label-vertical-align','product-label-copy-list','product-label-use-stock'])assert.match(html,new RegExp(`id="${id}"`));
   assert.match(script,/productLabelCopies:new Map/);
   assert.match(script,/setProductLabelCopies\('STOCK'\)/);
   assert.match(script,/function productLabelStock/);
   assert.match(script,/barcodeModuleCount/);
   assert.match(script,/printEscPosProductLabels/);
+  assert.match(script,/renderEscPosProductLabelCanvas/);
   assert.match(script,/window\.KasirNusaAndroid\?\.printBase64/);
   assert.match(html,/id="product-label-module-width"[^>]*value="0\.26"/);
   assert.match(css,/@page\{margin:4mm\}/);
+  assert.match(css,/\.product-label-raster-preview/);
   assert.match(worker,/product-labels\.mjs/);
 });
 

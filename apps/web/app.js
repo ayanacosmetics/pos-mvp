@@ -3,7 +3,7 @@ import { quoteBasket as quoteOffline } from './pricing.mjs';
 import { deviceIdentity, enqueueCommand, listCommands, migrateLegacyQueue, removeCommand, updateCommand } from './offline-store.mjs';
 import { clearStoredAuth, isAuthStorageEvent, loadAuth, saveAuth, shouldRefreshAuth } from './auth-store.mjs';
 import { customerReceiptView } from './receipt.mjs';
-import { disconnectBluetoothPrinter, printEscPosProductLabels, printEscPosReceipt, printEscPosTest, printerConnected, printerSelected, restoreGrantedPrinter, selectBluetoothPrinter, supportsBluetoothClassicPrinting } from './escpos-printer.mjs';
+import { disconnectBluetoothPrinter, printEscPosProductLabels, printEscPosReceipt, printEscPosTest, printerConnected, printerSelected, renderEscPosProductLabelCanvas, restoreGrantedPrinter, selectBluetoothPrinter, supportsBluetoothClassicPrinting } from './escpos-printer.mjs';
 import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, unitFitsStock } from './pos-units.mjs';
 import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
 import { createProductExportWorkbook, createTemplateWorkbook, productExportRows, productExtensionExportRows, workbookMatrix, workbookTemplates } from './product-workbook.mjs';
@@ -688,9 +688,15 @@ function productLabelConfig(){
     rows:productLabelNumber('product-label-rows',1,1,20),
     type:el('product-label-type').value,source:el('product-label-source').value,position:el('product-label-text-position').value,
     align:el('product-label-align').value.toLowerCase(),
-    nameSize:productLabelNumber('product-label-name-size',2,1,12),
-    priceSize:productLabelNumber('product-label-price-size',2.7,1,12),
-    codeSize:productLabelNumber('product-label-code-size',1.55,1,8),
+    verticalAlign:el('product-label-vertical-align').value,
+    printerWidth:productLabelNumber('product-label-printer-width',58,58,80),
+    marginX:productLabelNumber('product-label-margin-x',.5,0,10),
+    marginY:productLabelNumber('product-label-margin-y',.25,0,10),
+    offsetX:productLabelNumber('product-label-offset-x',0,-10,10),
+    offsetY:productLabelNumber('product-label-offset-y',0,-10,10),
+    nameSize:productLabelNumber('product-label-name-size',1.6,1,12),
+    priceSize:productLabelNumber('product-label-price-size',2.2,1,12),
+    codeSize:productLabelNumber('product-label-code-size',1.2,1,8),
     barcodeHeight:productLabelNumber('product-label-barcode-height',4.8,3,40),
     moduleWidth:productLabelNumber('product-label-module-width',.26,.2,.6),
     gap:productLabelNumber('product-label-gap',2,0,10),
@@ -702,13 +708,23 @@ function productLabelConfig(){
 function renderProductLabelSheet(target,{preview=false}={}){
   const products=selectedProductLabels(),config=productLabelConfig(),errors=[];
   const totalRequested=products.reduce((sum,product)=>sum+(state.productLabelCopies.get(product.id)??1),0);
-  let remainingPreview=config.columns*config.rows;
+  let remainingPreview=Math.min(6,config.columns*config.rows);
   const labels=products.flatMap((product)=>{
     const requested=state.productLabelCopies.get(product.id)??1;
     const copies=preview?Math.min(requested,Math.max(0,remainingPreview)):requested;
     remainingPreview-=copies;
     return Array.from({length:copies},()=>{
     const barcode=productLabelBarcode(product,config.source),price=productPrices(product).retail;
+    const label={name:product.name,sku:product.sku,barcode,priceText:money.format(price)};
+    if(preview){
+      try{
+        const canvas=renderEscPosProductLabelCanvas(label,{...config,width:config.size.width,height:config.size.height,paperWidth:config.printerWidth});
+        return `<article class="product-print-label raster-label" style="--label-width:${config.size.width}mm;--label-height:${config.size.height}mm"><img class="product-label-raster-preview" src="${canvas.toDataURL('image/png')}" alt="Pratinjau raster ${escapeHtml(product.name)}"></article>`;
+      }catch(error){
+        errors.push(`${product.name}: ${error.message}`);
+        return `<article class="product-print-label raster-label" style="--label-width:${config.size.width}mm;--label-height:${config.size.height}mm"><span class="barcode-invalid">Periksa ukuran label</span></article>`;
+      }
+    }
     let graphic='',barcodeWidth=config.size.width-1.2;
     try{
       graphic=barcodeSvg(barcode,{height:42,type:config.type});
@@ -722,7 +738,7 @@ function renderProductLabelSheet(target,{preview=false}={}){
   })});
   const perPage=config.columns*config.rows,pages=[];
   for(let index=0;index<labels.length;index+=perPage)pages.push(labels.slice(index,index+perPage));
-  if(preview)el('product-label-preview-note').textContent=`${config.size.width} × ${config.size.height} mm · ${config.columns} kolom × ${config.rows} baris · ${totalRequested.toLocaleString('id-ID')} label`;
+  if(preview)el('product-label-preview-note').textContent=`${config.size.width} × ${config.size.height} mm · printer ${config.printerWidth} mm · geser ${config.offsetX}/${config.offsetY} mm · ${totalRequested.toLocaleString('id-ID')} label`;
   const pageWidth=config.size.width*config.columns,pageHeight=config.size.height*config.rows;
   target.innerHTML=`${preview?'':`<style>@page{size:${pageWidth}mm ${pageHeight}mm;margin:0}</style>`}<div class="product-label-sheet ${preview?'is-preview':''}" style="--label-columns:${config.columns};--page-width:${pageWidth}mm;--page-height:${pageHeight}mm">${pages.map((page)=>`<section class="product-label-page">${page.join('')}</section>`).join('')}</div>`;
   target.dataset.errors=String(errors.length);
@@ -730,7 +746,8 @@ function renderProductLabelSheet(target,{preview=false}={}){
     const fallback=products.filter((product)=>!product.units.some((unit)=>unit.barcode)).length;
     el('product-label-warning').innerHTML=[
       fallback?`<span><strong>${fallback} barang belum memiliki barcode.</strong> SKU dipakai sebagai pengganti.</span>`:'',
-      errors.length?`<span><strong>${errors.length} barcode tidak cocok dengan jenis terpilih.</strong> ${escapeHtml(errors[0])}</span>`:''
+      errors.length?`<span><strong>${errors.length} label belum muat atau barcodenya tidak valid.</strong> ${escapeHtml(errors[0])}</span>`:'',
+      config.offsetX||config.offsetY?`<span><strong>Kalibrasi posisi aktif.</strong> Mendatar ${config.offsetX} mm, vertikal ${config.offsetY} mm. Nilai negatif menggeser ke kiri/atas.</span>`:''
     ].filter(Boolean).join('');
   }
   return {count:labels.length,errors};
@@ -738,6 +755,7 @@ function renderProductLabelSheet(target,{preview=false}={}){
 
 function openProductLabelDialog(){
   const products=selectedProductLabels();if(!products.length)return;
+  el('product-label-printer-width').value=String(Number(state.deviceSettings.paperWidth)===58?58:80);
   state.productLabelCopies=new Map(products.map((product)=>[product.id,state.productLabelCopies.get(product.id)??1]));
   el('product-label-summary').textContent=`${products.length.toLocaleString('id-ID')} barang dipilih. Barcode satuan dasar dipakai bila tersedia.`;
   renderProductLabelCopyEditor();
@@ -792,7 +810,7 @@ async function printProductLabels(event){
   button.disabled=true;button.textContent='Mengirim label…';
   try{
     if(!printerSelected())await selectBluetoothPrinter();
-    await printEscPosProductLabels(labels,{...config,width:config.size.width,height:config.size.height,paperWidth:state.deviceSettings.paperWidth});
+    await printEscPosProductLabels(labels,{...config,width:config.size.width,height:config.size.height,paperWidth:config.printerWidth});
     el('product-label-dialog').close();
     toast(`${labels.length.toLocaleString('id-ID')} label berhasil dikirim langsung ke printer Bluetooth.`);
   }catch(error){

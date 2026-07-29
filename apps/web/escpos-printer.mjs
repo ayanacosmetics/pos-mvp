@@ -235,19 +235,36 @@ async function write(bytes) {
 
 export const LABEL_DOTS_PER_MM=8;
 
+export function productLabelPrinterWidthDots(paperWidth=58){
+  return Number(paperWidth)===80?576:Number(paperWidth)===58?384:0;
+}
+
+export function productLabelRasterPlacement(labelWidthDots,paperWidth){
+  const printerWidth=productLabelPrinterWidthDots(paperWidth);
+  const labelWidth=Math.max(0,Number(labelWidthDots)||0);
+  const rasterWidth=Math.max(labelWidth,printerWidth);
+  return {rasterWidth,startX:Math.max(0,Math.floor((rasterWidth-labelWidth)/2))};
+}
+
 export function productLabelRasterLayout(label,config={}){
   const widthMm=Math.max(10,Math.min(200,Number(config.width)||33));
   const heightMm=Math.max(10,Math.min(200,Number(config.height)||15));
   const widthDots=Math.max(80,Math.round(widthMm*LABEL_DOTS_PER_MM));
   const heightDots=Math.max(80,Math.round(heightMm*LABEL_DOTS_PER_MM));
+  const configuredMarginX=Number(config.marginX),configuredMarginY=Number(config.marginY);
+  const marginX=Math.max(0,Math.min(widthMm/3,Number.isFinite(configuredMarginX)?configuredMarginX:.5));
+  const marginY=Math.max(0,Math.min(heightMm/3,Number.isFinite(configuredMarginY)?configuredMarginY:.25));
+  const contentLeft=Math.round(marginX*LABEL_DOTS_PER_MM);
+  const contentTop=Math.round(marginY*LABEL_DOTS_PER_MM);
+  const contentWidth=Math.max(8,widthDots-contentLeft*2);
+  const contentHeight=Math.max(8,heightDots-contentTop*2);
   const bits=barcodeRasterBits(label.barcode,config.type||'AUTO');
-  const horizontalPadding=Math.max(4,Math.round(LABEL_DOTS_PER_MM*.5));
   const requestedModuleDots=Math.max(1,Math.round((Number(config.moduleWidth)||.26)*LABEL_DOTS_PER_MM));
-  const moduleDots=Math.min(requestedModuleDots,Math.floor((widthDots-horizontalPadding*2)/bits.length));
+  const moduleDots=Math.min(requestedModuleDots,Math.floor(contentWidth/bits.length));
   if(moduleDots<2)throw new Error(`Barcode ${label.barcode} terlalu padat untuk label ${widthMm} mm. Perpendek kode atau lebarkan label.`);
   const barcodeWidth=bits.length*moduleDots;
-  const barcodeHeight=Math.max(24,Math.min(heightDots-16,Math.round((Number(config.barcodeHeight)||4.8)*LABEL_DOTS_PER_MM)));
-  return {widthMm,heightMm,widthDots,heightDots,bits,moduleDots,barcodeWidth,barcodeHeight};
+  const barcodeHeight=Math.max(24,Math.min(contentHeight-8,Math.round((Number(config.barcodeHeight)||4.8)*LABEL_DOTS_PER_MM)));
+  return {widthMm,heightMm,widthDots,heightDots,contentLeft,contentTop,contentWidth,contentHeight,bits,moduleDots,barcodeWidth,barcodeHeight};
 }
 
 function fittedFont(context,text,{family='sans-serif',weight='700',size,maxWidth}){
@@ -260,19 +277,21 @@ function fittedFont(context,text,{family='sans-serif',weight='700',size,maxWidth
   return {font:`${weight} ${pixels}px ${family}`,height:Math.ceil(pixels*1.15)};
 }
 
-function rasterCommand(canvas,gapMm=0){
+function rasterCommand(canvas,config={}){
   const context=canvas.getContext('2d',{willReadFrequently:true});
   const pixels=context.getImageData(0,0,canvas.width,canvas.height).data;
-  const bytesPerRow=Math.ceil(canvas.width/8);
+  const {rasterWidth,startX}=productLabelRasterPlacement(canvas.width,config.paperWidth);
+  const bytesPerRow=Math.ceil(rasterWidth/8);
   const raster=new Uint8Array(bytesPerRow*canvas.height);
   for(let y=0;y<canvas.height;y+=1)for(let x=0;x<canvas.width;x+=1){
     const index=(y*canvas.width+x)*4;
     const luminance=.299*pixels[index]+.587*pixels[index+1]+.114*pixels[index+2];
-    if(pixels[index+3]>40&&luminance<180)raster[y*bytesPerRow+(x>>3)]|=0x80>>(x&7);
+    const targetX=startX+x;
+    if(pixels[index+3]>40&&luminance<180)raster[y*bytesPerRow+(targetX>>3)]|=0x80>>(targetX&7);
   }
-  const feedDots=Math.max(0,Math.min(255,Math.round((Number(gapMm)||0)*LABEL_DOTS_PER_MM)));
+  const feedDots=Math.max(0,Math.min(255,Math.round((Number(config.gap)||0)*LABEL_DOTS_PER_MM)));
   return new Uint8Array([
-    ESC,0x40,ESC,0x61,0x01,
+    ESC,0x40,ESC,0x61,0x00,
     GS,0x76,0x30,0x00,bytesPerRow&0xff,(bytesPerRow>>8)&0xff,canvas.height&0xff,(canvas.height>>8)&0xff,
     ...raster,
     ...(feedDots?[ESC,0x4a,feedDots]:[]),
@@ -280,7 +299,7 @@ function rasterCommand(canvas,gapMm=0){
   ]);
 }
 
-export function buildEscPosProductLabel(label,config={}){
+export function renderEscPosProductLabelCanvas(label,config={}){
   if(typeof document==='undefined')throw new Error('Renderer label hanya tersedia pada perangkat cetak.');
   const layout=productLabelRasterLayout(label,config);
   const canvas=document.createElement('canvas');
@@ -288,9 +307,15 @@ export function buildEscPosProductLabel(label,config={}){
   const context=canvas.getContext('2d',{alpha:false,willReadFrequently:true});
   context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);
   context.fillStyle='#000';context.textBaseline='top';
-  const maxWidth=canvas.width-8;
+  const maxWidth=layout.contentWidth;
+  const offsetX=Math.round(Math.max(-10,Math.min(10,Number(config.offsetX)||0))*LABEL_DOTS_PER_MM);
+  const offsetY=Math.round(Math.max(-10,Math.min(10,Number(config.offsetY)||0))*LABEL_DOTS_PER_MM);
   const align=config.align==='left'?'left':config.align==='right'?'right':'center';
-  const textX=align==='left'?4:align==='right'?canvas.width-4:canvas.width/2;
+  const textX=(align==='left'
+    ?layout.contentLeft
+    :align==='right'
+      ?layout.contentLeft+layout.contentWidth
+      :layout.contentLeft+layout.contentWidth/2)+offsetX;
   context.textAlign=align;
   const name=String(label.name??'').trim(),price=String(label.priceText??'').trim();
   const code=[config.showSku?label.sku:'',config.showCode?label.barcode:''].filter(Boolean).join(' · ');
@@ -307,11 +332,16 @@ export function buildEscPosProductLabel(label,config={}){
   ];
   const ordered=config.position==='BELOW'?[...graphicLines,...textLines]:[...textLines,...graphicLines];
   const gap=2,totalHeight=ordered.reduce((sum,item)=>sum+item.height,0)+Math.max(0,ordered.length-1)*gap;
-  if(totalHeight>canvas.height-4)throw new Error(`Isi label melebihi tinggi ${layout.heightMm} mm. Kecilkan tulisan atau barcode.`);
-  let y=Math.max(2,Math.floor((canvas.height-totalHeight)/2));
+  if(totalHeight>layout.contentHeight)throw new Error(`Isi label melebihi tinggi ${layout.heightMm} mm. Kecilkan tulisan, barcode, atau margin.`);
+  const vertical=config.verticalAlign==='BOTTOM'?'BOTTOM':config.verticalAlign==='CENTER'?'CENTER':'TOP';
+  let y=(vertical==='BOTTOM'
+    ?layout.contentTop+layout.contentHeight-totalHeight
+    :vertical==='CENTER'
+      ?layout.contentTop+Math.floor((layout.contentHeight-totalHeight)/2)
+      :layout.contentTop)+offsetY;
   for(const item of ordered){
     if(item.barcode){
-      const startX=Math.floor((canvas.width-layout.barcodeWidth)/2);
+      const startX=Math.floor(layout.contentLeft+(layout.contentWidth-layout.barcodeWidth)/2)+offsetX;
       for(let index=0;index<layout.bits.length;index+=1)if(layout.bits[index]==='1'){
         context.fillRect(startX+index*layout.moduleDots,y,layout.moduleDots,item.height);
       }
@@ -321,7 +351,11 @@ export function buildEscPosProductLabel(label,config={}){
     }
     y+=item.height+gap;
   }
-  return rasterCommand(canvas,config.gap);
+  return canvas;
+}
+
+export function buildEscPosProductLabel(label,config={}){
+  return rasterCommand(renderEscPosProductLabelCanvas(label,config),config);
 }
 
 export async function printEscPosProductLabels(labels,config={}){
