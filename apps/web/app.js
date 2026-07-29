@@ -8,9 +8,10 @@ import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, uni
 import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
 import { createProductExportWorkbook, createTemplateWorkbook, productExportRows, productExtensionExportRows, workbookMatrix, workbookTemplates } from './product-workbook.mjs';
 import { barcodeModuleCount, barcodeSvg, labelSize, normalizeCode128Text } from './product-labels.mjs';
+import { parseKaspinProductWorkbook } from './kaspin-import.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, dataResetScopesSignature:'', dataRestoreSnapshot:null, dataRestoreOtpReady:false, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, dataResetScopesSignature:'', dataRestoreSnapshot:null, dataRestoreOtpReady:false, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', importSourceReport:null, productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -1332,7 +1333,14 @@ function syncImportKindUi() {
     el('export-products-xlsx').textContent=`Export ${template.sheet}`;
   }
   el('export-products-xlsx').classList.toggle('hidden',!['PRODUCTS','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES'].includes(kind));
+  syncImportSourceUi();
   updateProductExportCount();
+}
+
+function syncImportSourceUi(){
+  const supported=state.productImportMode==='CREATE_ONLY'&&el('import-kind').value==='PRODUCTS';
+  el('import-source-options').classList.toggle('hidden',!supported);
+  el('kaspin-barcode-option').classList.toggle('hidden',!supported||el('import-source').value==='NUSA');
 }
 
 function syncProductImportModeUi(){
@@ -1344,6 +1352,7 @@ function syncProductImportModeUi(){
   el('download-import-template').classList.toggle('hidden',updateOnly);
   const kind=el('import-kind').value,template=workbookTemplates[kind];
   el('import-location-label').classList.toggle('hidden',kind!=='PRODUCTS'||updateOnly);
+  syncImportSourceUi();
   if(createOnly){
     el('import-page-eyebrow').textContent='PRODUK BARU';
     el('import-page-title').textContent='Import produk baru';
@@ -1381,6 +1390,7 @@ async function openProductImportWorkspace(kind,{mode='CREATE_ONLY'}={}) {
 
 function resetImportPreview(message = 'Pilih file untuk melihat data sebelum disimpan.') {
   state.importDraft = null;
+  state.importSourceReport = null;
   el('commit-import').disabled = true;
   el('import-validity').className = 'pill';
   el('import-validity').textContent = 'Belum diperiksa';
@@ -1405,14 +1415,24 @@ function mapCsvRows(kind, matrix) {
   return matrix.slice(1).map((cells) => Object.fromEntries(mappedHeaders.map((field,index) => [field,cells[index] ?? '']).filter(([field]) => field)));
 }
 
-function renderImportPreview(preview) {
+function renderImportSourceReport(report){
+  if(!report)return '';
+  const typeSummary=Object.entries(report.types??{}).map(([type,count])=>`${type}: ${count}`).join(' · ');
+  const notes=[];
+  if(report.skipped)notes.push(`${report.skipped} baris dilewati: ${report.issues.slice(0,3).map((issue)=>`baris ${issue.row} (${issue.message})`).join('; ')}`);
+  if(report.detailedTypeRows)notes.push(`${report.detailedTypeRows} barang bertipe selain Default dibuat sebagai barang utama dahulu; detail varian/multisatuan memerlukan file tipe produk Kaspin.`);
+  if(report.serviceRows)notes.push(`${report.serviceRows} barang bertanda jasa/tanpa batas stok dibawa sebagai produk dengan stok sesuai file.`);
+  return `<div class="import-source-report ${notes.length?'warning':''}"><strong>Export Kasir Pintar terdeteksi · sheet ${escapeHtml(report.sheetName)}</strong><p>${report.mapped} dari ${report.total} barang siap diperiksa · ${escapeHtml(typeSummary)}</p>${notes.map((note)=>`<p>${escapeHtml(note)}</p>`).join('')}</div>`;
+}
+
+function renderImportPreview(preview,sourceReport=null) {
   const summary = preview.summary ?? { total: preview.rows.length, create: 0, update: 0, error: preview.errors.length };
   el('import-metrics').innerHTML = [
     ['Total baris',summary.total],['Data baru',summary.create],['Diperbarui',summary.update],['Kesalahan',summary.error]
   ].map(([label,value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
   el('import-validity').className = `pill ${preview.valid ? 'success' : ''}`;
   el('import-validity').textContent = preview.valid ? 'Siap disimpan' : 'Perlu diperbaiki';
-  el('import-errors').innerHTML = preview.errors.length ? `<div class="import-error-list"><strong>${preview.errors.length} hal perlu diperbaiki</strong>${preview.errors.slice(0,20).map((error) => `<p>Baris ${error.row || '—'} · ${escapeHtml(error.message)}</p>`).join('')}</div>` : '';
+  el('import-errors').innerHTML = `${renderImportSourceReport(sourceReport)}${preview.errors.length ? `<div class="import-error-list"><strong>${preview.errors.length} hal perlu diperbaiki</strong>${preview.errors.slice(0,20).map((error) => `<p>Baris ${error.row || '—'} · ${escapeHtml(error.message)}</p>`).join('')}</div>` : ''}`;
   const keysByKind={
     PRODUCTS:['sku','name','baseUnit','retailPrice','openingQty','minimumStock','trackExpiry'],
     PRODUCT_UNITS:['sku','unitName','factor','barcode'],
@@ -1437,12 +1457,20 @@ async function inspectImportFile() {
     const kind = el('import-kind').value;
     const isCsv=file.name.toLowerCase().endsWith('.csv');
     if(!isCsv&&!window.XLSX)throw new Error('Komponen Excel belum siap. Muat ulang aplikasi.');
-    const matrix=isCsv?parseCsv(await file.text()):workbookMatrix(window.XLSX,await file.arrayBuffer(),kind);
-    const rows = mapCsvRows(kind,matrix);
+    const source=el('import-source')?.value??'NUSA';
+    const buffer=isCsv?null:await file.arrayBuffer();
+    const kaspin=kind==='PRODUCTS'&&!isCsv&&source!=='NUSA'
+      ?parseKaspinProductWorkbook(window.XLSX,buffer,{useCodeAsBarcode:el('kaspin-code-as-barcode').checked})
+      :null;
+    if(source==='KASPIN'&&!kaspin)throw new Error('File ini bukan export Barang dari Kasir Pintar.');
+    const matrix=kaspin?null:(isCsv?parseCsv(await file.text()):workbookMatrix(window.XLSX,buffer,kind));
+    const rows=kaspin?.rows??mapCsvRows(kind,matrix);
+    if(!rows.length)throw new Error(kaspin?.report?.issues?.[0]?.message??'Tidak ada baris yang dapat diimpor.');
+    state.importSourceReport=kaspin?.report??null;
     const input = { kind, mode:state.productImportMode, locationId: kind === 'PRODUCTS' ? el('import-location').value : null, rows };
     const preview = await request('/api/imports/preview', { method:'POST', body:JSON.stringify(input) });
     state.importDraft = { ...input, rows: preview.rows, fileName: file.name, idempotencyKey: crypto.randomUUID(), valid: preview.valid };
-    renderImportPreview(preview);
+    renderImportPreview(preview,state.importSourceReport);
   } catch (error) {
     resetImportPreview(error.message);
     el('import-message').textContent = error.message;
@@ -6740,6 +6768,11 @@ el('import-kind').addEventListener('change', () => {
   syncProductImportModeUi();
   resetImportPreview('Unduh dan gunakan template Excel untuk jenis data yang dipilih.');
 });
+el('import-source').addEventListener('change',()=>{
+  syncImportSourceUi();
+  if(el('import-file').files[0])inspectImportFile();
+});
+el('kaspin-code-as-barcode').addEventListener('change',()=>{if(el('import-file').files[0])inspectImportFile();});
 el('import-location').addEventListener('change', () => { if (el('import-file').files[0]) inspectImportFile(); });
 el('commit-import').addEventListener('click', commitImport);
 el('refresh-imports').addEventListener('click', loadImportHistory);
