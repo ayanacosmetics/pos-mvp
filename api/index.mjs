@@ -2090,7 +2090,10 @@ async function routeRequest(request, response, route) {
       });
     }catch(error){
       if(/reset_tenant_data_v1|schema cache|function/i.test(error.message))throw Object.assign(new Error('Fitur reset belum aktif di database. Jalankan migrasi reset data terbaru terlebih dahulu.'),{status:503});
-      if(/violates foreign key constraint/i.test(error.message))throw Object.assign(new Error('Reset dibatalkan seluruhnya karena relasi database belum diperbarui. Jalankan migrasi reset terbaru lalu minta OTP baru.'),{status:409});
+      if(/violates foreign key constraint/i.test(error.message)){
+        const constraint=error.message.match(/constraint\s+"([^"]+)"/i)?.[1];
+        throw Object.assign(new Error(`Reset dibatalkan seluruhnya karena relasi database belum diperbarui${constraint?` (${constraint})`:''}. Jalankan migrasi reset terbaru lalu minta OTP baru.`),{status:409});
+      }
       throw error;
     }
     return send(response,200,{...result,fileName,snapshot,totalRows});

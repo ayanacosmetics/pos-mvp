@@ -21,10 +21,11 @@ async function call(route,body={}) {
 }
 
 test('reset data tersedia hanya sebagai alur Owner dengan backup dan OTP',async()=>{
-  const [html,app,api,sql,fkFix]=await Promise.all([
+  const [html,app,api,sql,fkFix,tierFix]=await Promise.all([
     read('../apps/web/index.html'),read('../apps/web/app.js'),read('../api/index.mjs'),
     read('../supabase/migrations/202607290045_owner_selective_data_reset.sql'),
-    read('../supabase/migrations/202607290046_reset_purchase_batch_fk.sql')
+    read('../supabase/migrations/202607290046_reset_purchase_batch_fk.sql'),
+    read('../supabase/migrations/202607290047_reset_customer_tier_fk.sql')
   ]);
   for(const id of ['data-reset-settings','data-reset-form','request-data-reset-otp','data-reset-otp','data-reset-phrase','execute-data-reset'])assert.ok(html.includes(`id="${id}"`));
   for(const scope of ['ALL','TRANSACTIONS','CATALOG','CUSTOMERS','SUPPLIERS','PROMOTIONS','FINANCE','WORKFORCE'])assert.ok(html.includes(`value="${scope}"`));
@@ -43,6 +44,8 @@ test('reset data tersedia hanya sebagai alur Owner dengan backup dan OTP',async(
   assert.match(fkFix,/inventory_batches_receipt_item_id_fkey/);
   assert.match(fkFix,/inventory_batches_receipt_id_fkey/);
   assert.equal((fkFix.match(/on delete set null/g)??[]).length,2);
+  assert.match(tierFix,/customers_tier_id_fkey/);
+  assert.match(tierFix,/on delete set null/);
 });
 
 test('OTP reset dikirim ke email akun Owner aktif dan dicatat di audit',async()=>{
