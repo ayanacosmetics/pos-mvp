@@ -58,6 +58,8 @@ kapabilitas retail yang lebih lengkap tersedia di
   opsi nama, SKU, dan Harga Umum.
 - Editor label menyediakan EAN-13, EAN-8, Code 128, mode barcode saja, sumber
   barcode/SKU, jumlah kolom dan baris, ukuran teks/barcode, posisi, dan perataan.
+- Jumlah label dapat diisi per barang atau mengikuti stok outlet aktif. Lebar
+  modul fisik dan garis SVG tajam menjaga barcode kecil tidak tampak menyatu.
 - Daftar barang pada Kasir, Pilih Barang Restok, dan Daftar Stok memakai baris
   kompak memanjang: foto di kiri, identitas di tengah, serta harga dan stok di
   kanan. Barang tanpa foto memakai placeholder otomatis.

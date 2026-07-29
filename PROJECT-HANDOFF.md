@@ -45,6 +45,18 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.16.1 Label Tajam & Sesuai Stok
+
+- Barcode tidak lagi diregangkan sembarang sampai memenuhi label. Lebarnya
+  dihitung dari jumlah modul dan lebar garis fisik dalam mm, memakai garis SVG
+  tajam serta margin putih. Lebar garis dapat disesuaikan pengguna.
+- Jumlah salinan diatur per barang, bukan satu angka global. Setiap baris
+  menampilkan stok outlet aktif dan dapat diisi manual, dibuat semua satu, atau
+  diisi otomatis mengikuti sisa stok masing-masing barang.
+- Rilis memakai API `2.16.1-cloud`, aset/cache PWA `v112`, tanpa migrasi SQL.
+- Seluruh 236 pengujian otomatis lulus. Produksi dan alias utama diverifikasi
+  setelah deployment otomatis dari commit fitur.
+
 ### Rilis v2.16.0 Editor Label Fleksibel
 
 - Jenis barcode dapat dipilih: otomatis, EAN-13, EAN-8, Code 128 otomatis,

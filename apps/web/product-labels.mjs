@@ -54,7 +54,7 @@ export function code128Svg(value,{height=46,mode='AUTO'}={}){
       x+=width;
     }
   }
-  return `<svg class="product-label-barcode" viewBox="0 0 ${x+10} ${height}" role="img" aria-label="Barcode ${label}" preserveAspectRatio="none">${bars}</svg>`;
+  return `<svg class="product-label-barcode" viewBox="0 0 ${x+10} ${height}" role="img" aria-label="Barcode ${label}" preserveAspectRatio="none" shape-rendering="crispEdges">${bars}</svg>`;
 }
 
 export function eanChecksum(value){
@@ -100,7 +100,14 @@ export function barcodeSvg(value,{height=46,type='AUTO'}={}){
   if(resolved==='CODE128C')return code128Svg(value,{height,mode:'C'});
   const bits=eanBits(value,resolved),quiet=9,label=normalizeCode128Text(value).replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;');
   const bars=[...bits].map((bit,index)=>bit==='1'?`<rect x="${quiet+index}" y="0" width="1" height="${height}"/>`:'').join('');
-  return `<svg class="product-label-barcode" viewBox="0 0 ${bits.length+quiet*2} ${height}" role="img" aria-label="${resolved} ${label}" preserveAspectRatio="none">${bars}</svg>`;
+  return `<svg class="product-label-barcode" viewBox="0 0 ${bits.length+quiet*2} ${height}" role="img" aria-label="${resolved} ${label}" preserveAspectRatio="none" shape-rendering="crispEdges">${bars}</svg>`;
+}
+
+export function barcodeModuleCount(value,type='AUTO'){
+  const resolved=barcodeTypeFor(value,type);
+  if(resolved==='EAN13'||resolved==='EAN8')return eanBits(value,resolved).length+18;
+  const mode=resolved==='CODE128B'?'B':resolved==='CODE128C'?'C':'AUTO';
+  return [...code128ModulesFor(value,mode)].reduce((total,width)=>total+Number(width),0)+20;
 }
 
 export function labelSize(width=33,height=15){
