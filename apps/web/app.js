@@ -10,7 +10,7 @@ import { createProductExportWorkbook, createTemplateWorkbook, productExportRows,
 import { barcodeModuleCount, barcodeSvg, labelSize, normalizeCode128Text } from './product-labels.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, dataResetScopesSignature:'', outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, dataResetScopesSignature:'', dataRestoreSnapshot:null, dataRestoreOtpReady:false, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -1619,6 +1619,103 @@ function downloadJsonSnapshot(snapshot,fileName) {
   const link=document.createElement('a');
   link.href=URL.createObjectURL(new Blob([content],{type:'application/json'}));
   link.download=fileName;link.click();URL.revokeObjectURL(link.href);
+}
+
+function showDataMaintenanceMode(mode) {
+  const selected=mode==='restore'?'restore':'reset';
+  document.querySelectorAll('[data-maintenance-mode]').forEach((button)=>{
+    const active=button.dataset.maintenanceMode===selected;
+    button.classList.toggle('active',active);
+    button.setAttribute('aria-selected',String(active));
+  });
+  el('data-reset-panel').classList.toggle('hidden',selected!=='reset');
+  el('data-restore-panel').classList.toggle('hidden',selected!=='restore');
+}
+
+function resetDataRestoreSelection(message='Belum ada file JSON dipilih') {
+  state.dataRestoreSnapshot=null;
+  state.dataRestoreOtpReady=false;
+  el('data-restore-file-name').textContent=message;
+  el('data-restore-preview').classList.add('hidden');
+  el('data-restore-confirmation').classList.add('hidden');
+  el('data-restore-otp').value='';
+  el('data-restore-phrase').value='';
+  el('data-restore-error').textContent='';
+  el('data-restore-file-error').textContent='';
+  el('request-data-restore-otp').disabled=true;
+  el('request-data-restore-otp').textContent='Periksa file & kirim OTP Owner';
+}
+
+async function inspectDataRestoreFile(event) {
+  const file=event.target.files?.[0];
+  resetDataRestoreSelection(file?.name??'Belum ada file JSON dipilih');
+  if(!file)return;
+  try{
+    const snapshot=JSON.parse(await file.text());
+    const result=await request('/api/data-restore/preview',{method:'POST',body:JSON.stringify({snapshot})});
+    state.dataRestoreSnapshot=snapshot;
+    const groups=result.preview?.groups??{};
+    const createdAt=new Date(result.createdAt);
+    el('data-restore-created-at').textContent=Number.isNaN(createdAt.getTime())
+      ?'Tanggal backup tidak tersedia'
+      :`Dibuat ${createdAt.toLocaleString('id-ID')}`;
+    el('data-restore-total').textContent=`${Number(result.preview?.totalRows??0).toLocaleString('id-ID')} data`;
+    ['catalog','transactions','inventory','relations','growth','finance','workforce'].forEach((group)=>{
+      el(`data-restore-count-${group}`).textContent=Number(groups[group]??0).toLocaleString('id-ID');
+    });
+    el('data-restore-preview').classList.remove('hidden');
+    el('request-data-restore-otp').disabled=false;
+  }catch(error){
+    resetDataRestoreSelection(file.name);
+    el('data-restore-file-error').textContent=error instanceof SyntaxError
+      ?'File bukan backup JSON Kasir Nusa yang valid.'
+      :error.message;
+  }
+}
+
+async function requestDataRestoreOtp() {
+  if(!state.dataRestoreSnapshot)return;
+  const button=el('request-data-restore-otp');
+  button.disabled=true;button.textContent='Mensimulasikan pemulihan…';
+  el('data-restore-file-error').textContent='';
+  el('data-restore-error').textContent='';
+  try{
+    const result=await request('/api/data-restore/otp',{method:'POST',body:JSON.stringify({snapshot:state.dataRestoreSnapshot})});
+    state.dataRestoreOtpReady=true;
+    el('data-restore-email').textContent=`Simulasi berhasil tanpa mengubah data. OTP dikirim ke ${result.emailMasked}.`;
+    el('data-restore-confirmation').classList.remove('hidden');
+    el('data-restore-otp').focus();
+    toast('File siap dipulihkan dan OTP telah dikirim.');
+  }catch(error){
+    state.dataRestoreOtpReady=false;
+    el('data-restore-file-error').textContent=error.message;
+  }finally{
+    button.disabled=false;button.textContent=state.dataRestoreOtpReady?'Simulasikan ulang & kirim OTP baru':'Periksa file & kirim OTP Owner';
+  }
+}
+
+async function executeDataRestore(event) {
+  event.preventDefault();
+  const errorNode=el('data-restore-error');errorNode.textContent='';
+  if(!state.dataRestoreSnapshot||!state.dataRestoreOtpReady){
+    errorNode.textContent='Pilih dan periksa file backup terlebih dahulu.';return;
+  }
+  const button=el('execute-data-restore');
+  button.disabled=true;button.textContent='Membuat backup lalu memulihkan…';
+  try{
+    const result=await request('/api/data-restore/execute',{method:'POST',body:JSON.stringify({
+      snapshot:state.dataRestoreSnapshot,
+      otp:el('data-restore-otp').value,
+      confirmation:el('data-restore-phrase').value
+    })});
+    downloadJsonSnapshot(result.snapshot,result.fileName);
+    toast(`Pemulihan selesai. ${Number(result.restoredRows??0).toLocaleString('id-ID')} data dikembalikan.`);
+    state.dataRestoreOtpReady=false;
+    setTimeout(()=>location.reload(),1200);
+  }catch(error){
+    errorNode.textContent=error.message;
+    button.disabled=false;button.textContent='Backup kondisi saat ini lalu pulihkan';
+  }
 }
 
 function selectedDataResetScopes() {
@@ -6651,9 +6748,13 @@ el('verify-backup-file').addEventListener('change', verifyBackupFile);
 el('refresh-backups').addEventListener('click', loadBackupHistory);
 el('refresh-settings').addEventListener('click', loadSettingsWorkspace);
 el('refresh-system-health').addEventListener('click', loadSystemHealth);
+document.querySelectorAll('[data-maintenance-mode]').forEach((button)=>button.addEventListener('click',()=>showDataMaintenanceMode(button.dataset.maintenanceMode)));
 el('data-reset-form').addEventListener('change',(event)=>{if(event.target.matches('input[name="data-reset-scope"]'))syncDataResetForm(event);});
 el('request-data-reset-otp').addEventListener('click',requestDataResetOtp);
 el('data-reset-form').addEventListener('submit',executeDataReset);
+el('data-restore-file').addEventListener('change',inspectDataRestoreFile);
+el('request-data-restore-otp').addEventListener('click',requestDataRestoreOtp);
+el('data-restore-form').addEventListener('submit',executeDataRestore);
 el('install-app').addEventListener('click', installPwa);
 el('business-settings-form').addEventListener('submit', saveBusinessSettings);
 el('receipt-settings-form').addEventListener('submit',saveReceiptSettings);

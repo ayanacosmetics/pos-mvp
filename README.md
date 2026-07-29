@@ -116,7 +116,7 @@ kapabilitas retail yang lebih lengkap tersedia di
 - Retur pelanggan dan supplier dengan dampak stok serta keuangan.
 - Shift kasir, kas masuk/keluar, kas harapan, dan selisih penutupan.
 - Laporan penjualan, laba, stok, pembelian, outlet, produk, supplier, dan audit.
-- Impor data awal, backup ber-checksum, sinkronisasi offline, dan resolusi konflik.
+- Impor data awal, backup ber-checksum, reset selektif, pemulihan atomik dengan simulasi dan OTP Owner, sinkronisasi offline, serta resolusi konflik.
 - Pusat kesehatan untuk rekonsiliasi stok, pembayaran, piutang, hutang, shift, dan sinkronisasi.
 - Aplikasi kasir Android terhubung langsung ke printer ESC/POS Bluetooth Classic
   SPP tanpa kabel, bridge berbayar, atau langganan. Scanner Bluetooth HID
@@ -223,7 +223,7 @@ Untuk rilis v2.4.6, jalankan satu file
 Migrasi ini menambahkan URL foto produk dan transaksi penyimpanan produk v3.
 Jangan deploy source v2.4.6 sebelum migrasi berhasil.
 
-Untuk rilis v2.16.17, jalankan
+Untuk rilis v2.16.18, jalankan
 `supabase/migrations/202607290044_stock_management_fifo_cost.sql` sebelum
 deployment. Migrasi ini menambahkan penyesuaian stok per barang, log alokasi
 batch, HPP penjualan sesuai FEFO/FIFO, dan pemulihan lapisan modal saat void.

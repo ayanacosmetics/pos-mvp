@@ -53,6 +53,22 @@ const BACKUP_TABLES = [
   'customer_returns','customer_return_items','customer_refunds',
   'pos_devices','sync_commands','document_sequences','audit_logs','import_jobs'
 ];
+const RESTORE_TABLES = [
+  'suppliers','products','product_units','price_rules','customer_tiers','customers','loyalty_settings',
+  'promotions','promotion_versions','promotion_outlets','receipt_voucher_campaigns',
+  'employee_schedules','attendance_records','employee_targets','approval_policies','approval_requests',
+  'shifts','cash_movements','shift_reconciliations','sales','vouchers','parked_sales',
+  'sale_adjustment_authorizations','sale_items','payments','promotion_redemptions','voucher_redemptions',
+  'customer_point_entries','customer_returns','customer_return_items','customer_refunds',
+  'customer_account_entries','customer_payment_receipts','customer_payment_allocations',
+  'purchase_orders','purchase_order_items','purchase_receipts','purchase_receipt_items',
+  'inventory_batches','stock_balances','stock_ledger','inventory_batch_movements','sale_stock_allocations',
+  'stock_adjustments','supplier_bills','supplier_payable_entries','supplier_payment_receipts',
+  'supplier_payment_allocations','supplier_returns','supplier_return_items','stock_transfers',
+  'stock_transfer_items','transfer_requests','transfer_request_items','transfer_request_batches',
+  'stock_counts','stock_count_items','restock_policies','outlet_price_overrides','accounting_periods',
+  'journal_entries','journal_lines','outlet_expenses','sync_commands','import_jobs'
+];
 
 const env = () => ({
   url: process.env.SUPABASE_URL?.replace(/\/$/, ''),
@@ -1183,6 +1199,37 @@ async function baseSaleQuote(context, input) {
   });
 }
 
+function restorePayload(snapshot) {
+  return Object.fromEntries(RESTORE_TABLES.map((table)=>[
+    table,Array.isArray(snapshot.tables?.[table])?snapshot.tables[table]:[]
+  ]));
+}
+
+function restorePreview(snapshot) {
+  const tables=restorePayload(snapshot);
+  const groups={
+    catalog:['products','product_units','price_rules','outlet_price_overrides'],
+    transactions:['sales','sale_items','payments','shifts','cash_movements','customer_returns','supplier_returns'],
+    inventory:['stock_balances','stock_ledger','inventory_batches','inventory_batch_movements','stock_transfers','stock_counts'],
+    relations:['customers','suppliers','customer_account_entries','supplier_bills','supplier_payable_entries'],
+    growth:['promotions','promotion_versions','vouchers','customer_point_entries','customer_tiers'],
+    finance:['accounting_periods','journal_entries','journal_lines','outlet_expenses'],
+    workforce:['employee_schedules','attendance_records','employee_targets','approval_requests']
+  };
+  const count=(names)=>names.reduce((sum,table)=>sum+tables[table].length,0);
+  return {
+    totalRows:Object.values(tables).reduce((sum,rows)=>sum+rows.length,0),
+    groups:Object.fromEntries(Object.entries(groups).map(([name,names])=>[name,count(names)])),
+    tableCounts:Object.fromEntries(Object.entries(tables).map(([table,rows])=>[table,rows.length]))
+  };
+}
+
+async function requireRegisteredBackup(tenantId,snapshot) {
+  const rows=await rest('backup_exports',
+    `tenant_id=eq.${encodeURIComponent(tenantId)}&checksum_sha256=eq.${encodeURIComponent(snapshot.checksum)}&status=eq.COMPLETED&select=id&limit=1`);
+  if(!rows[0])throw Object.assign(new Error('File ini belum tercatat sebagai backup resmi usaha ini'),{status:422});
+}
+
 function maskEmail(email) {
   const [name='',domain='']=String(email??'').split('@');
   if(!domain)return 'email Owner';
@@ -1297,7 +1344,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.17-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.18-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2022,6 +2069,91 @@ async function routeRequest(request, response, route) {
     requirePermission(session, 'identity.manage');
     const exports = await rest('backup_exports',`tenant_id=eq.${context.tenantId}&select=*&order=created_at.desc&limit=20`);
     return send(response,200,{exports});
+  }
+
+  if(request.method==='POST'&&route==='data-restore/preview'){
+    requirePermission(session,'identity.manage');
+    if(session.profile.role!=='OWNER')throw Object.assign(new Error('Hanya Owner yang dapat memeriksa file pemulihan'),{status:403});
+    const snapshot=bodyOf(request).snapshot,verification=verifyBackup(snapshot,context.tenantId);
+    if(!verification.valid)throw Object.assign(new Error(verification.message),{status:422});
+    await requireRegisteredBackup(context.tenantId,snapshot);
+    return send(response,200,{...verification,preview:restorePreview(snapshot)});
+  }
+
+  if(request.method==='POST'&&route==='data-restore/otp'){
+    requirePermission(session,'identity.manage');
+    if(session.profile.role!=='OWNER')throw Object.assign(new Error('Hanya Owner yang dapat meminta OTP pemulihan'),{status:403});
+    const snapshot=bodyOf(request).snapshot,verification=verifyBackup(snapshot,context.tenantId);
+    if(!verification.valid)throw Object.assign(new Error(verification.message),{status:422});
+    await requireRegisteredBackup(context.tenantId,snapshot);
+    const email=String(session.authUser.email??'').trim().toLowerCase();
+    if(!email)throw Object.assign(new Error('Email akun Owner belum tersedia'),{status:422});
+    let simulation;
+    try{
+      simulation=await rpc('dry_run_restore_tenant_backup_v1',{
+        p_tenant_id:context.tenantId,
+        p_actor_id:session.authUser.id,
+        p_tables:restorePayload(snapshot)
+      });
+    }catch(error){
+      if(/dry_run_restore_tenant_backup_v1|schema cache|function|PGRST202/i.test(error.message)){
+        throw Object.assign(new Error('Pemulihan belum aktif di database. Jalankan migrasi pemulihan terbaru terlebih dahulu.'),{status:503});
+      }
+      throw Object.assign(new Error('Kesiapan pemulihan belum dapat diverifikasi'),{status:503});
+    }
+    if(!simulation?.valid)throw Object.assign(new Error(`File belum dapat dipulihkan: ${simulation?.error??'simulasi gagal'}`),{status:409});
+    try{
+      await supabase('/auth/v1/otp',{method:'POST',body:{email,create_user:false}});
+    }catch(error){
+      if(error.status===429)throw Object.assign(new Error('OTP terlalu sering diminta. Tunggu beberapa menit lalu coba lagi.'),{status:429});
+      throw Object.assign(new Error('OTP pemulihan belum dapat dikirim'),{status:502});
+    }
+    await rest('audit_logs','',{method:'POST',body:{
+      tenant_id:context.tenantId,actor_id:session.authUser.id,action:'TENANT_BACKUP_RESTORE_OTP_REQUESTED',
+      entity_type:'tenant',entity_id:context.tenantId,
+      details_json:{emailMasked:maskEmail(email),simulatedRows:simulation.restoredRows??verification.totalRows}
+    }});
+    return send(response,200,{sent:true,emailMasked:maskEmail(email),simulation});
+  }
+
+  if(request.method==='POST'&&route==='data-restore/execute'){
+    requirePermission(session,'identity.manage');
+    if(session.profile.role!=='OWNER')throw Object.assign(new Error('Hanya Owner yang dapat memulihkan backup'),{status:403});
+    const input=bodyOf(request),otp=String(input.otp??'').trim(),snapshot=input.snapshot;
+    const verification=verifyBackup(snapshot,context.tenantId);
+    if(!verification.valid)throw Object.assign(new Error(verification.message),{status:422});
+    await requireRegisteredBackup(context.tenantId,snapshot);
+    if(!/^\d{6,10}$/.test(otp))throw Object.assign(new Error('OTP harus terdiri dari 6 sampai 10 angka'),{status:400});
+    if(String(input.confirmation??'').trim().toUpperCase()!=='PULIHKAN DATA')throw Object.assign(new Error('Ketik PULIHKAN DATA untuk melanjutkan'),{status:400});
+    const email=String(session.authUser.email??'').trim().toLowerCase();
+    let verified;
+    try{
+      verified=await supabase('/auth/v1/verify',{method:'POST',body:{email,token:otp,type:'email'}});
+    }catch(error){
+      throw Object.assign(new Error('OTP salah, kedaluwarsa, atau sudah digunakan'),{status:401});
+    }
+    if(verified?.user?.id!==session.authUser.id)throw Object.assign(new Error('OTP bukan milik akun Owner yang sedang login'),{status:403});
+
+    const currentSnapshot=await buildBackup(context,session);
+    const rowCounts=Object.fromEntries(Object.entries(currentSnapshot.tables).map(([table,rows])=>[table,rows.length]));
+    const totalRows=Object.values(rowCounts).reduce((sum,count)=>sum+count,0);
+    const stamp=currentSnapshot.createdAt.replace(/\D/g,'').slice(0,14);
+    const fileName=`kasir-nusa-sebelum-pemulihan-${stamp}.json`;
+    await rest('backup_exports','',{method:'POST',body:{
+      tenant_id:context.tenantId,actor_id:session.authUser.id,file_name:fileName,
+      schema_version:currentSnapshot.schemaVersion,checksum_sha256:currentSnapshot.checksum,
+      total_rows:totalRows,row_counts:rowCounts,status:'COMPLETED'
+    }});
+    let result;
+    try{
+      result=await rpc('restore_tenant_backup_v1',{
+        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_tables:restorePayload(snapshot)
+      });
+    }catch(error){
+      if(/restore_tenant_backup_v1|schema cache|function/i.test(error.message))throw Object.assign(new Error('Pemulihan belum aktif di database. Jalankan migrasi pemulihan terbaru.'),{status:503});
+      throw Object.assign(new Error(`Pemulihan dibatalkan seluruhnya: ${error.message}`),{status:409});
+    }
+    return send(response,200,{...result,fileName,snapshot:currentSnapshot,totalRows});
   }
 
   if(request.method==='POST'&&route==='data-reset/otp'){

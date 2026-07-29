@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=128">
+  <link rel="stylesheet" href="/styles.css?v=129">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -174,10 +174,10 @@
           <button data-page="settings-locations" data-target-page="settings" data-settings-view="locations" class="feature-nav-item" data-permission="identity.manage"><span>Lokasi stok</span><small>Toko, gudang, transit</small></button>
           <button data-page="settings-device" data-target-page="settings" data-settings-view="device" class="feature-nav-item" data-permission="identity.manage"><span>Perangkat</span><small>Kasir, printer, instalasi PWA</small></button>
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
-          <button data-page="settings-data-reset" data-target-page="settings" data-settings-view="reset" class="feature-nav-item" data-permission="identity.manage"><span>Reset data</span><small>Hapus data dengan OTP Owner</small></button>
+          <button data-page="settings-data-reset" data-target-page="settings" data-settings-view="reset" class="feature-nav-item" data-permission="identity.manage"><span>Reset & pulihkan data</span><small>Hapus atau kembalikan backup</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Reset Relasi Aman · v2.16.17</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Reset & Pulihkan · v2.16.18</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -737,8 +737,13 @@
           <div id="system-health-checks" class="health-checks"><div class="empty-state compact">Pemeriksaan belum dijalankan.</div></div>
         </section>
 
-        <section id="data-reset-settings" class="surface settings-section data-reset-settings">
-          <div class="settings-section-head"><div><p class="eyebrow">KHUSUS OWNER</p><h2>Reset data usaha</h2><p class="muted">Pilih kelompok data yang akan dikosongkan. Sistem membuat backup JSON otomatis sebelum penghapusan dimulai.</p></div><span class="status-badge rejected">BERISIKO</span></div>
+        <section id="data-reset-settings" class="surface settings-section data-maintenance-settings">
+          <div class="settings-section-head"><div><p class="eyebrow">KHUSUS OWNER</p><h2>Reset & pulihkan data</h2><p class="muted">Pilih satu tindakan. Reset mengosongkan data, sedangkan pulihkan mengembalikan data dari file backup Kasir Nusa.</p></div></div>
+          <div class="data-maintenance-tabs" role="tablist" aria-label="Tindakan data">
+            <button class="data-maintenance-tab active" type="button" role="tab" aria-selected="true" data-maintenance-mode="reset" aria-controls="data-reset-panel"><span class="data-maintenance-icon">R</span><span><strong>Reset data</strong><small>Backup lalu kosongkan data terpilih</small></span></button>
+            <button class="data-maintenance-tab" type="button" role="tab" aria-selected="false" data-maintenance-mode="restore" aria-controls="data-restore-panel"><span class="data-maintenance-icon">P</span><span><strong>Pulihkan data</strong><small>Kembalikan isi file backup JSON</small></span></button>
+          </div>
+          <section id="data-reset-panel" class="data-maintenance-panel">
           <div class="data-reset-preserved"><strong>Tetap dipertahankan</strong><span>Akun Owner dan staff, identitas usaha, outlet, lokasi stok, perangkat, pengaturan dasar, riwayat backup, dan audit.</span></div>
           <form id="data-reset-form">
             <fieldset class="data-reset-options">
@@ -765,6 +770,40 @@
               <button id="execute-data-reset" class="button danger full" type="submit">Backup lalu reset data terpilih</button>
             </div>
           </form>
+          </section>
+
+          <section id="data-restore-panel" class="data-maintenance-panel hidden">
+            <div class="data-restore-note"><strong>Yang akan dipulihkan</strong><span>Produk, stok, transaksi, pelanggan, supplier, promo, keuangan, dan aktivitas karyawan dari backup. Akun, outlet, lokasi, perangkat, serta pengaturan usaha saat ini tetap dipakai.</span></div>
+            <label class="data-restore-picker" for="data-restore-file"><span><strong>Pilih file backup Kasir Nusa</strong><small id="data-restore-file-name">Belum ada file JSON dipilih</small></span><span class="button secondary">Pilih file</span></label>
+            <input id="data-restore-file" class="hidden" type="file" accept=".json,application/json">
+            <div id="data-restore-preview" class="data-restore-preview hidden">
+              <div class="data-restore-preview-head"><div><p class="eyebrow">PRATINJAU BACKUP</p><strong id="data-restore-created-at">-</strong></div><span id="data-restore-total" class="status-badge approved">0 data</span></div>
+              <div class="data-restore-counts">
+                <span><small>Produk & harga</small><strong id="data-restore-count-catalog">0</strong></span>
+                <span><small>Transaksi</small><strong id="data-restore-count-transactions">0</strong></span>
+                <span><small>Stok</small><strong id="data-restore-count-inventory">0</strong></span>
+                <span><small>Relasi</small><strong id="data-restore-count-relations">0</strong></span>
+                <span><small>Promo</small><strong id="data-restore-count-growth">0</strong></span>
+                <span><small>Keuangan</small><strong id="data-restore-count-finance">0</strong></span>
+                <span><small>Karyawan</small><strong id="data-restore-count-workforce">0</strong></span>
+              </div>
+            </div>
+            <div class="data-restore-warning"><strong>Data operasional saat ini akan diganti.</strong><span>Sebelum pemulihan dimulai, sistem otomatis membuat dan mengunduh backup kondisi saat ini. Proses bersifat atomik: jika satu bagian gagal, seluruh perubahan dibatalkan.</span></div>
+            <p id="data-restore-file-error" class="error"></p>
+            <div class="button-row"><button id="request-data-restore-otp" class="button primary" type="button" disabled>Periksa file & kirim OTP Owner</button></div>
+            <form id="data-restore-form">
+              <div id="data-restore-confirmation" class="data-restore-confirmation hidden">
+                <div><strong>Konfirmasi pemulihan</strong><p id="data-restore-email" class="muted">File akan disimulasikan sebelum OTP dikirim.</p></div>
+                <div class="form-grid compact data-reset-confirm-grid">
+                  <label>Kode OTP<input id="data-restore-otp" inputmode="numeric" autocomplete="one-time-code" maxlength="10" pattern="[0-9]{6,10}" placeholder="Masukkan 6–10 angka"></label>
+                  <label>Ketik PULIHKAN DATA<input id="data-restore-phrase" autocomplete="off" placeholder="PULIHKAN DATA"></label>
+                </div>
+                <p class="muted">Gunakan seluruh angka dari email OTP terbaru. Jangan tutup halaman sampai backup kondisi saat ini selesai diunduh.</p>
+                <p id="data-restore-error" class="error"></p>
+                <button id="execute-data-restore" class="button primary full" type="submit">Backup kondisi saat ini lalu pulihkan</button>
+              </div>
+            </form>
+          </section>
         </section>
 
         <form id="device-settings-form" class="surface settings-section">
@@ -977,6 +1016,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=128"></script>
+  <script type="module" src="/app.js?v=129"></script>
 </body>
 </html>
