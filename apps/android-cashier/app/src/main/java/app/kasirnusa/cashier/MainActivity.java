@@ -16,6 +16,9 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.print.PrintAttributes;
+import android.print.PrintDocumentAdapter;
+import android.print.PrintManager;
 import android.util.Base64;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -99,7 +102,7 @@ public final class MainActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setSupportMultipleWindows(false);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " KasirNusaAndroid/1.2.0");
+        settings.setUserAgentString(settings.getUserAgentString() + " KasirNusaAndroid/1.2.1");
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
@@ -210,6 +213,28 @@ public final class MainActivity extends Activity {
                 } catch (Exception error) {
                     closePrinterSocket();
                     respond(requestId, false, printerError(error));
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public boolean supportsSystemPrint() {
+            return true;
+        }
+
+        @JavascriptInterface
+        public void printCurrentPage(String requestedName) {
+            runOnUiThread(() -> {
+                try {
+                    PrintManager manager = getSystemService(PrintManager.class);
+                    if (manager == null) throw new IllegalStateException("Layanan cetak Android tidak tersedia.");
+                    String jobName = requestedName == null || requestedName.trim().isEmpty()
+                            ? "Label produk Kasir Nusa"
+                            : requestedName.trim();
+                    PrintDocumentAdapter adapter = webView.createPrintDocumentAdapter(jobName);
+                    manager.print(jobName, adapter, new PrintAttributes.Builder().build());
+                } catch (Exception error) {
+                    Toast.makeText(MainActivity.this, printerError(error), Toast.LENGTH_LONG).show();
                 }
             });
         }

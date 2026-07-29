@@ -45,6 +45,17 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.16.3 Cetak Label Staff
+
+- Cetak label pada browser/PWA dipanggil langsung dalam aksi tombol pengguna,
+  bukan ditunda ke animation frame yang dapat diblokir setelah dialog ditutup.
+- Aplikasi kasir Android v1.2.1 menambahkan bridge PrintManager untuk membuka
+  dialog cetak sistem dari halaman label. APK lama menampilkan pesan pembaruan
+  dan mempertahankan editor, bukan terlihat langsung keluar.
+- Rilis memakai API `2.16.3-cloud`, aset/cache PWA `v114`, tanpa migrasi SQL.
+- Seluruh pengujian otomatis dan build APK lulus. Produksi dan alias utama
+  diverifikasi setelah deployment otomatis dari commit fitur.
+
 ### Rilis v2.16.2 Barcode Batang-Ruang
 
 - Encoder Code 128 diperbaiki agar segmen bergantian benar antara batang hitam

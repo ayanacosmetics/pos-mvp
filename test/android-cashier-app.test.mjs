@@ -29,6 +29,9 @@ const androidIcon = await readFile(
   'utf8',
 );
 const pwaIcon = await readFile(new URL('../apps/web/icon-512.svg', import.meta.url), 'utf8');
+const releaseApk = await readFile(new URL('../releases/Kasir-Nusa-POS-1.2.1.apk', import.meta.url));
+const publicApk = await readFile(new URL('../apps/web/downloads/Kasir-Nusa-POS-1.2.1.apk', import.meta.url));
+const vercelConfig = await readFile(new URL('../vercel.json', import.meta.url), 'utf8');
 
 test('Android cashier app locks its WebView to the production POS and blocks unsafe file access', () => {
   assert.match(androidBuild, /applicationId\s+"app\.kasirnusa\.cashier"/);
@@ -73,11 +76,26 @@ test('scanner dipasangkan dari Bluetooth Android dan aplikasi tidak mengambil al
 });
 
 test('APK pembaruan mempertahankan printer SPP tetapi scanner hanya memakai HID', () => {
-  assert.match(androidBuild, /versionCode 4/);
-  assert.match(androidBuild, /versionName "1\.2\.0"/);
+  assert.match(androidBuild, /versionCode 5/);
+  assert.match(androidBuild, /versionName "1\.2\.1"/);
   assert.match(androidBuild, /release\s*\{[\s\S]*signingConfig signingConfigs\.debug/);
-  assert.match(activity, /KasirNusaAndroid\/1\.2\.0/);
+  assert.match(activity, /KasirNusaAndroid\/1\.2\.1/);
   assert.doesNotMatch(activity, /SCANNER_MODE|scannerSocket|scannerReader/);
+});
+
+test('APK menyediakan dialog cetak sistem untuk label dan web tidak kehilangan user gesture', () => {
+  assert.match(activity, /PrintManager/);
+  assert.match(activity, /createPrintDocumentAdapter/);
+  assert.match(activity, /printCurrentPage/);
+  assert.match(webApp, /KasirNusaAndroid\.printCurrentPage/);
+  assert.match(webApp, /else window\.print\(\)/);
+  assert.doesNotMatch(webApp, /requestAnimationFrame\(\(\)=>window\.print\(\)\)/);
+});
+
+test('APK v1.2.1 tersedia sebagai unduhan produksi yang identik dengan hasil rilis', () => {
+  assert.deepEqual(publicApk, releaseApk);
+  assert.match(vercelConfig, /\/downloads\/Kasir-Nusa-POS-1\.2\.1\.apk/);
+  assert.match(vercelConfig, /attachment; filename=Kasir-Nusa-POS-1\.2\.1\.apk/);
 });
 
 test('APK dan PWA memakai nama serta identitas visual Kasir Nusa POS yang konsisten', () => {

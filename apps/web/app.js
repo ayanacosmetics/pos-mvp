@@ -751,8 +751,15 @@ function printProductLabels(event){
   const result=renderProductLabelSheet(el('product-label-print-root'));
   if(!result.count)return toast('Pilih minimal satu barang.');
   if(result.errors.length){el('product-label-print-root').replaceChildren();return toast('Periksa jenis barcode: ada kode yang tidak valid.');}
+  const nativeAndroid=/KasirNusaAndroid\//.test(navigator.userAgent);
+  const nativeSystemPrint=typeof window.KasirNusaAndroid?.printCurrentPage==='function';
+  if(nativeAndroid&&!nativeSystemPrint){
+    el('product-label-print-root').replaceChildren();
+    return toast('Perbarui aplikasi Kasir Nusa Android ke v1.2.1 untuk mencetak label.');
+  }
   el('product-label-dialog').close();
-  requestAnimationFrame(()=>window.print());
+  if(nativeSystemPrint)window.KasirNusaAndroid.printCurrentPage('Label produk Kasir Nusa');
+  else window.print();
 }
 
 function applyProductLabelPreset(){
