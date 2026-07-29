@@ -45,6 +45,18 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.16.4 Tabel Produk Ringkas
+
+- Direktori Produk memakai satu baris padat dengan kolom terpisah untuk SKU,
+  nama, kategori, merek, varian, satuan, barcode, harga, stok, minimum stok,
+  dan status.
+- Checkbox seleksi diperkecil menjadi 14 px dan tidak lagi terdorong oleh
+  aturan lebar input tabel.
+- Tombol Edit serta Aktifkan/Nonaktifkan disembunyikan dari setiap baris dan
+  hanya ditampilkan pada panel tindakan setelah produk ditekan.
+- Baris produk dapat dibuka dengan klik, Enter, atau Space.
+- Rilis memakai API `2.16.4-cloud`, aset/cache PWA `v115`, tanpa migrasi SQL.
+
 ### Rilis v2.16.3 Cetak Label Staff
 
 - Cetak label pada browser/PWA dipanggil langsung dalam aksi tombol pengguna,

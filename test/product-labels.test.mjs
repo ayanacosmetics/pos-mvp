@@ -60,3 +60,18 @@ test('UI produk menyediakan seleksi dan dialog cetak label',async()=>{
   assert.match(css,/@page\{margin:4mm\}/);
   assert.match(worker,/product-labels\.mjs/);
 });
+
+test('direktori produk memakai baris ringkas, kolom terpisah, dan tindakan saat baris dibuka',async()=>{
+  const {readFile}=await import('node:fs/promises');
+  const [script,css]=await Promise.all([
+    readFile(new URL('../apps/web/app.js',import.meta.url),'utf8'),
+    readFile(new URL('../apps/web/styles.css',import.meta.url),'utf8')
+  ]);
+  for(const heading of ['SKU','Nama produk','Kategori','Merek','Varian','Satuan','Barcode','Harga umum','Stok','Min. stok','Status'])assert.match(script,new RegExp(`<th>${heading.replace('.','\\.')}`));
+  assert.doesNotMatch(script,/<th>Aksi<\/th>/);
+  assert.match(script,/productActionId:null/);
+  assert.match(script,/class="product-action-row"/);
+  assert.match(script,/state\.productActionId===row\.dataset\.productId\?null:row\.dataset\.productId/);
+  assert.match(css,/\.product-select-cell input\{width:14px;height:14px;min-width:14px!important;min-height:14px!important/);
+  assert.match(css,/\.product-admin-table\{min-width:1100px;table-layout:fixed\}/);
+});
