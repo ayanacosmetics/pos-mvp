@@ -19,8 +19,8 @@ test('versi kandidat final tampil pada API, aplikasi, dan cache PWA', async () =
     readFile(new URL('../apps/web/service-worker.js', import.meta.url), 'utf8'),
     readFile(new URL('../package.json', import.meta.url), 'utf8')
   ]);
-  assert.match(api, /2\.16\.7-cloud/);
-  assert.match(html, /Cetak Label Bluetooth .* v2\.16\.7/);
-  assert.match(worker, /nusa-pos-shell-v118/);
-  assert.equal(JSON.parse(pkgText).version, '2.16.7');
+  assert.match(api, /2\.16\.8-cloud/);
+  assert.match(html, /Hotfix Transaksi Kasir .* v2\.16\.8/);
+  assert.match(worker, /nusa-pos-shell-v119/);
+  assert.equal(JSON.parse(pkgText).version, '2.16.8');
 });

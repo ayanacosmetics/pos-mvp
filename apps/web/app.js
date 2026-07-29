@@ -2311,7 +2311,7 @@ async function applyVoucherCode(){
   state.voucherCode=el('voucher-code').value.trim().toUpperCase();
   if(!state.voucherCode)return;
   try{
-    state.quote=await request('/api/quote',{method:'POST',body:JSON.stringify({lines:state.cart,customerGroupId:el('customer-group').value,customerId:el('customer-select').value,voucherCode:state.voucherCode,at:new Date().toISOString(),...(state.saleAuthorization?{authorization:state.saleAuthorization}:{})})});
+    state.quote=await request('/api/quote',{method:'POST',body:JSON.stringify({lines:state.cart,customerGroupId:el('customer-group').value,customerId:el('customer-select').value||null,voucherCode:state.voucherCode,at:new Date().toISOString(),...(state.saleAuthorization?{authorization:state.saleAuthorization}:{})})});
     renderCart();toast(`Voucher ${state.voucherCode} dipakai`);
   }catch(error){state.voucherCode='';el('voucher-code').value='';renderCart();toast(error.message);}
 }
@@ -4903,7 +4903,7 @@ function shareReceiptWhatsApp(){
 
 async function completePayment(event) {
   event.preventDefault();
-  if (!state.currentShift) return toast('Buka shift kasir terlebih dahulu.');
+  if (!state.currentShift?.id) return toast('Shift aktif belum siap. Muat ulang kasir lalu coba lagi.');
   const totals=paymentTotals();
   if(Math.abs(totals.allocated-state.quote.grandTotal)>0.01)return el('payment-error').textContent='Total pembayaran harus sama dengan total transaksi.';
   if(!navigator.onLine&&state.saleAuthorization)return el('payment-error').textContent='Diskon berizin hanya dapat diselesaikan saat online. Sambungkan internet atau batalkan diskon manual.';

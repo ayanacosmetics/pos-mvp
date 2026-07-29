@@ -1194,8 +1194,26 @@ async function resolveSaleCustomerGroup(context, input) {
   return rows[0].group_id || 'retail';
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function normalizeOptionalUuid(value, label) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return null;
+  if (!UUID_PATTERN.test(normalized)) {
+    const error = new Error(`${label} tidak valid. Muat ulang data lalu coba lagi.`);
+    error.status = 422;
+    throw error;
+  }
+  return normalized;
+}
+
 async function normalizeSaleCustomer(context, input) {
-  return { ...input, customerGroupId: await resolveSaleCustomerGroup(context, input) };
+  const normalized = {
+    ...input,
+    customerId: normalizeOptionalUuid(input.customerId, 'Pelanggan'),
+    shiftId: normalizeOptionalUuid(input.shiftId, 'Shift')
+  };
+  return { ...normalized, customerGroupId: await resolveSaleCustomerGroup(context, normalized) };
 }
 
 async function voucherSaleQuote(context, input, quote) {
@@ -1273,7 +1291,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.7-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.8-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1720,6 +1738,11 @@ async function routeRequest(request, response, route) {
   if (request.method === 'POST' && route === 'sales') {
     requirePermission(session, 'pos.sell');
     const input = await normalizeSaleCustomer(context, bodyOf(request));
+    if (!input.shiftId) {
+      const error = new Error('Shift aktif tidak ditemukan. Muat ulang kasir lalu coba lagi.');
+      error.status = 409;
+      throw error;
+    }
     const key = request.headers['idempotency-key'];
     if (!key) { const error = new Error('Idempotency-Key wajib diisi'); error.status = 400; throw error; }
     let quote = await baseSaleQuote(context, { ...input, at: new Date().toISOString() });
@@ -1805,6 +1828,7 @@ async function routeRequest(request, response, route) {
         const at = new Date(command.occurredAt);
         if (!Number.isFinite(at.getTime())) throw new Error('Waktu transaksi offline tidak valid');
         const payload=await normalizeSaleCustomer(context,command.payload);
+        if (!payload.shiftId) throw new Error('Shift transaksi offline tidak ditemukan. Buka ulang shift lalu buat transaksi baru.');
         const quote = quoteBasket({ lines: payload.lines, customerGroupId: payload.customerGroupId, products, promotions, at });
         const result = await rpc('process_sync_sale', {
           p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_device_id: input.device.id,

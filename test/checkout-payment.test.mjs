@@ -56,6 +56,40 @@ test('pembayaran tunai dan QRIS diteruskan atomik dengan kembalian tunai',async(
   }
 });
 
+test('checkout menormalisasi UUID pelanggan kosong agar transaksi umum tetap dapat diproses',async()=>{
+  const originalFetch=globalThis.fetch;
+  const previous={url:process.env.SUPABASE_URL,anon:process.env.SUPABASE_ANON_KEY,service:process.env.SUPABASE_SERVICE_ROLE_KEY};
+  process.env.SUPABASE_URL='https://project.supabase.test';process.env.SUPABASE_ANON_KEY='anon';process.env.SUPABASE_SERVICE_ROLE_KEY='service';
+  let rpcBody;
+  globalThis.fetch=installCloudMock((body)=>{rpcBody=body;});
+  try{
+    const result=await callApi('POST','sales',{lines:[{productId:ids.product,unitId:ids.unit,qty:2}],customerId:'  ',customerGroupId:'member',shiftId:ids.shift,payments:[{method:'CASH',amount:20000,tendered:20000}]},{'idempotency-key':'sale-empty-customer'});
+    assert.equal(result.status,201);
+    assert.equal(rpcBody.p_customer_id,null);
+    assert.equal(rpcBody.p_customer_group_id,'retail');
+  }finally{
+    globalThis.fetch=originalFetch;
+    for(const [key,value] of Object.entries(previous)){const envKey={url:'SUPABASE_URL',anon:'SUPABASE_ANON_KEY',service:'SUPABASE_SERVICE_ROLE_KEY'}[key];if(value===undefined)delete process.env[envKey];else process.env[envKey]=value;}
+  }
+});
+
+test('checkout menolak shift kosong dengan pesan aplikasi sebelum memanggil database',async()=>{
+  const originalFetch=globalThis.fetch;
+  const previous={url:process.env.SUPABASE_URL,anon:process.env.SUPABASE_ANON_KEY,service:process.env.SUPABASE_SERVICE_ROLE_KEY};
+  process.env.SUPABASE_URL='https://project.supabase.test';process.env.SUPABASE_ANON_KEY='anon';process.env.SUPABASE_SERVICE_ROLE_KEY='service';
+  let rpcCalled=false;
+  globalThis.fetch=installCloudMock(()=>{rpcCalled=true;});
+  try{
+    const result=await callApi('POST','sales',{lines:[{productId:ids.product,unitId:ids.unit,qty:2}],customerId:'',shiftId:'',payments:[{method:'CASH',amount:20000,tendered:20000}]},{'idempotency-key':'sale-empty-shift'});
+    assert.equal(result.status,409);
+    assert.match(result.body.error,/Shift aktif tidak ditemukan/);
+    assert.equal(rpcCalled,false);
+  }finally{
+    globalThis.fetch=originalFetch;
+    for(const [key,value] of Object.entries(previous)){const envKey={url:'SUPABASE_URL',anon:'SUPABASE_ANON_KEY',service:'SUPABASE_SERVICE_ROLE_KEY'}[key];if(value===undefined)delete process.env[envKey];else process.env[envKey]=value;}
+  }
+});
+
 test('checkout memperbaiki penghitung struk dan mencoba ulang setelah benturan nomor',async()=>{
   const originalFetch=globalThis.fetch;
   const previous={url:process.env.SUPABASE_URL,anon:process.env.SUPABASE_ANON_KEY,service:process.env.SUPABASE_SERVICE_ROLE_KEY};
