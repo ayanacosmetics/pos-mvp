@@ -320,21 +320,29 @@ async function loadSupplierAccounts(tenantId){
   });
 }
 
-async function loadManagedProducts(tenantId) {
+async function loadManagedProducts(tenantId,{includeCost=false}={}) {
   const tenant=encodeURIComponent(tenantId);
   const [products,units,rules,balances]=await Promise.all([
     rest('products',`tenant_id=eq.${tenant}&select=*&order=active.desc,name`),
     rest('product_units',`tenant_id=eq.${tenant}&select=*`),
     rest('price_rules',`tenant_id=eq.${tenant}&starts_at=is.null&ends_at=is.null&select=*`),
-    rest('stock_balances',`tenant_id=eq.${tenant}&select=product_id,quantity`)
+    rest('stock_balances',`tenant_id=eq.${tenant}&select=product_id,quantity${includeCost?',avg_cost':''}`)
   ]);
-  return products.map((product)=>({
-    id:product.id,sku:product.sku,name:product.name,category:product.category,brand:product.brand,imageUrl:product.image_url,active:product.active,
-    variantGroup:product.variant_group,variantName:product.variant_name,minimumStock:Number(product.minimum_stock??0),trackExpiry:Boolean(product.track_expiry),
-    stockBase:balances.filter((balance)=>balance.product_id===product.id).reduce((sum,balance)=>sum+Number(balance.quantity),0),
-    units:units.filter((unit)=>unit.product_id===product.id).map((unit)=>({id:unit.id,name:unit.name,factor:Number(unit.factor_to_base),barcode:unit.barcode})).sort((a,b)=>a.factor-b.factor),
-    priceRules:rules.filter((rule)=>rule.product_id===product.id).map((rule)=>({id:rule.id,customerGroupId:rule.customer_group_id,minBaseQty:Number(rule.min_base_qty),unitPriceBase:Number(rule.unit_price_base),priority:rule.priority}))
-  }));
+  return products.map((product)=>{
+    const productBalances=balances.filter((balance)=>balance.product_id===product.id);
+    const stockBase=productBalances.reduce((sum,balance)=>sum+Number(balance.quantity),0);
+    const costQuantity=productBalances.reduce((sum,balance)=>sum+Math.max(0,Number(balance.quantity)),0);
+    const weightedCost=costQuantity>0
+      ? productBalances.reduce((sum,balance)=>sum+(Math.max(0,Number(balance.quantity))*Number(balance.avg_cost??0)),0)/costQuantity
+      : Math.max(0,...productBalances.map((balance)=>Number(balance.avg_cost??0)));
+    return {
+      id:product.id,sku:product.sku,name:product.name,category:product.category,brand:product.brand,imageUrl:product.image_url,active:product.active,
+      variantGroup:product.variant_group,variantName:product.variant_name,minimumStock:Number(product.minimum_stock??0),trackExpiry:Boolean(product.track_expiry),
+      stockBase,...(includeCost?{averageCost:Math.round(weightedCost*100)/100}:{}),
+      units:units.filter((unit)=>unit.product_id===product.id).map((unit)=>({id:unit.id,name:unit.name,factor:Number(unit.factor_to_base),barcode:unit.barcode})).sort((a,b)=>a.factor-b.factor),
+      priceRules:rules.filter((rule)=>rule.product_id===product.id).map((rule)=>({id:rule.id,customerGroupId:rule.customer_group_id,minBaseQty:Number(rule.min_base_qty),unitPriceBase:Number(rule.unit_price_base),priority:rule.priority}))
+    };
+  });
 }
 
 function normalizeProductInput(input,id=null) {
@@ -1265,7 +1273,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.4-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.5-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1873,7 +1881,7 @@ async function routeRequest(request, response, route) {
 
   if (request.method === 'GET' && route === 'products/manage') {
     requirePermission(session, 'catalog.manage');
-    return send(response,200,{products:await loadManagedProducts(context.tenantId)});
+    return send(response,200,{products:await loadManagedProducts(context.tenantId,{includeCost:session.permissions.includes('purchasing.view_cost')})});
   }
 
   if(request.method==='POST'&&route==='products/bulk-delete'){

@@ -61,17 +61,24 @@ test('UI produk menyediakan seleksi dan dialog cetak label',async()=>{
   assert.match(worker,/product-labels\.mjs/);
 });
 
-test('direktori produk memakai baris ringkas, kolom terpisah, dan tindakan saat baris dibuka',async()=>{
+test('direktori produk memakai kolom umum, barcode utuh, tipe barang, dan detail saat baris dibuka',async()=>{
   const {readFile}=await import('node:fs/promises');
   const [script,css]=await Promise.all([
     readFile(new URL('../apps/web/app.js',import.meta.url),'utf8'),
     readFile(new URL('../apps/web/styles.css',import.meta.url),'utf8')
   ]);
-  for(const heading of ['SKU','Nama produk','Kategori','Merek','Varian','Satuan','Barcode','Harga umum','Stok','Min. stok','Status'])assert.match(script,new RegExp(`<th>${heading.replace('.','\\.')}`));
+  for(const heading of ['SKU','Barcode','Nama produk','Tipe barang','Kategori','Merek','Harga umum','Stok','Min. stok','Status'])assert.match(script,new RegExp(`>${heading.replace('.','\\.')}</th>`));
+  assert.doesNotMatch(script,/>Varian<\/th>|>Satuan<\/th>/);
+  assert.match(script,/hasVariant&&hasMultipleUnits\?'Varian \+ Multisatuan'/);
+  assert.match(script,/hasMultipleUnits\?`<div class="product-detail-units"/);
+  assert.match(script,/can\('purchasing\.view_cost'\)/);
+  assert.match(script,/>Modal<\/th>/);
   assert.doesNotMatch(script,/<th>Aksi<\/th>/);
   assert.match(script,/productActionId:null/);
-  assert.match(script,/class="product-action-row"/);
+  assert.match(script,/class="product-action-row product-detail-row"/);
   assert.match(script,/state\.productActionId===row\.dataset\.productId\?null:row\.dataset\.productId/);
   assert.match(css,/\.product-select-cell input\{width:14px;height:14px;min-width:14px!important;min-height:14px!important/);
-  assert.match(css,/\.product-admin-table\{min-width:1100px;table-layout:fixed\}/);
+  assert.match(css,/\.product-admin-table\{min-width:1105px;table-layout:fixed\}/);
+  assert.match(css,/\.product-col-barcode\{width:165px\}/);
+  assert.match(css,/\.product-admin-table \.product-admin-row>\.product-barcode-cell\{overflow:visible;text-overflow:clip;white-space:nowrap\}/);
 });

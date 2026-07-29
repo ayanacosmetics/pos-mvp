@@ -24,7 +24,7 @@ test('direktori master memuat produk aktif dan nonaktif beserta semua satuan',as
     if(target.includes('/rest/v1/products?'))return responseOf([{id:ids.product,sku:'KOS-001',name:'Lip Tint',category:'Kosmetik',brand:'Nusa',image_url:'https://images.example/lip-tint.jpg',active:false,variant_group:'Velvet',variant_name:'Rose',minimum_stock:'6',track_expiry:true}]);
     if(target.includes('/rest/v1/product_units?'))return responseOf([{id:ids.unit,product_id:ids.product,name:'pcs',factor_to_base:'1',barcode:'8991'}]);
     if(target.includes('/rest/v1/price_rules?'))return responseOf([{id:'price',product_id:ids.product,customer_group_id:'retail',min_base_qty:'1',unit_price_base:'25000',priority:10}]);
-    if(target.includes('/rest/v1/stock_balances?'))return responseOf([{product_id:ids.product,quantity:'4'}]);
+    if(target.includes('/rest/v1/stock_balances?'))return responseOf([{product_id:ids.product,quantity:'4',avg_cost:'15000'}]);
     return responseOf({message:`Mock belum menangani ${target}`},500);
   };
   try{
@@ -35,6 +35,36 @@ test('direktori master memuat produk aktif dan nonaktif beserta semua satuan',as
     assert.equal(result.body.products[0].imageUrl,'https://images.example/lip-tint.jpg');
     assert.equal(result.body.products[0].units[0].factor,1);
     assert.equal(result.body.products[0].stockBase,4);
+    assert.equal(result.body.products[0].averageCost,15000);
+  }finally{
+    globalThis.fetch=originalFetch;
+    for(const [key,value] of Object.entries(previous)){const envKey={url:'SUPABASE_URL',anon:'SUPABASE_ANON_KEY',service:'SUPABASE_SERVICE_ROLE_KEY'}[key];if(value===undefined)delete process.env[envKey];else process.env[envKey]=value;}
+  }
+});
+
+test('modal produk tidak diminta atau dikirim kepada manajer tanpa izin biaya',async()=>{
+  const originalFetch=globalThis.fetch;
+  const previous={url:process.env.SUPABASE_URL,anon:process.env.SUPABASE_ANON_KEY,service:process.env.SUPABASE_SERVICE_ROLE_KEY};
+  process.env.SUPABASE_URL='https://project.supabase.test';process.env.SUPABASE_ANON_KEY='anon';process.env.SUPABASE_SERVICE_ROLE_KEY='service';
+  let balanceQuery='';
+  globalThis.fetch=async(url)=>{
+    const target=String(url);
+    if(target.endsWith('/auth/v1/user'))return responseOf({id:ids.user});
+    if(target.includes('/rest/v1/profiles?'))return responseOf([{user_id:ids.user,tenant_id:ids.tenant,display_name:'Manager',role:'MANAGER',active:true}]);
+    if(target.includes('/rest/v1/user_outlets?'))return responseOf([{outlet_id:ids.outlet}]);
+    if(target.includes('/rest/v1/outlets?'))return responseOf([{id:ids.outlet,name:'Toko',active:true}]);
+    if(target.includes('/rest/v1/stock_locations?'))return responseOf([{id:ids.location,outlet_id:ids.outlet,name:'Toko',kind:'STORE'}]);
+    if(target.includes('/rest/v1/products?'))return responseOf([{id:ids.product,sku:'SKU-1',name:'Barang',category:'Umum',active:true,minimum_stock:'0'}]);
+    if(target.includes('/rest/v1/product_units?'))return responseOf([{id:ids.unit,product_id:ids.product,name:'pcs',factor_to_base:'1',barcode:'8991'}]);
+    if(target.includes('/rest/v1/price_rules?'))return responseOf([]);
+    if(target.includes('/rest/v1/stock_balances?')){balanceQuery=target;return responseOf([{product_id:ids.product,quantity:'4'}]);}
+    return responseOf({message:`Mock belum menangani ${target}`},500);
+  };
+  try{
+    const result=await callApi('GET','products/manage');
+    assert.equal(result.status,200);
+    assert.doesNotMatch(balanceQuery,/avg_cost/);
+    assert.equal(Object.hasOwn(result.body.products[0],'averageCost'),false);
   }finally{
     globalThis.fetch=originalFetch;
     for(const [key,value] of Object.entries(previous)){const envKey={url:'SUPABASE_URL',anon:'SUPABASE_ANON_KEY',service:'SUPABASE_SERVICE_ROLE_KEY'}[key];if(value===undefined)delete process.env[envKey];else process.env[envKey]=value;}
