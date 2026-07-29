@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {code128Modules,code128Svg,code128Values,labelSize,normalizeCode128Text} from '../apps/web/product-labels.mjs';
+import {barcodeSvg,barcodeTypeFor,code128Modules,code128Svg,code128Values,eanBits,labelSize,normalizeCode128Text,validEan} from '../apps/web/product-labels.mjs';
 
 test('Code 128B membentuk checksum dan stop pattern yang valid',()=>{
   assert.deepEqual(code128Values('ABC'),[104,33,34,35,1,106]);
@@ -13,6 +13,16 @@ test('Code 128B membentuk checksum dan stop pattern yang valid',()=>{
 test('barcode angka genap memakai Code 128C agar garis tidak terlalu rapat',()=>{
   assert.deepEqual(code128Values('899000000001'),[105,89,90,0,0,0,1,71,106]);
   assert.ok(code128Modules('899000000001').length<code128Modules('A899000000001').length);
+});
+
+test('EAN-13 dan EAN-8 tervalidasi serta dapat dipilih otomatis',()=>{
+  assert.equal(validEan('8999908509109',13),true);
+  assert.equal(barcodeTypeFor('8999908509109'),'EAN13');
+  assert.equal(eanBits('8999908509109','EAN13').length,95);
+  assert.match(barcodeSvg('8999908509109'),/aria-label="EAN13/);
+  assert.equal(validEan('96385074',8),true);
+  assert.equal(eanBits('96385074','EAN8').length,67);
+  assert.throws(()=>barcodeSvg('00000002',{type:'EAN8'}),/bukan EAN-8/);
 });
 
 test('kode label dinormalisasi aman dan ukuran hanya dari preset',()=>{
@@ -34,7 +44,8 @@ test('UI produk menyediakan seleksi dan dialog cetak label',async()=>{
   assert.match(html,/id="product-label-dialog"/);
   assert.match(html,/id="product-label-width"[^>]*value="33"/);
   assert.match(html,/id="product-label-height"[^>]*value="15"/);
-  assert.match(script,/code128Svg/);
+  assert.match(script,/barcodeSvg/);
+  for(const id of ['product-label-preset','product-label-source','product-label-type','product-label-columns','product-label-rows','product-label-name-size','product-label-price-size','product-label-code-size','product-label-barcode-height','product-label-text-position','product-label-align'])assert.match(html,new RegExp(`id="${id}"`));
   assert.match(css,/@page\{margin:4mm\}/);
   assert.match(worker,/product-labels\.mjs/);
 });

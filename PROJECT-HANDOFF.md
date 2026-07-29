@@ -45,6 +45,22 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Rilis v2.16.0 Editor Label Fleksibel
+
+- Jenis barcode dapat dipilih: otomatis, EAN-13, EAN-8, Code 128 otomatis,
+  Code 128B, atau Code 128C. Mode otomatis memprioritaskan EAN yang checksum-nya
+  valid agar barcode retail 13 digit tidak lagi tampak seperti blok rapat.
+- Sumber kode dapat memakai barcode satuan dasar atau SKU. Preset isi tersedia
+  untuk nama-harga-barcode, barcode dengan angka, barcode saja, dan kustom.
+- Pengguna dapat mengatur jumlah kolom dan baris per halaman, jumlah salinan,
+  ukuran nama/harga/angka kode, tinggi barcode, posisi tulisan di atas/bawah,
+  serta perataan kiri/tengah/kanan.
+- Pratinjau langsung mengikuti ukuran halaman dan pengaturan. Jenis EAN yang
+  dipaksakan tetapi tidak valid diblokir sebelum dialog cetak dibuka.
+- Rilis memakai API `2.16.0-cloud`, aset/cache PWA `v111`, tanpa migrasi SQL.
+- Seluruh 236 pengujian otomatis lulus. Produksi dan alias utama diverifikasi
+  setelah deployment otomatis dari commit fitur.
+
 ### Rilis v2.15.1 Barcode Label Ringkas
 
 - Barcode yang seluruhnya angka dan berjumlah digit genap otomatis memakai

@@ -9,15 +9,24 @@ const CODE128_PATTERNS=[
   '124112','124211','411212','421112','421211','212141','214121','412121','111143','111341','131141','114113',
   '114311','411113','411311','113141','114131','311141','411131','211412','211214','211232','2331112'
 ];
+const EAN_L=['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
+const EAN_G=['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
+const EAN_R=['1110010','1100110','1101100','1000010','1011100','1001110','1010000','1000100','1001000','1110100'];
+const EAN13_PARITY=['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
 
 export function normalizeCode128Text(value){
   return String(value??'').trim().replace(/[^\x20-\x7e]/g,'?').slice(0,80);
 }
 
 export function code128Values(value){
+  return code128ValuesFor(value,'AUTO');
+}
+
+export function code128ValuesFor(value,mode='AUTO'){
   const text=normalizeCode128Text(value);
   if(!text)throw new Error('Kode barcode tidak boleh kosong.');
-  const numeric=/^\d+$/.test(text)&&text.length%2===0;
+  const numeric=mode==='C'||(mode==='AUTO'&&/^\d+$/.test(text)&&text.length%2===0);
+  if(mode==='C'&&(!/^\d+$/.test(text)||text.length%2!==0))throw new Error('Code 128C memerlukan jumlah digit genap.');
   const start=numeric?105:104;
   const data=numeric
     ?text.match(/\d{2}/g).map(Number)
@@ -27,11 +36,15 @@ export function code128Values(value){
 }
 
 export function code128Modules(value){
-  return code128Values(value).map((item)=>CODE128_PATTERNS[item]).join('');
+  return code128ModulesFor(value,'AUTO');
 }
 
-export function code128Svg(value,{height=46}={}){
-  const text=normalizeCode128Text(value),modules=code128Modules(text);
+export function code128ModulesFor(value,mode='AUTO'){
+  return code128ValuesFor(value,mode).map((item)=>CODE128_PATTERNS[item]).join('');
+}
+
+export function code128Svg(value,{height=46,mode='AUTO'}={}){
+  const text=normalizeCode128Text(value),modules=code128ModulesFor(text,mode);
   const label=text.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;');
   let x=10,bars='';
   for(const pattern of modules){
@@ -42,6 +55,52 @@ export function code128Svg(value,{height=46}={}){
     }
   }
   return `<svg class="product-label-barcode" viewBox="0 0 ${x+10} ${height}" role="img" aria-label="Barcode ${label}" preserveAspectRatio="none">${bars}</svg>`;
+}
+
+export function eanChecksum(value){
+  const digits=String(value).replace(/\D/g,'').split('').map(Number);
+  const sum=digits.reduce((total,digit,index)=>total+digit*((digits.length-index)%2===0?1:3),0);
+  return (10-(sum%10))%10;
+}
+
+export function validEan(value,length){
+  const text=String(value??'').trim();
+  if(!new RegExp(`^\\d{${length}}$`).test(text))return false;
+  return eanChecksum(text.slice(0,-1))===Number(text.at(-1));
+}
+
+export function eanBits(value,type){
+  const text=String(value??'').trim();
+  if(type==='EAN13'){
+    if(!validEan(text,13))throw new Error('Kode bukan EAN-13 yang valid.');
+    const parity=EAN13_PARITY[Number(text[0])];
+    const left=[...text.slice(1,7)].map((digit,index)=>(parity[index]==='L'?EAN_L:EAN_G)[Number(digit)]).join('');
+    const right=[...text.slice(7)].map((digit)=>EAN_R[Number(digit)]).join('');
+    return `101${left}01010${right}101`;
+  }
+  if(type==='EAN8'){
+    if(!validEan(text,8))throw new Error('Kode bukan EAN-8 yang valid.');
+    return `101${[...text.slice(0,4)].map((digit)=>EAN_L[Number(digit)]).join('')}01010${[...text.slice(4)].map((digit)=>EAN_R[Number(digit)]).join('')}101`;
+  }
+  throw new Error('Jenis EAN tidak valid.');
+}
+
+export function barcodeTypeFor(value,type='AUTO'){
+  const text=String(value??'').trim();
+  if(type!=='AUTO')return type;
+  if(validEan(text,13))return'EAN13';
+  if(validEan(text,8))return'EAN8';
+  return'CODE128';
+}
+
+export function barcodeSvg(value,{height=46,type='AUTO'}={}){
+  const resolved=barcodeTypeFor(value,type);
+  if(resolved==='CODE128')return code128Svg(value,{height,mode:'AUTO'});
+  if(resolved==='CODE128B')return code128Svg(value,{height,mode:'B'});
+  if(resolved==='CODE128C')return code128Svg(value,{height,mode:'C'});
+  const bits=eanBits(value,resolved),quiet=9,label=normalizeCode128Text(value).replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+  const bars=[...bits].map((bit,index)=>bit==='1'?`<rect x="${quiet+index}" y="0" width="1" height="${height}"/>`:'').join('');
+  return `<svg class="product-label-barcode" viewBox="0 0 ${bits.length+quiet*2} ${height}" role="img" aria-label="${resolved} ${label}" preserveAspectRatio="none">${bars}</svg>`;
 }
 
 export function labelSize(width=33,height=15){

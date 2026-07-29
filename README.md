@@ -56,6 +56,8 @@ kapabilitas retail yang lebih lengkap tersedia di
 - Label rak/barcode Code 128 dapat dicetak massal dari produk terpilih, dengan
   ukuran bebas dalam milimeter (default 33×15 mm), pratinjau langsung, serta
   opsi nama, SKU, dan Harga Umum.
+- Editor label menyediakan EAN-13, EAN-8, Code 128, mode barcode saja, sumber
+  barcode/SKU, jumlah kolom dan baris, ukuran teks/barcode, posisi, dan perataan.
 - Daftar barang pada Kasir, Pilih Barang Restok, dan Daftar Stok memakai baris
   kompak memanjang: foto di kiri, identitas di tengah, serta harga dan stok di
   kanan. Barang tanpa foto memakai placeholder otomatis.
