@@ -1297,7 +1297,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.16-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.17-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2090,6 +2090,7 @@ async function routeRequest(request, response, route) {
       });
     }catch(error){
       if(/reset_tenant_data_v1|schema cache|function/i.test(error.message))throw Object.assign(new Error('Fitur reset belum aktif di database. Jalankan migrasi reset data terbaru terlebih dahulu.'),{status:503});
+      if(/violates foreign key constraint/i.test(error.message))throw Object.assign(new Error('Reset dibatalkan seluruhnya karena relasi database belum diperbarui. Jalankan migrasi reset terbaru lalu minta OTP baru.'),{status:409});
       throw error;
     }
     return send(response,200,{...result,fileName,snapshot,totalRows});
