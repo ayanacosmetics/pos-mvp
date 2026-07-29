@@ -1183,6 +1183,12 @@ async function baseSaleQuote(context, input) {
   });
 }
 
+function maskEmail(email) {
+  const [name='',domain='']=String(email??'').split('@');
+  if(!domain)return 'email Owner';
+  return `${name.slice(0,2)}${'*'.repeat(Math.max(2,name.length-2))}@${domain}`;
+}
+
 async function resolveSaleCustomerGroup(context, input) {
   if (!input.customerId) return 'retail';
   const rows = await rest('customers', `tenant_id=eq.${encodeURIComponent(context.tenantId)}&id=eq.${encodeURIComponent(input.customerId)}&active=eq.true&select=group_id&limit=1`);
@@ -1291,7 +1297,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.14-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.15-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2016,6 +2022,63 @@ async function routeRequest(request, response, route) {
     requirePermission(session, 'identity.manage');
     const exports = await rest('backup_exports',`tenant_id=eq.${context.tenantId}&select=*&order=created_at.desc&limit=20`);
     return send(response,200,{exports});
+  }
+
+  if(request.method==='POST'&&route==='data-reset/otp'){
+    requirePermission(session,'identity.manage');
+    if(session.profile.role!=='OWNER')throw Object.assign(new Error('Hanya Owner yang dapat meminta OTP reset data'),{status:403});
+    const email=String(session.authUser.email??'').trim().toLowerCase();
+    if(!email)throw Object.assign(new Error('Email akun Owner belum tersedia'),{status:422});
+    try{
+      await supabase('/auth/v1/otp',{method:'POST',body:{email,create_user:false}});
+    }catch(error){
+      if(error.status===429)throw Object.assign(new Error('OTP terlalu sering diminta. Tunggu beberapa menit lalu coba lagi.'),{status:429});
+      throw Object.assign(new Error('OTP belum dapat dikirim. Pastikan email Owner aktif dan konfigurasi email Supabase memakai kode OTP.'),{status:502});
+    }
+    await rest('audit_logs','',{method:'POST',body:{
+      tenant_id:context.tenantId,actor_id:session.authUser.id,action:'TENANT_DATA_RESET_OTP_REQUESTED',
+      entity_type:'tenant',entity_id:context.tenantId,details_json:{emailMasked:maskEmail(email)}
+    }});
+    return send(response,200,{sent:true,emailMasked:maskEmail(email),expiresInMinutes:5});
+  }
+
+  if(request.method==='POST'&&route==='data-reset/execute'){
+    requirePermission(session,'identity.manage');
+    if(session.profile.role!=='OWNER')throw Object.assign(new Error('Hanya Owner yang dapat mereset data'),{status:403});
+    const input=bodyOf(request),otp=String(input.otp??'').trim();
+    const scopes=[...new Set((Array.isArray(input.scopes)?input.scopes:[]).map((scope)=>String(scope).trim().toUpperCase()))];
+    const allowed=new Set(['ALL','TRANSACTIONS','CATALOG','CUSTOMERS','SUPPLIERS','PROMOTIONS','FINANCE','WORKFORCE']);
+    if(!scopes.length||scopes.some((scope)=>!allowed.has(scope)))throw Object.assign(new Error('Pilih data yang akan direset'),{status:400});
+    if(!/^\d{6}$/.test(otp))throw Object.assign(new Error('OTP harus terdiri dari 6 angka'),{status:400});
+    if(String(input.confirmation??'').trim().toUpperCase()!=='RESET DATA')throw Object.assign(new Error('Ketik RESET DATA untuk melanjutkan'),{status:400});
+    const email=String(session.authUser.email??'').trim().toLowerCase();
+    let verified;
+    try{
+      verified=await supabase('/auth/v1/verify',{method:'POST',body:{email,token:otp,type:'email'}});
+    }catch(error){
+      throw Object.assign(new Error('OTP salah, kedaluwarsa, atau sudah digunakan'),{status:401});
+    }
+    if(verified?.user?.id!==session.authUser.id)throw Object.assign(new Error('OTP bukan milik akun Owner yang sedang login'),{status:403});
+
+    const snapshot=await buildBackup(context,session);
+    const rowCounts=Object.fromEntries(Object.entries(snapshot.tables).map(([table,rows])=>[table,rows.length]));
+    const totalRows=Object.values(rowCounts).reduce((sum,count)=>sum+count,0);
+    const stamp=snapshot.createdAt.replace(/\D/g,'').slice(0,14);
+    const fileName=`kasir-nusa-sebelum-reset-${stamp}.json`;
+    await rest('backup_exports','',{method:'POST',body:{
+      tenant_id:context.tenantId,actor_id:session.authUser.id,file_name:fileName,
+      schema_version:snapshot.schemaVersion,checksum_sha256:snapshot.checksum,total_rows:totalRows,row_counts:rowCounts,status:'COMPLETED'
+    }});
+    let result;
+    try{
+      result=await rpc('reset_tenant_data_v1',{
+        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_scopes:scopes
+      });
+    }catch(error){
+      if(/reset_tenant_data_v1|schema cache|function/i.test(error.message))throw Object.assign(new Error('Fitur reset belum aktif di database. Jalankan migrasi reset data terbaru terlebih dahulu.'),{status:503});
+      throw error;
+    }
+    return send(response,200,{...result,fileName,snapshot,totalRows});
   }
 
   if (request.method === 'GET' && route === 'promotions/manage') {

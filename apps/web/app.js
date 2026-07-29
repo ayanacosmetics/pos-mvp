@@ -10,7 +10,7 @@ import { createProductExportWorkbook, createTemplateWorkbook, productExportRows,
 import { barcodeModuleCount, barcodeSvg, labelSize, normalizeCode128Text } from './product-labels.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, dataResetScopesSignature:'', outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -1612,6 +1612,83 @@ async function loadPromotionManagement(){
     state.promotionVersions=data.promotions??[];state.loyalty=loyalty;renderPromotionList();renderLoyalty();
   }
   catch(error){toast(error.message);}
+}
+
+function downloadJsonSnapshot(snapshot,fileName) {
+  const content=JSON.stringify(snapshot,null,2);
+  const link=document.createElement('a');
+  link.href=URL.createObjectURL(new Blob([content],{type:'application/json'}));
+  link.download=fileName;link.click();URL.revokeObjectURL(link.href);
+}
+
+function selectedDataResetScopes() {
+  return [...document.querySelectorAll('input[name="data-reset-scope"]:checked')].map((input)=>input.value);
+}
+
+function syncDataResetForm(event) {
+  const all=el('data-reset-form').querySelector('input[value="ALL"]');
+  const others=[...el('data-reset-form').querySelectorAll('input[name="data-reset-scope"]:not([value="ALL"])')];
+  if(event?.target===all&&all.checked)others.forEach((input)=>{input.checked=false;});
+  if(event?.target!==all&&event?.target?.checked)all.checked=false;
+  others.forEach((input)=>{input.disabled=all.checked;});
+  const scopes=selectedDataResetScopes(),labels={
+    ALL:'semua data operasional',TRANSACTIONS:'transaksi, pembelian, dan stok',
+    CATALOG:'produk dan harga',CUSTOMERS:'pelanggan dan loyalty',SUPPLIERS:'supplier',
+    PROMOTIONS:'promo dan voucher',FINANCE:'keuangan dan jurnal',WORKFORCE:'aktivitas karyawan'
+  };
+  const dependencies=[];
+  if(scopes.some((scope)=>['CATALOG','CUSTOMERS','SUPPLIERS'].includes(scope)))dependencies.push('transaksi, pembelian, stok, dan jurnal terkait ikut dikosongkan');
+  if(scopes.includes('CUSTOMERS'))dependencies.push('loyalty, promo, dan voucher terkait ikut dikosongkan');
+  el('data-reset-impact').textContent=scopes.length
+    ? `Akan direset: ${scopes.map((scope)=>labels[scope]).join(', ')}.${dependencies.length?` Demi konsistensi, ${dependencies.join('; ')}.`:''}`
+    :'Belum ada kelompok data yang dipilih.';
+  el('request-data-reset-otp').disabled=!scopes.length;
+  if(event){
+    state.dataResetScopesSignature='';
+    el('data-reset-confirmation').classList.add('hidden');
+    el('data-reset-otp').value='';el('data-reset-phrase').value='';el('data-reset-error').textContent='';
+  }
+}
+
+async function requestDataResetOtp() {
+  const scopes=selectedDataResetScopes();
+  if(!scopes.length)return;
+  const button=el('request-data-reset-otp');button.disabled=true;button.textContent='Mengirim OTP…';
+  el('data-reset-error').textContent='';
+  try{
+    const result=await request('/api/data-reset/otp',{method:'POST',body:JSON.stringify({scopes})});
+    state.dataResetScopesSignature=scopes.sort().join('|');
+    el('data-reset-email').textContent=`OTP 6 angka dikirim ke ${result.emailMasked}. Berlaku sekitar ${result.expiresInMinutes} menit.`;
+    el('data-reset-confirmation').classList.remove('hidden');
+    el('data-reset-otp').focus();
+    toast('OTP reset telah dikirim ke email Owner.');
+  }catch(error){
+    el('data-reset-confirmation').classList.remove('hidden');
+    el('data-reset-error').textContent=error.message;
+  }finally{
+    button.disabled=false;button.textContent='Kirim ulang OTP ke email Owner';
+  }
+}
+
+async function executeDataReset(event) {
+  event.preventDefault();
+  const scopes=selectedDataResetScopes(),signature=[...scopes].sort().join('|');
+  const errorNode=el('data-reset-error');errorNode.textContent='';
+  if(!state.dataResetScopesSignature||signature!==state.dataResetScopesSignature){
+    errorNode.textContent='Pilihan data berubah. Kirim OTP baru untuk pilihan ini.';return;
+  }
+  const button=el('execute-data-reset');button.disabled=true;button.textContent='Membuat backup dan mereset…';
+  try{
+    const result=await request('/api/data-reset/execute',{method:'POST',body:JSON.stringify({
+      scopes,otp:el('data-reset-otp').value,confirmation:el('data-reset-phrase').value
+    })});
+    downloadJsonSnapshot(result.snapshot,result.fileName);
+    toast('Reset selesai. Backup sebelum reset telah diunduh.');
+    state.dataResetScopesSignature='';
+    setTimeout(()=>location.reload(),1200);
+  }catch(error){
+    errorNode.textContent=error.message;button.disabled=false;button.textContent='Backup lalu reset data terpilih';
+  }
 }
 
 function renderCustomerGroupList() {
@@ -5471,7 +5548,7 @@ function showReportView(name='summary'){
 
 function showSettingsView(name='business'){
   const page=el('page-settings'),splits=[...page.querySelectorAll('.settings-split')];
-  const views={business:el('business-settings-form'),receipt:el('receipt-settings-form'),outlets:splits[0],locations:splits[1],health:page.querySelector('.system-health'),device:el('device-settings-form')};
+  const views={business:el('business-settings-form'),receipt:el('receipt-settings-form'),outlets:splits[0],locations:splits[1],health:page.querySelector('.system-health'),reset:el('data-reset-settings'),device:el('device-settings-form')};
   Object.entries(views).forEach(([key,node])=>node?.classList.toggle('hidden',key!==name));
 }
 
@@ -6574,6 +6651,9 @@ el('verify-backup-file').addEventListener('change', verifyBackupFile);
 el('refresh-backups').addEventListener('click', loadBackupHistory);
 el('refresh-settings').addEventListener('click', loadSettingsWorkspace);
 el('refresh-system-health').addEventListener('click', loadSystemHealth);
+el('data-reset-form').addEventListener('change',(event)=>{if(event.target.matches('input[name="data-reset-scope"]'))syncDataResetForm(event);});
+el('request-data-reset-otp').addEventListener('click',requestDataResetOtp);
+el('data-reset-form').addEventListener('submit',executeDataReset);
 el('install-app').addEventListener('click', installPwa);
 el('business-settings-form').addEventListener('submit', saveBusinessSettings);
 el('receipt-settings-form').addEventListener('submit',saveReceiptSettings);

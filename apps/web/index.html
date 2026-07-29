@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=125">
+  <link rel="stylesheet" href="/styles.css?v=126">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -174,9 +174,10 @@
           <button data-page="settings-locations" data-target-page="settings" data-settings-view="locations" class="feature-nav-item" data-permission="identity.manage"><span>Lokasi stok</span><small>Toko, gudang, transit</small></button>
           <button data-page="settings-device" data-target-page="settings" data-settings-view="device" class="feature-nav-item" data-permission="identity.manage"><span>Perangkat</span><small>Kasir, printer, instalasi PWA</small></button>
           <button data-page="settings-health" data-target-page="settings" data-settings-view="health" class="feature-nav-item" data-permission="identity.manage"><span>Kesehatan sistem</span><small>Rekonsiliasi data operasional</small></button>
+          <button data-page="settings-data-reset" data-target-page="settings" data-settings-view="reset" class="feature-nav-item" data-permission="identity.manage"><span>Reset data</span><small>Hapus data dengan OTP Owner</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Excel Produk Terpandu · v2.16.14</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Reset Data Aman · v2.16.15</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -736,6 +737,36 @@
           <div id="system-health-checks" class="health-checks"><div class="empty-state compact">Pemeriksaan belum dijalankan.</div></div>
         </section>
 
+        <section id="data-reset-settings" class="surface settings-section data-reset-settings">
+          <div class="settings-section-head"><div><p class="eyebrow">KHUSUS OWNER</p><h2>Reset data usaha</h2><p class="muted">Pilih kelompok data yang akan dikosongkan. Sistem membuat backup JSON otomatis sebelum penghapusan dimulai.</p></div><span class="status-badge rejected">BERISIKO</span></div>
+          <div class="data-reset-preserved"><strong>Tetap dipertahankan</strong><span>Akun Owner dan staff, identitas usaha, outlet, lokasi stok, perangkat, pengaturan dasar, riwayat backup, dan audit.</span></div>
+          <form id="data-reset-form">
+            <fieldset class="data-reset-options">
+              <legend>Pilih data yang akan direset</legend>
+              <label class="data-reset-option data-reset-all"><input name="data-reset-scope" type="checkbox" value="ALL"><span><strong>Reset semua data operasional</strong><small>Transaksi, stok, produk, pelanggan, supplier, promo, keuangan, dan aktivitas karyawan.</small></span></label>
+              <label class="data-reset-option"><input name="data-reset-scope" type="checkbox" value="TRANSACTIONS"><span><strong>Transaksi, pembelian, dan stok</strong><small>Penjualan, retur, shift, kas, hutang/piutang transaksi, penerimaan, batch, dan seluruh pergerakan stok.</small></span></label>
+              <label class="data-reset-option"><input name="data-reset-scope" type="checkbox" value="CATALOG"><span><strong>Produk dan harga</strong><small>Produk, satuan, harga, dan aturan restok. Transaksi serta stok terkait ikut dikosongkan agar data konsisten.</small></span></label>
+              <label class="data-reset-option"><input name="data-reset-scope" type="checkbox" value="CUSTOMERS"><span><strong>Pelanggan dan loyalty</strong><small>Pelanggan, saldo akun, poin, tier, dan voucher. Transaksi terkait ikut dikosongkan.</small></span></label>
+              <label class="data-reset-option"><input name="data-reset-scope" type="checkbox" value="SUPPLIERS"><span><strong>Supplier</strong><small>Supplier, pembelian, hutang, retur supplier, dan stok terkait.</small></span></label>
+              <label class="data-reset-option"><input name="data-reset-scope" type="checkbox" value="PROMOTIONS"><span><strong>Promo dan voucher</strong><small>Aturan promo, voucher, kampanye struk, dan riwayat penukaran.</small></span></label>
+              <label class="data-reset-option"><input name="data-reset-scope" type="checkbox" value="FINANCE"><span><strong>Keuangan dan jurnal</strong><small>Jurnal akuntansi, periode pembukuan, dan pengeluaran outlet.</small></span></label>
+              <label class="data-reset-option"><input name="data-reset-scope" type="checkbox" value="WORKFORCE"><span><strong>Aktivitas karyawan</strong><small>Jadwal, absensi, target, dan permintaan persetujuan; akun staff tidak dihapus.</small></span></label>
+            </fieldset>
+            <div id="data-reset-impact" class="data-reset-impact">Belum ada kelompok data yang dipilih.</div>
+            <div class="button-row"><button id="request-data-reset-otp" class="button danger" type="button" disabled>Kirim OTP ke email Owner</button></div>
+            <div id="data-reset-confirmation" class="data-reset-confirmation hidden">
+              <div><strong>Konfirmasi terakhir</strong><p id="data-reset-email" class="muted">OTP dikirim ke email Owner yang sedang login.</p></div>
+              <div class="form-grid compact data-reset-confirm-grid">
+                <label>OTP 6 angka<input id="data-reset-otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000"></label>
+                <label>Ketik RESET DATA<input id="data-reset-phrase" autocomplete="off" placeholder="RESET DATA"></label>
+              </div>
+              <p class="muted">OTP hanya dapat digunakan sekali. Jangan tutup halaman sampai backup otomatis selesai diunduh.</p>
+              <p id="data-reset-error" class="error"></p>
+              <button id="execute-data-reset" class="button danger full" type="submit">Backup lalu reset data terpilih</button>
+            </div>
+          </form>
+        </section>
+
         <form id="device-settings-form" class="surface settings-section">
           <div class="settings-section-head"><div><p class="eyebrow">PERANGKAT INI</p><h2>Kasir dan printer struk</h2><p class="muted">Berlaku hanya untuk browser atau PWA yang sedang digunakan.</p></div><span id="setting-device-id" class="device-code"></span></div>
           <div class="form-grid compact settings-device-grid">
@@ -946,6 +977,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=125"></script>
+  <script type="module" src="/app.js?v=126"></script>
 </body>
 </html>
