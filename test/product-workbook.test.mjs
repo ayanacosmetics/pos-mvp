@@ -14,12 +14,18 @@ test('template barang adalah workbook sederhana dengan SKU opsional dan panduan'
   const XLSX=await sheetJs(),workbook=createTemplateWorkbook(XLSX,'PRODUCTS');
   assert.deepEqual([...workbook.SheetNames],['Barang','Panduan']);
   const binary=XLSX.write(workbook,{bookType:'xlsx',type:'array'}),matrix=workbookMatrix(XLSX,binary,'PRODUCTS');
+  const saved=XLSX.read(binary,{type:'array',cellStyles:true});
   assert.equal(matrix[0][0],'no_barang_sku');
   assert.equal(matrix[1][0],'');
   assert.equal(matrix[0].includes('harga_grosir'),false);
   assert.equal(matrix[0].includes('satuan_besar'),false);
   assert.equal(matrix[0].includes('satuan_dasar'),true);
   assert.equal(matrix[0].includes('stok_minimum'),true);
+  assert.match(saved.Sheets.Barang.A1.c[0].t,/Opsional untuk baru \/ wajib saat edit/);
+  const guide=XLSX.utils.sheet_to_json(workbook.Sheets.Panduan,{header:1,defval:''});
+  assert.deepEqual(Array.from(guide[0]),['PANDUAN PENGISIAN','Status','Keterangan','Format / nilai yang diterima','Contoh']);
+  assert.equal(guide.filter((row)=>workbookTemplates.PRODUCTS.headers.includes(row[0])).length,workbookTemplates.PRODUCTS.headers.length);
+  assert.match(workbook.Sheets.Barang.A1.c[0].t,/Opsional untuk baru \/ wajib saat edit/);
 });
 
 test('multi satuan, varian, dan harga pelanggan memakai file terpisah serta lolos roundtrip',async()=>{
@@ -43,6 +49,9 @@ test('export barang dapat difilter dan diurutkan menurut nomor barang, barcode, 
   assert.equal(productExtensionExportRows(products,'PRODUCT_UNITS',{status:'ALL'}).filter((row)=>row.no_barang_sku==='000010').length,3);
   assert.equal(productExtensionExportRows(products,'PRODUCT_VARIANTS',{status:'ALL'})[0].nama_varian,'Pink');
   assert.equal(productExtensionExportRows(products,'PRODUCT_PRICES',{status:'ALL'}).length,2);
+  const rows=productExportRows(products,{status:'ALL',sort:'SKU_ASC'});
+  assert.equal(rows.find((row)=>row.no_barang_sku==='000002').tipe_barang,'Default');
+  assert.equal(rows.find((row)=>row.no_barang_sku==='000010').tipe_barang,'Varian + Multisatuan');
 });
 
 test('export setiap jenis produk menghasilkan sheet dan jumlah baris yang sesuai',async()=>{
@@ -51,4 +60,19 @@ test('export setiap jenis produk menghasilkan sheet dan jumlah baris yang sesuai
     const result=createProductExportWorkbook(XLSX,products,{status:'ALL'},kind);
     assert.equal(result.count,count);assert.equal(result.workbook.SheetNames[0],workbookTemplates[kind].sheet);
   }
+});
+
+test('file edit barang menempatkan tipe barang dekat ujung kanan dan menjelaskan setiap kolom',async()=>{
+  const XLSX=await sheetJs(),products=[
+    {sku:'SKU-1',name:'Default',category:'Tes',active:true,units:[{name:'pcs',factor:1,barcode:'1'}],priceRules:[{customerGroupId:'retail',minBaseQty:1,unitPriceBase:1000}]},
+    {sku:'SKU-2',name:'Multi',category:'Tes',active:true,units:[{name:'pcs',factor:1},{name:'dus',factor:12}],priceRules:[{customerGroupId:'retail',minBaseQty:1,unitPriceBase:1200}]},
+    {sku:'SKU-3',name:'Varian',category:'Tes',active:true,variantGroup:'Warna',variantName:'Merah',units:[{name:'pcs',factor:1}],priceRules:[{customerGroupId:'retail',minBaseQty:1,unitPriceBase:1300}]}
+  ];
+  const {workbook}=createProductExportWorkbook(XLSX,products,{status:'ALL'},'PRODUCTS');
+  const matrix=XLSX.utils.sheet_to_json(workbook.Sheets.Barang,{header:1,defval:''});
+  assert.deepEqual(Array.from(matrix[0].slice(-3)),['stok_saat_ini','tipe_barang','status_produk']);
+  assert.deepEqual(Array.from(matrix.slice(1).map((row)=>row.at(-2))),['Default','Multisatuan','Varian']);
+  const guide=XLSX.utils.sheet_to_json(workbook.Sheets.Panduan,{header:1,defval:''});
+  assert.equal(guide.length-1,matrix[0].length);
+  assert.match(workbook.Sheets.Barang.O1.c[0].t,/Default berarti tanpa varian/);
 });
