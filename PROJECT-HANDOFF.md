@@ -45,7 +45,7 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
-### Kandidat v2.15.0 Label Produk
+### Rilis v2.15.0 Label Produk
 
 - Direktori Produk dapat mencetak label massal dari barang yang dicentang.
 - Label memakai barcode Code 128 SVG lokal agar tetap tersedia offline. Barcode
@@ -55,9 +55,13 @@ kode frontend, dokumentasi publik, atau chat.
   nama, SKU, dan Harga Umum.
 - Pratinjau langsung diperbesar tersedia sebelum dialog cetak browser dibuka. Isi cetak
   dibersihkan setelah selesai agar tidak mengganggu cetak struk berikutnya.
-- Kandidat memakai API `2.15.0-cloud`, aset/cache PWA `v109`, tanpa migrasi SQL.
-- Validasi lokal: 234 pengujian otomatis lulus. Deployment produksi belum
-  dilakukan dan status live tidak boleh diklaim sebelum verifikasi publik.
+- Rilis memakai API `2.15.0-cloud`, aset/cache PWA `v109`, tanpa migrasi SQL.
+- Seluruh 234 pengujian otomatis lulus. Commit fitur `6399b6b` sudah didorong
+  ke `origin/main`.
+- Deployment Vercel `dpl_7oojMMU6uwhW6c1uKGdVz2K6Yh9w` berstatus Ready dan
+  alias `kasir-nusa-pos.vercel.app` aktif pada 29 Juli 2026.
+- Verifikasi publik mengembalikan API `2.15.0-cloud`, aset/cache `v109`, serta
+  modul label dengan ukuran default 33×15 mm.
 
 ### Rilis v2.14.1 Produk Massal Aman
 
