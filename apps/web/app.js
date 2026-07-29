@@ -10,7 +10,7 @@ import { createProductExportWorkbook, createTemplateWorkbook, productExportRows,
 import { barcodeModuleCount, barcodeSvg, labelSize, normalizeCode128Text } from './product-labels.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -3254,10 +3254,26 @@ function renderStockProductLog() {
       const batch = batches.get(allocation.batchId);
       return `Batch ${escapeHtml(batch?.batchNo ?? '-')} ${Number(allocation.quantity).toLocaleString('id-ID')} pcs × ${money.format(allocation.unitCost)}`;
     }).join(' · ');
-    return `<article class="stock-log-row">
+    const expanded=state.stockLogEntryId===entry.id;
+    const reason=entry.reason||entry.note||'Tidak ada keterangan tambahan.';
+    const reference=entry.documentNo||entry.referenceId||'-';
+    return `<article class="stock-log-item ${expanded?'expanded':''}">
+      <button class="stock-log-row stock-log-button" type="button" data-stock-log-id="${escapeHtml(entry.id)}" aria-expanded="${expanded}">
       <span class="stock-log-delta ${Number(entry.delta) >= 0 ? 'in' : 'out'}">${Number(entry.delta) >= 0 ? '+' : ''}${Number(entry.delta).toLocaleString('id-ID')}</span>
-      <span><strong>${escapeHtml(stockEventLabel(entry.eventType))}</strong><small>${new Date(entry.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(entry.locationName)}</small>${entry.note ? `<small>${escapeHtml(entry.note)}</small>` : ''}${layerText ? `<small class="stock-layer-cost">${layerText}</small>` : ''}</span>
+      <span><strong>${escapeHtml(stockEventLabel(entry.eventType))}</strong><small>${new Date(entry.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(entry.locationName)}</small><small>${escapeHtml(entry.actorName||'Sistem')} · ${escapeHtml(reason)}</small>${layerText ? `<small class="stock-layer-cost">${layerText}</small>` : ''}</span>
       <span><small>Saldo setelahnya</small><strong>${Number(entry.balanceAfter).toLocaleString('id-ID')} pcs</strong>${detail.canViewCost && entry.unitCost != null ? `<small>Modal ${money.format(entry.unitCost)} / pcs</small>` : ''}</span>
+      <b aria-hidden="true">${expanded?'⌃':'›'}</b>
+      </button>
+      ${expanded?`<div class="stock-log-detail">
+        <div><small>Penyebab</small><strong>${escapeHtml(reason)}</strong></div>
+        <div><small>Dilakukan oleh</small><strong>${escapeHtml(entry.actorName||'Sistem')}</strong><span>${escapeHtml(entry.actorRole||'Akun sistem')}</span></div>
+        <div><small>Waktu & lokasi</small><strong>${new Date(entry.occurredAt).toLocaleString('id-ID')}</strong><span>${escapeHtml(entry.locationName)}</span></div>
+        <div><small>Perubahan stok</small><strong>${Number(entry.delta)>=0?'+':''}${Number(entry.delta).toLocaleString('id-ID')} pcs</strong><span>Saldo menjadi ${Number(entry.balanceAfter).toLocaleString('id-ID')} pcs</span></div>
+        <div><small>Referensi dokumen</small><strong>${escapeHtml(reference)}</strong><span>${escapeHtml(stockEventLabel(entry.eventType))}</span></div>
+        ${entry.batchNo?`<div><small>Batch</small><strong>${escapeHtml(entry.batchNo)}</strong><span>${entry.expiresOn?`EXP ${escapeHtml(displayExpiryDate(entry.expiresOn))}`:'Tanpa EXP'}</span></div>`:''}
+        ${layerText?`<div class="stock-log-detail-wide"><small>Lapisan modal yang dipakai</small><strong>${layerText}</strong></div>`:''}
+        ${entry.canOpenReceipt&&entry.saleId?`<div class="stock-log-detail-action"><button class="button primary" type="button" data-open-stock-sale="${escapeHtml(entry.saleId)}">Buka struk${entry.documentNo?` ${escapeHtml(entry.documentNo)}`:''}</button></div>`:''}
+      </div>`:''}
     </article>`;
   }).join('');
   el('stock-product-log').innerHTML = `<section class="stock-detail-section"><header><div><p class="eyebrow">LOG BARANG</p><h3>Semua pergerakan stok</h3><small>Penerimaan, penjualan, retur, opname, transfer, dan penyesuaian tampil berurutan.</small></div></header><div class="stock-log-list">${rows || '<div class="empty-state compact">Belum ada pergerakan stok.</div>'}</div></section>`;
@@ -3296,6 +3312,7 @@ function showStockProductView(view = 'overview') {
 async function openStockProduct(productId) {
   state.stockProductId = productId;
   state.stockProductDetail = null;
+  state.stockLogEntryId = null;
   const product = state.inventoryProducts.find((item) => item.id === productId);
   el('stock-product-title').textContent = product?.name ?? 'Detail stok';
   el('stock-product-subtitle').textContent = product ? `${product.sku} · ${product.category || 'Tanpa kategori'}` : 'Memuat barang...';
@@ -3326,6 +3343,24 @@ async function openStockProduct(productId) {
   } catch (error) {
     el('stock-product-summary').innerHTML = '';
     el('stock-product-overview').innerHTML = `<div class="empty-state compact"><strong>Detail stok gagal dimuat</strong><small>${escapeHtml(error.message)}</small></div>`;
+  }
+}
+
+async function openStockSaleReceipt(saleId) {
+  try {
+    const data=await request(`/api/inventory-sales/${saleId}/receipt`);
+    el('stock-product-dialog').close();
+    if(state.session.permissions.includes('report.view')){
+      showPage('reports-sales');
+      state.posSales=[data.sale,...state.posSales.filter((sale)=>sale.id!==data.sale.id)];
+      state.selectedPosSaleId=data.sale.id;
+      renderPosSales();
+      openHistoryReceiptPage(data.sale);
+    }else{
+      renderReceipt(data.sale,data.sale.payments??[],{allowAutoPrint:false,closeLabel:'Tutup'});
+    }
+  } catch (error) {
+    toast(error.message);
   }
 }
 
@@ -6140,6 +6175,14 @@ el('close-stock-product-dialog').addEventListener('click', () => el('stock-produ
 el('stock-product-dialog').addEventListener('click', (event) => {
   const button = event.target.closest('[data-stock-product-view]');
   if (button) showStockProductView(button.dataset.stockProductView);
+});
+el('stock-product-log').addEventListener('click',(event)=>{
+  const receiptButton=event.target.closest('[data-open-stock-sale]');
+  if(receiptButton){event.stopPropagation();openStockSaleReceipt(receiptButton.dataset.openStockSale);return;}
+  const row=event.target.closest('[data-stock-log-id]');
+  if(!row)return;
+  state.stockLogEntryId=state.stockLogEntryId===row.dataset.stockLogId?null:row.dataset.stockLogId;
+  renderStockProductLog();
 });
 el('stock-adjustment-location').addEventListener('change', () => {
   el('stock-adjustment-unit-cost').dataset.edited = '';

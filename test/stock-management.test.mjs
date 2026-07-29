@@ -40,11 +40,14 @@ test('manajemen stok menyediakan daftar dan semua tindakan per barang', async ()
     assert.ok(html.includes(`id="${id}"`));
   }
   for (const label of ['Tambah stok','Kurangi stok','Lihat stok','Log barang','Edit produk']) assert.ok(html.includes(label));
-  for (const functionName of ['renderStockManagement','openStockProduct','submitStockAdjustment','renderStockProductLog']) {
+  for (const functionName of ['renderStockManagement','openStockProduct','submitStockAdjustment','renderStockProductLog','openStockSaleReceipt']) {
     assert.ok(app.includes(`function ${functionName}`));
   }
+  for(const detail of ['data-stock-log-id','Dilakukan oleh','Penyebab','data-open-stock-sale']) assert.ok(app.includes(detail));
   assert.ok(api.includes("route.match(/^inventory-products\\/([^/]+)\\/adjustments$/)"));
   assert.ok(api.includes("route.match(/^inventory-products\\/([^/]+)$/)"));
+  assert.ok(api.includes("route.match(/^inventory-sales\\/([^/]+)\\/receipt$/)"));
+  for(const field of ['actorName','documentNo','canOpenReceipt']) assert.ok(api.includes(field));
 });
 
 test('lapisan HPP transaksi memakai FEFO/FIFO dan mencatat modal batch aktual', async () => {

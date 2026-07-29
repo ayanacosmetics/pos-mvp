@@ -652,7 +652,7 @@ async function loadReturnableSale(context, { saleId = null, receiptNo = null } =
   };
 }
 
-async function loadPosSales(context, query = '', { outletIds = [context.outlet.id], from = null, to = null, limit = 50 } = {}) {
+async function loadPosSales(context, query = '', { outletIds = [context.outlet.id], from = null, to = null, limit = 50, saleId = null } = {}) {
   const broadPeriod = from && to
     ? `&occurred_at=gte.${encodeURIComponent(`${shiftIsoDate(from,-1)}T00:00:00Z`)}&occurred_at=lt.${encodeURIComponent(`${shiftIsoDate(to,2)}T00:00:00Z`)}`
     : '';
@@ -660,7 +660,7 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
   let sales=[];
   for(let offset=0;offset<requestedLimit;offset+=1000){
     const pageLimit=Math.min(1000,requestedLimit-offset);
-    const page=await rest('sales', `tenant_id=eq.${context.tenantId}&outlet_id=${inFilter(outletIds)}&status=in.(COMPLETED,VOIDED)${broadPeriod}&select=*&order=occurred_at.desc&limit=${pageLimit}&offset=${offset}`);
+    const page=await rest('sales', `tenant_id=eq.${context.tenantId}&outlet_id=${inFilter(outletIds)}${saleId?`&id=eq.${encodeURIComponent(saleId)}`:''}&status=in.(COMPLETED,VOIDED)${broadPeriod}&select=*&order=occurred_at.desc&limit=${pageLimit}&offset=${offset}`);
     sales.push(...page);
     if(page.length<pageLimit)break;
   }
@@ -1291,7 +1291,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.12-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.13-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2777,6 +2777,35 @@ async function routeRequest(request, response, route) {
     const canViewCost=session.permissions.includes('purchasing.view_cost');
     const locations=new Map(context.locations.map((location)=>[location.id,location]));
     const visibleLedgerIds=new Set(ledger.map((item)=>item.id));
+    const actorIds=[...new Set(ledger.map((item)=>item.actor_id).filter(Boolean))];
+    const referenceIds=(types)=>[...new Set(ledger.filter((item)=>types.includes(item.event_type)).map((item)=>item.reference_id).filter(Boolean))];
+    const saleIds=referenceIds(['SALE','SALE_VOID']);
+    const purchaseIds=referenceIds(['PURCHASE_RECEIPT']);
+    const adjustmentIds=referenceIds(['STOCK_ADJUSTMENT_IN','STOCK_ADJUSTMENT_OUT','MANUAL_IN','MANUAL_OUT']);
+    const countIds=referenceIds(['STOCK_COUNT']);
+    const transferIds=referenceIds(['TRANSFER_IN','TRANSFER_OUT']);
+    const returnIds=referenceIds(['CUSTOMER_RETURN']);
+    const supplierReturnIds=referenceIds(['SUPPLIER_RETURN']);
+    const tenant=`tenant_id=eq.${context.tenantId}`;
+    const [actors,sales,purchases,adjustments,counts,transfers,returns,supplierReturns]=await Promise.all([
+      actorIds.length?rest('profiles',`${tenant}&user_id=${inFilter(actorIds)}&select=user_id,display_name,role`):[],
+      saleIds.length?rest('sales',`${tenant}&id=${inFilter(saleIds)}&select=id,receipt_no,status,void_reason`):[],
+      purchaseIds.length?rest('purchase_receipts',`${tenant}&id=${inFilter(purchaseIds)}&select=id,document_no,supplier_name`):[],
+      adjustmentIds.length?rest('stock_adjustments',`${tenant}&id=${inFilter(adjustmentIds)}&select=id,reason,batch_no,expires_on`):[],
+      countIds.length?rest('stock_counts',`${tenant}&id=${inFilter(countIds)}&select=id,count_no`):[],
+      transferIds.length?rest('stock_transfers',`${tenant}&id=${inFilter(transferIds)}&select=id,transfer_no`):[],
+      returnIds.length?rest('customer_returns',`${tenant}&id=${inFilter(returnIds)}&select=id,return_no,sale_id,reason`):[],
+      supplierReturnIds.length?rest('supplier_returns',`${tenant}&id=${inFilter(supplierReturnIds)}&select=id,return_no,reason,supplier_name`):[]
+    ]);
+    const documents=new Map([
+      ...sales.map((item)=>[item.id,{documentNo:item.receipt_no,reason:item.status==='VOIDED'?(item.void_reason||'Transaksi dibatalkan'):'Barang terjual',saleId:item.id,canOpenReceipt:true}]),
+      ...purchases.map((item)=>[item.id,{documentNo:item.document_no,reason:`Diterima dari ${item.supplier_name}`}]),
+      ...adjustments.map((item)=>[item.id,{documentNo:null,reason:item.reason,batchNo:item.batch_no,expiresOn:item.expires_on}]),
+      ...counts.map((item)=>[item.id,{documentNo:item.count_no,reason:'Hasil penghitungan stok fisik'}]),
+      ...transfers.map((item)=>[item.id,{documentNo:item.transfer_no,reason:'Perpindahan stok antar lokasi'}]),
+      ...returns.map((item)=>[item.id,{documentNo:item.return_no,reason:item.reason,saleId:item.sale_id,canOpenReceipt:true}]),
+      ...supplierReturns.map((item)=>[item.id,{documentNo:item.return_no,reason:`${item.reason}${item.supplier_name?` · ${item.supplier_name}`:''}`}])
+    ]);
     const visibleBatches=batches.map((batch)=>({
       id:batch.id,locationId:batch.location_id,locationName:locations.get(batch.location_id)?.name??'Lokasi',
       batchNo:batch.batch_no??'-',expiresOn:batch.expires_on,receivedAt:batch.received_at,
@@ -2791,12 +2820,19 @@ async function routeRequest(request, response, route) {
         quantity:Number(balance.quantity),...(canViewCost?{averageCost:Number(balance.avg_cost)}:{})
       })),
       batches:visibleBatches,
-      ledger:ledger.map((item)=>({
+      ledger:ledger.map((item)=>{
+        const actor=actors.find((profile)=>profile.user_id===item.actor_id);
+        const document=documents.get(item.reference_id)??{};
+        return {
         id:item.id,locationId:item.location_id,locationName:locations.get(item.location_id)?.name??'Lokasi',
         delta:Number(item.delta),balanceAfter:Number(item.balance_after),eventType:item.event_type,
         referenceId:item.reference_id,note:item.note,occurredAt:item.occurred_at,
+        actorId:item.actor_id,actorName:actor?.display_name??'Sistem',actorRole:actor?.role??null,
+        documentNo:document.documentNo??null,reason:document.reason??item.note??null,
+        saleId:document.saleId??null,canOpenReceipt:Boolean(document.canOpenReceipt),
+        batchNo:document.batchNo??null,expiresOn:document.expiresOn??null,
         ...(canViewCost?{unitCost:Number(item.unit_cost)}:{})
-      })),
+      }}),
       allocations:canViewCost?allocations.filter((item)=>visibleLedgerIds.has(item.stock_ledger_id)).map((item)=>({
         id:item.id,saleId:item.sale_id,batchId:item.batch_id,lineIndex:item.line_index,
         quantity:Number(item.base_qty),unitCost:Number(item.unit_cost),costTotal:Number(item.cost_total),
@@ -3343,6 +3379,16 @@ async function routeRequest(request, response, route) {
     return send(response, 200, { sales: await loadPosSales(context, queryValue(request,'q') ?? '', {
       outletIds,from:reportScope?from:null,to:reportScope?to:null,limit:reportScope?500:50
     }) });
+  }
+
+  const inventorySaleReceiptMatch=route.match(/^inventory-sales\/([^/]+)\/receipt$/);
+  if(request.method==='GET'&&inventorySaleReceiptMatch){
+    requirePermission(session,'inventory.manage');
+    const sales=await loadPosSales(context,'',{
+      outletIds:context.outlets.map((outlet)=>outlet.id),saleId:inventorySaleReceiptMatch[1],limit:1
+    });
+    if(!sales[0])throw Object.assign(new Error('Riwayat struk tidak ditemukan atau tidak dapat diakses'),{status:404});
+    return send(response,200,{sale:sales[0]});
   }
 
   if(request.method==='GET'&&route==='purchase-receipts/report'){
