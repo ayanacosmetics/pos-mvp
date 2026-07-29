@@ -106,4 +106,7 @@ test('direktori produk memakai kolom umum, barcode utuh, tipe barang, dan detail
   assert.match(css,/\.product-admin-table\{min-width:1105px;table-layout:fixed\}/);
   assert.match(css,/\.product-col-barcode\{width:165px\}/);
   assert.match(css,/\.product-admin-table \.product-admin-row>\.product-barcode-cell\{overflow:visible;text-overflow:clip;white-space:nowrap\}/);
+  assert.match(css,/#page-products \.page-title\{display:grid;grid-template-columns:/);
+  assert.match(css,/#page-products \.product-page-actions \.button\{min-height:34px/);
+  assert.match(css,/#page-products \.product-metrics \.metric\{display:grid;min-height:62px/);
 });
