@@ -53,6 +53,9 @@ kapabilitas retail yang lebih lengkap tersedia di
 - Owner dapat mengganti konteks ke Owner aktif lain dalam usaha yang sama tanpa
   login ulang; pergantian diaudit dan berakhir saat logout.
 - Produk, varian, SKU, barcode, kategori, merek, foto, dan status aktif.
+- Label rak/barcode Code 128 dapat dicetak massal dari produk terpilih, dengan
+  ukuran bebas dalam milimeter (default 33×15 mm), pratinjau langsung, serta
+  opsi nama, SKU, dan Harga Umum.
 - Daftar barang pada Kasir, Pilih Barang Restok, dan Daftar Stok memakai baris
   kompak memanjang: foto di kiri, identitas di tengah, serta harga dan stok di
   kanan. Barang tanpa foto memakai placeholder otomatis.

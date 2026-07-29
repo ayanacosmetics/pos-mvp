@@ -7,6 +7,7 @@ import { disconnectBluetoothPrinter, printEscPosReceipt, printEscPosTest, printe
 import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, unitFitsStock } from './pos-units.mjs';
 import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
 import { createProductExportWorkbook, createTemplateWorkbook, productExportRows, productExtensionExportRows, workbookMatrix, workbookTemplates } from './product-workbook.mjs';
+import { code128Svg, labelSize, normalizeCode128Text } from './product-labels.mjs';
 
 const storedAuth = loadAuth();
 const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], selectedProductIds:new Set(), productImportMode:'GENERAL', productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement: null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], ledger: [], expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
@@ -646,6 +647,48 @@ function renderProductTable() {
   const selectedCount=state.selectedProductIds.size;
   el('selected-product-count').textContent=`${selectedCount.toLocaleString('id-ID')} barang dipilih`;
   el('delete-selected-products').disabled=selectedCount===0;
+  el('print-selected-product-labels').disabled=selectedCount===0;
+}
+
+function selectedProductLabels(){
+  return [...state.selectedProductIds].map((id)=>state.managedProducts.find((product)=>product.id===id)).filter(Boolean);
+}
+
+function productLabelBarcode(product){
+  const unit=product.units.find((item)=>Number(item.factor)===1)??product.units[0];
+  return normalizeCode128Text(unit?.barcode||product.sku);
+}
+
+function renderProductLabelSheet(target,{preview=false}={}){
+  const products=selectedProductLabels();
+  const copies=Math.max(1,Math.min(100,Number(el('product-label-copies').value)||1));
+  const size=labelSize(el('product-label-width').value,el('product-label-height').value);
+  const showName=el('product-label-show-name').checked,showSku=el('product-label-show-sku').checked,showPrice=el('product-label-show-price').checked;
+  const labels=products.flatMap((product)=>Array.from({length:copies},()=>{
+    const barcode=productLabelBarcode(product),price=productPrices(product).retail;
+    const compact=size.height<=18;
+    return `<article class="product-print-label ${compact?'compact-label':''}" style="--label-width:${size.width}mm;--label-height:${size.height}mm">${showName?`<strong>${escapeHtml(product.name)}</strong>`:''}${showPrice?`<b>${money.format(price)}</b>`:''}${code128Svg(barcode,{height:42})}<small>${showSku?`${escapeHtml(product.sku)} · `:''}${escapeHtml(barcode)}</small></article>`;
+  }));
+  if(preview)el('product-label-preview-note').textContent=`${size.width} × ${size.height} mm · tampilan diperbesar 2×`;
+  target.innerHTML=`<div class="product-label-sheet ${preview?'is-preview':''}">${labels.join('')}</div>`;
+  return labels.length;
+}
+
+function openProductLabelDialog(){
+  const products=selectedProductLabels();if(!products.length)return;
+  const fallback=products.filter((product)=>!product.units.some((unit)=>unit.barcode));
+  el('product-label-summary').textContent=`${products.length.toLocaleString('id-ID')} barang dipilih. Barcode satuan dasar dipakai bila tersedia.`;
+  el('product-label-warning').innerHTML=fallback.length?`<strong>${fallback.length} barang belum memiliki barcode.</strong><small>SKU akan dicetak sebagai barcode agar label tetap dapat dipakai.</small>`:'';
+  renderProductLabelSheet(el('product-label-preview'),{preview:true});
+  el('product-label-dialog').showModal();
+}
+
+function printProductLabels(event){
+  event.preventDefault();
+  const count=renderProductLabelSheet(el('product-label-print-root'));
+  if(!count)return toast('Pilih minimal satu barang.');
+  el('product-label-dialog').close();
+  requestAnimationFrame(()=>window.print());
 }
 
 function renderRelations() {
@@ -6019,6 +6062,13 @@ el('product-price-tiers').addEventListener('click',(event)=>{
 el('product-admin-search').addEventListener('input',renderProductTable);
 el('product-admin-status').addEventListener('change',renderProductTable);
 el('delete-selected-products').addEventListener('click',deleteSelectedProducts);
+el('print-selected-product-labels').addEventListener('click',openProductLabelDialog);
+el('close-product-label-dialog').addEventListener('click',()=>el('product-label-dialog').close());
+el('cancel-product-label').addEventListener('click',()=>el('product-label-dialog').close());
+el('product-label-form').addEventListener('submit',printProductLabels);
+el('product-label-form').addEventListener('input',()=>renderProductLabelSheet(el('product-label-preview'),{preview:true}));
+el('product-label-form').addEventListener('change',()=>renderProductLabelSheet(el('product-label-preview'),{preview:true}));
+window.addEventListener('afterprint',()=>el('product-label-print-root').replaceChildren());
 el('export-products-xlsx').addEventListener('click',exportProductsXlsx);
 ['export-product-category','export-product-brand','export-product-status','export-product-sort'].forEach((id)=>el(id).addEventListener('change',updateProductExportCount));
 el('product-table').addEventListener('click',(event)=>{

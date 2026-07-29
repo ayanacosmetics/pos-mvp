@@ -45,6 +45,20 @@ kode frontend, dokumentasi publik, atau chat.
 
 ## 3. Status rilis
 
+### Kandidat v2.15.0 Label Produk
+
+- Direktori Produk dapat mencetak label massal dari barang yang dicentang.
+- Label memakai barcode Code 128 SVG lokal agar tetap tersedia offline. Barcode
+  satuan dasar dipakai bila tersedia; SKU menjadi cadangan yang terlihat jelas.
+- Pengguna dapat mengisi lebar dan tinggi label bebas dalam milimeter, dengan
+  default 33×15 mm, jumlah salinan per barang, serta menampilkan/menyembunyikan
+  nama, SKU, dan Harga Umum.
+- Pratinjau langsung diperbesar tersedia sebelum dialog cetak browser dibuka. Isi cetak
+  dibersihkan setelah selesai agar tidak mengganggu cetak struk berikutnya.
+- Kandidat memakai API `2.15.0-cloud`, aset/cache PWA `v109`, tanpa migrasi SQL.
+- Validasi lokal: 234 pengujian otomatis lulus. Deployment produksi belum
+  dilakukan dan status live tidak boleh diklaim sebelum verifikasi publik.
+
 ### Rilis v2.14.1 Produk Massal Aman
 
 - Halaman Import produk baru dan Edit produk massal memiliki alur terpisah.
