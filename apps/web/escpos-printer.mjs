@@ -246,6 +246,10 @@ export function productLabelRasterPlacement(labelWidthDots,paperWidth){
   return {rasterWidth,startX:Math.max(0,Math.floor((rasterWidth-labelWidth)/2))};
 }
 
+export function productLabelFeedDots(gapMm=0){
+  return Math.max(0,Math.min(255,Math.round((Number(gapMm)||0)*LABEL_DOTS_PER_MM)));
+}
+
 export function productLabelRasterLayout(label,config={}){
   const widthMm=Math.max(10,Math.min(200,Number(config.width)||33));
   const heightMm=Math.max(10,Math.min(200,Number(config.height)||15));
@@ -289,7 +293,7 @@ function rasterCommand(canvas,config={}){
     const targetX=startX+x;
     if(pixels[index+3]>40&&luminance<180)raster[y*bytesPerRow+(targetX>>3)]|=0x80>>(targetX&7);
   }
-  const feedDots=Math.max(0,Math.min(255,Math.round((Number(config.gap)||0)*LABEL_DOTS_PER_MM)));
+  const feedDots=productLabelFeedDots(config.gap);
   return new Uint8Array([
     ESC,0x40,ESC,0x61,0x00,
     GS,0x76,0x30,0x00,bytesPerRow&0xff,(bytesPerRow>>8)&0xff,canvas.height&0xff,(canvas.height>>8)&0xff,

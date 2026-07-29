@@ -68,7 +68,7 @@ test('API dan sidebar menyediakan enam halaman akuntansi Owner yang terpisah', a
     assert.ok(api.includes(route));
   }
   assert.match(api, /requirePermission\(session,'finance\.owner'\)/);
-  assert.ok(api.includes("version: '2.16.10-cloud'"));
-  assert.match(worker, /nusa-pos-shell-v121/);
-  assert.equal(JSON.parse(pkg).version, '2.16.10');
+  assert.ok(api.includes("version: '2.16.11-cloud'"));
+  assert.match(worker, /nusa-pos-shell-v122/);
+  assert.equal(JSON.parse(pkg).version, '2.16.11');
 });

@@ -699,7 +699,7 @@ function productLabelConfig(){
     codeSize:productLabelNumber('product-label-code-size',1.2,1,8),
     barcodeHeight:productLabelNumber('product-label-barcode-height',4.8,3,40),
     moduleWidth:productLabelNumber('product-label-module-width',.26,.2,.6),
-    gap:productLabelNumber('product-label-gap',2,0,10),
+    gap:productLabelNumber('product-label-gap',0,0,10),
     showName:el('product-label-show-name').checked,showPrice:el('product-label-show-price').checked,
     showCode:el('product-label-show-code').checked,showSku:el('product-label-show-sku').checked
   };
@@ -738,9 +738,9 @@ function renderProductLabelSheet(target,{preview=false}={}){
   })});
   const perPage=config.columns*config.rows,pages=[];
   for(let index=0;index<labels.length;index+=perPage)pages.push(labels.slice(index,index+perPage));
-  if(preview)el('product-label-preview-note').textContent=`${config.size.width} × ${config.size.height} mm · printer ${config.printerWidth} mm · geser ${config.offsetX}/${config.offsetY} mm · ${totalRequested.toLocaleString('id-ID')} label`;
-  const pageWidth=config.size.width*config.columns,pageHeight=config.size.height*config.rows;
-  target.innerHTML=`${preview?'':`<style>@page{size:${pageWidth}mm ${pageHeight}mm;margin:0}</style>`}<div class="product-label-sheet ${preview?'is-preview':''}" style="--label-columns:${config.columns};--page-width:${pageWidth}mm;--page-height:${pageHeight}mm">${pages.map((page)=>`<section class="product-label-page">${page.join('')}</section>`).join('')}</div>`;
+  if(preview)el('product-label-preview-note').textContent=`${config.size.width} × ${config.size.height} mm · jarak +${config.gap} mm · printer ${config.printerWidth} mm · geser ${config.offsetX}/${config.offsetY} mm · ${totalRequested.toLocaleString('id-ID')} label`;
+  const pageWidth=config.size.width*config.columns,pageHeight=(config.size.height+config.gap)*config.rows;
+  target.innerHTML=`${preview?'':`<style>@page{size:${pageWidth}mm ${pageHeight}mm;margin:0}</style>`}<div class="product-label-sheet ${preview?'is-preview':''}" style="--label-columns:${config.columns};--label-gap:${config.gap}mm;--page-width:${pageWidth}mm;--page-height:${pageHeight}mm">${pages.map((page)=>`<section class="product-label-page">${page.join('')}</section>`).join('')}</div>`;
   target.dataset.errors=String(errors.length);
   if(preview){
     const fallback=products.filter((product)=>!product.units.some((unit)=>unit.barcode)).length;
