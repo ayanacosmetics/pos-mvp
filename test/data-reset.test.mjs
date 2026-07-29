@@ -54,6 +54,7 @@ test('OTP reset dikirim ke email akun Owner aktif dan dicatat di audit',async()=
     if(target.includes('/rest/v1/user_outlets?'))return reply([{outlet_id:ids.outlet}]);
     if(target.includes('/rest/v1/outlets?'))return reply([{id:ids.outlet,name:'Toko Utama',active:true}]);
     if(target.includes('/rest/v1/stock_locations?'))return reply([{id:ids.location,outlet_id:ids.outlet,name:'Toko',kind:'STORE',active:true}]);
+    if(target.endsWith('/rest/v1/rpc/reset_tenant_data_v1'))return reply({message:'Hanya Owner aktif yang dapat mereset data'},400);
     if(target.endsWith('/auth/v1/otp'))return reply({});
     if(target.endsWith('/rest/v1/audit_logs'))return reply([]);
     return reply({message:`Mock belum menangani ${target}`},500);

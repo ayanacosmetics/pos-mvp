@@ -2030,6 +2030,20 @@ async function routeRequest(request, response, route) {
     const email=String(session.authUser.email??'').trim().toLowerCase();
     if(!email)throw Object.assign(new Error('Email akun Owner belum tersedia'),{status:422});
     try{
+      await rpc('reset_tenant_data_v1',{
+        p_tenant_id:'00000000-0000-0000-0000-000000000000',
+        p_actor_id:'00000000-0000-0000-0000-000000000000',
+        p_scopes:['TRANSACTIONS']
+      });
+      throw new Error('Pemeriksaan reset tidak berhenti pada pengaman Owner');
+    }catch(error){
+      if(/Hanya Owner aktif/i.test(error.message)){}else if(/reset_tenant_data_v1|schema cache|function|PGRST202/i.test(error.message)){
+        throw Object.assign(new Error('Fitur reset belum aktif di database. Pasang migrasi reset data terbaru terlebih dahulu.'),{status:503});
+      }else{
+        throw Object.assign(new Error('Kesiapan reset data belum dapat diverifikasi'),{status:503});
+      }
+    }
+    try{
       await supabase('/auth/v1/otp',{method:'POST',body:{email,create_user:false}});
     }catch(error){
       if(error.status===429)throw Object.assign(new Error('OTP terlalu sering diminta. Tunggu beberapa menit lalu coba lagi.'),{status:429});
