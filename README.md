@@ -223,7 +223,7 @@ Untuk rilis v2.4.6, jalankan satu file
 Migrasi ini menambahkan URL foto produk dan transaksi penyimpanan produk v3.
 Jangan deploy source v2.4.6 sebelum migrasi berhasil.
 
-Untuk rilis v2.16.15, jalankan
+Untuk rilis v2.16.16, jalankan
 `supabase/migrations/202607290044_stock_management_fifo_cost.sql` sebelum
 deployment. Migrasi ini menambahkan penyesuaian stok per barang, log alokasi
 batch, HPP penjualan sesuai FEFO/FIFO, dan pemulihan lapisan modal saat void.

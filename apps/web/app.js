@@ -1658,7 +1658,7 @@ async function requestDataResetOtp() {
   try{
     const result=await request('/api/data-reset/otp',{method:'POST',body:JSON.stringify({scopes})});
     state.dataResetScopesSignature=scopes.sort().join('|');
-    el('data-reset-email').textContent=`OTP 6 angka dikirim ke ${result.emailMasked}. Berlaku sekitar ${result.expiresInMinutes} menit.`;
+    el('data-reset-email').textContent=`Kode OTP dikirim ke ${result.emailMasked}. Masukkan seluruh angka pada kode terbaru.`;
     el('data-reset-confirmation').classList.remove('hidden');
     el('data-reset-otp').focus();
     toast('OTP reset telah dikirim ke email Owner.');

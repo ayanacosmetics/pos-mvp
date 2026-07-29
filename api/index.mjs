@@ -1297,7 +1297,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.15-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.16-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2053,7 +2053,7 @@ async function routeRequest(request, response, route) {
       tenant_id:context.tenantId,actor_id:session.authUser.id,action:'TENANT_DATA_RESET_OTP_REQUESTED',
       entity_type:'tenant',entity_id:context.tenantId,details_json:{emailMasked:maskEmail(email)}
     }});
-    return send(response,200,{sent:true,emailMasked:maskEmail(email),expiresInMinutes:5});
+    return send(response,200,{sent:true,emailMasked:maskEmail(email)});
   }
 
   if(request.method==='POST'&&route==='data-reset/execute'){
@@ -2063,7 +2063,7 @@ async function routeRequest(request, response, route) {
     const scopes=[...new Set((Array.isArray(input.scopes)?input.scopes:[]).map((scope)=>String(scope).trim().toUpperCase()))];
     const allowed=new Set(['ALL','TRANSACTIONS','CATALOG','CUSTOMERS','SUPPLIERS','PROMOTIONS','FINANCE','WORKFORCE']);
     if(!scopes.length||scopes.some((scope)=>!allowed.has(scope)))throw Object.assign(new Error('Pilih data yang akan direset'),{status:400});
-    if(!/^\d{6}$/.test(otp))throw Object.assign(new Error('OTP harus terdiri dari 6 angka'),{status:400});
+    if(!/^\d{6,10}$/.test(otp))throw Object.assign(new Error('OTP harus terdiri dari 6 sampai 10 angka'),{status:400});
     if(String(input.confirmation??'').trim().toUpperCase()!=='RESET DATA')throw Object.assign(new Error('Ketik RESET DATA untuk melanjutkan'),{status:400});
     const email=String(session.authUser.email??'').trim().toLowerCase();
     let verified;

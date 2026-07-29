@@ -32,6 +32,8 @@ test('reset data tersedia hanya sebagai alur Owner dengan backup dan OTP',async(
   assert.match(api,/route==='data-reset\/otp'/);
   assert.match(api,/route==='data-reset\/execute'/);
   assert.match(api,/session\.profile\.role!=='OWNER'/);
+  assert.match(api,/\\d\{6,10\}/);
+  assert.match(html,/maxlength="10"/);
   assert.match(api,/kasir-nusa-sebelum-reset-/);
   assert.match(sql,/security definer/i);
   assert.match(sql,/role='OWNER'/);

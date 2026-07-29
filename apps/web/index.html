@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=126">
+  <link rel="stylesheet" href="/styles.css?v=127">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -177,7 +177,7 @@
           <button data-page="settings-data-reset" data-target-page="settings" data-settings-view="reset" class="feature-nav-item" data-permission="identity.manage"><span>Reset data</span><small>Hapus data dengan OTP Owner</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Reset Data Aman · v2.16.15</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">OTP Fleksibel · v2.16.16</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -757,7 +757,7 @@
             <div id="data-reset-confirmation" class="data-reset-confirmation hidden">
               <div><strong>Konfirmasi terakhir</strong><p id="data-reset-email" class="muted">OTP dikirim ke email Owner yang sedang login.</p></div>
               <div class="form-grid compact data-reset-confirm-grid">
-                <label>OTP 6 angka<input id="data-reset-otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000"></label>
+                <label>Kode OTP<input id="data-reset-otp" inputmode="numeric" autocomplete="one-time-code" maxlength="10" pattern="[0-9]{6,10}" placeholder="Masukkan 6–10 angka"></label>
                 <label>Ketik RESET DATA<input id="data-reset-phrase" autocomplete="off" placeholder="RESET DATA"></label>
               </div>
               <p class="muted">OTP hanya dapat digunakan sekali. Jangan tutup halaman sampai backup otomatis selesai diunduh.</p>
@@ -977,6 +977,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=126"></script>
+  <script type="module" src="/app.js?v=127"></script>
 </body>
 </html>
