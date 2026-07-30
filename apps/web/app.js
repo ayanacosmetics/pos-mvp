@@ -2316,7 +2316,9 @@ async function updateQuote() {
 }
 
 function renderCart() {
-  el('mobile-cart-count').textContent=state.cart.reduce((sum,line)=>sum+Number(line.qty??0),0);
+  const cartQuantity=state.cart.reduce((sum,line)=>sum+Number(line.qty??0),0);
+  el('mobile-cart-count').textContent=cartQuantity;
+  el('cart-heading-count').textContent=cartQuantity?`${cartQuantity.toLocaleString('id-ID')} barang · ${state.cart.length.toLocaleString('id-ID')} jenis`:'Belum ada barang';
   el('open-order-adjustment').classList.toggle('hidden',!state.session.permissions.includes('sale.adjust'));
   if (!state.quote) {
     el('cart-lines').innerHTML = '<div class="empty-state">Belum ada barang.<br><small>Scan barcode atau pilih produk.</small></div>';

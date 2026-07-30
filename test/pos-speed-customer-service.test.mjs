@@ -83,3 +83,13 @@ test('ponsel memisahkan katalog dan keranjang, sedangkan tablet tetap berdamping
   assert.match(script,/mobile-cart-back'\)\.addEventListener\('click',\(\)=>setMobilePosView\('catalog'\)/);
   assert.match(script,/mobile-cart-count/);
 });
+
+test('desktop menjaga sidebar penuh dan daftar keranjang tetap dapat digulir',async()=>{
+  const [,,html,script,css]=await files();
+  assert.match(html,/id="cart-heading-count"/);
+  assert.match(script,/cartQuantity[\s\S]*cart-heading-count/);
+  assert.match(css,/\.sidebar\{[\s\S]*position:fixed;[\s\S]*inset:0 auto 0 0/);
+  assert.match(css,/\.cart-pane\{[\s\S]*min-height:0;[\s\S]*overflow:hidden/);
+  assert.match(css,/\.cart-lines\{[\s\S]*overflow-y:auto/);
+  assert.match(css,/\.cart-summary\{[\s\S]*max-height:60%;[\s\S]*overflow-y:auto/);
+});
