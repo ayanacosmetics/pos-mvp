@@ -11,7 +11,7 @@ import { barcodeModuleCount, barcodeSvg, labelSize, normalizeCode128Text } from 
 import { parseKaspinProductWorkbook, parseKaspinProductExtensionWorkbook } from './kaspin-import.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, dataResetScopesSignature:'', dataRestoreSnapshot:null, dataRestoreOtpReady:false, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', importSourceReport:null, productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, dataResetScopesSignature:'', dataRestoreSnapshot:null,dataRestoreOtpReady:false, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posProductLimit:100, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productAdminPage:1, selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', importSourceReport:null, productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -514,14 +514,16 @@ function renderProducts(query = '') {
     && (!state.posCategoryFilter || product.category===state.posCategoryFilter)
     && (!state.favoriteOnly || favorites.has(product.id))
   );
+  const visible=list.slice(0,state.posProductLimit);
   renderPosCategoryFilters();
   el('favorite-filter').setAttribute('aria-pressed',String(state.favoriteOnly));
-  el('product-grid').innerHTML = list.map((product) => {
+  el('product-grid').innerHTML = visible.map((product) => {
     const unit = sortedProductUnits(product)[0];
     const rule = product.priceRules.find((item) => item.customerGroupId === 'retail') ?? product.priceRules[0];
     const empty = Number(product.stockBase ?? 0) <= 0;
     return `<article class="product-card-shell"><button class="product-card ${empty ? 'out-of-stock' : ''}" data-product="${product.id}" data-unit="${unit.id}" ${empty ? 'disabled' : ''}>${productThumbnail(product)}<span class="product-list-copy"><span class="category">${escapeHtml(product.category)}</span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)}</small></span><span class="product-list-meta"><strong>${money.format(rule?.unitPriceBase ?? 0)}</strong><small class="${empty?'stock-empty':''}">${empty ? 'STOK KOSONG' : `Stok ${Number(product.stockBase).toLocaleString('id-ID')} pcs`}</small></span></button><button class="favorite-product ${favorites.has(product.id)?'active':''}" type="button" data-favorite-product="${product.id}" aria-label="${favorites.has(product.id)?'Hapus dari':'Tambahkan ke'} favorit" aria-pressed="${favorites.has(product.id)}">★</button></article>`;
   }).join('') || '<div class="empty-state compact">Tidak ada produk untuk filter ini.</div>';
+  if(list.length>visible.length)el('product-grid').insertAdjacentHTML('beforeend',`<div class="catalog-load-more"><small>Menampilkan ${visible.length.toLocaleString('id-ID')} dari ${list.length.toLocaleString('id-ID')} barang</small><button class="button secondary" type="button" data-product-load-more>Tampilkan 100 berikutnya</button></div>`);
   bindProductImageFallbacks(el('product-grid'));
   document.querySelectorAll('.product-card').forEach((button) => button.addEventListener('click', () => choosePosProduct(button.dataset.product)));
   document.querySelectorAll('.favorite-product').forEach((button)=>button.addEventListener('click',()=>{
@@ -636,11 +638,15 @@ function renderProductTable() {
   const brands=[...new Set(all.map((product)=>product.brand).filter(Boolean))].sort();
   el('product-category-options').innerHTML=categories.map((value)=>`<option value="${escapeHtml(value)}">`).join('');
   el('product-brand-options').innerHTML=brands.map((value)=>`<option value="${escapeHtml(value)}">`).join('');
-  const allVisibleSelected=list.length>0&&list.every((product)=>state.selectedProductIds.has(product.id));
+  const pageSize=100,totalPages=Math.max(1,Math.ceil(list.length/pageSize));
+  state.productAdminPage=Math.min(Math.max(1,state.productAdminPage),totalPages);
+  const pageStart=(state.productAdminPage-1)*pageSize;
+  const visible=list.slice(pageStart,pageStart+pageSize);
+  const allVisibleSelected=visible.length>0&&visible.every((product)=>state.selectedProductIds.has(product.id));
   if(state.productActionId&&!list.some((product)=>product.id===state.productActionId))state.productActionId=null;
   const canViewCost=state.session?.permissions?.includes('purchasing.view_cost')??false;
   const columnCount=canViewCost?12:11;
-  el('product-table').innerHTML=list.length?`<table class="product-admin-table ${canViewCost?'cost-visible':''}"><thead><tr><th class="product-select-cell product-col-select"><input id="select-all-products" type="checkbox" aria-label="Pilih semua barang yang tampil" ${allVisibleSelected?'checked':''}></th><th class="product-col-sku">SKU</th><th class="product-col-barcode">Barcode</th><th class="product-col-name">Nama produk</th><th class="product-col-type">Tipe barang</th><th class="product-col-category">Kategori</th><th class="product-col-brand">Merek</th><th class="product-col-price">Harga umum</th>${canViewCost?'<th class="product-col-cost" title="Modal rata-rata tertimbang seluruh stok">Modal</th>':''}<th class="product-col-stock">Stok</th><th class="product-col-minimum">Min. stok</th><th class="product-col-status">Status</th></tr></thead><tbody>${list.map((product)=>{
+  el('product-table').innerHTML=list.length?`<table class="product-admin-table ${canViewCost?'cost-visible':''}"><thead><tr><th class="product-select-cell product-col-select"><input id="select-all-products" type="checkbox" aria-label="Pilih semua barang yang tampil" ${allVisibleSelected?'checked':''}></th><th class="product-col-sku">SKU</th><th class="product-col-barcode">Barcode</th><th class="product-col-name">Nama produk</th><th class="product-col-type">Tipe barang</th><th class="product-col-category">Kategori</th><th class="product-col-brand">Merek</th><th class="product-col-price">Harga umum</th>${canViewCost?'<th class="product-col-cost" title="Modal rata-rata tertimbang seluruh stok">Modal</th>':''}<th class="product-col-stock">Stok</th><th class="product-col-minimum">Min. stok</th><th class="product-col-status">Status</th></tr></thead><tbody>${visible.map((product)=>{
     const prices=productPrices(product);
     const variant=[product.variantGroup,product.variantName].filter(Boolean).join(' · ');
     const customPrices=customCustomerGroups().filter((group)=>prices.byGroup[group.id]>0).map((group)=>`${escapeHtml(group.name)} ${money.format(prices.byGroup[group.id])}`).join(' · ');
@@ -657,9 +663,9 @@ function renderProductTable() {
     const multiUnitDetails=hasMultipleUnits?`<div class="product-detail-units"><small>Multi-satuan</small><div>${product.units.map((unit)=>`<span title="${escapeHtml(unit.barcode||'Tanpa barcode')}"><strong>${escapeHtml(unit.name)}</strong> · isi ${Number(unit.factor).toLocaleString('id-ID')}${unit.barcode?` · <code>${escapeHtml(unit.barcode)}</code>`:''}</span>`).join('')}</div></div>`:'';
     const emptyTypedDetails=!typedDetails&&!multiUnitDetails?'<small class="product-detail-empty">Barang default tanpa varian atau satuan tambahan.</small>':'';
     return `<tr data-product-id="${product.id}" class="product-admin-row ${state.selectedProductIds.has(product.id)?'selected':''} ${actionsOpen?'actions-open':''}" tabindex="0" aria-expanded="${actionsOpen}" title="Tekan untuk melihat detail dan tindakan produk"><td class="product-select-cell product-col-select"><input class="select-product" type="checkbox" aria-label="Pilih ${escapeHtml(product.name)}" ${state.selectedProductIds.has(product.id)?'checked':''}></td><td class="product-code product-col-sku" title="${escapeHtml(product.sku)}">${escapeHtml(product.sku)}</td><td class="product-barcode-cell product-col-barcode" title="${escapeHtml(barcodeDetails||'Tanpa barcode')}">${escapeHtml(baseUnit.barcode||'-')}</td><td class="product-name-cell product-col-name" title="${escapeHtml(product.name)}"><strong>${escapeHtml(product.name)}</strong></td><td class="product-col-type"><span class="product-type-badge">${escapeHtml(productType)}</span></td><td class="product-col-category" title="${escapeHtml(product.category)}">${escapeHtml(product.category||'-')}</td><td class="product-col-brand" title="${escapeHtml(product.brand||'Tanpa merek')}">${escapeHtml(product.brand||'-')}</td><td class="product-col-price" title="${escapeHtml(customPrices||money.format(prices.retail))}"><strong>${money.format(prices.retail)}</strong></td>${canViewCost?`<td class="numeric-cell product-col-cost" title="Modal rata-rata tertimbang seluruh stok">${Number(product.averageCost)>0?money.format(product.averageCost):'-'}</td>`:''}<td class="numeric-cell product-col-stock"><strong>${product.stockBase}</strong></td><td class="numeric-cell product-col-minimum">${product.minimumStock||0}</td><td class="product-col-status"><span class="badge ${product.active?'ok':'danger'}">${product.active?'Aktif':'Nonaktif'}</span></td></tr>${actionsOpen?`<tr class="product-action-row product-detail-row" data-product-id="${product.id}"><td colspan="${columnCount}"><div class="product-detail-drawer"><div class="product-detail-content"><div class="product-detail-heading"><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)} · ${escapeHtml(productType)}</small></div>${typedDetails?`<div class="product-detail-facts">${typedDetails}</div>`:''}${multiUnitDetails}${emptyTypedDetails}</div><div class="product-detail-actions"><button class="button secondary edit-product" type="button">Edit produk</button><button class="button ${product.active?'danger-button':'secondary'} toggle-product" type="button" data-active="${!product.active}">${product.active?'Nonaktifkan':'Aktifkan'}</button></div></div></td></tr>`:''}`;
-  }).join('')}</tbody></table>`:'<div class="empty-state compact">Tidak ada produk yang cocok dengan filter.</div>';
+  }).join('')}</tbody></table><div class="product-table-pager"><small>Menampilkan ${(pageStart+1).toLocaleString('id-ID')}–${Math.min(pageStart+pageSize,list.length).toLocaleString('id-ID')} dari ${list.length.toLocaleString('id-ID')} barang</small><div><button class="button secondary" type="button" data-product-page="-1" ${state.productAdminPage===1?'disabled':''}>Sebelumnya</button><span>Halaman ${state.productAdminPage} / ${totalPages}</span><button class="button secondary" type="button" data-product-page="1" ${state.productAdminPage===totalPages?'disabled':''}>Berikutnya</button></div></div>`:'<div class="empty-state compact">Tidak ada produk yang cocok dengan filter.</div>';
   const selectAll=el('select-all-products');
-  if(selectAll)selectAll.indeterminate=!allVisibleSelected&&list.some((product)=>state.selectedProductIds.has(product.id));
+  if(selectAll)selectAll.indeterminate=!allVisibleSelected&&visible.some((product)=>state.selectedProductIds.has(product.id));
   const selectedCount=state.selectedProductIds.size;
   el('selected-product-count').textContent=`${selectedCount.toLocaleString('id-ID')} barang dipilih`;
   el('delete-selected-products').disabled=selectedCount===0;
@@ -6160,7 +6166,7 @@ if (typeof mobileSidebarMedia.addEventListener === 'function') mobileSidebarMedi
 else mobileSidebarMedia.addListener(syncSidebarMode);
 syncSidebarMode();
 el('current-outlet-select').addEventListener('change', switchActiveOutlet);
-el('product-search').addEventListener('input', (event) => renderProducts(event.target.value));
+el('product-search').addEventListener('input', (event) => {state.posProductLimit=100;renderProducts(event.target.value);});
 el('product-search').addEventListener('keydown', (event) => {
   if (event.key !== 'Enter') return;
   event.preventDefault();
@@ -6170,8 +6176,9 @@ el('product-search').addEventListener('keydown', (event) => {
   else if(/^[A-Za-z0-9]{10}$/.test(value))tryScannedVoucher(value);
   event.target.value='';
 });
-el('pos-category-filters').addEventListener('click',(event)=>{const button=event.target.closest('[data-category]');if(!button)return;state.posCategoryFilter=button.dataset.category;renderProducts(el('product-search').value);});
-el('favorite-filter').addEventListener('click',()=>{state.favoriteOnly=!state.favoriteOnly;renderProducts(el('product-search').value);});
+el('pos-category-filters').addEventListener('click',(event)=>{const button=event.target.closest('[data-category]');if(!button)return;state.posCategoryFilter=button.dataset.category;state.posProductLimit=100;renderProducts(el('product-search').value);});
+el('favorite-filter').addEventListener('click',()=>{state.favoriteOnly=!state.favoriteOnly;state.posProductLimit=100;renderProducts(el('product-search').value);});
+el('product-grid').addEventListener('click',(event)=>{if(!event.target.closest('[data-product-load-more]'))return;state.posProductLimit+=100;renderProducts(el('product-search').value);});
 el('scan-camera-pos').addEventListener('click', () => openBarcodeCamera('pos'));
 el('close-barcode-camera').addEventListener('click', stopBarcodeCamera);
 el('cancel-barcode-camera').addEventListener('click', stopBarcodeCamera);
@@ -6698,8 +6705,8 @@ el('product-price-tiers').addEventListener('click',(event)=>{
     renderProductPriceTierEditor();
   }
 });
-el('product-admin-search').addEventListener('input',renderProductTable);
-el('product-admin-status').addEventListener('change',renderProductTable);
+el('product-admin-search').addEventListener('input',()=>{state.productAdminPage=1;renderProductTable();});
+el('product-admin-status').addEventListener('change',()=>{state.productAdminPage=1;renderProductTable();});
 el('delete-selected-products').addEventListener('click',deleteSelectedProducts);
 el('print-selected-product-labels').addEventListener('click',openProductLabelDialog);
 el('close-product-label-dialog').addEventListener('click',()=>el('product-label-dialog').close());
@@ -6722,6 +6729,8 @@ window.addEventListener('afterprint',()=>el('product-label-print-root').replaceC
 el('export-products-xlsx').addEventListener('click',exportProductsXlsx);
 ['export-product-category','export-product-brand','export-product-status','export-product-sort'].forEach((id)=>el(id).addEventListener('change',updateProductExportCount));
 el('product-table').addEventListener('click',(event)=>{
+  const pageButton=event.target.closest('[data-product-page]');
+  if(pageButton){state.productAdminPage+=Number(pageButton.dataset.productPage);state.productActionId=null;renderProductTable();return;}
   const row=event.target.closest('[data-product-id]');if(!row)return;
   if(event.target.closest('.edit-product'))return openProductEditor(row.dataset.productId);
   const toggle=event.target.closest('.toggle-product');

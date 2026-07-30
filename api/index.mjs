@@ -285,6 +285,16 @@ function authPayload(auth, profile) {
   };
 }
 
+function groupRows(rows,keyOf) {
+  const grouped=new Map();
+  for(const row of rows){
+    const key=keyOf(row);
+    if(!grouped.has(key))grouped.set(key,[]);
+    grouped.get(key).push(row);
+  }
+  return grouped;
+}
+
 async function loadCatalog(tenantId, locationId, outletId = null) {
   const tenant = encodeURIComponent(tenantId);
   const [products, units, rules, balances, overrides] = await Promise.all([
@@ -294,14 +304,18 @@ async function loadCatalog(tenantId, locationId, outletId = null) {
     locationId ? restAll('stock_balances', `tenant_id=eq.${tenant}&location_id=eq.${encodeURIComponent(locationId)}&select=*`) : Promise.resolve([]),
     outletId ? restAll('outlet_price_overrides', `tenant_id=eq.${tenant}&outlet_id=eq.${encodeURIComponent(outletId)}&active=eq.true&select=*`).catch(()=>[]) : Promise.resolve([])
   ]);
+  const unitsByProduct=groupRows(units,(item)=>item.product_id);
+  const rulesByProduct=groupRows(rules,(item)=>item.product_id);
+  const balancesByProduct=new Map(balances.map((item)=>[item.product_id,item]));
+  const overridesByProduct=groupRows(overrides,(item)=>item.product_id);
   return products.map((product) => ({
     id: product.id, sku: product.sku, name: product.name, category: product.category, brand: product.brand, imageUrl:product.image_url, active: product.active,
     variantGroup: product.variant_group, variantName: product.variant_name, minimumStock: Number(product.minimum_stock ?? 0), trackExpiry: Boolean(product.track_expiry),
-    stockBase: Number(balances.find((item) => item.product_id === product.id)?.quantity ?? 0),
-    units: units.filter((item) => item.product_id === product.id).map((unit) => ({ id: unit.id, name: unit.name, factor: Number(unit.factor_to_base), barcode: unit.barcode })).sort((a,b)=>a.factor-b.factor),
+    stockBase: Number(balancesByProduct.get(product.id)?.quantity ?? 0),
+    units: (unitsByProduct.get(product.id)??[]).map((unit) => ({ id: unit.id, name: unit.name, factor: Number(unit.factor_to_base), barcode: unit.barcode })).sort((a,b)=>a.factor-b.factor),
     priceRules: [
-      ...rules.filter((item) => item.product_id === product.id).map((rule) => ({ id: rule.id, customerGroupId: rule.customer_group_id, minBaseQty: Number(rule.min_base_qty), unitPriceBase: Number(rule.unit_price_base), priority: rule.priority })),
-      ...overrides.filter((item) => item.product_id === product.id).map((rule) => ({ id: rule.id, customerGroupId: rule.customer_group_id, minBaseQty: Number(rule.min_base_qty), unitPriceBase: Number(rule.unit_price_base), priority: 100000 }))
+      ...(rulesByProduct.get(product.id)??[]).map((rule) => ({ id: rule.id, customerGroupId: rule.customer_group_id, minBaseQty: Number(rule.min_base_qty), unitPriceBase: Number(rule.unit_price_base), priority: rule.priority })),
+      ...(overridesByProduct.get(product.id)??[]).map((rule) => ({ id: rule.id, customerGroupId: rule.customer_group_id, minBaseQty: Number(rule.min_base_qty), unitPriceBase: Number(rule.unit_price_base), priority: 100000 }))
     ]
   }));
 }
@@ -352,8 +366,11 @@ async function loadManagedProducts(tenantId,{includeCost=false}={}) {
     restAll('price_rules',`tenant_id=eq.${tenant}&starts_at=is.null&ends_at=is.null&select=*`),
     restAll('stock_balances',`tenant_id=eq.${tenant}&select=product_id,quantity${includeCost?',avg_cost':''}`)
   ]);
+  const unitsByProduct=groupRows(units,(item)=>item.product_id);
+  const rulesByProduct=groupRows(rules,(item)=>item.product_id);
+  const balancesByProduct=groupRows(balances,(item)=>item.product_id);
   return products.map((product)=>{
-    const productBalances=balances.filter((balance)=>balance.product_id===product.id);
+    const productBalances=balancesByProduct.get(product.id)??[];
     const stockBase=productBalances.reduce((sum,balance)=>sum+Number(balance.quantity),0);
     const costQuantity=productBalances.reduce((sum,balance)=>sum+Math.max(0,Number(balance.quantity)),0);
     const weightedCost=costQuantity>0
@@ -363,8 +380,8 @@ async function loadManagedProducts(tenantId,{includeCost=false}={}) {
       id:product.id,sku:product.sku,name:product.name,category:product.category,brand:product.brand,imageUrl:product.image_url,active:product.active,
       variantGroup:product.variant_group,variantName:product.variant_name,minimumStock:Number(product.minimum_stock??0),trackExpiry:Boolean(product.track_expiry),
       stockBase,...(includeCost?{averageCost:Math.round(weightedCost*100)/100}:{}),
-      units:units.filter((unit)=>unit.product_id===product.id).map((unit)=>({id:unit.id,name:unit.name,factor:Number(unit.factor_to_base),barcode:unit.barcode})).sort((a,b)=>a.factor-b.factor),
-      priceRules:rules.filter((rule)=>rule.product_id===product.id).map((rule)=>({id:rule.id,customerGroupId:rule.customer_group_id,minBaseQty:Number(rule.min_base_qty),unitPriceBase:Number(rule.unit_price_base),priority:rule.priority}))
+      units:(unitsByProduct.get(product.id)??[]).map((unit)=>({id:unit.id,name:unit.name,factor:Number(unit.factor_to_base),barcode:unit.barcode})).sort((a,b)=>a.factor-b.factor),
+      priceRules:(rulesByProduct.get(product.id)??[]).map((rule)=>({id:rule.id,customerGroupId:rule.customer_group_id,minBaseQty:Number(rule.min_base_qty),unitPriceBase:Number(rule.unit_price_base),priority:rule.priority}))
     };
   });
 }
@@ -1353,7 +1370,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.22-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.23-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
