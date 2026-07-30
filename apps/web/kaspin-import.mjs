@@ -32,6 +32,20 @@ function number(value){
   return Number.isFinite(parsed)?parsed:NaN;
 }
 
+function isoDateTime(value){
+  if(value instanceof Date&&!Number.isNaN(value.getTime()))return value.toISOString();
+  const source=text(value);
+  if(!source)return '';
+  const match=source.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if(match){
+    const [,day,month,year,hour='0',minute='0',second='0']=match;
+    const parsed=new Date(Number(year),Number(month)-1,Number(day),Number(hour),Number(minute),Number(second));
+    if(!Number.isNaN(parsed.getTime()))return parsed.toISOString();
+  }
+  const parsed=new Date(source);
+  return Number.isNaN(parsed.getTime())?'':parsed.toISOString();
+}
+
 function normalizedHeader(value){
   return text(value).toLowerCase().replace(/\s+/g,'_');
 }
@@ -184,6 +198,89 @@ export function parseKaspinProductExtensionWorkbook(XLSX,arrayBuffer,kind){
       source:'KASPIN',sheetName:source.sheetName,fileType:labels[kind],total:rows.length+issues.length+skippedRows.length,
       mapped:rows.length,skipped:issues.length+skippedRows.length,issues:[...issues,...skippedRows],
       ignored:skippedRows.length
+    }
+  };
+}
+
+function sheetWithHeaders(XLSX,workbook,required){
+  for(const sheetName of workbook.SheetNames){
+    const matrix=XLSX.utils.sheet_to_json(workbook.Sheets[sheetName],{header:1,raw:true,defval:''});
+    const headers=(matrix[0]??[]).map(normalizedHeader);
+    if(required.every((header)=>headers.includes(header)))return {sheetName,matrix,headers};
+  }
+  return null;
+}
+
+export function parseKaspinFifoWorkbooks(XLSX,purchaseBuffer,capitalBuffer){
+  const purchaseBook=XLSX.read(purchaseBuffer,{type:'array',cellDates:true});
+  const capitalBook=XLSX.read(capitalBuffer,{type:'array',cellDates:true});
+  const itemSheet=sheetWithHeaders(XLSX,purchaseBook,['kode_transaksi','timestamp','kode_barang','nama_barang','jumlah','harga_beli']);
+  const receiptSheet=sheetWithHeaders(XLSX,purchaseBook,['kode_transaksi','waktu','nama_suplier']);
+  const capitalSheet=sheetWithHeaders(XLSX,capitalBook,['kode','nama','stok','sisa_modal']);
+  if(!itemSheet||!capitalSheet)return null;
+
+  const indexes=(sheet)=>Object.fromEntries(sheet.headers.map((header,index)=>[header,index]));
+  const itemIndexes=indexes(itemSheet),receiptIndexes=receiptSheet?indexes(receiptSheet):{};
+  const capitalIndexes=indexes(capitalSheet);
+  const get=(row,map,key)=>row[map[key]]??'';
+  const receipts=new Map();
+  if(receiptSheet)receiptSheet.matrix.slice(1).forEach((cells)=>{
+    const transactionCode=identifier(get(cells,receiptIndexes,'kode_transaksi'));
+    if(transactionCode)receipts.set(transactionCode,{
+      supplierName:text(get(cells,receiptIndexes,'nama_suplier'))||'Supplier Kaspin',
+      occurredAt:isoDateTime(get(cells,receiptIndexes,'waktu'))
+    });
+  });
+
+  const rows=[],capitalRows=[],issues=[];
+  itemSheet.matrix.slice(1).forEach((cells,index)=>{
+    if(!cells.some((value)=>text(value)!==''))return;
+    const rowNo=index+2,transactionCode=identifier(get(cells,itemIndexes,'kode_transaksi'));
+    const productCode=identifier(get(cells,itemIndexes,'kode_barang'));
+    const quantity=number(get(cells,itemIndexes,'jumlah'));
+    const listedUnitCost=number(get(cells,itemIndexes,'harga_beli'));
+    const lineTotal=number(get(cells,itemIndexes,'total'));
+    const unitCost=quantity>0&&lineTotal>=0?lineTotal/quantity:listedUnitCost;
+    const receipt=receipts.get(transactionCode);
+    const occurredAt=isoDateTime(get(cells,itemIndexes,'timestamp'))||receipt?.occurredAt;
+    const reasons=[];
+    if(!transactionCode)reasons.push('kode transaksi kosong');
+    if(!productCode)reasons.push('kode barang kosong');
+    if(!(quantity>0))reasons.push('jumlah harus lebih dari nol');
+    if(!(unitCost>=0))reasons.push('harga beli tidak valid');
+    if(!occurredAt)reasons.push('tanggal transaksi tidak terbaca');
+    if(reasons.length){issues.push({row:rowNo,message:reasons.join(', ')});return;}
+    rows.push({
+      transactionCode,occurredAt,productCode,
+      productName:text(get(cells,itemIndexes,'nama_barang')),
+      quantity,unitCost,
+      supplierName:receipt?.supplierName??'Supplier Kaspin',
+      cashier:text(get(cells,itemIndexes,'kasir')),
+      paymentType:text(get(cells,itemIndexes,'tipe_pembayaran')),
+      paymentMethod:text(get(cells,itemIndexes,'metode_pembayaran'))
+    });
+  });
+  capitalSheet.matrix.slice(1).forEach((cells,index)=>{
+    if(!cells.some((value)=>text(value)!==''))return;
+    const rowNo=index+2,productCode=identifier(get(cells,capitalIndexes,'kode'));
+    const stock=number(get(cells,capitalIndexes,'stok')),remainingCapital=number(get(cells,capitalIndexes,'sisa_modal'));
+    if(!productCode||!(stock>=0)||!(remainingCapital>=0)){
+      issues.push({row:rowNo,message:'kode, stok, atau sisa modal tidak valid',source:'modal'});return;
+    }
+    capitalRows.push({
+      productCode,productName:text(get(cells,capitalIndexes,'nama')),
+      stock,remainingCapital
+    });
+  });
+  return {
+    rows,capitalRows,
+    report:{
+      source:'KASPIN',fileType:'Pembelian & Modal FIFO',
+      sheetName:`${itemSheet.sheetName} + ${capitalSheet.sheetName}`,
+      total:rows.length+capitalRows.length+issues.length,mapped:rows.length+capitalRows.length,
+      purchaseLines:rows.length,capitalLines:capitalRows.length,
+      receipts:new Set(rows.map((row)=>row.transactionCode)).size,
+      skipped:issues.length,issues
     }
   };
 }

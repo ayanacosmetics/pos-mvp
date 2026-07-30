@@ -1088,8 +1088,61 @@ function normalizeImportRows(kind, rawRows) {
   return { rows, errors };
 }
 
+async function previewKaspinFifo(context,input){
+  const errors=[],warnings=[],locationId=input.locationId||null;
+  if(!context.locationIds.includes(locationId))errors.push({row:0,field:'locationId',message:'Pilih lokasi stok yang benar'});
+  const rawRows=Array.isArray(input.rows)?input.rows:[],rawCapital=Array.isArray(input.capitalRows)?input.capitalRows:[];
+  if(!rawRows.length)errors.push({row:0,field:'file',message:'File pembelian tidak memiliki baris yang dapat dibaca'});
+  if(!rawCapital.length)errors.push({row:0,field:'capitalFile',message:'File Laporan Modal tidak memiliki baris yang dapat dibaca'});
+  if(rawRows.length>10000||rawCapital.length>10000)errors.push({row:0,field:'file',message:'Maksimal 10.000 baris per file'});
+
+  const [products,units,balances]=await Promise.all([
+    restAll('products',`tenant_id=eq.${context.tenantId}&select=id,sku,name`),
+    restAll('product_units',`tenant_id=eq.${context.tenantId}&barcode=not.is.null&select=product_id,barcode`),
+    locationId?restAll('stock_balances',`tenant_id=eq.${context.tenantId}&location_id=eq.${locationId}&select=product_id,quantity,avg_cost`):Promise.resolve([])
+  ]);
+  const productById=new Map(products.map((product)=>[product.id,product]));
+  const lookup=new Map(products.map((product)=>[String(product.sku).trim().toUpperCase(),product]));
+  units.forEach((unit)=>{if(unit.barcode&&productById.has(unit.product_id))lookup.set(String(unit.barcode).trim().toUpperCase(),productById.get(unit.product_id));});
+  const balanceByProduct=new Map(balances.map((balance)=>[balance.product_id,balance]));
+  const rows=[];
+  rawRows.forEach((raw,index)=>{
+    const productCode=String(raw.productCode??'').trim().toUpperCase(),product=lookup.get(productCode);
+    const quantity=importNumber(raw.quantity),unitCost=importNumber(raw.unitCost),occurredAt=new Date(raw.occurredAt);
+    if(!product){warnings.push({row:index+2,message:`Pembelian ${raw.productName||productCode||'-'} dilewati karena kode ${productCode||'-'} belum ada di Nusa POS`});return;}
+    if(!String(raw.transactionCode??'').trim()||!(quantity>0)||!(unitCost>=0)||Number.isNaN(occurredAt.getTime())){
+      warnings.push({row:index+2,message:`Baris pembelian ${productCode} dilewati karena transaksi, tanggal, jumlah, atau modal tidak valid`});return;
+    }
+    rows.push({
+      transactionCode:String(raw.transactionCode).trim(),occurredAt:occurredAt.toISOString(),
+      productId:product.id,productCode,productName:product.name,quantity,unitCost,
+      supplierName:String(raw.supplierName??'Supplier Kaspin').trim()||'Supplier Kaspin',
+      cashier:String(raw.cashier??'').trim(),paymentType:String(raw.paymentType??'').trim(),paymentMethod:String(raw.paymentMethod??'').trim()
+    });
+  });
+  const capitalByProduct=new Map();
+  rawCapital.forEach((raw,index)=>{
+    const productCode=String(raw.productCode??'').trim().toUpperCase(),product=lookup.get(productCode);
+    const stock=importNumber(raw.stock),remainingCapital=importNumber(raw.remainingCapital);
+    if(!product){warnings.push({row:index+2,message:`Modal ${raw.productName||productCode||'-'} dilewati karena kode ${productCode||'-'} belum ada di Nusa POS`});return;}
+    if(!(stock>=0)||!(remainingCapital>=0)){warnings.push({row:index+2,message:`Modal ${productCode} dilewati karena stok atau sisa modal tidak valid`});return;}
+    const balance=balanceByProduct.get(product.id),currentStock=Number(balance?.quantity??0);
+    if(Math.abs(currentStock-stock)>0.000001)warnings.push({row:index+2,message:`Stok ${product.name} di laporan ${stock}, sedangkan di Nusa ${currentStock}; jumlah Nusa dipertahankan`});
+    capitalByProduct.set(product.id,{productId:product.id,productCode,productName:product.name,stock,remainingCapital,currentStock});
+  });
+  const capitalRows=[...capitalByProduct.values()];
+  if(!rows.length)errors.push({row:0,field:'file',message:'Tidak ada pembelian yang cocok dengan produk Nusa POS'});
+  const receiptCount=new Set(rows.map((row)=>row.transactionCode)).size;
+  const productCount=new Set([...rows.map((row)=>row.productId),...capitalRows.map((row)=>row.productId)]).size;
+  return {
+    valid:errors.length===0,kind:'KASPIN_FIFO',mode:'MIXED',locationId,rows,capitalRows,errors,warnings,
+    summary:{total:rows.length,create:receiptCount,update:productCount,error:errors.length}
+  };
+}
+
 async function previewImport(context, input) {
   const kind = String(input.kind ?? '').toUpperCase();
+  if(kind==='KASPIN_FIFO')return previewKaspinFifo(context,input);
   const mode=['CREATE_ONLY','UPDATE_ONLY'].includes(String(input.mode??'').toUpperCase())?String(input.mode).toUpperCase():'MIXED';
   const supported=['PRODUCTS','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES','CUSTOMERS','SUPPLIERS'];
   if (!supported.includes(kind)) return { valid: false, kind, rows: [], errors: [{ row: 0, field: 'kind', message: 'Jenis impor tidak valid' }] };
@@ -1370,7 +1423,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.25-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.26-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2030,6 +2083,13 @@ async function routeRequest(request, response, route) {
     if (!preview.valid) { const error = new Error(`Masih ada ${preview.errors.length} kesalahan pada data impor`); error.status = 400; throw error; }
     const key = request.headers['idempotency-key'] || input.idempotencyKey;
     if (!key) { const error = new Error('Identitas proses impor tidak tersedia'); error.status = 400; throw error; }
+    if(preview.kind==='KASPIN_FIFO'){
+      const result=await rpc('import_kaspin_fifo_v1',{
+        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:key,
+        p_file_name:input.fileName??null,p_location_id:preview.locationId,p_rows:preview.rows,p_capital_rows:preview.capitalRows
+      });
+      return send(response,201,{kind:preview.kind,total:preview.rows.length,created:Number(result.created??0),updated:Number(result.updated??0),duplicate:Boolean(result.duplicate),receipts:Number(result.receipts??0),layers:Number(result.layers??0)});
+    }
     let rows=preview.rows.map((row)=>({...row}));
     if(preview.kind==='PRODUCTS'){
       const blankCount=rows.filter((row)=>!row.sku).length;

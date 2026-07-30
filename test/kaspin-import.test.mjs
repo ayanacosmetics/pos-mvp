@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
-import {parseKaspinProductWorkbook,parseKaspinProductExtensionWorkbook} from '../apps/web/kaspin-import.mjs';
+import {parseKaspinProductWorkbook,parseKaspinProductExtensionWorkbook,parseKaspinFifoWorkbooks} from '../apps/web/kaspin-import.mjs';
 
 async function sheetJs(){
   const source=await readFile(new URL('../apps/web/vendor/xlsx.full.min.js',import.meta.url),'utf8');
@@ -80,6 +80,31 @@ test('parser Kaspin hanya membawa harga grosir yang terintegrasi tipe pelanggan'
   assert.deepEqual({...parsed.rows[0]},{sku:'0000000000001',customerGroup:'grosir',minQty:12,unitPrice:3500});
 });
 
+test('parser FIFO menggabungkan transaksi pembelian dan laporan modal tanpa mengubah jumlah stok',async()=>{
+  const XLSX=await sheetJs(),purchase=XLSX.utils.book_new(),capital=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(purchase,XLSX.utils.aoa_to_sheet([
+    ['Kode Transaksi','Timestamp','Kategori','Kode Barang','Nama Barang','Jumlah','Harga Beli','Harga Jual','Total','Diskon','Pajak','Kasir','Tipe Pembayaran','Metode Pembayaran'],
+    ['PB-1','29/07/2026 10:30','Snack','0000000000001','Biskuit Durian',12,7350,9000,88200,0,0,'Budhi','Lunas','Tunai']
+  ]),'Transaksi_Barang');
+  XLSX.utils.book_append_sheet(purchase,XLSX.utils.aoa_to_sheet([
+    ['Kode Transaksi','Waktu','Total Pendapatan','Total Uang Real','Bayar','Kasir','Tipe Pembayaran','Email Suplier','Nama Suplier'],
+    ['PB-1','29/07/2026 10:30',88200,88200,88200,'Budhi','Lunas','','Supplier Uji']
+  ]),'Transaksi');
+  XLSX.utils.book_append_sheet(capital,XLSX.utils.aoa_to_sheet([
+    ['Kode','Nama','Kategori','Stok','Sisa Modal'],
+    ['0000000000001','Biskuit Durian','Snack',5,36750]
+  ]),'Laporan_Modal');
+  const parsed=parseKaspinFifoWorkbooks(
+    XLSX,XLSX.write(purchase,{bookType:'xlsx',type:'array'}),XLSX.write(capital,{bookType:'xlsx',type:'array'})
+  );
+  assert.equal(parsed.report.receipts,1);
+  assert.equal(parsed.report.purchaseLines,1);
+  assert.equal(parsed.rows[0].productCode,'0000000000001');
+  assert.equal(parsed.rows[0].unitCost,7350);
+  assert.equal(parsed.rows[0].supplierName,'Supplier Uji');
+  assert.deepEqual({...parsed.capitalRows[0]},{productCode:'0000000000001',productName:'Biskuit Durian',stock:5,remainingCapital:36750});
+});
+
 test('halaman impor menghubungkan pilihan Kasir Pintar dan parser ke cache PWA',async()=>{
   const [html,app,worker]=await Promise.all([
     readFile(new URL('../apps/web/index.html',import.meta.url),'utf8'),
@@ -90,6 +115,7 @@ test('halaman impor menghubungkan pilihan Kasir Pintar dan parser ke cache PWA',
   assert.match(html,/id="kaspin-code-as-barcode"[^>]*checked/);
   assert.match(app,/parseKaspinProductWorkbook/);
   assert.match(app,/parseKaspinProductExtensionWorkbook/);
+  assert.match(app,/parseKaspinFifoWorkbooks/);
   assert.match(app,/state\.importSourceReport/);
   assert.match(worker,/\/kaspin-import\.mjs/);
 });
