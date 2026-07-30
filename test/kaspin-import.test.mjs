@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
-import {parseKaspinProductWorkbook,parseKaspinProductExtensionWorkbook,parseKaspinFifoWorkbooks,parseKaspinSalesWorkbooks} from '../apps/web/kaspin-import.mjs';
+import {parseKaspinProductWorkbook,parseKaspinProductExtensionWorkbook,parseKaspinFifoWorkbooks,parseKaspinSalesWorkbooks,parseKaspinCustomerWorkbook} from '../apps/web/kaspin-import.mjs';
 
 async function sheetJs(){
   const source=await readFile(new URL('../apps/web/vendor/xlsx.full.min.js',import.meta.url),'utf8');
@@ -128,6 +128,25 @@ test('parser penjualan Kaspin menggabungkan detail barang dengan total struk',as
   assert.equal(parsed.rows[0].change,1000);
 });
 
+test('parser pelanggan Kaspin mempertahankan Member, Grosir, email, dan poin',async()=>{
+  const XLSX=await sheetJs(),workbook=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([
+    ['alasan_gagal','email_customer_edit','nama_lengkap_customer_edit','no_hp','alamat','kode','tipe_pelanggan','point','status_olshopin'],
+    ['Petunjuk','Jangan diubah','Nama','Telepon','Alamat','Kode','Tipe','Poin','Status'],
+    ['', 'member@example.com','Pelanggan Member',628111222333,'Sinjai','','Member',12,0],
+    ['', 'grosir@example.com','Pelanggan Grosir',628444555666,'Bulukumba','GR-01','grosir',5,0]
+  ]),'pelanggan');
+  const parsed=parseKaspinCustomerWorkbook(XLSX,XLSX.write(workbook,{bookType:'xlsx',type:'array'}));
+  assert.equal(parsed.report.mapped,2);
+  assert.deepEqual(parsed.report.types,{Member:1,grosir:1});
+  assert.deepEqual({...parsed.rows[0]},{
+    code:'KSP-628111222333',name:'Pelanggan Member',phone:'628111222333',
+    email:'member@example.com',address:'Sinjai',groupId:'Member',loyaltyPoints:12
+  });
+  assert.equal(parsed.rows[1].code,'GR-01');
+  assert.equal(parsed.rows[1].groupId,'grosir');
+});
+
 test('halaman impor menghubungkan pilihan Kasir Pintar dan parser ke cache PWA',async()=>{
   const [html,app,worker]=await Promise.all([
     readFile(new URL('../apps/web/index.html',import.meta.url),'utf8'),
@@ -140,6 +159,7 @@ test('halaman impor menghubungkan pilihan Kasir Pintar dan parser ke cache PWA',
   assert.match(app,/parseKaspinProductExtensionWorkbook/);
   assert.match(app,/parseKaspinFifoWorkbooks/);
   assert.match(app,/parseKaspinSalesWorkbooks/);
+  assert.match(app,/parseKaspinCustomerWorkbook/);
   assert.match(app,/state\.importSourceReport/);
   assert.match(worker,/\/kaspin-import\.mjs/);
 });

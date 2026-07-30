@@ -1082,6 +1082,10 @@ function normalizeImportRows(kind, rawRows) {
       const group = String(raw.groupId ?? 'retail').trim().toLowerCase();
       row.groupId = ['retail','ecer','eceran'].includes(group) ? 'retail' : ['wholesale','grosir'].includes(group) ? 'wholesale' : group;
       if(!row.groupId)addError(rowNo,'groupId','Tipe pelanggan wajib diisi');
+      row.email=String(raw.email??'').trim().toLowerCase();
+      row.address=String(raw.address??'').trim();
+      const loyaltyPoints=importNumber(raw.loyaltyPoints);
+      row.loyaltyPoints=Number.isFinite(loyaltyPoints)?Math.max(0,Math.floor(loyaltyPoints)):0;
     } else row.address = String(raw.address ?? '').trim();
     rows.push(row);
   });
@@ -1470,7 +1474,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.27-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.28-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2143,6 +2147,13 @@ async function routeRequest(request, response, route) {
         p_file_name:input.fileName??null,p_outlet_id:preview.outletId,p_rows:preview.rows
       });
       return send(response,201,{kind:preview.kind,total:preview.rows.length,created:Number(result.created??0),updated:0,duplicate:Boolean(result.duplicate),receipts:Number(result.receipts??0),items:Number(result.items??0)});
+    }
+    if(preview.kind==='CUSTOMERS'&&String(input.source??'').toUpperCase()==='KASPIN'){
+      const result=await rpc('import_kaspin_customers_v1',{
+        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:key,
+        p_file_name:input.fileName??null,p_rows:preview.rows
+      });
+      return send(response,201,{kind:preview.kind,total:preview.rows.length,created:Number(result.created??0),updated:Number(result.updated??0),duplicate:Boolean(result.duplicate)});
     }
     let rows=preview.rows.map((row)=>({...row}));
     if(preview.kind==='PRODUCTS'){

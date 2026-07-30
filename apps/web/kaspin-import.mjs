@@ -202,6 +202,44 @@ export function parseKaspinProductExtensionWorkbook(XLSX,arrayBuffer,kind){
   };
 }
 
+export function parseKaspinCustomerWorkbook(XLSX,arrayBuffer){
+  const workbook=XLSX.read(arrayBuffer,{type:'array',cellDates:true});
+  const source=sheetWithHeaders(XLSX,workbook,[
+    'email_customer_edit','nama_lengkap_customer_edit','no_hp','kode','tipe_pelanggan','point'
+  ]);
+  if(!source)return null;
+  const indexes=Object.fromEntries(source.headers.map((header,index)=>[header,index]));
+  const get=(row,key)=>row[indexes[key]]??'';
+  const rows=[],issues=[],types={};
+  source.matrix.slice(2).forEach((cells,index)=>{
+    if(!cells.some((value)=>text(value)!==''))return;
+    const rowNo=index+3,name=text(get(cells,'nama_lengkap_customer_edit'));
+    const email=text(get(cells,'email_customer_edit')).toLowerCase();
+    const phone=identifier(get(cells,'no_hp')).replace(/\D/g,'');
+    const explicitCode=identifier(get(cells,'kode')).replace(/\s+/g,'');
+    const code=explicitCode||(`KSP-${phone||email.replace(/[^a-z0-9]/gi,'').slice(0,40)}`);
+    const groupId=text(get(cells,'tipe_pelanggan'))||'Umum';
+    const loyaltyPoints=Math.max(0,Math.floor(number(get(cells,'point'))??0));
+    const reasons=[];
+    if(!name)reasons.push('nama pelanggan kosong');
+    if(!phone&&!email)reasons.push('nomor telepon dan email kosong');
+    if(!code||code==='KSP-')reasons.push('kode pelanggan tidak dapat dibuat');
+    if(reasons.length){issues.push({row:rowNo,message:reasons.join(', ')});return;}
+    types[groupId]=(types[groupId]??0)+1;
+    rows.push({
+      code:code.toUpperCase(),name,phone,email,
+      address:text(get(cells,'alamat')),groupId,loyaltyPoints
+    });
+  });
+  return {
+    rows,
+    report:{
+      source:'KASPIN',fileType:'Pelanggan',sheetName:source.sheetName,
+      total:rows.length+issues.length,mapped:rows.length,skipped:issues.length,issues,types
+    }
+  };
+}
+
 function sheetWithHeaders(XLSX,workbook,required){
   for(const sheetName of workbook.SheetNames){
     const matrix=XLSX.utils.sheet_to_json(workbook.Sheets[sheetName],{header:1,raw:true,defval:''});
