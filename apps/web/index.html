@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=131">
+  <link rel="stylesheet" href="/styles.css?v=132">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -177,7 +177,7 @@
           <button data-page="settings-data-reset" data-target-page="settings" data-settings-view="reset" class="feature-nav-item" data-permission="identity.manage"><span>Reset & pulihkan data</span><small>Hapus atau kembalikan backup</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Reset & Pulihkan · v2.16.20</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Migrasi Kaspin · v2.16.21</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -388,7 +388,7 @@
             <p id="import-control-description" class="muted">Periksa isi file sebelum menyimpannya.</p>
             <label id="import-kind-label">Jenis data<select id="import-kind"><option value="PRODUCTS">Barang utama & stok awal</option><option value="PRODUCT_UNITS">Multi satuan</option><option value="PRODUCT_VARIANTS">Varian barang</option><option value="PRODUCT_PRICES">Tipe harga pelanggan</option><option value="CUSTOMERS">Pelanggan</option><option value="SUPPLIERS">Supplier</option></select></label>
             <div id="import-source-options" class="import-source-options">
-              <label>Sumber file<select id="import-source"><option value="AUTO">Deteksi otomatis</option><option value="NUSA">Template Nusa POS</option><option value="KASPIN">Export barang Kasir Pintar</option></select></label>
+              <label>Sumber file<select id="import-source"><option value="AUTO">Deteksi otomatis</option><option value="NUSA">Template Nusa POS</option><option value="KASPIN">Export Kasir Pintar</option></select></label>
               <label id="kaspin-barcode-option" class="switch-row compact"><input id="kaspin-code-as-barcode" type="checkbox" checked><span><strong>Gunakan kode Kaspin sebagai barcode</strong><small>Kode tetap disimpan utuh, termasuk nol di depan.</small></span></label>
             </div>
             <label id="import-location-label">Lokasi stok awal<select id="import-location"></select><small class="muted">Stok awal hanya untuk produk yang belum pernah bertransaksi.</small></label>
@@ -1020,6 +1020,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=131"></script>
+  <script type="module" src="/app.js?v=132"></script>
 </body>
 </html>

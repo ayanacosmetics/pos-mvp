@@ -184,6 +184,14 @@ async function uploadPublicMedia(tenantId, kind, dataUrl) {
 }
 
 const rest = (table, query = '', options = {}) => supabase(`/rest/v1/${table}${query ? `?${query}` : ''}`, options);
+async function restAll(table,query='',options={}){
+  const rows=[];
+  for(let offset=0;;offset+=1000){
+    const page=await rest(table,`${query}${query?'&':''}limit=1000&offset=${offset}`,options);
+    rows.push(...page);
+    if(page.length<1000)return rows;
+  }
+}
 const rpc = (name, body) => supabase(`/rest/v1/rpc/${name}`, { method: 'POST', body });
 
 function isSaleReceiptCollision(error) {
@@ -1018,11 +1026,12 @@ function normalizeImportRows(kind, rawRows) {
       return;
     }
     if(kind==='PRODUCT_UNITS'){
-      const row={sku:String(raw.sku??'').trim().toUpperCase(),unitName:String(raw.unitName??'').trim(),factor:importNumber(raw.factor),barcode:String(raw.barcode??'').trim()};
+      const row={sku:String(raw.sku??'').trim().toUpperCase(),unitName:String(raw.unitName??'').trim(),factor:importNumber(raw.factor),barcode:String(raw.barcode??'').trim(),unitPriceTotal:importNumber(raw.unitPriceTotal)};
       const key=`${row.sku}:${row.unitName.toLowerCase()}`;
       if(!row.sku)addError(rowNo,'sku','SKU wajib diisi');
       if(!row.unitName)addError(rowNo,'unitName','Nama satuan wajib diisi');
       if(!(row.factor>0))addError(rowNo,'factor','Isi satuan dasar harus lebih dari nol');
+      if(row.unitPriceTotal!==null&&!(row.unitPriceTotal>0))addError(rowNo,'unitPriceTotal','Harga satuan harus lebih dari nol');
       if(seenCodes.has(key))addError(rowNo,'unitName',`Satuan ${row.unitName} untuk SKU ${row.sku} muncul lebih dari sekali`);
       seenCodes.add(key);
       if(row.barcode&&seenBarcodes.has(row.barcode))addError(rowNo,'barcode',`Barcode ${row.barcode} muncul lebih dari sekali`);
@@ -1075,7 +1084,7 @@ async function previewImport(context, input) {
   const productExtension=['PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES'].includes(kind);
   const table = kind === 'PRODUCTS'||productExtension ? 'products' : kind === 'CUSTOMERS' ? 'customers' : 'suppliers';
   const codeField = kind === 'PRODUCTS'||productExtension ? 'sku' : 'code';
-  const existing = await rest(table, `tenant_id=eq.${context.tenantId}&select=id,${codeField}`);
+  const existing = await restAll(table, `tenant_id=eq.${context.tenantId}&select=id,${codeField}`);
   const existingCodes = new Set(existing.map((row) => String(row[codeField]).toUpperCase()));
   if(kind==='CUSTOMERS'){
     const groups=await rest('customer_price_groups',`tenant_id=eq.${context.tenantId}&active=eq.true&select=id,name`);
@@ -1087,7 +1096,7 @@ async function previewImport(context, input) {
     });
   }
   if (kind === 'PRODUCTS') {
-    const units = await rest('product_units', `tenant_id=eq.${context.tenantId}&barcode=not.is.null&select=product_id,barcode`);
+    const units = await restAll('product_units', `tenant_id=eq.${context.tenantId}&barcode=not.is.null&select=product_id,barcode`);
     const productCodeById = new Map(existing.map((row) => [row.id,String(row.sku).toUpperCase()]));
     const barcodeOwner = new Map(units.map((unit) => [unit.barcode,productCodeById.get(unit.product_id)]));
     normalized.rows.forEach((row,index) => {
@@ -1108,7 +1117,7 @@ async function previewImport(context, input) {
       if(!existingCodes.has(row.sku))normalized.errors.push({row:index+2,field:'sku',message:`SKU ${row.sku||'-'} belum ada. Import Barang utama terlebih dahulu`});
     });
     if(kind==='PRODUCT_UNITS'){
-      const units=await rest('product_units',`tenant_id=eq.${context.tenantId}&select=product_id,name,barcode,factor_to_base`);
+      const units=await restAll('product_units',`tenant_id=eq.${context.tenantId}&select=product_id,name,barcode,factor_to_base`);
       const skuByProduct=new Map(existing.map((product)=>[product.id,String(product.sku).toUpperCase()]));
       const barcodeOwner=new Map(units.filter((unit)=>unit.barcode).map((unit)=>[unit.barcode,skuByProduct.get(unit.product_id)]));
       normalized.rows.forEach((row,index)=>{
@@ -1126,7 +1135,7 @@ async function previewImport(context, input) {
         else if(groupId==='retail')normalized.errors.push({row:index+2,field:'customerGroup',message:'Harga Umum diubah melalui file Barang, bukan file Harga Pelanggan'});
         else row.customerGroup=groupId;
       });
-      const rules=await rest('price_rules',`tenant_id=eq.${context.tenantId}&starts_at=is.null&ends_at=is.null&select=product_id,customer_group_id,min_base_qty`);
+      const rules=await restAll('price_rules',`tenant_id=eq.${context.tenantId}&starts_at=is.null&ends_at=is.null&select=product_id,customer_group_id,min_base_qty`);
       const skuByProduct=new Map(existing.map((product)=>[product.id,String(product.sku).toUpperCase()]));
       normalized.existingKeys=new Set(rules.map((rule)=>`${skuByProduct.get(rule.product_id)}:${rule.customer_group_id}:${Number(rule.min_base_qty)}`));
     }
@@ -1344,7 +1353,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.20-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.21-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2015,7 +2024,7 @@ async function routeRequest(request, response, route) {
     const tasks=[];
     const addChunks=(type,items)=>{for(let index=0;index<items.length;index+=500)tasks.push({type,rows:items.slice(index,index+500)});};
     if(preview.kind==='PRODUCTS'){
-      const products=await rest('products',`tenant_id=eq.${context.tenantId}&select=sku`),existing=new Set(products.map((product)=>String(product.sku).toUpperCase()));
+      const products=await restAll('products',`tenant_id=eq.${context.tenantId}&select=sku`),existing=new Set(products.map((product)=>String(product.sku).toUpperCase()));
       addChunks('CREATE',rows.filter((row)=>!existing.has(row.sku)));
       addChunks('UPDATE',rows.filter((row)=>existing.has(row.sku)));
     }else if(['PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES'].includes(preview.kind))addChunks('PRODUCT_EXTENSION',rows);

@@ -138,8 +138,8 @@ test('multi satuan menerima jumlah satuan tak terbatas dan diteruskan ke transak
     return responseOf({message:`Mock belum menangani ${target}`},500);
   };
   const rows=[
-    {sku:'KOS-001',unitName:'pcs',factor:1,barcode:'8991'},
-    {sku:'KOS-001',unitName:'pak',factor:6,barcode:'8996'},
+    {sku:'KOS-001',unitName:'pcs',factor:1,barcode:'8991',unitPriceTotal:25000},
+    {sku:'KOS-001',unitName:'pak',factor:6,barcode:'8996',unitPriceTotal:144000},
     {sku:'KOS-001',unitName:'lusin',factor:12,barcode:'89912'},
     {sku:'KOS-001',unitName:'dus',factor:144,barcode:'899144'}
   ];
@@ -148,6 +148,7 @@ test('multi satuan menerima jumlah satuan tak terbatas dan diteruskan ke transak
     assert.equal(preview.status,200);assert.equal(preview.body.valid,true);assert.deepEqual(preview.body.summary,{total:4,create:3,update:1,error:0});
     const result=await callApi('POST','imports/commit',{kind:'PRODUCT_UNITS',fileName:'satuan.xlsx',rows},{'idempotency-key':'units-1'});
     assert.equal(result.status,201);assert.equal(result.body.total,4);assert.equal(rpcBody.p_kind,'PRODUCT_UNITS');assert.equal(rpcBody.p_rows.length,4);
+    assert.equal(rpcBody.p_rows[1].unitPriceTotal,144000);
   }finally{
     globalThis.fetch=originalFetch;
     for(const [key,value] of Object.entries(previous)){const envKey={url:'SUPABASE_URL',anon:'SUPABASE_ANON_KEY',service:'SUPABASE_SERVICE_ROLE_KEY'}[key];if(value===undefined)delete process.env[envKey];else process.env[envKey]=value;}
@@ -178,6 +179,8 @@ test('fondasi impor memiliki audit, perlindungan stok berjalan, dan UI pratinjau
   assert.match(extensionMigration,/PRODUCT_VARIANTS_MASS_UPDATED/);
   assert.match(extensionMigration,/PRODUCT_PRICES_MASS_UPDATED/);
   assert.match(extensionMigration,/source='MANUAL'/);
+  const kaspinExtensionMigration=await readFile(new URL('../supabase/migrations/202607300051_kaspin_product_extension_prices.sql',import.meta.url),'utf8');
+  assert.match(kaspinExtensionMigration,/v_price\/v_factor/);
   assert.match(html,/id="open-import-products"/);
   assert.match(html,/data-product-import-kind="PRODUCT_UNITS"/);
   assert.match(html,/id="back-to-products"/);

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
-import {parseKaspinProductWorkbook} from '../apps/web/kaspin-import.mjs';
+import {parseKaspinProductWorkbook,parseKaspinProductExtensionWorkbook} from '../apps/web/kaspin-import.mjs';
 
 async function sheetJs(){
   const source=await readFile(new URL('../apps/web/vendor/xlsx.full.min.js',import.meta.url),'utf8');
@@ -51,15 +51,45 @@ test('file biasa tidak salah dideteksi sebagai export Kaspin',async()=>{
   assert.equal(parseKaspinProductWorkbook(XLSX,XLSX.write(workbook,{bookType:'xlsx',type:'array'})),null);
 });
 
+test('parser Kaspin membaca multi satuan beserta harga jual satuannya',async()=>{
+  const XLSX=await sheetJs(),workbook=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([
+    ['kode_barang','nama_barang','tipe_satuan','harga','jumlah_per_satuan','satuan_terkecil'],
+    ['0000000000001','Biskuit Durian','Pcs',5000,1,'Pcs'],
+    ['0000000000001','Biskuit Durian','Bal',42000,12,'Pcs']
+  ]),'multi_satuan');
+  const parsed=parseKaspinProductExtensionWorkbook(XLSX,XLSX.write(workbook,{bookType:'xlsx',type:'array'}),'PRODUCT_UNITS');
+  assert.equal(parsed.report.fileType,'Multi Satuan');
+  assert.equal(parsed.report.mapped,2);
+  assert.deepEqual(parsed.rows.map((row)=>({...row})),[
+    {sku:'0000000000001',unitName:'Pcs',factor:1,barcode:'',unitPriceTotal:5000},
+    {sku:'0000000000001',unitName:'Bal',factor:12,barcode:'',unitPriceTotal:42000}
+  ]);
+});
+
+test('parser Kaspin hanya membawa harga grosir yang terintegrasi tipe pelanggan',async()=>{
+  const XLSX=await sheetJs(),workbook=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([
+    ['nama_barang','kode_barang','nama','jumlah_minimal','harga_satuan','terintegrasi tipe pelanggan'],
+    ['Biskuit Durian','0000000000001','grosir',12,3500,'Ya'],
+    ['Gudang Garam',0,'tingkatan 1',1,348500,'Tidak']
+  ]),'harga_grosir');
+  const parsed=parseKaspinProductExtensionWorkbook(XLSX,XLSX.write(workbook,{bookType:'xlsx',type:'array'}),'PRODUCT_PRICES');
+  assert.equal(parsed.report.mapped,1);
+  assert.equal(parsed.report.ignored,1);
+  assert.deepEqual({...parsed.rows[0]},{sku:'0000000000001',customerGroup:'grosir',minQty:12,unitPrice:3500});
+});
+
 test('halaman impor menghubungkan pilihan Kasir Pintar dan parser ke cache PWA',async()=>{
   const [html,app,worker]=await Promise.all([
     readFile(new URL('../apps/web/index.html',import.meta.url),'utf8'),
     readFile(new URL('../apps/web/app.js',import.meta.url),'utf8'),
     readFile(new URL('../apps/web/service-worker.js',import.meta.url),'utf8')
   ]);
-  assert.match(html,/id="import-source"[\s\S]*Export barang Kasir Pintar/);
+  assert.match(html,/id="import-source"[\s\S]*Export Kasir Pintar/);
   assert.match(html,/id="kaspin-code-as-barcode"[^>]*checked/);
   assert.match(app,/parseKaspinProductWorkbook/);
+  assert.match(app,/parseKaspinProductExtensionWorkbook/);
   assert.match(app,/state\.importSourceReport/);
   assert.match(worker,/\/kaspin-import\.mjs/);
 });
