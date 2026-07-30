@@ -1474,7 +1474,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.28-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.29-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1586,6 +1586,11 @@ async function routeRequest(request, response, route) {
       error.status = 403;
       throw error;
     }
+    await rest('audit_logs','',{method:'POST',body:{
+      tenant_id:profile.tenant_id,actor_id:auth.user.id,action:'ACCOUNT_LOGIN',
+      entity_type:'profile',entity_id:auth.user.id,
+      details_json:{portal}
+    }}).catch(()=>{});
     setRefreshCookie(response, auth.refresh_token);
     return send(response, 200, authPayload(auth, profile));
   }
@@ -1830,6 +1835,25 @@ async function routeRequest(request, response, route) {
       permissions:effectivePermissions(profile),customPermissions:profile.custom_permissions,
       outletIds: assignments.filter((item) => item.user_id === profile.user_id).map((item) => item.outlet_id)
     })), outlets: context.outlets });
+  }
+
+  if (request.method === 'GET' && /^users\/[^/]+\/activity$/.test(route)) {
+    requirePermission(session, 'identity.manage');
+    const userId = route.split('/')[1];
+    const target = await rest('profiles', `tenant_id=eq.${context.tenantId}&user_id=eq.${encodeURIComponent(userId)}&select=user_id,display_name,role&limit=1`);
+    if (!target[0]) {
+      const error = new Error('Staff tidak ditemukan');
+      error.status = 404;
+      throw error;
+    }
+    const logs = await rest('audit_logs', `tenant_id=eq.${context.tenantId}&actor_id=eq.${encodeURIComponent(userId)}&select=id,action,entity_type,entity_id,details_json,occurred_at&order=occurred_at.desc&limit=100`);
+    return send(response, 200, {
+      staff:{id:target[0].user_id,displayName:target[0].display_name,role:target[0].role},
+      logs:logs.map((item)=>({
+        id:item.id,action:item.action,entityType:item.entity_type,entityId:item.entity_id,
+        details:item.details_json??{},occurredAt:item.occurred_at
+      }))
+    });
   }
 
   if (request.method === 'POST' && route === 'users') {
@@ -3054,6 +3078,10 @@ async function routeRequest(request, response, route) {
     const existing = await rest('shifts', `tenant_id=eq.${context.tenantId}&outlet_id=eq.${context.outlet.id}&cashier_id=eq.${session.authUser.id}&status=eq.OPEN&select=*&limit=1`);
     if (existing[0]) return send(response, 200, existing[0]);
     const rows = await rest('shifts', '', { method: 'POST', prefer: 'return=representation', body: { tenant_id: context.tenantId, outlet_id: context.outlet.id, cashier_id: session.authUser.id, opening_cash: openingCash, status: 'OPEN' } });
+    await rest('audit_logs','',{method:'POST',body:{
+      tenant_id:context.tenantId,actor_id:session.authUser.id,action:'SHIFT_OPENED',
+      entity_type:'shift',entity_id:rows[0].id,details_json:{outletId:context.outlet.id,openingCash}
+    }});
     return send(response, 201, rows[0]);
   }
 
@@ -3072,6 +3100,12 @@ async function routeRequest(request, response, route) {
     const shifts = await rest('shifts', `tenant_id=eq.${context.tenantId}&outlet_id=eq.${context.outlet.id}&cashier_id=eq.${session.authUser.id}&id=eq.${encodeURIComponent(input.shiftId ?? '')}&status=eq.OPEN&select=id&limit=1`);
     if (!shifts[0]) { const error = new Error('Shift aktif milik pengguna ini tidak ditemukan'); error.status = 404; throw error; }
     const rows = await rest('cash_movements', '', { method: 'POST', prefer: 'return=representation', body: { tenant_id: context.tenantId, shift_id: shifts[0].id, movement_type: movementType, amount, note: String(input.note ?? '').trim().slice(0, 240) || null, actor_id: session.authUser.id } });
+    await rest('audit_logs','',{method:'POST',body:{
+      tenant_id:context.tenantId,actor_id:session.authUser.id,
+      action:movementType==='CASH_IN'?'SHIFT_CASH_ADDED':'SHIFT_CASH_REMOVED',
+      entity_type:'cash_movement',entity_id:rows[0].id,
+      details_json:{shiftId:shifts[0].id,amount,note:rows[0].note??null}
+    }});
     return send(response, 201, rows[0]);
   }
 

@@ -3920,7 +3920,58 @@ function openUserEditor(userId) {
   el('edit-user-error').textContent = '';
   renderOutletOptions('edit-user-outlets', user.outletIds, user.role);
   renderPermissionOptions('edit-user-permissions',user.permissions,user.role);
+  setStaffDetailView('access');
+  el('staff-activity-list').innerHTML='<div class="empty-state compact">Pilih Log aktivitas untuk memuat data.</div>';
   el('edit-user-dialog').showModal();
+}
+
+const staffActivityLabels={
+  ACCOUNT_LOGIN:'Masuk ke Nusa POS',SHIFT_OPENED:'Membuka shift kasir',
+  SHIFT_CLOSED:'Menutup shift kasir',SHIFT_CASH_ADDED:'Menambah kas shift',
+  SHIFT_CASH_REMOVED:'Mengurangi kas shift',SALE_COMPLETED:'Menyelesaikan penjualan',
+  SALE_VOIDED:'Membatalkan transaksi',SALE_RETURNED:'Memproses retur penjualan',
+  STOCK_ADJUSTED:'Menyesuaikan stok',STOCK_TRANSFER_CREATED:'Membuat transfer stok',
+  STOCK_TRANSFER_RECEIVED:'Menerima transfer stok',PRODUCT_SAVED:'Menyimpan produk',
+  PRODUCT_STATUS_CHANGED:'Mengubah status produk',PURCHASE_ORDER_CREATED:'Membuat pesanan pembelian',
+  PURCHASE_RECEIVED:'Menerima barang',SUPPLIER_PAYMENT_RECORDED:'Mencatat pembayaran supplier',
+  CUSTOMER_SAVED:'Menyimpan pelanggan',PROMOTION_PUBLISHED:'Menerbitkan promo',
+  PROFILE_ACCESS_MANAGED:'Mengubah akses staf',BACKUP_EXPORTED:'Mengunduh backup data',
+  KASPIN_SALES_IMPORTED:'Mengimpor transaksi Kaspin',KASPIN_CUSTOMERS_IMPORTED:'Mengimpor pelanggan Kaspin'
+};
+
+function readableActivityAction(action=''){
+  return staffActivityLabels[action]??String(action).replaceAll('_',' ').toLowerCase().replace(/^./,(letter)=>letter.toUpperCase());
+}
+
+function staffActivitySummary(details={}){
+  const parts=[];
+  const receipt=details.receiptNo??details.receipt_no??details.documentNo??details.document_no;
+  const reason=details.reason??details.note;
+  const amount=details.amount??details.grandTotal??details.grand_total;
+  if(receipt)parts.push(`Dokumen ${receipt}`);
+  if(amount!=null&&Number.isFinite(Number(amount)))parts.push(money.format(Number(amount)));
+  if(reason)parts.push(String(reason));
+  return parts.join(' · ')||'Tindakan tercatat oleh sistem';
+}
+
+function setStaffDetailView(view){
+  const activity=view==='activity';
+  el('staff-access-panel').classList.toggle('hidden',activity);
+  el('staff-activity-panel').classList.toggle('hidden',!activity);
+  document.querySelectorAll('[data-staff-detail-view]').forEach((button)=>button.classList.toggle('active',button.dataset.staffDetailView===view));
+  if(activity)loadStaffActivity();
+}
+
+async function loadStaffActivity(){
+  const userId=el('edit-user-id').value;
+  if(!userId)return;
+  el('staff-activity-list').innerHTML='<div class="empty-state compact">Memuat log aktivitas...</div>';
+  try{
+    const data=await request(`/api/users/${encodeURIComponent(userId)}/activity`);
+    el('staff-activity-list').innerHTML=(data.logs??[]).map((item)=>`<article class="staff-activity-row"><span class="staff-activity-dot"></span><div><strong>${escapeHtml(readableActivityAction(item.action))}</strong><small>${new Date(item.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(item.entityType??'aktivitas')}</small><p>${escapeHtml(staffActivitySummary(item.details))}</p></div></article>`).join('')||'<div class="empty-state compact"><strong>Belum ada aktivitas</strong><small>Aktivitas baru akan muncul setelah akun ini digunakan.</small></div>';
+  }catch(error){
+    el('staff-activity-list').innerHTML=`<div class="empty-state compact"><strong>Log belum dapat dimuat</strong><small>${escapeHtml(error.message)}</small></div>`;
+  }
 }
 
 async function saveUser(event) {
@@ -6672,6 +6723,8 @@ el('user-status-filter').addEventListener('change', renderUsers);
 el('new-user-role').addEventListener('change', () => {const role=el('new-user-role').value;renderOutletOptions('new-user-outlets', selectedOutletIds('new-user-outlets', 'CASHIER'),role);renderPermissionOptions('new-user-permissions',permissionDefaults[role],role);});
 el('edit-user-role').addEventListener('change', () => {const role=el('edit-user-role').value;renderOutletOptions('edit-user-outlets', selectedOutletIds('edit-user-outlets', 'CASHIER'),role);renderPermissionOptions('edit-user-permissions',permissionDefaults[role],role);});
 el('user-list').addEventListener('click', (event) => { const button = event.target.closest('.edit-user'); if (button) openUserEditor(button.closest('[data-user-id]').dataset.userId); });
+el('edit-user-dialog').addEventListener('click',(event)=>{const button=event.target.closest('[data-staff-detail-view]');if(button)setStaffDetailView(button.dataset.staffDetailView);});
+el('refresh-staff-activity').addEventListener('click',loadStaffActivity);
 el('edit-user-form').addEventListener('submit', saveUser);
 el('close-user-editor').addEventListener('click', () => el('edit-user-dialog').close());
 el('cancel-user-edit').addEventListener('click', () => el('edit-user-dialog').close());
