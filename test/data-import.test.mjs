@@ -171,6 +171,8 @@ test('fondasi impor memiliki audit, perlindungan stok berjalan, dan UI pratinjau
   assert.match(html,/xlsx\.full\.min\.js/);
   assert.match(api,/allocate_product_skus_v1/);
   assert.match(api,/update_import_products_v1/);
+  assert.match(api,/restAll\('products', `tenant_id=eq\.\$\{tenant\}&active=eq\.true/);
+  assert.match(api,/restAll\('product_units', `tenant_id=eq\.\$\{tenant\}&select=\*`/);
   assert.match(excelMigration,/product_import_sku_reservations/);
   assert.match(excelMigration,/PRODUCTS_MASS_UPDATED/);
   const extensionMigration=await readFile(new URL('../supabase/migrations/202607290042_product_extension_imports.sql',import.meta.url),'utf8');

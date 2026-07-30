@@ -288,11 +288,11 @@ function authPayload(auth, profile) {
 async function loadCatalog(tenantId, locationId, outletId = null) {
   const tenant = encodeURIComponent(tenantId);
   const [products, units, rules, balances, overrides] = await Promise.all([
-    rest('products', `tenant_id=eq.${tenant}&active=eq.true&select=*&order=name`),
-    rest('product_units', `tenant_id=eq.${tenant}&select=*`),
-    rest('price_rules', `tenant_id=eq.${tenant}&select=*`),
-    locationId ? rest('stock_balances', `tenant_id=eq.${tenant}&location_id=eq.${encodeURIComponent(locationId)}&select=*`) : Promise.resolve([]),
-    outletId ? rest('outlet_price_overrides', `tenant_id=eq.${tenant}&outlet_id=eq.${encodeURIComponent(outletId)}&active=eq.true&select=*`).catch(()=>[]) : Promise.resolve([])
+    restAll('products', `tenant_id=eq.${tenant}&active=eq.true&select=*&order=name`),
+    restAll('product_units', `tenant_id=eq.${tenant}&select=*`),
+    restAll('price_rules', `tenant_id=eq.${tenant}&select=*`),
+    locationId ? restAll('stock_balances', `tenant_id=eq.${tenant}&location_id=eq.${encodeURIComponent(locationId)}&select=*`) : Promise.resolve([]),
+    outletId ? restAll('outlet_price_overrides', `tenant_id=eq.${tenant}&outlet_id=eq.${encodeURIComponent(outletId)}&active=eq.true&select=*`).catch(()=>[]) : Promise.resolve([])
   ]);
   return products.map((product) => ({
     id: product.id, sku: product.sku, name: product.name, category: product.category, brand: product.brand, imageUrl:product.image_url, active: product.active,
@@ -347,10 +347,10 @@ async function loadSupplierAccounts(tenantId){
 async function loadManagedProducts(tenantId,{includeCost=false}={}) {
   const tenant=encodeURIComponent(tenantId);
   const [products,units,rules,balances]=await Promise.all([
-    rest('products',`tenant_id=eq.${tenant}&select=*&order=active.desc,name`),
-    rest('product_units',`tenant_id=eq.${tenant}&select=*`),
-    rest('price_rules',`tenant_id=eq.${tenant}&starts_at=is.null&ends_at=is.null&select=*`),
-    rest('stock_balances',`tenant_id=eq.${tenant}&select=product_id,quantity${includeCost?',avg_cost':''}`)
+    restAll('products',`tenant_id=eq.${tenant}&select=*&order=active.desc,name`),
+    restAll('product_units',`tenant_id=eq.${tenant}&select=*`),
+    restAll('price_rules',`tenant_id=eq.${tenant}&starts_at=is.null&ends_at=is.null&select=*`),
+    restAll('stock_balances',`tenant_id=eq.${tenant}&select=product_id,quantity${includeCost?',avg_cost':''}`)
   ]);
   return products.map((product)=>{
     const productBalances=balances.filter((balance)=>balance.product_id===product.id);
@@ -1353,7 +1353,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.21-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.22-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {

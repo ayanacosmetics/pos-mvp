@@ -1494,9 +1494,14 @@ async function commitImport() {
     toast(`Impor selesai: ${result.created} baru, ${result.updated} diperbarui`);
     el('import-file').value = ''; el('import-file-name').textContent = 'Belum ada file dipilih';
     resetImportPreview('Impor berhasil. Anda dapat memilih file berikutnya.');
-    await refreshCatalog();
-    if (state.session.permissions.includes('inventory.manage')) await loadInventory();
-    await loadImportHistory();
+    try{
+      await refreshCatalog();
+      if (state.session.permissions.includes('inventory.manage')) await loadInventory();
+      await loadImportHistory();
+    }catch(refreshError){
+      console.error('Impor tersimpan tetapi penyegaran data gagal',refreshError);
+      toast('Data sudah tersimpan. Muat ulang halaman untuk memperbarui tampilan.');
+    }
   } catch (error) {
     el('import-message').textContent = error.message; button.disabled = false;
   } finally { button.textContent = 'Simpan data yang sudah valid'; }
