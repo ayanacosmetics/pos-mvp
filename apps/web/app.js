@@ -1519,10 +1519,15 @@ async function commitImport() {
       method:'POST', headers:{ 'idempotency-key':state.importDraft.idempotencyKey },
       body:JSON.stringify(state.importDraft)
     });
-    toast(`Impor selesai: ${result.created} baru, ${result.updated} diperbarui`);
+    const linkedReceipts=Number(result.reconciliation?.linkedReceipts??0);
+    toast(linkedReceipts
+      ? `Impor selesai dan ${linkedReceipts.toLocaleString('id-ID')} struk lama terhubung ke pelanggan`
+      : `Impor selesai: ${result.created} baru, ${result.updated} diperbarui`);
     el('import-file').value = ''; el('import-file-name').textContent = 'Belum ada file dipilih';
     el('import-capital-file').value='';el('import-capital-file-name').textContent='Belum ada file dipilih';
-    resetImportPreview('Impor berhasil. Anda dapat memilih file berikutnya.');
+    resetImportPreview(linkedReceipts
+      ? `Impor berhasil. ${linkedReceipts.toLocaleString('id-ID')} struk lama sudah masuk ke nilai transaksi pelanggan.`
+      : 'Impor berhasil. Anda dapat memilih file berikutnya.');
     try{
       await refreshCatalog();
       if (state.session.permissions.includes('inventory.manage')) await loadInventory();

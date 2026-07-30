@@ -1474,7 +1474,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.29-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.30-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2177,7 +2177,18 @@ async function routeRequest(request, response, route) {
         p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:key,
         p_file_name:input.fileName??null,p_rows:preview.rows
       });
-      return send(response,201,{kind:preview.kind,total:preview.rows.length,created:Number(result.created??0),updated:Number(result.updated??0),duplicate:Boolean(result.duplicate)});
+      let reconciliation=null;
+      try{
+        reconciliation=await rpc('reconcile_kaspin_customer_sales_v1',{
+          p_tenant_id:context.tenantId,p_actor_id:session.authUser.id
+        });
+      }catch(error){
+        if(!/reconcile_kaspin_customer_sales_v1|schema cache|function|PGRST202/i.test(error.message))throw error;
+      }
+      return send(response,201,{
+        kind:preview.kind,total:preview.rows.length,created:Number(result.created??0),
+        updated:Number(result.updated??0),duplicate:Boolean(result.duplicate),reconciliation
+      });
     }
     let rows=preview.rows.map((row)=>({...row}));
     if(preview.kind==='PRODUCTS'){
