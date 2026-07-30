@@ -284,3 +284,83 @@ export function parseKaspinFifoWorkbooks(XLSX,purchaseBuffer,capitalBuffer){
     }
   };
 }
+
+export function parseKaspinSalesWorkbooks(XLSX,detailBuffer,transactionBuffer){
+  const detailBook=XLSX.read(detailBuffer,{type:'array',cellDates:true});
+  const transactionBook=XLSX.read(transactionBuffer,{type:'array',cellDates:true});
+  const detailSheet=sheetWithHeaders(XLSX,detailBook,[
+    'kode_transaksi','timestamp','kode_barang','nama_barang','jumlah','harga_beli','harga_jual','total'
+  ]);
+  const transactionSheet=sheetWithHeaders(XLSX,transactionBook,[
+    'kode_transaksi','waktu','total_pendapatan','keuntungan','bayar','uang_kembalian'
+  ]);
+  if(!detailSheet||!transactionSheet)return null;
+
+  const indexes=(sheet)=>Object.fromEntries(sheet.headers.map((header,index)=>[header,index]));
+  const detailIndexes=indexes(detailSheet),transactionIndexes=indexes(transactionSheet);
+  const get=(row,map,key)=>row[map[key]]??'';
+  const transactions=new Map();
+  transactionSheet.matrix.slice(1).forEach((cells)=>{
+    const transactionCode=identifier(get(cells,transactionIndexes,'kode_transaksi'));
+    if(!transactionCode||transactionCode.toLowerCase()==='total semua')return;
+    transactions.set(transactionCode,{
+      occurredAt:isoDateTime(get(cells,transactionIndexes,'waktu')),
+      grandTotal:number(get(cells,transactionIndexes,'total_pendapatan')),
+      profit:number(get(cells,transactionIndexes,'keuntungan')),
+      tendered:number(get(cells,transactionIndexes,'bayar')),
+      change:number(get(cells,transactionIndexes,'uang_kembalian')),
+      transactionDiscount:number(get(cells,transactionIndexes,'diskon'))??0,
+      cashier:text(get(cells,transactionIndexes,'kasir')),
+      paymentType:text(get(cells,transactionIndexes,'tipe_pembayaran')),
+      paymentMethod:text(get(cells,transactionIndexes,'metode_pembayaran')),
+      customerEmail:text(get(cells,transactionIndexes,'email_pelanggan')),
+      customerName:text(get(cells,transactionIndexes,'nama_pelanggan')),
+      note:text(get(cells,transactionIndexes,'keterangan'))
+    });
+  });
+
+  const rows=[],issues=[],missingTransactions=new Set();
+  detailSheet.matrix.slice(1).forEach((cells,index)=>{
+    if(!cells.some((value)=>text(value)!==''))return;
+    const rowNo=index+2,transactionCode=identifier(get(cells,detailIndexes,'kode_transaksi'));
+    if(!transactionCode||transactionCode.toLowerCase()==='total semua')return;
+    const summary=transactions.get(transactionCode);
+    const productCode=identifier(get(cells,detailIndexes,'kode_barang'));
+    const quantity=number(get(cells,detailIndexes,'jumlah'));
+    const unitCost=number(get(cells,detailIndexes,'harga_beli'));
+    const unitPrice=number(get(cells,detailIndexes,'harga_jual'));
+    const lineGross=number(get(cells,detailIndexes,'total'));
+    const occurredAt=isoDateTime(get(cells,detailIndexes,'timestamp'))||summary?.occurredAt;
+    const reasons=[];
+    if(!summary){reasons.push('kode transaksi tidak ditemukan pada Laporan Data Penjualan');missingTransactions.add(transactionCode);}
+    if(!productCode)reasons.push('kode barang kosong');
+    if(!(quantity>0))reasons.push('jumlah harus lebih dari nol');
+    if(!(unitCost>=0))reasons.push('harga beli tidak valid');
+    if(!(unitPrice>=0))reasons.push('harga jual tidak valid');
+    if(!(lineGross>=0))reasons.push('total baris tidak valid');
+    if(!occurredAt)reasons.push('tanggal transaksi tidak terbaca');
+    if(reasons.length){issues.push({row:rowNo,message:reasons.join(', ')});return;}
+    rows.push({
+      transactionCode,occurredAt,productCode,
+      productName:text(get(cells,detailIndexes,'nama_barang')),
+      quantity,unitCost,unitPrice,lineGross,
+      lineDiscount:number(get(cells,detailIndexes,'diskon'))??0,
+      grandTotal:summary.grandTotal,profit:summary.profit,
+      tendered:summary.tendered,change:summary.change,
+      transactionDiscount:summary.transactionDiscount,
+      cashier:summary.cashier||text(get(cells,detailIndexes,'kasir')),
+      paymentType:summary.paymentType||text(get(cells,detailIndexes,'tipe_pembayaran')),
+      paymentMethod:summary.paymentMethod||text(get(cells,detailIndexes,'metode_pembayaran')),
+      customerEmail:summary.customerEmail,customerName:summary.customerName,note:summary.note
+    });
+  });
+  return {
+    rows,
+    report:{
+      source:'KASPIN',fileType:'Penjualan & detail struk',sheetName:`${detailSheet.sheetName} + ${transactionSheet.sheetName}`,
+      total:rows.length+issues.length,mapped:rows.length,skipped:issues.length,issues,
+      salesLines:rows.length,receipts:new Set(rows.map((row)=>row.transactionCode)).size,
+      missingTransactions:missingTransactions.size
+    }
+  };
+}

@@ -676,7 +676,7 @@ async function loadReturnableSale(context, { saleId = null, receiptNo = null } =
   return {
     id: sale.id, receiptNo: sale.receipt_no, outletId: sale.outlet_id,
     outletName: context.outlets.find((item) => item.id === sale.outlet_id)?.name ?? 'Outlet',
-    customer: customers[0] ?? null, cashierName: cashiers[0]?.display_name ?? 'Kasir',
+    customer: customers[0] ?? null, cashierName: sale.source_cashier || cashiers[0]?.display_name || 'Kasir',
     paymentMethod: sale.payment_method, grandTotal: Number(sale.grand_total), creditAmount:Number(sale.credit_amount??0),
     paidCreditAmount:Number(sale.paid_credit_amount??0),returnedCreditAmount:Number(sale.returned_credit_amount??0), occurredAt: sale.occurred_at,
     status: lines.some((line) => line.remainingQty>0) ? (returnItems.length ? 'PARTIALLY_RETURNED' : 'RETURNABLE') : 'FULLY_RETURNED',
@@ -745,7 +745,7 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
   const normalized = String(query ?? '').trim().toLowerCase();
   return sales.map((sale) => {
     const customer = customers.find((item) => item.id === sale.customer_id) ?? null;
-    const cashier = cashiers.find((item) => item.user_id === sale.cashier_id)?.display_name ?? 'Kasir';
+    const cashier = sale.source_cashier || cashiers.find((item) => item.user_id === sale.cashier_id)?.display_name || 'Kasir';
     const saleReturns=customerReturns.filter((returned)=>returned.sale_id===sale.id);
     const saleReturnIds=new Set(saleReturns.map((returned)=>returned.id));
     const saleReturnItems=customerReturnItems.filter((item)=>saleReturnIds.has(item.return_id));
@@ -1140,9 +1140,56 @@ async function previewKaspinFifo(context,input){
   };
 }
 
+async function previewKaspinSales(context,input){
+  const errors=[],warnings=[],rawRows=Array.isArray(input.rows)?input.rows:[];
+  if(!rawRows.length)errors.push({row:0,field:'file',message:'File penjualan tidak memiliki baris yang dapat dibaca'});
+  if(rawRows.length>10000)errors.push({row:0,field:'file',message:'Maksimal 10.000 baris per file'});
+  const [products,units]=await Promise.all([
+    restAll('products',`tenant_id=eq.${context.tenantId}&select=id,sku,name`),
+    restAll('product_units',`tenant_id=eq.${context.tenantId}&barcode=not.is.null&select=product_id,barcode`)
+  ]);
+  const productById=new Map(products.map((product)=>[product.id,product]));
+  const lookup=new Map(products.map((product)=>[String(product.sku).trim().toUpperCase(),product]));
+  units.forEach((unit)=>{if(unit.barcode&&productById.has(unit.product_id))lookup.set(String(unit.barcode).trim().toUpperCase(),productById.get(unit.product_id));});
+
+  const candidateRows=[],invalidTransactions=new Set();
+  rawRows.forEach((raw,index)=>{
+    const transactionCode=String(raw.transactionCode??'').trim();
+    const productCode=String(raw.productCode??'').trim().toUpperCase(),product=lookup.get(productCode);
+    const quantity=importNumber(raw.quantity),unitCost=importNumber(raw.unitCost),unitPrice=importNumber(raw.unitPrice);
+    const lineGross=importNumber(raw.lineGross),grandTotal=importNumber(raw.grandTotal),occurredAt=new Date(raw.occurredAt);
+    if(!transactionCode||!product||!(quantity>0)||!(unitCost>=0)||!(unitPrice>=0)||!(lineGross>=0)||!(grandTotal>=0)||Number.isNaN(occurredAt.getTime())){
+      invalidTransactions.add(transactionCode||`BARIS-${index+2}`);
+      warnings.push({row:index+2,message:`Struk ${transactionCode||'-'} dilewati karena produk ${raw.productName||productCode||'-'} belum cocok atau datanya tidak valid`});
+      return;
+    }
+    candidateRows.push({
+      transactionCode,occurredAt:occurredAt.toISOString(),productId:product.id,productCode,
+      productName:product.name,quantity,unitCost,unitPrice,lineGross,
+      lineDiscount:Math.max(0,importNumber(raw.lineDiscount)??0),grandTotal,
+      profit:importNumber(raw.profit),tendered:Math.max(0,importNumber(raw.tendered)??grandTotal),
+      change:Math.max(0,importNumber(raw.change)??0),
+      transactionDiscount:Math.max(0,importNumber(raw.transactionDiscount)??0),
+      cashier:String(raw.cashier??'').trim(),paymentType:String(raw.paymentType??'').trim(),
+      paymentMethod:String(raw.paymentMethod??'').trim()||'Cash',
+      customerEmail:String(raw.customerEmail??'').trim(),customerName:String(raw.customerName??'').trim(),
+      note:String(raw.note??'').trim()
+    });
+  });
+  const rows=candidateRows.filter((row)=>!invalidTransactions.has(row.transactionCode));
+  const transactionCount=new Set(rows.map((row)=>row.transactionCode)).size;
+  if(!rows.length)errors.push({row:0,field:'file',message:'Tidak ada detail struk yang cocok dengan produk Nusa POS'});
+  return {
+    valid:errors.length===0,kind:'KASPIN_SALES',mode:'MIXED',outletId:context.outlet.id,
+    rows,errors,warnings,
+    summary:{total:rows.length,create:transactionCount,update:0,error:errors.length}
+  };
+}
+
 async function previewImport(context, input) {
   const kind = String(input.kind ?? '').toUpperCase();
   if(kind==='KASPIN_FIFO')return previewKaspinFifo(context,input);
+  if(kind==='KASPIN_SALES')return previewKaspinSales(context,input);
   const mode=['CREATE_ONLY','UPDATE_ONLY'].includes(String(input.mode??'').toUpperCase())?String(input.mode).toUpperCase():'MIXED';
   const supported=['PRODUCTS','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES','CUSTOMERS','SUPPLIERS'];
   if (!supported.includes(kind)) return { valid: false, kind, rows: [], errors: [{ row: 0, field: 'kind', message: 'Jenis impor tidak valid' }] };
@@ -1423,7 +1470,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.26-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.27-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2089,6 +2136,13 @@ async function routeRequest(request, response, route) {
         p_file_name:input.fileName??null,p_location_id:preview.locationId,p_rows:preview.rows,p_capital_rows:preview.capitalRows
       });
       return send(response,201,{kind:preview.kind,total:preview.rows.length,created:Number(result.created??0),updated:Number(result.updated??0),duplicate:Boolean(result.duplicate),receipts:Number(result.receipts??0),layers:Number(result.layers??0)});
+    }
+    if(preview.kind==='KASPIN_SALES'){
+      const result=await rpc('import_kaspin_sales_v1',{
+        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:key,
+        p_file_name:input.fileName??null,p_outlet_id:preview.outletId,p_rows:preview.rows
+      });
+      return send(response,201,{kind:preview.kind,total:preview.rows.length,created:Number(result.created??0),updated:0,duplicate:Boolean(result.duplicate),receipts:Number(result.receipts??0),items:Number(result.items??0)});
     }
     let rows=preview.rows.map((row)=>({...row}));
     if(preview.kind==='PRODUCTS'){
