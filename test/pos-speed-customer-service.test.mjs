@@ -92,4 +92,6 @@ test('desktop menjaga sidebar penuh dan daftar keranjang tetap dapat digulir',as
   assert.match(css,/\.cart-pane\{[\s\S]*min-height:0;[\s\S]*overflow:hidden/);
   assert.match(css,/\.cart-lines\{[\s\S]*overflow-y:auto/);
   assert.match(css,/\.cart-summary\{[\s\S]*max-height:60%;[\s\S]*overflow-y:auto/);
+  assert.match(css,/\.cart-line-main>div>strong\{[^}]*font-size:11px/);
+  assert.match(css,/\.cart-line-meta\{[^}]*font-size:9px/);
 });
