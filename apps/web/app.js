@@ -154,7 +154,7 @@ function reportClientTelemetry(eventType,path,{statusCode=null,durationMs=null}=
 
 async function request(path, options = {}, allowRefresh = true) {
   const started=globalThis.performance?.now?.()??Date.now();
-  const publicAuthPaths = ['/api/login','/api/register-owner','/api/refresh','/api/logout'];
+  const publicAuthPaths = ['/api/login','/api/register-owner','/api/forgot-password','/api/reset-password','/api/refresh','/api/logout'];
   if (allowRefresh && !publicAuthPaths.includes(path) && shouldRefreshAuth(state)) {
     try {
       await refreshSession();
@@ -254,8 +254,10 @@ async function login(email, password, portal) {
 
 function setAuthView(view) {
   const registering = view === 'register';
-  el('login-form').classList.toggle('hidden', registering);
+  el('login-form').classList.toggle('hidden', view !== 'login');
   el('register-owner-form').classList.toggle('hidden', !registering);
+  el('forgot-password-form').classList.toggle('hidden',view!=='forgot');
+  el('reset-password-form').classList.toggle('hidden',view!=='reset');
   el('register-owner-error').textContent = '';
   el('register-owner-success').textContent = '';
   el('register-owner-success').classList.add('hidden');
@@ -264,9 +266,32 @@ function setAuthView(view) {
     setLoginPortal('OWNER');
     el('register-owner-email').value = el('email').value.trim();
     requestAnimationFrame(() => el('register-owner-name').focus());
+  } else if(view==='forgot') {
+    el('forgot-password-email').value=el('email').value.trim();
+    el('forgot-password-error').textContent='';
+    el('forgot-password-success').classList.add('hidden');
+    requestAnimationFrame(()=>el('forgot-password-email').focus());
+  } else if(view==='reset') {
+    el('reset-password-error').textContent='';
+    requestAnimationFrame(()=>el('reset-password-value').focus());
   } else {
     requestAnimationFrame(() => el('email').focus());
   }
+}
+
+function passwordRecoverySession(){
+  const hash=new URLSearchParams(location.hash.replace(/^#/,''));
+  return hash.get('type')==='recovery'&&hash.get('access_token')?{
+    accessToken:hash.get('access_token'),refreshToken:hash.get('refresh_token')??''
+  }:null;
+}
+
+async function requestPasswordRecovery(email){
+  return request('/api/forgot-password',{method:'POST',body:JSON.stringify({email})});
+}
+
+async function resetRecoveredPassword(accessToken,password){
+  return request('/api/reset-password',{method:'POST',body:JSON.stringify({accessToken,password})});
 }
 
 async function registerOwner(input) {
@@ -6324,9 +6349,39 @@ document.querySelectorAll('[data-login-portal]').forEach((button) => button.addE
   el('email').focus();
 }));
 el('open-owner-registration').addEventListener('click', () => setAuthView('register'));
+el('open-forgot-password').addEventListener('click',()=>setAuthView('forgot'));
 el('back-to-login').addEventListener('click', () => {
   el('email').value = el('register-owner-email').value.trim();
   setAuthView('login');
+});
+document.querySelectorAll('[data-back-to-login]').forEach((button)=>button.addEventListener('click',()=>setAuthView('login')));
+el('forgot-password-form').addEventListener('submit',async(event)=>{
+  event.preventDefault();
+  const button=event.currentTarget.querySelector('button[type="submit"]');
+  const email=el('forgot-password-email').value.trim();
+  el('forgot-password-error').textContent='';button.disabled=true;button.textContent='Mengirim...';
+  try{
+    const data=await requestPasswordRecovery(email);
+    el('forgot-password-success').textContent=data.message;
+    el('forgot-password-success').classList.remove('hidden');
+  }catch(error){el('forgot-password-error').textContent=error.message;}
+  finally{button.disabled=false;button.textContent='Kirim tautan pemulihan';}
+});
+el('reset-password-form').addEventListener('submit',async(event)=>{
+  event.preventDefault();
+  const password=el('reset-password-value').value,confirmation=el('reset-password-confirmation').value;
+  const button=event.currentTarget.querySelector('button[type="submit"]');
+  el('reset-password-error').textContent='';
+  if(password!==confirmation){el('reset-password-error').textContent='Ulangi kata sandi harus sama.';return;}
+  const recovery=passwordRecoverySession();
+  if(!recovery){el('reset-password-error').textContent='Tautan pemulihan tidak valid atau sudah kedaluwarsa.';return;}
+  button.disabled=true;button.textContent='Menyimpan...';
+  try{
+    await resetRecoveredPassword(recovery.accessToken,password);
+    history.replaceState(null,'',location.pathname+location.search);
+    clearAuth();setAuthView('login');el('login-error').textContent='Kata sandi berhasil diubah. Silakan masuk.';
+  }catch(error){el('reset-password-error').textContent=error.message;}
+  finally{button.disabled=false;button.textContent='Simpan kata sandi baru';}
 });
 el('login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -7342,6 +7397,9 @@ async function restoreAppSession() {
 }
 
 setLoginPortal(state.loginPortal);
+const recoverySession=passwordRecoverySession();
 if(matchMedia('(max-width:760px)').matches)el('report-filter-panel').open=false;
 updateReportFilterSummary();
-restoreAppSession();
+if(recoverySession){
+  el('session-view').classList.add('hidden');el('login-view').classList.remove('hidden');el('app-view').classList.add('hidden');setAuthView('reset');
+}else restoreAppSession();

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=156">
+  <link rel="stylesheet" href="/styles.css?v=157">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -45,6 +45,7 @@
         <label>Kata sandi<input id="password" type="password" autocomplete="current-password" required></label>
         <p id="login-error" class="error" role="alert"></p>
         <button class="button primary full" type="submit">Masuk sebagai Owner</button>
+        <button id="open-forgot-password" class="auth-secondary-action" type="button">Lupa kata sandi?</button>
         <button id="open-owner-registration" class="auth-secondary-action" type="button">Belum punya akun? <strong>Daftar sebagai Owner</strong></button>
         <small id="login-help" class="login-help">Gunakan akun Owner aktif pada usaha Anda.</small>
       </form>
@@ -66,6 +67,25 @@
         <p id="register-owner-success" class="auth-success hidden" role="status"></p>
         <button class="button primary full" type="submit">Buat akun Owner</button>
         <small class="login-help">Satu akun Owner membuat satu ruang usaha dan outlet utama. Tidak ada pendaftaran mandiri untuk Staff.</small>
+      </form>
+      <form id="forgot-password-form" class="auth-form hidden">
+        <button class="auth-back-button" data-back-to-login type="button">← Kembali masuk</button>
+        <p class="eyebrow">PEMULIHAN AKUN</p>
+        <h1>Lupa kata sandi</h1>
+        <p class="muted">Masukkan email akun. Kami akan mengirim tautan untuk membuat kata sandi baru.</p>
+        <label>Email akun<input id="forgot-password-email" type="email" autocomplete="email" maxlength="254" required></label>
+        <p id="forgot-password-error" class="error" role="alert"></p>
+        <p id="forgot-password-success" class="auth-success hidden" role="status"></p>
+        <button class="button primary full" type="submit">Kirim tautan pemulihan</button>
+      </form>
+      <form id="reset-password-form" class="auth-form hidden">
+        <p class="eyebrow">KATA SANDI BARU</p>
+        <h1>Atur ulang kata sandi</h1>
+        <p class="muted">Buat kata sandi baru minimal 8 karakter.</p>
+        <label>Kata sandi baru<input id="reset-password-value" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
+        <label>Ulangi kata sandi<input id="reset-password-confirmation" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
+        <p id="reset-password-error" class="error" role="alert"></p>
+        <button class="button primary full" type="submit">Simpan kata sandi baru</button>
       </form>
     </section>
   </section>
@@ -177,7 +197,7 @@
           <button data-page="settings-data-reset" data-target-page="settings" data-settings-view="reset" class="feature-nav-item" data-permission="identity.manage"><span>Reset & pulihkan data</span><small>Hapus atau kembalikan backup</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Pendaftaran Owner pulih · v2.16.45</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Akun & kata sandi pulih · v2.16.46</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -1040,6 +1060,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=156"></script>
+  <script type="module" src="/app.js?v=157"></script>
 </body>
 </html>

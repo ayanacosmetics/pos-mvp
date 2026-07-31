@@ -256,6 +256,24 @@ function ownerRegistrationMetadata(authUser,fallback={}) {
   };
 }
 
+async function adminAuthUserForEmail(email){
+  const expected=String(email??'').trim().toLowerCase();
+  for(let page=1;page<=10;page+=1){
+    const result=await supabase(`/auth/v1/admin/users?page=${page}&per_page=100`,{token:env().service});
+    const users=Array.isArray(result?.users)?result.users:[];
+    const found=users.find((user)=>String(user.email??'').toLowerCase()===expected);
+    if(found)return found;
+    if(users.length<100)break;
+  }
+  return null;
+}
+
+async function passwordAuth(email,password){
+  return supabase('/auth/v1/token?grant_type=password',{
+    method:'POST',token:env().anon,body:{email,password}
+  });
+}
+
 async function sessionOf(request) {
   const token = request.headers.authorization?.replace(/^Bearer\s+/i, '');
   if (!token) return null;
@@ -1508,7 +1526,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.45-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.46-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1542,9 +1560,7 @@ async function routeRequest(request, response, route) {
     // profil/workspace sempat terputus (misalnya koneksi atau email bermasalah).
     let recoveredAuth=null;
     try {
-      recoveredAuth=await supabase('/auth/v1/token?grant_type=password',{
-        method:'POST',token:config.anon,body:{email,password}
-      });
+      recoveredAuth=await passwordAuth(email,password);
     } catch(error) {
       if(![400,401,403].includes(error.status))throw error;
     }
@@ -1557,13 +1573,33 @@ async function routeRequest(request, response, route) {
       setRefreshCookie(response,recoveredAuth.refresh_token);
       return send(response,201,{...authPayload(recoveredAuth,profile),registered:true,recovered:true});
     }
-    let auth;
+    const existingUser=await adminAuthUserForEmail(email);
+    if(existingUser){
+      const existingProfile=await profileFor(existingUser.id);
+      if(existingProfile){
+        const error=new Error('Email sudah terdaftar. Silakan masuk sebagai Owner.');error.status=409;throw error;
+      }
+      if(!existingUser.email_confirmed_at){
+        await supabase(`/auth/v1/admin/users/${existingUser.id}`,{
+          method:'PUT',token:config.service,body:{email_confirm:true}
+        });
+      }
+      try{recoveredAuth=await passwordAuth(email,password);}
+      catch{
+        const error=new Error('Email sudah pernah didaftarkan, tetapi kata sandinya berbeda. Gunakan Lupa kata sandi.');error.status=409;throw error;
+      }
+      const profile=await provisionOwnerWorkspace(recoveredAuth.user,{ownerName,businessName,email});
+      setRefreshCookie(response,recoveredAuth.refresh_token);
+      return send(response,201,{...authPayload(recoveredAuth,profile),registered:true,recovered:true});
+    }
+    let createdUser;
     try {
-      auth = await supabase('/auth/v1/signup', {
+      const created=await supabase('/auth/v1/admin/users', {
         method: 'POST',
-        token: config.anon,
-        body: { email, password, data: { display_name: ownerName, business_name: businessName, registration_source:'NUSA_OWNER_SELF_REGISTRATION' } }
+        token: config.service,
+        body: {email,password,email_confirm:true,user_metadata:{display_name:ownerName,business_name:businessName,registration_source:'NUSA_OWNER_SELF_REGISTRATION'}}
       });
+      createdUser=created?.user??created;
     } catch (error) {
       if (/already (registered|been registered)|user.*exists/i.test(error.message)) {
         error.message = 'Email sudah terdaftar. Silakan masuk sebagai Owner.';
@@ -1571,35 +1607,55 @@ async function routeRequest(request, response, route) {
       }
       throw error;
     }
-    const createdIdentity = !Array.isArray(auth.user?.identities) || auth.user.identities.length > 0;
-    if(!auth.user?.id){
+    if(!createdUser?.id){
       const error=new Error('Identitas akun gagal dibuat. Coba kembali beberapa saat lagi.');error.status=502;throw error;
     }
-    if (!createdIdentity) {
-      return send(response,202,{
-        registered:true,requiresEmailConfirmation:true,recoveryPending:true,email,
-        message:'Email sudah memiliki identitas Auth. Konfirmasikan email lalu masuk sebagai Owner; ruang usaha akan diselesaikan otomatis.'
-      });
-    }
+    let auth;
     try {
-      await provisionOwnerWorkspace(auth.user,{ownerName,businessName,email});
+      auth=await passwordAuth(email,password);
+      await provisionOwnerWorkspace(createdUser,{ownerName,businessName,email});
     } catch (error) {
-      await supabase(`/auth/v1/admin/users/${auth.user.id}`, {
+      await supabase(`/auth/v1/admin/users/${createdUser.id}`, {
         method: 'DELETE',
         token: config.service
       }).catch(() => {});
       throw error;
     }
-    const profile = await profileFor(auth.user.id);
-    if (auth.access_token && auth.refresh_token) {
-      setRefreshCookie(response, auth.refresh_token);
-      return send(response, 201, { ...authPayload(auth, profile), registered: true });
+    const profile=await profileFor(createdUser.id);
+    setRefreshCookie(response,auth.refresh_token);
+    return send(response,201,{...authPayload(auth,profile),registered:true});
+  }
+
+  if(request.method==='POST'&&route==='forgot-password'){
+    const input=bodyOf(request),email=String(input.email??'').trim().toLowerCase();
+    if(email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+      const error=new Error('Alamat email tidak valid');error.status=400;throw error;
     }
-    return send(response, 201, {
-      registered: true,
-      requiresEmailConfirmation: true,
-      email
-    });
+    const redirectTo=encodeURIComponent(`${process.env.PUBLIC_APP_URL??'https://kasir-nusa-pos.vercel.app'}/?password-recovery=1`);
+    try{
+      await supabase(`/auth/v1/recover?redirect_to=${redirectTo}`,{method:'POST',token:env().anon,body:{email}});
+    }catch(error){
+      if(/smtp|email.*(send|rate|authorized)|rate limit/i.test(`${error.message} ${JSON.stringify(error.details??{})}`)){
+        error.message='Email pemulihan belum dapat dikirim. Periksa pengaturan SMTP Supabase atau tunggu batas pengiriman pulih.';
+        error.status=503;
+      }
+      throw error;
+    }
+    return send(response,200,{message:'Jika email terdaftar, tautan pemulihan telah dikirim. Periksa juga folder Spam.'});
+  }
+
+  if(request.method==='POST'&&route==='reset-password'){
+    const input=bodyOf(request),accessToken=String(input.accessToken??'').trim(),password=String(input.password??'');
+    if(password.length<8||password.length>128){const error=new Error('Kata sandi harus berisi 8 sampai 128 karakter');error.status=400;throw error;}
+    if(!accessToken){const error=new Error('Tautan pemulihan tidak valid atau sudah kedaluwarsa');error.status=401;throw error;}
+    try{
+      await supabase('/auth/v1/user',{token:accessToken});
+      await supabase('/auth/v1/user',{method:'PUT',token:accessToken,body:{password}});
+    }catch(error){
+      if([400,401,403].includes(error.status)){error.message='Tautan pemulihan tidak valid atau sudah kedaluwarsa';error.status=401;}
+      throw error;
+    }
+    return send(response,200,{updated:true});
   }
 
   if (request.method === 'POST' && route === 'login') {
