@@ -1433,6 +1433,9 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
 .keep-cart-button b{display:grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--brand);color:#fff;font-size:9px;line-height:1}
 .receipt-thanks,.sale-note-display{white-space:pre-line}
 @media(max-width:650px){.cart-checkout-actions{grid-template-columns:auto minmax(74px,.72fr) minmax(98px,1fr)!important}.cart-checkout-actions #pay-button{grid-column:auto}.adjustment-dialog{padding:20px}.adjustment-target{margin-bottom:9px}}
+.restock-new-product-dialog{width:min(680px,94vw);max-height:90vh;overflow:auto}
+.purchase-product-results .empty-state .button{display:block;margin:12px auto 0}
+@media(max-width:650px){.restock-step-heading #toggle-restock-extra-product{width:100%;margin-top:12px}.restock-new-product-dialog{padding:20px}}
 
 @media(max-width:760px){
   #page-pos .pos-layout:not(.mobile-cart-view){

@@ -2505,6 +2505,7 @@ function sortedPurchaseProducts(query = '') {
 function renderPurchaseProductResults(kind, query = '') {
   const container = el(`${kind}-product-results`);
   const products = sortedPurchaseProducts(query);
+  const canCreate=kind==='restock'&&state.session.permissions.includes('catalog.manage')&&['OWNER','ADMIN'].includes(state.session.user.role);
   container.innerHTML = products.map((product) => {
     const stock = Number(product.stockBase ?? 0);
     const baseUnit = product.units.find((unit) => Number(unit.factor) === 1) ?? product.units[0];
@@ -2513,8 +2514,9 @@ function renderPurchaseProductResults(kind, query = '') {
       <div class="purchase-product-stock"><span>Stok</span><strong>${stock} pcs</strong></div>
       <button class="button secondary choose-purchase-product" type="button" data-kind="${kind}" data-product-id="${escapeHtml(product.id)}" data-unit-id="${escapeHtml(baseUnit?.id ?? '')}">Tambah</button>
     </article>`;
-  }).join('') || '<div class="empty-state compact">Barang tidak ditemukan. Periksa nama, SKU, atau barcode.</div>';
+  }).join('') || `<div class="empty-state compact"><strong>Barang tidak ditemukan.</strong><br><small>Periksa nama, SKU, atau barcode.</small>${canCreate?'<button class="button primary create-restock-product" type="button">+ Buat produk baru</button>':''}</div>`;
   container.querySelectorAll('.choose-purchase-product').forEach((button) => button.addEventListener('click', () => choosePurchaseProduct(button.dataset.kind, button.dataset.productId, button.dataset.unitId)));
+  container.querySelector('.create-restock-product')?.addEventListener('click',()=>openRestockNewProduct(query));
 }
 
 async function choosePurchaseProduct(kind, productId, unitId = null) {
@@ -2526,6 +2528,7 @@ async function choosePurchaseProduct(kind, productId, unitId = null) {
   const input = el(`${kind}-product-search`);
   input.value = '';
   renderPurchaseProductResults(kind);
+  if(kind==='restock')setRestockExtraPicker(false);
   input.focus();
 }
 
@@ -2537,7 +2540,60 @@ async function handlePurchaseProductEnter(kind, event) {
   if (exact) return choosePurchaseProduct(kind, exact.product.id, exact.unit.id);
   const first = sortedPurchaseProducts(value)[0];
   if (first) return choosePurchaseProduct(kind, first.id);
+  if(kind==='restock'&&state.session.permissions.includes('catalog.manage')&&['OWNER','ADMIN'].includes(state.session.user.role))return openRestockNewProduct(value);
   toast('Barang tidak ditemukan.');
+}
+
+function setRestockExtraPicker(open){
+  el('restock-extra-product-picker').classList.toggle('hidden',!open);
+  el('toggle-restock-extra-product').setAttribute('aria-expanded',String(open));
+  el('toggle-restock-extra-product').textContent=open?'Tutup pencarian':'+ Tambah barang lain';
+  if(open){
+    renderPurchaseProductResults('restock',el('restock-product-search').value);
+    el('restock-product-search').focus();
+  }
+}
+
+function openRestockNewProduct(seed=''){
+  if(!state.session.permissions.includes('catalog.manage')||!['OWNER','ADMIN'].includes(state.session.user.role))return toast('Produk baru hanya dapat dibuat oleh Owner/Admin yang memiliki hak kelola katalog.');
+  const value=String(seed??'').trim();
+  const looksBarcode=/^\d{4,80}$/.test(value);
+  el('restock-new-product-form').reset();
+  el('restock-new-name').value=looksBarcode?'':value;
+  el('restock-new-barcode').value=looksBarcode?value:'';
+  el('restock-new-sku').value=looksBarcode?value:'';
+  el('restock-new-category').value='Lainnya';
+  el('restock-new-unit').value='pcs';
+  el('restock-new-min-stock').value=0;
+  el('restock-new-product-error').textContent='';
+  el('restock-new-product-dialog').showModal();
+  el(looksBarcode||!value?'restock-new-name':'restock-new-price').focus();
+}
+
+async function saveRestockNewProduct(event){
+  event.preventDefault();
+  const button=el('save-restock-new-product'),barcode=el('restock-new-barcode').value.trim();
+  const sku=(el('restock-new-sku').value.trim()||barcode||`BRG-${crypto.randomUUID().slice(0,8)}`).toUpperCase();
+  const duplicate=state.products.find((product)=>product.sku?.toUpperCase()===sku||barcode&&product.units.some((unit)=>String(unit.barcode??'')===barcode));
+  if(duplicate)return el('restock-new-product-error').textContent=`Barcode atau SKU sudah dipakai oleh ${duplicate.name}. Gunakan produk tersebut dari pencarian.`;
+  const payload={
+    sku,name:el('restock-new-name').value.trim(),category:el('restock-new-category').value.trim()||'Lainnya',
+    brand:el('restock-new-brand').value.trim(),minimumStock:Number(el('restock-new-min-stock').value||0),
+    trackExpiry:el('restock-new-track-expiry').checked,retailPrice:Number(el('restock-new-price').value),
+    prices:[{customerGroupId:'retail',minBaseQty:1,unitPriceBase:Number(el('restock-new-price').value)}],
+    units:[{name:el('restock-new-unit').value.trim()||'pcs',factor:1,barcode}]
+  };
+  button.disabled=true;button.textContent='Membuat produk…';el('restock-new-product-error').textContent='';
+  try{
+    const created=await request('/api/products',{method:'POST',body:JSON.stringify(payload)});
+    await refreshCatalog();
+    const product=state.products.find((item)=>item.id===created.id);
+    if(!product)throw new Error('Produk berhasil dibuat tetapi katalog belum diperbarui. Muat ulang lalu cari produk tersebut.');
+    await appendRestockLine(product.id,1,0,product.units.find((unit)=>Number(unit.factor)===1)?.name??'pcs');
+    el('restock-new-product-dialog').close();setRestockExtraPicker(false);
+    toast(`${product.name} dibuat dan dimasukkan ke penerimaan.`);
+  }catch(error){el('restock-new-product-error').textContent=error.message;}
+  finally{button.disabled=false;button.textContent='Buat dan tambahkan';}
 }
 
 function activatePurchaseScanner(kind) {
@@ -2556,6 +2612,7 @@ function barcodeMatch(value) {
 async function handleCameraBarcode(value) {
   const exact = barcodeMatch(value);
   if (!exact && barcodeCameraTarget === 'pos' && await tryScannedVoucher(value)) return;
+  if(!exact&&barcodeCameraTarget==='restock'&&state.session.permissions.includes('catalog.manage')&&['OWNER','ADMIN'].includes(state.session.user.role))return openRestockNewProduct(value);
   if (!exact) return toast(`Barcode ${value} belum terdaftar pada produk.`);
   if (barcodeCameraTarget === 'pos') {
     await addScannedProduct(exact.product, exact.unit);
@@ -2715,6 +2772,7 @@ async function renderRestock() {
   el('restock-document').value = '';
   el('restock-history').innerHTML = '<p class="eyebrow">HISTORI MODAL</p><p class="muted">Klik “Riwayat” pada barang untuk melihat modal per supplier dan batch.</p>';
   el('receive-button').disabled = !state.suppliers.length || !receivingLocations.length || !state.products.length;
+  setRestockExtraPicker(false);
   syncRestockVisibility();
   setRestockWizardStep('document', { focus: false });
 }
@@ -6460,11 +6518,15 @@ el('sync-review-list').addEventListener('click', (event) => {
   if (button) decideSyncCommand(button.closest('[data-command-id]').dataset.commandId, button.dataset.action);
 });
 el('receive-button').addEventListener('click', receivePurchase);
+el('toggle-restock-extra-product').addEventListener('click',()=>setRestockExtraPicker(el('restock-extra-product-picker').classList.contains('hidden')));
 el('restock-product-search').addEventListener('input', (event) => renderPurchaseProductResults('restock', event.currentTarget.value));
 el('restock-product-search').addEventListener('keydown', (event) => handlePurchaseProductEnter('restock', event));
 el('search-restock-product').addEventListener('click', () => renderPurchaseProductResults('restock', el('restock-product-search').value));
 el('scan-restock-product').addEventListener('click', () => activatePurchaseScanner('restock'));
 el('camera-restock-product').addEventListener('click', () => openBarcodeCamera('restock'));
+el('restock-new-product-form').addEventListener('submit',saveRestockNewProduct);
+el('close-restock-new-product').addEventListener('click',()=>el('restock-new-product-dialog').close());
+el('cancel-restock-new-product').addEventListener('click',()=>el('restock-new-product-dialog').close());
 document.querySelectorAll('[data-restock-step-target]').forEach((button)=>button.addEventListener('click',()=>{
   setRestockWizardStep(button.dataset.restockStepTarget,{validate:true});
 }));
