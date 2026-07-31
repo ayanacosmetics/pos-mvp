@@ -20,6 +20,14 @@ test('Kasir, restok, dan stok memakai daftar produk memanjang dengan thumbnail',
   assert.match(css, /\.stock-management-row\{display:grid/);
 });
 
+test('etalase kasir mobile merapatkan harga tepat di bawah informasi barang',async()=>{
+  const css=await read('../apps/web/styles.css');
+  assert.match(css,/@media\(max-width:560px\)\{[\s\S]*#page-pos \.product-card-shell \.product-card\{[\s\S]*grid-template-columns:42px minmax\(0,1fr\);[\s\S]*grid-template-rows:auto auto;[\s\S]*row-gap:1px/);
+  assert.match(css,/#page-pos \.product-card-shell \.product-thumb\{[\s\S]*grid-row:1\/3/);
+  assert.match(css,/#page-pos \.product-list-meta\{[\s\S]*grid-column:2;[\s\S]*grid-row:2;[\s\S]*grid-template-columns:auto minmax\(0,1fr\)/);
+  assert.match(css,/#page-pos \.product-list-meta strong,[\s\S]*#page-pos \.product-list-meta small\{white-space:nowrap\}/);
+});
+
 test('foto produk dapat dipilih dari galeri dan gambar rusak kembali ke placeholder', async () => {
   const [html, script] = await Promise.all([
     read('../apps/web/index.html'),
