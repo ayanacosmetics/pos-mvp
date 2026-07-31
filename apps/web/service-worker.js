@@ -1,5 +1,5 @@
-const CACHE = 'nusa-pos-shell-v146';
-const SHELL = ['/', '/styles.css?v=146', '/app.js?v=146', '/vendor/xlsx.full.min.js', '/vendor/zxing-browser.min.js', '/auth-store.mjs', '/date.mjs', '/pricing.mjs', '/receipt.mjs', '/escpos-printer.mjs', '/offline-store.mjs', '/pos-units.mjs', '/payment-keypad.mjs', '/product-workbook.mjs', '/product-labels.mjs', '/kaspin-import.mjs', '/manifest.webmanifest', '/icon-192.svg', '/icon-512.svg'];
+const CACHE = 'nusa-pos-shell-v147';
+const SHELL = ['/', '/styles.css?v=147', '/app.js?v=147', '/vendor/xlsx.full.min.js', '/vendor/zxing-browser.min.js', '/auth-store.mjs', '/date.mjs', '/pricing.mjs', '/receipt.mjs', '/escpos-printer.mjs', '/offline-store.mjs', '/pos-units.mjs', '/payment-keypad.mjs', '/product-workbook.mjs', '/product-labels.mjs', '/kaspin-import.mjs', '/manifest.webmanifest', '/icon-192.svg', '/icon-512.svg'];
 self.addEventListener('install', (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener('activate', (event) => event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', (event) => {

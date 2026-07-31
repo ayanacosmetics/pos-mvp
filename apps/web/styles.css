@@ -1327,9 +1327,15 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
   display:flex;
   height:calc(100dvh - 74px);
   min-height:0;
+  padding:14px 32px 0;
   flex-direction:column;
   overflow:hidden;
 }
+#page-customers>.content-width>.page-title{margin-bottom:9px}
+#page-customers>.content-width>.page-title h1{font-size:30px}
+#page-customers>.content-width>.page-title .eyebrow{margin-bottom:2px;font-size:9px}
+#page-customers>.content-width>.page-title .muted{margin:0;font-size:12px;line-height:1.35}
+#page-customers>.content-width>.page-title .button-row{margin-top:0}
 #page-customers>.content-width>.page-title,
 #page-customers #customer-account-metrics,
 #page-customers #crm-metrics,
@@ -1337,10 +1343,10 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
 #page-customers #customer-account-metrics .metric,
 #page-customers #crm-metrics .metric{
   display:grid;
-  min-height:64px;
+  min-height:48px;
   align-content:center;
   gap:3px;
-  padding:9px 13px;
+  padding:7px 12px;
   border-right:1px solid var(--line);
 }
 #page-customers #customer-account-metrics .metric:last-child,
@@ -1349,9 +1355,9 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
 #page-customers #crm-metrics .metric span{font-size:9px}
 #page-customers #customer-account-metrics .metric strong,
 #page-customers #crm-metrics .metric strong{font-size:17px}
-#page-customers .customer-aging-buckets{gap:7px;margin-top:8px}
-#page-customers .customer-aging-buckets>div{min-height:58px;padding:8px 11px;border-radius:9px}
-#page-customers .customer-page-layout{display:grid;min-height:0;flex:1;margin-top:12px}
+#page-customers .customer-aging-buckets{gap:7px;margin-top:5px}
+#page-customers .customer-aging-buckets>div{min-height:46px;padding:6px 11px;border-radius:9px}
+#page-customers .customer-page-layout{display:grid;min-height:0;flex:1;margin-top:7px}
 #page-customers .customer-directory{display:flex;min-height:0;padding:0;overflow:hidden;flex-direction:column}
 #page-customers .customer-directory .settings-section-head{margin:0;padding:15px 18px;border-bottom:1px solid var(--line)}
 #page-customers .customer-directory .settings-section-head h2{margin:0;font-size:17px}
@@ -1373,11 +1379,42 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
 .customer-table-actions{display:flex;gap:5px}
 .customer-table-actions .button{min-height:29px;padding:5px 8px;border-radius:7px;font-size:9px}
 @media(max-width:760px){
-  #page-customers>.content-width{height:calc(100dvh - 64px);padding-bottom:16px}
+  #page-customers>.content-width{height:calc(100dvh - 64px);padding:12px 14px 10px}
   #page-customers #customer-account-metrics,
   #page-customers #crm-metrics{display:flex;overflow-x:auto}
   #page-customers #customer-account-metrics .metric,
   #page-customers #crm-metrics .metric{flex:0 0 132px;border-right:1px solid var(--line)}
   #page-customers .customer-directory .settings-section-head{display:grid;padding:13px}
   #page-customers .customer-directory .settings-section-head input{max-width:none}
+}
+
+/* POS: controls stay visible; only the merchandise list scrolls. */
+@media(min-width:761px){
+  #page-pos .catalog-pane{
+    display:flex;
+    min-height:0;
+    padding:14px clamp(22px,2.7vw,40px) 0;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  #page-pos .catalog-pane>.page-title,
+  #page-pos .catalog-pane>.search-row,
+  #page-pos .catalog-pane>.customer-service-note,
+  #page-pos .catalog-pane>.pos-product-tools{flex:0 0 auto}
+  #page-pos .catalog-pane>.page-title{margin-bottom:9px}
+  #page-pos .catalog-pane>.page-title h1{font-size:30px}
+  #page-pos .catalog-pane>.page-title .eyebrow{margin-bottom:2px;font-size:9px}
+  #page-pos .catalog-pane>.search-row{margin-bottom:9px}
+  #page-pos .catalog-pane>.customer-service-note{margin:0 0 8px}
+  #page-pos .catalog-pane>.pos-product-tools{margin:0 0 7px}
+  #page-pos #product-grid{
+    min-height:0;
+    flex:1;
+    align-content:start;
+    overflow-x:hidden;
+    overflow-y:auto;
+    padding:1px 7px 18px 1px;
+    overscroll-behavior:contain;
+    scrollbar-gutter:stable;
+  }
 }

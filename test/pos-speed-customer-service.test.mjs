@@ -95,3 +95,10 @@ test('desktop menjaga sidebar penuh dan daftar keranjang tetap dapat digulir',as
   assert.match(css,/\.cart-line-main>div>strong\{[^}]*font-size:11px/);
   assert.match(css,/\.cart-line-meta\{[^}]*font-size:9px/);
 });
+
+test('desktop menjaga kontrol kasir tetap terlihat dan hanya daftar barang yang digulir',async()=>{
+  const [,,,,css]=await files();
+  assert.match(css,/@media\(min-width:761px\)\{[\s\S]*#page-pos \.catalog-pane\{[\s\S]*display:flex[\s\S]*overflow:hidden/);
+  assert.match(css,/#page-pos \.catalog-pane>\.page-title,[\s\S]*#page-pos \.catalog-pane>\.pos-product-tools\{flex:0 0 auto\}/);
+  assert.match(css,/#page-pos #product-grid\{[\s\S]*min-height:0[\s\S]*flex:1[\s\S]*overflow-y:auto[\s\S]*scrollbar-gutter:stable/);
+});
