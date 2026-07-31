@@ -1526,7 +1526,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.46-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.47-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1580,26 +1580,23 @@ async function routeRequest(request, response, route) {
         const error=new Error('Email sudah terdaftar. Silakan masuk sebagai Owner.');error.status=409;throw error;
       }
       if(!existingUser.email_confirmed_at){
-        await supabase(`/auth/v1/admin/users/${existingUser.id}`,{
-          method:'PUT',token:config.service,body:{email_confirm:true}
+        await supabase('/auth/v1/resend',{
+          method:'POST',token:config.anon,body:{type:'signup',email}
+        });
+        return send(response,202,{
+          registered:true,requiresEmailConfirmation:true,email,
+          message:'Akun sudah dibuat tetapi email belum dikonfirmasi. Tautan konfirmasi terbaru telah dikirim ulang.'
         });
       }
-      try{recoveredAuth=await passwordAuth(email,password);}
-      catch{
-        const error=new Error('Email sudah pernah didaftarkan, tetapi kata sandinya berbeda. Gunakan Lupa kata sandi.');error.status=409;throw error;
-      }
-      const profile=await provisionOwnerWorkspace(recoveredAuth.user,{ownerName,businessName,email});
-      setRefreshCookie(response,recoveredAuth.refresh_token);
-      return send(response,201,{...authPayload(recoveredAuth,profile),registered:true,recovered:true});
+      const error=new Error('Email sudah pernah didaftarkan. Gunakan kata sandi sebelumnya atau pilih Lupa kata sandi.');error.status=409;throw error;
     }
-    let createdUser;
+    let auth;
     try {
-      const created=await supabase('/auth/v1/admin/users', {
+      auth=await supabase('/auth/v1/signup', {
         method: 'POST',
-        token: config.service,
-        body: {email,password,email_confirm:true,user_metadata:{display_name:ownerName,business_name:businessName,registration_source:'NUSA_OWNER_SELF_REGISTRATION'}}
+        token: config.anon,
+        body: {email,password,data:{display_name:ownerName,business_name:businessName,registration_source:'NUSA_OWNER_SELF_REGISTRATION'}}
       });
-      createdUser=created?.user??created;
     } catch (error) {
       if (/already (registered|been registered)|user.*exists/i.test(error.message)) {
         error.message = 'Email sudah terdaftar. Silakan masuk sebagai Owner.';
@@ -1607,21 +1604,16 @@ async function routeRequest(request, response, route) {
       }
       throw error;
     }
-    if(!createdUser?.id){
+    if(!auth.user?.id){
       const error=new Error('Identitas akun gagal dibuat. Coba kembali beberapa saat lagi.');error.status=502;throw error;
     }
-    let auth;
-    try {
-      auth=await passwordAuth(email,password);
-      await provisionOwnerWorkspace(createdUser,{ownerName,businessName,email});
-    } catch (error) {
-      await supabase(`/auth/v1/admin/users/${createdUser.id}`, {
-        method: 'DELETE',
-        token: config.service
-      }).catch(() => {});
-      throw error;
+    if(!auth.access_token||!auth.refresh_token){
+      return send(response,202,{
+        registered:true,requiresEmailConfirmation:true,email,
+        message:'Akun berhasil dibuat. Periksa email dan tekan Konfirmasi akun sebelum masuk sebagai Owner.'
+      });
     }
-    const profile=await profileFor(createdUser.id);
+    const profile=await provisionOwnerWorkspace(auth.user,{ownerName,businessName,email});
     setRefreshCookie(response,auth.refresh_token);
     return send(response,201,{...authPayload(auth,profile),registered:true});
   }

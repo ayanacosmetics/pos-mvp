@@ -67,23 +67,18 @@ async function withRegistrationEnvironment(fetchMock, operation) {
 test('pendaftaran Owner membuat Auth, workspace, lalu sesi aktif', async () => {
   const calls = [];
   let workspaceCreated=false;
-  let passwordAttempts=0;
   await withRegistrationEnvironment(async (url, options = {}) => {
     const target = String(url);
     calls.push({ target, options });
-    if (target.includes('/auth/v1/token?grant_type=password')) {
-      passwordAttempts+=1;
-      if(passwordAttempts===1)return responseOf({ message:'Invalid login credentials' },400);
-      return responseOf({
+    if (target.includes('/auth/v1/token?grant_type=password')) return responseOf({ message:'Invalid login credentials' },400);
+    if (target.endsWith('/auth/v1/signup')) return responseOf({
       access_token: 'access',
       refresh_token: 'refresh',
       expires_in: 3600,
       expires_at: 9999999999,
       user: { id: ids.user, identities: [{ id: 'identity' }] }
-      });
-    }
+    });
     if (target.includes('/auth/v1/admin/users?page=')) return responseOf({users:[]});
-    if (target.endsWith('/auth/v1/admin/users')) return responseOf({id:ids.user,email:'ayu@example.com'});
     if (target.endsWith('/rest/v1/rpc/register_owner_workspace_v1')) {
       workspaceCreated=true;
       return responseOf({ tenantId: ids.tenant });
@@ -108,36 +103,24 @@ test('pendaftaran Owner membuat Auth, workspace, lalu sesi aktif', async () => {
     assert.equal(result.body.registered, true);
     assert.match(result.headers['set-cookie'], /__Host-kasir_nusa_refresh=/);
   });
-  const signup = calls.find((call) => call.target.endsWith('/auth/v1/admin/users'));
+  const signup = calls.find((call) => call.target.endsWith('/auth/v1/signup'));
   assert.deepEqual(JSON.parse(signup.options.body), {
     email: 'ayu@example.com',
     password: 'rahasia-kuat',
-    email_confirm: true,
-    user_metadata: { display_name: 'Ayu Pemilik', business_name: 'Toko Ayu', registration_source:'NUSA_OWNER_SELF_REGISTRATION' }
+    data: { display_name: 'Ayu Pemilik', business_name: 'Toko Ayu', registration_source:'NUSA_OWNER_SELF_REGISTRATION' }
   });
   const workspace = calls.find((call) => call.target.endsWith('/rest/v1/rpc/register_owner_workspace_v1'));
   assert.equal(workspace.options.headers.authorization, 'Bearer service');
 });
 
-test('pendaftaran memulihkan identitas lama yang belum terkonfirmasi', async () => {
-  let passwordAttempts=0,workspaceCreated=false,confirmed=false;
-  await withRegistrationEnvironment(async (url) => {
+test('pendaftaran mengirim ulang konfirmasi untuk identitas lama yang belum aktif', async () => {
+  let resent=false;
+  await withRegistrationEnvironment(async (url,options={}) => {
     const target = String(url);
-    if (target.includes('/auth/v1/token?grant_type=password')) {
-      passwordAttempts+=1;
-      if(passwordAttempts===1)return responseOf({ message:'Email not confirmed' },400);
-      return responseOf({access_token:'access',refresh_token:'refresh',expires_in:3600,user:{id:ids.user}});
-    }
+    if (target.includes('/auth/v1/token?grant_type=password')) return responseOf({ message:'Email not confirmed' },400);
     if(target.includes('/auth/v1/admin/users?page='))return responseOf({users:[{id:ids.user,email:'ayu@example.com',email_confirmed_at:null}]});
-    if(target.endsWith(`/auth/v1/admin/users/${ids.user}`)){confirmed=true;return responseOf({id:ids.user,email_confirmed_at:new Date().toISOString()});}
-    if (target.endsWith('/rest/v1/rpc/register_owner_workspace_v1')) {workspaceCreated=true;return responseOf({});}
-    if (target.includes('/rest/v1/profiles?')) return responseOf(workspaceCreated?[{
-      user_id: ids.user,
-      tenant_id: ids.tenant,
-      display_name: 'Ayu',
-      role: 'OWNER',
-      active: true
-    }]:[]);
+    if(target.endsWith('/auth/v1/resend')){resent=true;assert.deepEqual(JSON.parse(options.body),{type:'signup',email:'ayu@example.com'});return responseOf({});}
+    if (target.includes('/rest/v1/profiles?')) return responseOf([]);
     return responseOf({}, 500);
   }, async () => {
     const result = await callRegistration({
@@ -146,11 +129,28 @@ test('pendaftaran memulihkan identitas lama yang belum terkonfirmasi', async () 
       email: 'ayu@example.com',
       password: 'rahasia-kuat'
     });
-    assert.equal(result.status, 201);
-    assert.equal(result.body.recovered, true);
-    assert.equal(result.body.user.role, 'OWNER');
+    assert.equal(result.status, 202);
+    assert.equal(result.body.requiresEmailConfirmation, true);
+    assert.equal(result.body.token, undefined);
   });
-  assert.equal(confirmed,true);
+  assert.equal(resent,true);
+});
+
+test('pendaftaran baru menunggu konfirmasi email sebelum membuat workspace',async()=>{
+  const calls=[];
+  await withRegistrationEnvironment(async(url)=>{
+    const target=String(url);calls.push(target);
+    if(target.includes('/auth/v1/token?grant_type=password'))return responseOf({message:'Invalid login credentials'},400);
+    if(target.includes('/auth/v1/admin/users?page='))return responseOf({users:[]});
+    if(target.endsWith('/auth/v1/signup'))return responseOf({user:{id:ids.user,email:'ayu@example.com',identities:[{id:'identity'}]}});
+    return responseOf({message:`Mock belum menangani ${target}`},500);
+  },async()=>{
+    const result=await callRegistration({ownerName:'Ayu',businessName:'Toko Ayu',email:'ayu@example.com',password:'rahasia-kuat'});
+    assert.equal(result.status,202);
+    assert.equal(result.body.requiresEmailConfirmation,true);
+    assert.equal(result.body.token,undefined);
+  });
+  assert.equal(calls.some((target)=>target.includes('register_owner_workspace_v1')),false);
 });
 
 test('pendaftaran menyelesaikan akun Auth lama yang belum mempunyai workspace',async()=>{
