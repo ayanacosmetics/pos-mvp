@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=147">
+  <link rel="stylesheet" href="/styles.css?v=148">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -177,7 +177,7 @@
           <button data-page="settings-data-reset" data-target-page="settings" data-settings-view="reset" class="feature-nav-item" data-permission="identity.manage"><span>Reset & pulihkan data</span><small>Hapus atau kembalikan backup</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Daftar tetap & luas · v2.16.36</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Semua barang tampil · v2.16.37</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -198,7 +198,7 @@
             </div>
             <div id="customer-service-note" class="customer-service-note hidden"></div>
             <div class="pos-product-tools"><div id="pos-category-filters" class="pos-category-filters" aria-label="Filter kategori"></div><button id="favorite-filter" class="button secondary favorite-filter" type="button" aria-pressed="false">★ Favorit</button></div>
-            <div id="product-grid" class="product-grid"></div>
+            <div class="pos-product-scroll"><div id="product-grid" class="product-grid"></div></div>
           </div>
           <aside class="cart-pane" aria-label="Keranjang transaksi">
             <button id="mobile-cart-back" class="mobile-cart-back" type="button" aria-label="Kembali ke daftar barang"><span aria-hidden="true">←</span> Pilih barang</button>
@@ -1033,6 +1033,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=147"></script>
+  <script type="module" src="/app.js?v=148"></script>
 </body>
 </html>

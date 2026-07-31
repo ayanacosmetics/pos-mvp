@@ -11,7 +11,7 @@ import { barcodeModuleCount, barcodeSvg, labelSize, normalizeCode128Text } from 
 import { parseKaspinProductWorkbook, parseKaspinProductExtensionWorkbook, parseKaspinFifoWorkbooks, parseKaspinSalesWorkbooks, parseKaspinCustomerWorkbook } from './kaspin-import.mjs';
 
 const storedAuth = loadAuth();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, dataResetScopesSignature:'', dataRestoreSnapshot:null,dataRestoreOtpReady:false, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, posProductLimit:100, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productAdminPage:1, selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', importSourceReport:null, productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, dataResetScopesSignature:'', dataRestoreSnapshot:null,dataRestoreOtpReady:false, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productAdminPage:1, selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', importSourceReport:null, productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -514,16 +514,14 @@ function renderProducts(query = '') {
     && (!state.posCategoryFilter || product.category===state.posCategoryFilter)
     && (!state.favoriteOnly || favorites.has(product.id))
   );
-  const visible=list.slice(0,state.posProductLimit);
   renderPosCategoryFilters();
   el('favorite-filter').setAttribute('aria-pressed',String(state.favoriteOnly));
-  el('product-grid').innerHTML = visible.map((product) => {
+  el('product-grid').innerHTML = list.map((product) => {
     const unit = sortedProductUnits(product)[0];
     const rule = product.priceRules.find((item) => item.customerGroupId === 'retail') ?? product.priceRules[0];
     const empty = Number(product.stockBase ?? 0) <= 0;
     return `<article class="product-card-shell"><button class="product-card ${empty ? 'out-of-stock' : ''}" data-product="${product.id}" data-unit="${unit.id}" ${empty ? 'disabled' : ''}>${productThumbnail(product)}<span class="product-list-copy"><span class="category">${escapeHtml(product.category)}</span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)}</small></span><span class="product-list-meta"><strong>${money.format(rule?.unitPriceBase ?? 0)}</strong><small class="${empty?'stock-empty':''}">${empty ? 'STOK KOSONG' : `Stok ${Number(product.stockBase).toLocaleString('id-ID')} pcs`}</small></span></button><button class="favorite-product ${favorites.has(product.id)?'active':''}" type="button" data-favorite-product="${product.id}" aria-label="${favorites.has(product.id)?'Hapus dari':'Tambahkan ke'} favorit" aria-pressed="${favorites.has(product.id)}">★</button></article>`;
   }).join('') || '<div class="empty-state compact">Tidak ada produk untuk filter ini.</div>';
-  if(list.length>visible.length)el('product-grid').insertAdjacentHTML('beforeend',`<div class="catalog-load-more"><small>Menampilkan ${visible.length.toLocaleString('id-ID')} dari ${list.length.toLocaleString('id-ID')} barang</small><button class="button secondary" type="button" data-product-load-more>Tampilkan 100 berikutnya</button></div>`);
   bindProductImageFallbacks(el('product-grid'));
   document.querySelectorAll('.product-card').forEach((button) => button.addEventListener('click', () => choosePosProduct(button.dataset.product)));
   document.querySelectorAll('.favorite-product').forEach((button)=>button.addEventListener('click',()=>{
@@ -6257,7 +6255,7 @@ if (typeof mobileSidebarMedia.addEventListener === 'function') mobileSidebarMedi
 else mobileSidebarMedia.addListener(syncSidebarMode);
 syncSidebarMode();
 el('current-outlet-select').addEventListener('change', switchActiveOutlet);
-el('product-search').addEventListener('input', (event) => {state.posProductLimit=100;renderProducts(event.target.value);});
+el('product-search').addEventListener('input', (event) => renderProducts(event.target.value));
 el('product-search').addEventListener('keydown', (event) => {
   if (event.key !== 'Enter') return;
   event.preventDefault();
@@ -6267,9 +6265,8 @@ el('product-search').addEventListener('keydown', (event) => {
   else if(/^[A-Za-z0-9]{10}$/.test(value))tryScannedVoucher(value);
   event.target.value='';
 });
-el('pos-category-filters').addEventListener('click',(event)=>{const button=event.target.closest('[data-category]');if(!button)return;state.posCategoryFilter=button.dataset.category;state.posProductLimit=100;renderProducts(el('product-search').value);});
-el('favorite-filter').addEventListener('click',()=>{state.favoriteOnly=!state.favoriteOnly;state.posProductLimit=100;renderProducts(el('product-search').value);});
-el('product-grid').addEventListener('click',(event)=>{if(!event.target.closest('[data-product-load-more]'))return;state.posProductLimit+=100;renderProducts(el('product-search').value);});
+el('pos-category-filters').addEventListener('click',(event)=>{const button=event.target.closest('[data-category]');if(!button)return;state.posCategoryFilter=button.dataset.category;renderProducts(el('product-search').value);});
+el('favorite-filter').addEventListener('click',()=>{state.favoriteOnly=!state.favoriteOnly;renderProducts(el('product-search').value);});
 el('scan-camera-pos').addEventListener('click', () => openBarcodeCamera('pos'));
 el('close-barcode-camera').addEventListener('click', stopBarcodeCamera);
 el('cancel-barcode-camera').addEventListener('click', stopBarcodeCamera);

@@ -97,8 +97,11 @@ test('desktop menjaga sidebar penuh dan daftar keranjang tetap dapat digulir',as
 });
 
 test('desktop menjaga kontrol kasir tetap terlihat dan hanya daftar barang yang digulir',async()=>{
-  const [,,,,css]=await files();
+  const [,,html,script,css]=await files();
+  assert.match(html,/class="pos-product-scroll"><div id="product-grid"/);
   assert.match(css,/@media\(min-width:761px\)\{[\s\S]*#page-pos \.catalog-pane\{[\s\S]*display:flex[\s\S]*overflow:hidden/);
   assert.match(css,/#page-pos \.catalog-pane>\.page-title,[\s\S]*#page-pos \.catalog-pane>\.pos-product-tools\{flex:0 0 auto\}/);
-  assert.match(css,/#page-pos #product-grid\{[\s\S]*min-height:0[\s\S]*flex:1[\s\S]*overflow-y:auto[\s\S]*scrollbar-gutter:stable/);
+  assert.match(css,/#page-pos \.pos-product-scroll\{[\s\S]*min-height:0[\s\S]*flex:1[\s\S]*overflow-y:auto[\s\S]*scrollbar-gutter:stable/);
+  assert.doesNotMatch(script,/posProductLimit|data-product-load-more/);
+  assert.match(script,/innerHTML = list\.map\(\(product\)/);
 });
