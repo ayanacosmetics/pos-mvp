@@ -720,11 +720,12 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
     Array.from({length:Math.ceil(ids.length/80)},(_,index)=>ids.slice(index*80,index*80+80))
       .map((chunk)=>rest(table,`tenant_id=eq.${context.tenantId}&${column}=${inFilter(chunk)}&${tail}`))
   )).flat();
-  const [items,payments,customers,cashiers] = await Promise.all([
+  const [items,payments,customers,cashiers,pointEntries] = await Promise.all([
     byChunks('sale_items','sale_id',saleIds,'select=*&order=id'),
     byChunks('payments','sale_id',saleIds,'select=*&order=created_at'),
-    customerIds.length ? byChunks('customers','id',customerIds,'select=id,name,phone,notes,group_id') : [],
-    cashierIds.length ? byChunks('profiles','user_id',cashierIds,'select=user_id,display_name') : []
+    customerIds.length ? byChunks('customers','id',customerIds,'select=id,name,phone,notes,group_id,loyalty_points,tier_id') : [],
+    cashierIds.length ? byChunks('profiles','user_id',cashierIds,'select=user_id,display_name') : [],
+    byChunks('customer_point_entries','sale_id',saleIds,'select=sale_id,points,balance_after,entry_type,occurred_at&order=occurred_at')
   ]);
   let customerReturns=[];let customerReturnItems=[];
   try{
@@ -745,6 +746,7 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
   const normalized = String(query ?? '').trim().toLowerCase();
   return sales.map((sale) => {
     const customer = customers.find((item) => item.id === sale.customer_id) ?? null;
+    const pointEntry=pointEntries.find((item)=>item.sale_id===sale.id&&item.entry_type==='EARN');
     const cashier = sale.source_cashier || cashiers.find((item) => item.user_id === sale.cashier_id)?.display_name || 'Kasir';
     const saleReturns=customerReturns.filter((returned)=>returned.sale_id===sale.id);
     const saleReturnIds=new Set(saleReturns.map((returned)=>returned.id));
@@ -792,6 +794,9 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
       id:sale.id,receiptNo:sale.receipt_no,status:sale.status,occurredAt:sale.occurred_at,cashierId:sale.cashier_id,
       cashier,outletName:context.outlets.find((outlet)=>outlet.id===sale.outlet_id)?.name??context.outlet.name,customer,
       customerGroupId:sale.customer_group_id??customer?.group_id??'retail',notes:sale.notes ?? '',
+      sourceSystem:sale.source_system??'NUSA',pointsEarned:Number(sale.points_earned??pointEntry?.points??0),
+      pointsBalance:pointEntry?Number(pointEntry.balance_after):customer?Number(customer.loyalty_points??0):null,
+      pointsBalanceIsCurrent:!pointEntry&&Boolean(customer),
       creditAmount:Number(sale.credit_amount??0),paidCreditAmount:Number(sale.paid_credit_amount??0),
       voidReason:sale.void_reason ?? '',voidedAt:sale.voided_at ?? null,
       returnStatus,returnTotal,returnCost,netTotal,netCost,grossProfit:netTotal-netCost,
@@ -1474,7 +1479,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.30-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.31-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {

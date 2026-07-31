@@ -191,7 +191,13 @@ export function buildEscPosReceipt(receipt, payments = [], settings = {}, contex
     bytes.push(...lineBytes(separator));
     for (const row of wrap(`Catatan: ${receipt.notes}`, width)) bytes.push(...lineBytes(row));
   }
-  if (layout.showLoyaltyPoints&&Number(receipt.pointsEarned) > 0) bytes.push(...lineBytes(`Poin +${Number(receipt.pointsEarned)} | Saldo ${Number(receipt.pointsBalance || 0)}`));
+  if(layout.showLoyaltyPoints&&customer&&receipt.pointsBalance!=null){
+    const earned=Number(receipt.pointsEarned??0),balance=Number(receipt.pointsBalance??0);
+    const pointText=earned>0
+      ? `Poin +${earned} | Saldo ${balance}`
+      : `${receipt.pointsBalanceIsCurrent?'Saldo poin saat ini':'Saldo setelah transaksi'} ${balance}${receipt.sourceSystem==='KASPIN'?' (Kaspin)':''}`;
+    for(const row of wrap(pointText,width))bytes.push(...lineBytes(row));
+  }
   if(receipt.issuedVoucher){
     const voucher=receipt.issuedVoucher;
     bytes.push(...lineBytes(separator),ESC,0x61,0x01,ESC,0x45,0x01,...lineBytes('VOUCHER BELANJA BERIKUTNYA'),ESC,0x45,0x00);

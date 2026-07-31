@@ -24,6 +24,7 @@ test('pencarian struk menghitung jumlah retur tersisa dan riwayat refund',async(
     if(target.includes('/rest/v1/customer_returns?'))return reply([{id:ids.returned,sale_id:ids.sale,return_no:'RTR-00001',reason:'Salah warna',total:'25000',refund_method:'CASH',refund_reference:null,occurred_at:'2026-07-23T11:00:00+08:00'}]);
     if(target.includes('/rest/v1/customer_return_items?'))return reply([{return_id:ids.returned,sale_item_id:ids.line,product_id:ids.product,base_qty:'1',unit_cost:'15000',line_total:'25000',item_condition:'SALEABLE',restockable:true}]);
     if(target.includes('/rest/v1/customer_refunds?'))return reply([{return_id:ids.returned,amount:'25000',method:'CASH',status:'COMPLETED'}]);
+    if(target.includes('/rest/v1/customer_point_entries?'))return reply([]);
     if(target.includes('/rest/v1/payments?'))return reply([]);
     return reply({message:`Mock belum menangani ${target}`},500);
   };
