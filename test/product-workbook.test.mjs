@@ -74,5 +74,15 @@ test('file edit barang menempatkan tipe barang dekat ujung kanan dan menjelaskan
   assert.deepEqual(Array.from(matrix.slice(1).map((row)=>row.at(-2))),['Default','Multisatuan','Varian']);
   const guide=XLSX.utils.sheet_to_json(workbook.Sheets.Panduan,{header:1,defval:''});
   assert.equal(guide.length-1,matrix[0].length);
-  assert.match(workbook.Sheets.Barang.O1.c[0].t,/Default berarti tanpa varian/);
+  const typeColumn=matrix[0].indexOf('tipe_barang');
+  assert.match(workbook.Sheets.Barang[`${String.fromCharCode(65+typeColumn)}1`].c[0].t,/Default berarti tanpa varian/);
+});
+
+test('template dan export barang memakai aturan stok 0 atau 1',async()=>{
+  const XLSX=await sheetJs(),template=createTemplateWorkbook(XLSX,'PRODUCTS');
+  const templateRows=XLSX.utils.sheet_to_json(template.Sheets.Barang,{header:1,defval:''});
+  assert.equal(templateRows[0].includes('aturan_stok'),true);
+  assert.equal(templateRows[1][templateRows[0].indexOf('aturan_stok')],1);
+  const rows=productExportRows([{sku:'JASA',name:'Jasa',category:'Jasa',active:true,trackStock:false,units:[{name:'unit',factor:1}],priceRules:[{customerGroupId:'retail',minBaseQty:1,unitPriceBase:1000}]}]);
+  assert.equal(rows[0].aturan_stok,0);assert.equal(rows[0].stok_saat_ini,'TANPA STOK');
 });

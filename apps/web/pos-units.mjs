@@ -21,6 +21,7 @@ export function productBaseQuantity(cart, product, excludeIndex = -1) {
 
 export function unitFitsStock({ cart, product, unit, qty = 1, excludeIndex = -1 }) {
   if (!product || !unit) return false;
+  if (product.trackStock === false) return true;
   return productBaseQuantity(cart, product, excludeIndex)
     + Number(qty) * Number(unit.factor ?? 0)
     <= Number(product.stockBase ?? 0);

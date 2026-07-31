@@ -1,8 +1,8 @@
 export const workbookTemplates={
   PRODUCTS:{
     file:'template-barang-kasir-nusa.xlsx',sheet:'Barang',
-    headers:['no_barang_sku','nama_barang','kategori','merek','satuan_dasar','barcode_satuan_dasar','harga_umum','stok_awal','modal_per_satuan_dasar','nomor_batch','tanggal_exp','stok_minimum','pantau_exp'],
-    examples:[['','Lip Tint Rose','Lip Tint','Nusa Beauty','pcs','899000000001',25000,24,15000,'BATCH-A1','2027-12-31',5,'YA']],
+    headers:['no_barang_sku','nama_barang','kategori','merek','satuan_dasar','barcode_satuan_dasar','harga_umum','aturan_stok','stok_awal','modal_per_satuan_dasar','nomor_batch','tanggal_exp','stok_minimum','pantau_exp'],
+    examples:[['','Lip Tint Rose','Lip Tint','Nusa Beauty','pcs','899000000001',25000,1,24,15000,'BATCH-A1','2027-12-31',5,'YA']],
     notes:[
       ['no_barang_sku','Opsional untuk baru / wajib saat edit','Nomor unik barang. Boleh kosong untuk produk baru agar dibuat otomatis; jangan diubah saat mengedit produk hasil export.','Teks; pertahankan nol di depan','KOS-001'],
       ['nama_barang','Wajib','Nama barang yang tampil di kasir dan struk.','Teks, maksimal 120 karakter','Lip Tint Rose'],
@@ -11,6 +11,7 @@ export const workbookTemplates={
       ['satuan_dasar','Wajib','Satuan acuan stok terkecil. Mengisi satuan dasar tidak menjadikan barang Multisatuan.','Teks, misalnya pcs/botol/sachet','pcs'],
       ['barcode_satuan_dasar','Opsional','Barcode satuan dasar. Simpan sebagai teks agar angka nol di depan tidak hilang.','Teks; harus unik bila diisi','899000000001'],
       ['harga_umum','Wajib','Harga jual umum untuk satu satuan dasar.','Angka lebih dari 0, tanpa Rp/titik ribuan','25000'],
+      ['aturan_stok','Wajib','Gunakan 0 untuk barang/jasa tanpa stok dan 1 untuk barang yang memakai stok.','Hanya angka 0 atau 1','1'],
       ['stok_awal','Opsional; produk baru saja','Saldo pembukaan. Untuk produk lama gunakan Manajemen stok, stok opname, atau penerimaan restok.','Angka 0 atau lebih','24'],
       ['modal_per_satuan_dasar','Wajib jika stok_awal > 0','Modal per satuan dasar untuk batch pembukaan. Tidak dipakai untuk menimpa modal produk lama.','Angka 0 atau lebih, tanpa Rp','15000'],
       ['nomor_batch','Opsional','Nomor batch untuk stok pembukaan. Jika kosong, sistem dapat membuat nomor otomatis.','Teks','BATCH-A1'],
@@ -107,7 +108,7 @@ export function productExportRows(products,filters={}){
     const base=units.find((unit)=>Number(unit.factor)===1)??units[0]??{};
     const hasVariant=Boolean(product.variantGroup||product.variantName),hasMultipleUnits=units.length>1;
     const productType=hasVariant&&hasMultipleUnits?'Varian + Multisatuan':hasVariant?'Varian':hasMultipleUnits?'Multisatuan':'Default';
-    return {no_barang_sku:product.sku,nama_barang:product.name,kategori:product.category,merek:product.brand??'',satuan_dasar:base.name??'pcs',barcode_satuan_dasar:base.barcode??'',harga_umum:retailPrice(product),stok_awal:'',modal_per_satuan_dasar:'',nomor_batch:'',tanggal_exp:'',stok_minimum:Number(product.minimumStock??0),pantau_exp:product.trackExpiry?'YA':'TIDAK',stok_saat_ini:Number(product.stockBase??0),tipe_barang:productType,status_produk:product.active?'AKTIF':'NONAKTIF'};
+    return {no_barang_sku:product.sku,nama_barang:product.name,kategori:product.category,merek:product.brand??'',satuan_dasar:base.name??'pcs',barcode_satuan_dasar:base.barcode??'',harga_umum:retailPrice(product),aturan_stok:product.trackStock===false?0:1,stok_awal:'',modal_per_satuan_dasar:'',nomor_batch:'',tanggal_exp:'',stok_minimum:Number(product.minimumStock??0),pantau_exp:product.trackExpiry?'YA':'TIDAK',stok_saat_ini:product.trackStock===false?'TANPA STOK':Number(product.stockBase??0),tipe_barang:productType,status_produk:product.active?'AKTIF':'NONAKTIF'};
   });
   const sorters={SKU_ASC:(a,b)=>compare(a.no_barang_sku,b.no_barang_sku),SKU_DESC:(a,b)=>compare(b.no_barang_sku,a.no_barang_sku),NAME_ASC:(a,b)=>compare(a.nama_barang,b.nama_barang),BARCODE_ASC:(a,b)=>compare(a.barcode_satuan_dasar,b.barcode_satuan_dasar),STOCK_ASC:(a,b)=>a.stok_saat_ini-b.stok_saat_ini,STOCK_DESC:(a,b)=>b.stok_saat_ini-a.stok_saat_ini};
   return rows.sort(sorters[filters.sort]??sorters.SKU_ASC);

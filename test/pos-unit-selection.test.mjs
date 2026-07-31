@@ -42,6 +42,11 @@ test('pergantian satuan menghitung stok dengan mengecualikan baris yang sedang d
   assert.equal(unitFitsStock({ cart, product, unit: product.units[0], qty: 1, excludeIndex: 0 }), true);
 });
 
+test('produk tanpa stok tidak dibatasi saldo persediaan',()=>{
+  const unlimited={...product,trackStock:false,stockBase:0};
+  assert.equal(unitFitsStock({cart:[],product:unlimited,unit:unlimited.units[0],qty:999}),true);
+});
+
 test('UI menyediakan pemilih satuan untuk kartu, scan, keranjang, dan mode offline', async () => {
   const [html, app, css, worker] = await Promise.all([
     readFile(new URL('../apps/web/index.html', import.meta.url), 'utf8'),

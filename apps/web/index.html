@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=159">
+  <link rel="stylesheet" href="/styles.css?v=160">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -197,7 +197,7 @@
           <button data-page="settings-data-reset" data-target-page="settings" data-settings-view="reset" class="feature-nav-item" data-permission="identity.manage"><span>Reset & pulihkan data</span><small>Hapus atau kembalikan backup</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Etalase mobile rapat · v2.16.48</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Aturan stok fleksibel · v2.16.49</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -1006,7 +1006,7 @@
   <dialog id="product-dialog"><form id="product-form" class="dialog-card product-editor">
     <div class="comparison-heading"><div><p id="product-dialog-eyebrow" class="eyebrow">PRODUK BARU</p><h2 id="product-dialog-title">Tambah produk</h2><p class="muted">Setiap varian mempunyai SKU, barcode, harga, dan stok sendiri.</p></div><button id="close-product-dialog" class="icon-button" type="button">×</button></div>
     <input id="edit-product-id" type="hidden">
-    <section class="product-editor-section"><p class="eyebrow">IDENTITAS BARANG</p><div class="form-grid compact"><label>SKU<input id="new-sku" required></label><label>Nama produk<input id="new-name" required></label><label>Kategori<input id="new-category" list="product-category-options" required></label><label>Merek<input id="new-brand" list="product-brand-options"></label><div class="product-image-field product-photo-editor"><div id="new-image-preview" class="product-photo-preview"><span>Foto produk</span></div><div><label class="media-picker">Pilih dari galeri atau kamera<input id="new-image-file" type="file" accept="image/png,image/jpeg,image/webp"><small>Foto otomatis diperkecil sebelum diunggah.</small></label><button id="remove-product-image" class="link-button" type="button">Hapus foto</button><details class="media-url-option"><summary>Gunakan URL gambar (opsional)</summary><label>URL foto<input id="new-image-url" type="url" maxlength="2000" placeholder="https://..."></label></details></div></div><label>Kelompok varian<input id="new-variant-group" placeholder="Contoh: Lip Tint Velvet"></label><label>Nama varian<input id="new-variant-name" placeholder="Contoh: Rose 01"></label><label>Batas stok minimum<input id="new-min-stock" type="number" min="0" value="0"></label><label class="switch-row editor-switch"><input id="new-track-expiry" type="checkbox"><span><strong>Pantau batch & EXP</strong><small>Aktifkan untuk kosmetik atau barang kedaluwarsa.</small></span></label></div><datalist id="product-category-options"></datalist><datalist id="product-brand-options"></datalist></section>
+    <section class="product-editor-section"><p class="eyebrow">IDENTITAS BARANG</p><div class="form-grid compact"><label>SKU<input id="new-sku" required></label><label>Nama produk<input id="new-name" required></label><label>Kategori<input id="new-category" list="product-category-options" required></label><label>Merek<input id="new-brand" list="product-brand-options"></label><div class="product-image-field product-photo-editor"><div id="new-image-preview" class="product-photo-preview"><span>Foto produk</span></div><div><label class="media-picker">Pilih dari galeri atau kamera<input id="new-image-file" type="file" accept="image/png,image/jpeg,image/webp"><small>Foto otomatis diperkecil sebelum diunggah.</small></label><button id="remove-product-image" class="link-button" type="button">Hapus foto</button><details class="media-url-option"><summary>Gunakan URL gambar (opsional)</summary><label>URL foto<input id="new-image-url" type="url" maxlength="2000" placeholder="https://..."></label></details></div></div><label>Kelompok varian<input id="new-variant-group" placeholder="Contoh: Lip Tint Velvet"></label><label>Nama varian<input id="new-variant-name" placeholder="Contoh: Rose 01"></label><label>Aturan stok<select id="new-track-stock"><option value="1">Pakai stok</option><option value="0">Tanpa stok</option></select><small>Tanpa stok tetap dapat dijual saat saldo nol.</small></label><label>Batas stok minimum<input id="new-min-stock" type="number" min="0" value="0"></label><label class="switch-row editor-switch"><input id="new-track-expiry" type="checkbox"><span><strong>Pantau batch & EXP</strong><small>Aktifkan untuk kosmetik atau barang kedaluwarsa.</small></span></label></div><datalist id="product-category-options"></datalist><datalist id="product-brand-options"></datalist></section>
     <section class="product-editor-section"><div class="product-editor-section-head"><div><p class="eyebrow">SATUAN & BARCODE</p><strong>Pcs, lusin, karton, atau satuan lainnya</strong></div><button id="add-product-unit" type="button" class="button secondary">Tambah satuan</button></div><div id="product-units-editor"></div><small class="muted">Harus ada tepat satu satuan dasar dengan isi 1.</small></section>
     <section class="product-editor-section"><p class="eyebrow">HARGA JUAL</p><div id="product-price-tiers" class="product-price-tiers"></div><small>Setiap tipe dimulai dari minimal 1 pcs. Tambahkan tingkat 3, 6, 12, atau jumlah lain bila harganya berubah. Harga tipe pelanggan yang kosong akan memakai harga Umum.</small></section>
     <p id="product-error" class="error"></p><div class="button-row"><button id="cancel-product" type="button" class="button secondary">Batal</button><button id="save-product-button" type="submit" class="button primary">Simpan produk</button></div>
@@ -1060,6 +1060,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=159"></script>
+  <script type="module" src="/app.js?v=160"></script>
 </body>
 </html>

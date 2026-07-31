@@ -353,7 +353,7 @@ async function loadCatalog(tenantId, locationId, outletId = null) {
   const overridesByProduct=groupRows(overrides,(item)=>item.product_id);
   return products.map((product) => ({
     id: product.id, sku: product.sku, name: product.name, category: product.category, brand: product.brand, imageUrl:product.image_url, active: product.active,
-    variantGroup: product.variant_group, variantName: product.variant_name, minimumStock: Number(product.minimum_stock ?? 0), trackExpiry: Boolean(product.track_expiry),
+    variantGroup: product.variant_group, variantName: product.variant_name, minimumStock: Number(product.minimum_stock ?? 0), trackExpiry: Boolean(product.track_expiry), trackStock: product.track_stock !== false,
     stockBase: Number(balancesByProduct.get(product.id)?.quantity ?? 0),
     units: (unitsByProduct.get(product.id)??[]).map((unit) => ({ id: unit.id, name: unit.name, factor: Number(unit.factor_to_base), barcode: unit.barcode })).sort((a,b)=>a.factor-b.factor),
     priceRules: [
@@ -421,7 +421,7 @@ async function loadManagedProducts(tenantId,{includeCost=false}={}) {
       : Math.max(0,...productBalances.map((balance)=>Number(balance.avg_cost??0)));
     return {
       id:product.id,sku:product.sku,name:product.name,category:product.category,brand:product.brand,imageUrl:product.image_url,active:product.active,
-      variantGroup:product.variant_group,variantName:product.variant_name,minimumStock:Number(product.minimum_stock??0),trackExpiry:Boolean(product.track_expiry),
+      variantGroup:product.variant_group,variantName:product.variant_name,minimumStock:Number(product.minimum_stock??0),trackExpiry:Boolean(product.track_expiry),trackStock:product.track_stock!==false,
       stockBase,...(includeCost?{averageCost:Math.round(weightedCost*100)/100}:{}),
       units:(unitsByProduct.get(product.id)??[]).map((unit)=>({id:unit.id,name:unit.name,factor:Number(unit.factor_to_base),barcode:unit.barcode})).sort((a,b)=>a.factor-b.factor),
       priceRules:(rulesByProduct.get(product.id)??[]).map((rule)=>({id:rule.id,customerGroupId:rule.customer_group_id,minBaseQty:Number(rule.min_base_qty),unitPriceBase:Number(rule.unit_price_base),priority:rule.priority}))
@@ -446,11 +446,12 @@ function normalizeProductInput(input,id=null) {
     category:String(input.category??'').trim()||'Lainnya',brand:String(input.brand??'').trim(),
     imageUrl:String(input.imageUrl??'').trim(),
     variantGroup:String(input.variantGroup??'').trim(),variantName:String(input.variantName??'').trim(),
-    minimumStock:Number(input.minimumStock??0),trackExpiry:Boolean(input.trackExpiry),
+    minimumStock:Number(input.minimumStock??0),trackExpiry:Boolean(input.trackExpiry),trackStock:input.trackStock!==false,
     retailPrice:Number(retailPrice),wholesalePrice:Number(prices.find((price)=>price.customerGroupId==='wholesale')?.unitPriceBase??0),
     prices,
     units:units.map((unit)=>({id:unit.id??null,name:String(unit.name??'').trim(),factor:Number(unit.factor),barcode:String(unit.barcode??'').trim()}))
   };
+  if(!normalized.trackStock){normalized.minimumStock=0;normalized.trackExpiry=false;}
   if(!normalized.sku||!normalized.name)throw Object.assign(new Error('SKU dan nama produk wajib diisi'),{status:400});
   if(!(normalized.retailPrice>0))throw Object.assign(new Error('Harga umum harus lebih dari nol'),{status:400});
   const priceTiers=new Set();
@@ -1054,6 +1055,13 @@ function importBoolean(value){
   return null;
 }
 
+function importStockFlag(value){
+  if(value===undefined)return true;
+  if(value===true||value===1||String(value).trim()==='1')return true;
+  if(value===false||value===0||String(value).trim()==='0')return false;
+  return null;
+}
+
 function normalizeImportRows(kind, rawRows) {
   const rows = [], errors = [], seenCodes = new Set(), seenBarcodes = new Set();
   const addError = (row, field, message) => errors.push({ row, field, message });
@@ -1073,7 +1081,7 @@ function normalizeImportRows(kind, rawRows) {
         bulkBarcode: String(raw.bulkBarcode ?? '').trim(), openingQty: importNumber(raw.openingQty),
         openingCost: importNumber(raw.openingCost), batchNo: String(raw.batchNo ?? '').trim(),
         expiresOn: String(raw.expiresOn ?? '').trim(), minimumStock: importNumber(raw.minimumStock) ?? 0,
-        trackExpiry: importBoolean(raw.trackExpiry)
+        trackExpiry: importBoolean(raw.trackExpiry), trackStock: importStockFlag(raw.trackStock)
       };
       if (!row.name) addError(rowNo, 'name', 'Nama produk wajib diisi');
       if (!(row.retailPrice > 0)) addError(rowNo, 'retailPrice', 'Harga ecer harus lebih dari nol');
@@ -1091,6 +1099,8 @@ function normalizeImportRows(kind, rawRows) {
       if (row.expiresOn && !/^\d{4}-\d{2}-\d{2}$/.test(row.expiresOn)) addError(rowNo, 'expiresOn', 'Tanggal EXP harus YYYY-MM-DD');
       if (!(row.minimumStock >= 0)) addError(rowNo, 'minimumStock', 'Stok minimum tidak valid');
       if (row.trackExpiry === null) addError(rowNo, 'trackExpiry', 'Pantau EXP harus YA atau TIDAK');
+      if (row.trackStock === null) addError(rowNo, 'trackStock', 'Aturan stok harus 0 atau 1');
+      if (row.trackStock === false && ((row.openingQty ?? 0) > 0 || row.minimumStock > 0)) addError(rowNo, 'trackStock', 'Barang tanpa stok harus memakai stok awal dan stok minimum 0');
       rows.push(row);
       return;
     }
@@ -1526,7 +1536,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.48-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.49-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2323,7 +2333,7 @@ async function routeRequest(request, response, route) {
         :task.type==='PRODUCT_EXTENSION'
           ?await rpc('import_product_extensions_v1',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:chunkKey,p_kind:preview.kind,p_file_name:input.fileName??null,p_rows:task.rows})
           :await rpc('import_initial_data',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:chunkKey,p_kind:preview.kind,p_file_name:input.fileName??null,p_location_id:preview.locationId,p_rows:task.rows});
-      if(preview.kind==='PRODUCTS'&&task.type==='CREATE')await rpc('apply_import_product_settings_v1',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_rows:task.rows});
+      if(preview.kind==='PRODUCTS')await rpc('apply_import_product_settings_v1',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_rows:task.rows});
       results.push(result);
     }
     if(preview.kind==='PRODUCTS')await rpc('refresh_safe_customer_prices_v1',{p_tenant_id:context.tenantId,p_product_id:null});

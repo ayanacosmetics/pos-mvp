@@ -555,8 +555,8 @@ function ensurePosProductSearchIndex(){
 function posProductCard(product,favorites){
   const unit = sortedProductUnits(product)[0];
   const rule = product.priceRules.find((item) => item.customerGroupId === 'retail') ?? product.priceRules[0];
-  const empty = Number(product.stockBase ?? 0) <= 0;
-  return `<article class="product-card-shell"><button class="product-card ${empty ? 'out-of-stock' : ''}" data-product="${product.id}" data-unit="${unit.id}" ${empty ? 'disabled' : ''}>${productThumbnail(product)}<span class="product-list-copy"><span class="category">${escapeHtml(product.category)}</span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)}</small></span><span class="product-list-meta"><strong>${money.format(rule?.unitPriceBase ?? 0)}</strong><small class="${empty?'stock-empty':''}">${empty ? 'STOK KOSONG' : `Stok ${Number(product.stockBase).toLocaleString('id-ID')} pcs`}</small></span></button><button class="favorite-product ${favorites.has(product.id)?'active':''}" type="button" data-favorite-product="${product.id}" aria-label="${favorites.has(product.id)?'Hapus dari':'Tambahkan ke'} favorit" aria-pressed="${favorites.has(product.id)}">★</button></article>`;
+  const tracksStock=product.trackStock!==false,empty=tracksStock&&Number(product.stockBase??0)<=0;
+  return `<article class="product-card-shell"><button class="product-card ${empty ? 'out-of-stock' : ''}" data-product="${product.id}" data-unit="${unit.id}" ${empty ? 'disabled' : ''}>${productThumbnail(product)}<span class="product-list-copy"><span class="category">${escapeHtml(product.category)}</span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)}</small></span><span class="product-list-meta"><strong>${money.format(rule?.unitPriceBase ?? 0)}</strong><small class="${empty?'stock-empty':''}">${tracksStock?(empty?'STOK KOSONG':`Stok ${Number(product.stockBase).toLocaleString('id-ID')} pcs`):'TANPA STOK'}</small></span></button><button class="favorite-product ${favorites.has(product.id)?'active':''}" type="button" data-favorite-product="${product.id}" aria-label="${favorites.has(product.id)?'Hapus dari':'Tambahkan ke'} favorit" aria-pressed="${favorites.has(product.id)}">★</button></article>`;
 }
 
 function renderVisiblePosProducts(){
@@ -691,10 +691,10 @@ function renderProductTable() {
   for(const productId of state.selectedProductIds)if(!availableIds.has(productId))state.selectedProductIds.delete(productId);
   const list=all.filter((product)=>{
     const matches=!query||`${product.sku} ${product.name} ${product.brand??''} ${product.category} ${product.variantGroup??''} ${product.variantName??''} ${product.units.map((unit)=>unit.barcode??'').join(' ')}`.toLowerCase().includes(query);
-    const statusMatch=status==='ALL'||(status==='ACTIVE'&&product.active)||(status==='INACTIVE'&&!product.active)||(status==='LOW_STOCK'&&product.active&&product.minimumStock>0&&product.stockBase<=product.minimumStock);
+    const statusMatch=status==='ALL'||(status==='ACTIVE'&&product.active)||(status==='INACTIVE'&&!product.active)||(status==='LOW_STOCK'&&product.active&&product.trackStock!==false&&product.minimumStock>0&&product.stockBase<=product.minimumStock);
     return matches&&statusMatch;
   });
-  const active=all.filter((product)=>product.active).length,inactive=all.length-active,low=all.filter((product)=>product.active&&product.minimumStock>0&&product.stockBase<=product.minimumStock).length;
+  const active=all.filter((product)=>product.active).length,inactive=all.length-active,low=all.filter((product)=>product.active&&product.trackStock!==false&&product.minimumStock>0&&product.stockBase<=product.minimumStock).length;
   el('product-metrics').innerHTML=[['Total SKU',all.length],['Aktif dijual',active],['Nonaktif',inactive],['Stok menipis',low]].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
   const categories=[...new Set(all.map((product)=>product.category).filter(Boolean))].sort();
   const brands=[...new Set(all.map((product)=>product.brand).filter(Boolean))].sort();
@@ -720,6 +720,7 @@ function renderProductTable() {
     const actionsOpen=state.productActionId===product.id;
     const typedDetails=[
       hasVariant?`<div class="product-detail-fact"><small>Varian</small><strong>${escapeHtml(variant)}</strong></div>`:'',
+      `<div class="product-detail-fact"><small>Aturan stok</small><strong>${product.trackStock===false?'Tanpa stok':'Pakai stok'}</strong></div>`,
       product.trackExpiry?'<div class="product-detail-fact"><small>Persediaan</small><strong>Pantau kedaluwarsa</strong></div>':''
     ].filter(Boolean).join('');
     const multiUnitDetails=hasMultipleUnits?`<div class="product-detail-units"><small>Multi-satuan</small><div>${product.units.map((unit)=>`<span title="${escapeHtml(unit.barcode||'Tanpa barcode')}"><strong>${escapeHtml(unit.name)}</strong> · isi ${Number(unit.factor).toLocaleString('id-ID')}${unit.barcode?` · <code>${escapeHtml(unit.barcode)}</code>`:''}</span>`).join('')}</div></div>`:'';
@@ -1188,6 +1189,12 @@ function renderProductPriceTierEditor(){
   }).join('');
 }
 
+function syncProductStockFields(){
+  const tracks=el('new-track-stock').value==='1';
+  el('new-min-stock').disabled=!tracks;el('new-track-expiry').disabled=!tracks;
+  if(!tracks){el('new-min-stock').value=0;el('new-track-expiry').checked=false;}
+}
+
 function openProductEditor(productId=null){
   const product=productId?state.managedProducts.find((item)=>item.id===productId):null;
   el('product-form').reset();el('product-error').textContent='';
@@ -1200,7 +1207,7 @@ function openProductEditor(productId=null){
   state.productImageFile=null;state.productImagePreviewUrl=product?.imageUrl??'';
   renderProductPhotoPreview(state.productImagePreviewUrl);
   el('new-variant-group').value=product?.variantGroup??'';el('new-variant-name').value=product?.variantName??'';
-  el('new-min-stock').value=product?.minimumStock??0;el('new-track-expiry').checked=Boolean(product?.trackExpiry);
+  el('new-track-stock').value=product?.trackStock===false?'0':'1';el('new-min-stock').value=product?.minimumStock??0;el('new-track-expiry').checked=Boolean(product?.trackExpiry);syncProductStockFields();
   state.productPriceTiers=defaultProductPriceTiers(product);renderProductPriceTierEditor();
   state.productUnitsDraft=product?product.units.map((unit)=>({...unit})):[{id:null,name:'pcs',factor:1,barcode:''}];
   renderProductUnitEditor();el('product-dialog').showModal();
@@ -1213,7 +1220,7 @@ function productPayload(){
   return {
     id:el('edit-product-id').value||null,sku:el('new-sku').value,name:el('new-name').value,category:el('new-category').value,
     brand:el('new-brand').value,imageUrl:el('new-image-url').value,variantGroup:el('new-variant-group').value,variantName:el('new-variant-name').value,
-    minimumStock:Number(el('new-min-stock').value),trackExpiry:el('new-track-expiry').checked,
+    minimumStock:Number(el('new-min-stock').value),trackExpiry:el('new-track-expiry').checked,trackStock:el('new-track-stock').value==='1',
     retailPrice:Number(el('new-retail-price').value),prices,
     units:state.productUnitsDraft
   };
@@ -1352,7 +1359,7 @@ async function recordSupplierPayment(event){
 }
 
 const importAliases = {
-  PRODUCTS: { no_barang_sku:'sku',sku:'sku',nama_barang:'name',nama:'name',kategori:'category',merek:'brand',satuan_terkecil:'baseUnit',satuan_dasar:'baseUnit',barcode_satuan_terkecil:'baseBarcode',barcode_satuan_dasar:'baseBarcode',barcode_dasar:'baseBarcode',harga_umum:'retailPrice',harga_ecer:'retailPrice',harga_grosir:'wholesalePrice',min_qty_grosir:'tierQty',harga_per_pcs_grosir:'tierPrice',satuan_besar:'bulkUnit',isi_dalam_pcs:'bulkFactor',isi_satuan_besar:'bulkFactor',barcode_satuan_besar:'bulkBarcode',stok_awal:'openingQty',modal_per_pcs:'openingCost',modal_per_satuan_dasar:'openingCost',modal_awal:'openingCost',nomor_batch:'batchNo',tanggal_exp:'expiresOn',stok_minimum:'minimumStock',pantau_exp:'trackExpiry' },
+  PRODUCTS: { no_barang_sku:'sku',sku:'sku',nama_barang:'name',nama:'name',kategori:'category',merek:'brand',satuan_terkecil:'baseUnit',satuan_dasar:'baseUnit',barcode_satuan_terkecil:'baseBarcode',barcode_satuan_dasar:'baseBarcode',barcode_dasar:'baseBarcode',harga_umum:'retailPrice',harga_ecer:'retailPrice',harga_grosir:'wholesalePrice',min_qty_grosir:'tierQty',harga_per_pcs_grosir:'tierPrice',satuan_besar:'bulkUnit',isi_dalam_pcs:'bulkFactor',isi_satuan_besar:'bulkFactor',barcode_satuan_besar:'bulkBarcode',aturan_stok:'trackStock',pakai_stok:'trackStock',stok_awal:'openingQty',modal_per_pcs:'openingCost',modal_per_satuan_dasar:'openingCost',modal_awal:'openingCost',nomor_batch:'batchNo',tanggal_exp:'expiresOn',stok_minimum:'minimumStock',pantau_exp:'trackExpiry' },
   PRODUCT_UNITS: { no_barang_sku:'sku',sku:'sku',nama_satuan:'unitName',satuan:'unitName',isi_dalam_satuan_dasar:'factor',isi:'factor',barcode:'barcode' },
   PRODUCT_VARIANTS: { no_barang_sku:'sku',sku:'sku',kelompok_varian:'variantGroup',nama_varian:'variantName' },
   PRODUCT_PRICES: { no_barang_sku:'sku',sku:'sku',tipe_pelanggan:'customerGroup',tipe_harga:'customerGroup',minimal_pembelian:'minQty',min_qty:'minQty',harga_per_satuan_dasar:'unitPrice',harga:'unitPrice' },
@@ -1521,7 +1528,7 @@ function renderImportPreview(preview,sourceReport=null) {
   el('import-validity').textContent = preview.valid ? 'Siap disimpan' : 'Perlu diperbaiki';
   el('import-errors').innerHTML = `${renderImportSourceReport(sourceReport)}${preview.warnings?.length ? `<div class="import-source-report warning"><strong>${preview.warnings.length} baris dilewati tanpa menggagalkan impor</strong>${preview.warnings.slice(0,12).map((warning)=>`<p>${escapeHtml(warning.message)}</p>`).join('')}</div>`:''}${preview.errors.length ? `<div class="import-error-list"><strong>${preview.errors.length} hal perlu diperbaiki</strong>${preview.errors.slice(0,20).map((error) => `<p>Baris ${error.row || '—'} · ${escapeHtml(error.message)}</p>`).join('')}</div>` : ''}`;
   const keysByKind={
-    PRODUCTS:['sku','name','baseUnit','retailPrice','openingQty','minimumStock','trackExpiry'],
+    PRODUCTS:['sku','name','baseUnit','retailPrice','trackStock','openingQty','minimumStock','trackExpiry'],
     PRODUCT_UNITS:['sku','unitName','factor','unitPriceTotal','barcode'],
     PRODUCT_VARIANTS:['sku','variantGroup','variantName'],
     PRODUCT_PRICES:['sku','customerGroup','minQty','unitPrice'],
@@ -1530,7 +1537,7 @@ function renderImportPreview(preview,sourceReport=null) {
     CUSTOMERS:['code','name','phone','email','groupId','loyaltyPoints'],SUPPLIERS:['code','name','phone','address']
   };
   const keys=keysByKind[preview.kind]??[];
-  const labels = { sku:'No. barang / SKU',name:'Nama',baseUnit:'Satuan dasar',retailPrice:'Harga umum',openingQty:'Stok awal',minimumStock:'Stok minimum',trackExpiry:'Pantau EXP',unitName:'Nama satuan',factor:'Isi satuan dasar',unitPriceTotal:'Harga per satuan',barcode:'Barcode',variantGroup:'Kelompok varian',variantName:'Nama varian',customerGroup:'Tipe pelanggan',minQty:'Minimal beli',unitPrice:'Harga / satuan dasar',code:'Kode',phone:'Telepon',email:'Email',groupId:'Tipe pelanggan',loyaltyPoints:'Poin',address:'Alamat',transactionCode:'Transaksi',occurredAt:'Tanggal',productCode:'Kode barang',productName:'Nama barang',quantity:'Jumlah',unitCost:'Modal / pcs',lineGross:'Total barang',grandTotal:'Total struk' };
+  const labels = { sku:'No. barang / SKU',name:'Nama',baseUnit:'Satuan dasar',retailPrice:'Harga umum',trackStock:'Aturan stok (0/1)',openingQty:'Stok awal',minimumStock:'Stok minimum',trackExpiry:'Pantau EXP',unitName:'Nama satuan',factor:'Isi satuan dasar',unitPriceTotal:'Harga per satuan',barcode:'Barcode',variantGroup:'Kelompok varian',variantName:'Nama varian',customerGroup:'Tipe pelanggan',minQty:'Minimal beli',unitPrice:'Harga / satuan dasar',code:'Kode',phone:'Telepon',email:'Email',groupId:'Tipe pelanggan',loyaltyPoints:'Poin',address:'Alamat',transactionCode:'Transaksi',occurredAt:'Tanggal',productCode:'Kode barang',productName:'Nama barang',quantity:'Jumlah',unitCost:'Modal / pcs',lineGross:'Total barang',grandTotal:'Total struk' };
   el('import-preview').innerHTML = `<table><thead><tr><th>Baris</th>${keys.map((key) => `<th>${labels[key]}</th>`).join('')}</tr></thead><tbody>${preview.rows.slice(0,50).map((row,index) => `<tr><td>${index+2}</td>${keys.map((key) => `<td>${escapeHtml(row[key] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table>${preview.rows.length>50?'<p class="muted import-more">Menampilkan 50 baris pertama.</p>':''}`;
   el('commit-import').disabled = !preview.valid;
   el('import-message').textContent = preview.valid ? `${summary.total} baris sudah lolos pemeriksaan dan belum disimpan.` : 'Perbaiki file sesuai pesan, lalu pilih kembali file tersebut.';
@@ -2290,13 +2297,13 @@ function openUnitPicker(productId, { cartIndex = null, scanFallback = false } = 
       : `Ganti satuan untuk ${qty} barang ini.`;
   el('unit-picker-options').innerHTML = units.map((unit) => {
     const factor = Number(unit.factor ?? 0);
-    const available = factor > 0 ? Math.floor(Math.max(0, Number(product.stockBase ?? 0) - usedOutsideLine) / factor) : 0;
+    const available = product.trackStock===false?null:(factor > 0 ? Math.floor(Math.max(0, Number(product.stockBase ?? 0) - usedOutsideLine) / factor) : 0);
     const fits = unitFitsStock({ cart: state.cart, product, unit, qty, excludeIndex: cartIndex ?? -1 });
     const current = line?.unitId === unit.id;
     const barcode = String(unit.barcode ?? '').trim();
     return `<button class="unit-picker-option ${current ? 'current' : ''}" type="button" data-unit-id="${unit.id}" ${fits ? '' : 'disabled'}>
       <span class="unit-picker-copy"><strong>${escapeHtml(unit.name)}</strong><small>${factor === 1 ? 'Satuan dasar' : `Isi ${factor} pcs`}${barcode ? ` · barcode terdaftar` : ' · tanpa barcode'}</small></span>
-      <span class="unit-picker-stock"><strong>${available}</strong><small>tersedia${current ? ' · dipakai' : ''}</small></span>
+      <span class="unit-picker-stock"><strong>${available??'∞'}</strong><small>${available===null?'tanpa stok':`tersedia${current ? ' · dipakai' : ''}`}</small></span>
     </button>`;
   }).join('');
   const dialog = el('unit-picker-dialog');
@@ -2352,7 +2359,7 @@ async function addToCart(productId, unitId) {
     const selectedUnit=product.units.find((item)=>item.id===line.unitId);
     return sum+Number(line.qty)*Number(selectedUnit?.factor??0);
   },0);
-  if(currentBase+Number(unit.factor)>Number(product.stockBase??0))return toast(`${product.name}: stok tidak cukup. Tersedia ${product.stockBase} pcs.`);
+    if(product.trackStock!==false&&currentBase+Number(unit.factor)>Number(product.stockBase??0))return toast(`${product.name}: stok tidak cukup. Tersedia ${product.stockBase} pcs.`);
   if (existing) existing.qty += 1;
   else state.cart.push({ productId, unitId, qty: 1 });
   el('product-search').value = '';
@@ -2367,7 +2374,7 @@ async function changeQty(index, delta) {
     const product=state.products.find((item)=>item.id===line.productId);
     const unit=product?.units.find((item)=>item.id===line.unitId);
     const currentBase=state.cart.filter((item)=>item.productId===line.productId).reduce((sum,item)=>sum+Number(item.qty)*Number(product?.units.find((candidate)=>candidate.id===item.unitId)?.factor??0),0);
-    if(!product||!unit||currentBase+Number(unit.factor)>Number(product.stockBase??0))return toast(`${product?.name??'Produk'}: jumlah melebihi stok tersedia.`);
+    if(!product||!unit||(product.trackStock!==false&&currentBase+Number(unit.factor)>Number(product.stockBase??0)))return toast(`${product?.name??'Produk'}: jumlah melebihi stok tersedia.`);
   }
   state.cart[index].qty += delta;
   if (state.cart[index].qty <= 0) state.cart.splice(index, 1);
@@ -2426,9 +2433,9 @@ function renderCart() {
   el('cart-lines').innerHTML = state.quote.lines.map((line, index) => {
     const cartLine=state.cart[index],product=state.products.find((item)=>item.id===cartLine.productId),unit=product?.units.find((item)=>item.id===cartLine.unitId);
     const usedBase=state.cart.filter((item)=>item.productId===cartLine.productId).reduce((sum,item)=>sum+Number(item.qty)*Number(product?.units.find((candidate)=>candidate.id===item.unitId)?.factor??0),0);
-    const atLimit=!product||!unit||usedBase+Number(unit.factor)>Number(product.stockBase??0);
+    const atLimit=!product||!unit||(product.trackStock!==false&&usedBase+Number(unit.factor)>Number(product.stockBase??0));
     const lineNote=String(cartLine.note??'').trim();
-    return `<div class="cart-line" data-cart-index="${index}"><button class="cart-line-main cart-line-editor" data-index="${index}" type="button" aria-label="Atur ${escapeHtml(line.productName)}"><span><strong>${escapeHtml(line.productName)}</strong><small class="cart-line-meta">${line.qty} ${escapeHtml(line.unitName)} · ${money.format(line.gross / line.qty)} · stok ${product?.stockBase??0} pcs</small>${lineNote?`<small class="cart-line-note">✎ ${escapeHtml(lineNote)}</small>`:''}</span><strong>${money.format(line.total)}</strong></button><div class="cart-controls"><button data-index="${index}" data-delta="-1">−</button><span>${line.qty}</span><button data-index="${index}" data-delta="1" ${atLimit?'disabled title="Stok tidak mencukupi"':''}>+</button><button class="cart-unit-change" data-index="${index}" type="button" aria-label="Ganti satuan ${escapeHtml(line.productName)}">${escapeHtml(line.unitName)} <span aria-hidden="true">⌄</span></button></div>${line.promotions.map((promo) => { const raised=Number(promo.discount)<0; return `<div class="promo-note ${promo.manual?'manual':''}">${promo.manual?'Harga manual ':''}${escapeHtml(promo.code)} v${promo.version}: ${raised?'+':'−'}${money.format(Math.abs(promo.discount))}${promo.approvedBy?` · ${escapeHtml(promo.approvedBy)}`:''}</div>`; }).join('')}</div>`;
+    return `<div class="cart-line" data-cart-index="${index}"><button class="cart-line-main cart-line-editor" data-index="${index}" type="button" aria-label="Atur ${escapeHtml(line.productName)}"><span><strong>${escapeHtml(line.productName)}</strong><small class="cart-line-meta">${line.qty} ${escapeHtml(line.unitName)} · ${money.format(line.gross / line.qty)} · ${product?.trackStock===false?'tanpa stok':`stok ${product?.stockBase??0} pcs`}</small>${lineNote?`<small class="cart-line-note">✎ ${escapeHtml(lineNote)}</small>`:''}</span><strong>${money.format(line.total)}</strong></button><div class="cart-controls"><button data-index="${index}" data-delta="-1">−</button><span>${line.qty}</span><button data-index="${index}" data-delta="1" ${atLimit?'disabled title="Stok tidak mencukupi"':''}>+</button><button class="cart-unit-change" data-index="${index}" type="button" aria-label="Ganti satuan ${escapeHtml(line.productName)}">${escapeHtml(line.unitName)} <span aria-hidden="true">⌄</span></button></div>${line.promotions.map((promo) => { const raised=Number(promo.discount)<0; return `<div class="promo-note ${promo.manual?'manual':''}">${promo.manual?'Harga manual ':''}${escapeHtml(promo.code)} v${promo.version}: ${raised?'+':'−'}${money.format(Math.abs(promo.discount))}${promo.approvedBy?` · ${escapeHtml(promo.approvedBy)}`:''}</div>`; }).join('')}</div>`;
   }).join('');
   document.querySelectorAll('.cart-controls button[data-delta]').forEach((button) => button.addEventListener('click', () => changeQty(Number(button.dataset.index), Number(button.dataset.delta))));
   document.querySelectorAll('.cart-unit-change').forEach((button) => button.addEventListener('click', () => {
@@ -7193,6 +7200,7 @@ el('product-table').addEventListener('change',(event)=>{
   renderProductTable();
 });
 el('product-form').addEventListener('submit', saveProduct);
+el('new-track-stock').addEventListener('change',syncProductStockFields);
 el('new-image-file').addEventListener('change',(event)=>{
   const file=event.target.files?.[0];if(!file)return;
   if(!file.type.match(/^image\/(png|jpeg|webp)$/))return el('product-error').textContent='Pilih foto PNG, JPEG, atau WebP.';
