@@ -231,6 +231,31 @@ async function profileFor(userId) {
   return rows[0] ?? null;
 }
 
+async function provisionOwnerWorkspace(authUser,{ownerName,businessName,email}) {
+  const existing=await profileFor(authUser.id);
+  if(existing)return existing;
+  await rpc('register_owner_workspace_v1', {
+    p_user_id:authUser.id,
+    p_display_name:ownerName,
+    p_business_name:businessName,
+    p_email:email
+  });
+  const profile=await profileFor(authUser.id);
+  if(!profile?.active||profile.role!=='OWNER'){
+    const error=new Error('Ruang usaha gagal diaktifkan');error.status=500;throw error;
+  }
+  return profile;
+}
+
+function ownerRegistrationMetadata(authUser,fallback={}) {
+  const metadata=authUser?.user_metadata??{};
+  return {
+    ownerName:String(metadata.display_name??fallback.ownerName??'').trim(),
+    businessName:String(metadata.business_name??fallback.businessName??'').trim(),
+    email:String(authUser?.email??fallback.email??'').trim().toLowerCase()
+  };
+}
+
 async function sessionOf(request) {
   const token = request.headers.authorization?.replace(/^Bearer\s+/i, '');
   if (!token) return null;
@@ -1483,7 +1508,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.44-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.45-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1513,12 +1538,31 @@ async function routeRequest(request, response, route) {
       throw error;
     }
     const config = env();
+    // Pulihkan akun yang identitas Auth-nya sudah terbentuk, tetapi pembuatan
+    // profil/workspace sempat terputus (misalnya koneksi atau email bermasalah).
+    let recoveredAuth=null;
+    try {
+      recoveredAuth=await supabase('/auth/v1/token?grant_type=password',{
+        method:'POST',token:config.anon,body:{email,password}
+      });
+    } catch(error) {
+      if(![400,401,403].includes(error.status))throw error;
+    }
+    if(recoveredAuth?.user?.id){
+      const existingProfile=await profileFor(recoveredAuth.user.id);
+      if(existingProfile){
+        const error=new Error('Email sudah terdaftar. Silakan masuk sebagai Owner.');error.status=409;throw error;
+      }
+      const profile=await provisionOwnerWorkspace(recoveredAuth.user,{ownerName,businessName,email});
+      setRefreshCookie(response,recoveredAuth.refresh_token);
+      return send(response,201,{...authPayload(recoveredAuth,profile),registered:true,recovered:true});
+    }
     let auth;
     try {
       auth = await supabase('/auth/v1/signup', {
         method: 'POST',
         token: config.anon,
-        body: { email, password, data: { display_name: ownerName, business_name: businessName } }
+        body: { email, password, data: { display_name: ownerName, business_name: businessName, registration_source:'NUSA_OWNER_SELF_REGISTRATION' } }
       });
     } catch (error) {
       if (/already (registered|been registered)|user.*exists/i.test(error.message)) {
@@ -1528,18 +1572,17 @@ async function routeRequest(request, response, route) {
       throw error;
     }
     const createdIdentity = !Array.isArray(auth.user?.identities) || auth.user.identities.length > 0;
-    if (!auth.user?.id || !createdIdentity) {
-      const error = new Error('Email sudah terdaftar. Silakan masuk sebagai Owner.');
-      error.status = 409;
-      throw error;
+    if(!auth.user?.id){
+      const error=new Error('Identitas akun gagal dibuat. Coba kembali beberapa saat lagi.');error.status=502;throw error;
+    }
+    if (!createdIdentity) {
+      return send(response,202,{
+        registered:true,requiresEmailConfirmation:true,recoveryPending:true,email,
+        message:'Email sudah memiliki identitas Auth. Konfirmasikan email lalu masuk sebagai Owner; ruang usaha akan diselesaikan otomatis.'
+      });
     }
     try {
-      await rpc('register_owner_workspace_v1', {
-        p_user_id: auth.user.id,
-        p_display_name: ownerName,
-        p_business_name: businessName,
-        p_email: email
-      });
+      await provisionOwnerWorkspace(auth.user,{ownerName,businessName,email});
     } catch (error) {
       await supabase(`/auth/v1/admin/users/${auth.user.id}`, {
         method: 'DELETE',
@@ -1548,11 +1591,6 @@ async function routeRequest(request, response, route) {
       throw error;
     }
     const profile = await profileFor(auth.user.id);
-    if (!profile?.active || profile.role !== 'OWNER') {
-      const error = new Error('Ruang usaha gagal diaktifkan');
-      error.status = 500;
-      throw error;
-    }
     if (auth.access_token && auth.refresh_token) {
       setRefreshCookie(response, auth.refresh_token);
       return send(response, 201, { ...authPayload(auth, profile), registered: true });
@@ -1575,6 +1613,12 @@ async function routeRequest(request, response, route) {
     const config = env();
     let auth = await supabase('/auth/v1/token?grant_type=password', { method: 'POST', body: { email: input.email, password: input.password }, token: config.anon });
     let profile = await profileFor(auth.user.id);
+    if(!profile&&portal==='OWNER'){
+      const registration=ownerRegistrationMetadata(auth.user);
+      if(registration.ownerName.length>=2&&registration.businessName.length>=2&&registration.email){
+        profile=await provisionOwnerWorkspace(auth.user,registration);
+      }
+    }
     if (!profile && portal === 'OWNER' && process.env.ALLOW_OWNER_BOOTSTRAP === 'true') {
       await rpc('bootstrap_owner', { p_user_id: auth.user.id, p_display_name: auth.user.user_metadata?.display_name ?? input.email, p_business_name: process.env.DEFAULT_BUSINESS_NAME ?? 'Kasir Nusa' });
       profile = await profileFor(auth.user.id);

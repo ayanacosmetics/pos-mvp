@@ -55,9 +55,11 @@ async function withRegistrationEnvironment(fetchMock, operation) {
 
 test('pendaftaran Owner membuat Auth, workspace, lalu sesi aktif', async () => {
   const calls = [];
+  let workspaceCreated=false;
   await withRegistrationEnvironment(async (url, options = {}) => {
     const target = String(url);
     calls.push({ target, options });
+    if (target.includes('/auth/v1/token?grant_type=password')) return responseOf({ message:'Invalid login credentials' },400);
     if (target.endsWith('/auth/v1/signup')) return responseOf({
       access_token: 'access',
       refresh_token: 'refresh',
@@ -66,15 +68,16 @@ test('pendaftaran Owner membuat Auth, workspace, lalu sesi aktif', async () => {
       user: { id: ids.user, identities: [{ id: 'identity' }] }
     });
     if (target.endsWith('/rest/v1/rpc/register_owner_workspace_v1')) {
+      workspaceCreated=true;
       return responseOf({ tenantId: ids.tenant });
     }
-    if (target.includes('/rest/v1/profiles?')) return responseOf([{
+    if (target.includes('/rest/v1/profiles?')) return responseOf(workspaceCreated?[{
       user_id: ids.user,
       tenant_id: ids.tenant,
       display_name: 'Ayu Pemilik',
       role: 'OWNER',
       active: true
-    }]);
+    }]:[]);
     return responseOf({ message: `Mock belum menangani ${target}` }, 500);
   }, async () => {
     const result = await callRegistration({
@@ -92,7 +95,7 @@ test('pendaftaran Owner membuat Auth, workspace, lalu sesi aktif', async () => {
   assert.deepEqual(JSON.parse(signup.options.body), {
     email: 'ayu@example.com',
     password: 'rahasia-kuat',
-    data: { display_name: 'Ayu Pemilik', business_name: 'Toko Ayu' }
+    data: { display_name: 'Ayu Pemilik', business_name: 'Toko Ayu', registration_source:'NUSA_OWNER_SELF_REGISTRATION' }
   });
   const workspace = calls.find((call) => call.target.endsWith('/rest/v1/rpc/register_owner_workspace_v1'));
   assert.equal(workspace.options.headers.authorization, 'Bearer service');
@@ -101,6 +104,7 @@ test('pendaftaran Owner membuat Auth, workspace, lalu sesi aktif', async () => {
 test('pendaftaran Owner mendukung proyek yang mewajibkan konfirmasi email', async () => {
   await withRegistrationEnvironment(async (url) => {
     const target = String(url);
+    if (target.includes('/auth/v1/token?grant_type=password')) return responseOf({ message:'Email not confirmed' },400);
     if (target.endsWith('/auth/v1/signup')) {
       return responseOf({ user: { id: ids.user, identities: [{ id: 'identity' }] } });
     }
@@ -126,6 +130,30 @@ test('pendaftaran Owner mendukung proyek yang mewajibkan konfirmasi email', asyn
   });
 });
 
+test('pendaftaran menyelesaikan akun Auth lama yang belum mempunyai workspace',async()=>{
+  let workspaceCreated=false;
+  const calls=[];
+  await withRegistrationEnvironment(async(url,options={})=>{
+    const target=String(url);calls.push(target);
+    if(target.includes('/auth/v1/token?grant_type=password'))return responseOf({
+      access_token:'recovered-access',refresh_token:'recovered-refresh',expires_in:3600,expires_at:9999999999,
+      user:{id:ids.user,email:'ayu@example.com',user_metadata:{display_name:'Ayu',business_name:'Toko Ayu'}}
+    });
+    if(target.includes('/rest/v1/profiles?'))return responseOf(workspaceCreated?[{
+      user_id:ids.user,tenant_id:ids.tenant,display_name:'Ayu',role:'OWNER',active:true
+    }]:[]);
+    if(target.endsWith('/rest/v1/rpc/register_owner_workspace_v1')){workspaceCreated=true;return responseOf({tenantId:ids.tenant});}
+    return responseOf({message:`Mock belum menangani ${target}`},500);
+  },async()=>{
+    const result=await callRegistration({ownerName:'Ayu',businessName:'Toko Ayu',email:'ayu@example.com',password:'rahasia-kuat'});
+    assert.equal(result.status,201);
+    assert.equal(result.body.recovered,true);
+    assert.equal(result.body.user.role,'OWNER');
+  });
+  assert.equal(calls.some((target)=>target.endsWith('/auth/v1/signup')),false);
+  assert.equal(workspaceCreated,true);
+});
+
 test('UI dan SQL membatasi daftar mandiri hanya untuk Owner', async () => {
   const [html, script, sql] = await Promise.all([
     readFile(new URL('../apps/web/index.html', import.meta.url), 'utf8'),
@@ -143,6 +171,8 @@ test('UI dan SQL membatasi daftar mandiri hanya untuk Owner', async () => {
   ]) assert.match(html, new RegExp(`id="${id}"`));
   assert.match(html, /Akun Staff ditambahkan kemudian oleh Owner/);
   assert.match(script, /\/api\/register-owner/);
+  assert.match(script, /ruang usaha akan diselesaikan otomatis/);
+  assert.match(await readFile(new URL('../api/index.mjs',import.meta.url),'utf8'),/function provisionOwnerWorkspace/);
   assert.match(script, /open-owner-registration'\)\.classList\.toggle\('hidden', !owner\)/);
   assert.match(sql, /function public\.register_owner_workspace_v1/);
   assert.match(sql, /insert into public\.profiles[\s\S]*'OWNER'/);

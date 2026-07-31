@@ -6365,7 +6365,7 @@ el('register-owner-form').addEventListener('submit', async (event) => {
       password
     });
     if (data.requiresEmailConfirmation) {
-      el('register-owner-success').textContent = 'Akun dan ruang usaha berhasil dibuat. Periksa email untuk mengaktifkan akun, lalu kembali masuk sebagai Owner.';
+      el('register-owner-success').textContent = data.message ?? 'Akun berhasil dibuat. Periksa email untuk mengaktifkan akun, lalu masuk sebagai Owner; ruang usaha akan diselesaikan otomatis.';
       el('register-owner-success').classList.remove('hidden');
       button.classList.add('hidden');
     }
