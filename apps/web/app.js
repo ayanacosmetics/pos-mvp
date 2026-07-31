@@ -79,6 +79,14 @@ let barcodeCameraCompleting = false;
 let lastTelemetryAt = 0;
 let productManagementPromise = null;
 let deferredBootstrapRun = 0;
+let posProductMatches = [];
+let posProductSearchIndex = new Map();
+let posProductIndexSource = null;
+let posProductRenderFrame = 0;
+let posProductSearchTimer = 0;
+let posCategoryRenderKey = '';
+const POS_PRODUCT_ROW_HEIGHT = 88;
+const POS_PRODUCT_OVERSCAN = 8;
 
 function storeAuth(data) {
   const auth = saveAuth(data, state);
@@ -503,31 +511,62 @@ function saveFavoriteProductIds(ids) {
 
 function renderPosCategoryFilters() {
   const categories=[...new Set(state.products.map((product)=>product.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'id'));
+  const renderKey=`${state.posCategoryFilter}\u0000${categories.join('\u0000')}`;
+  if(renderKey===posCategoryRenderKey)return;
+  posCategoryRenderKey=renderKey;
   el('pos-category-filters').innerHTML=['',...categories].map((category)=>`<button class="category-filter ${state.posCategoryFilter===category?'active':''}" type="button" data-category="${escapeHtml(category)}">${escapeHtml(category||'Semua')}</button>`).join('');
 }
 
+function ensurePosProductSearchIndex(){
+  if(posProductIndexSource===state.products)return;
+  posProductIndexSource=state.products;
+  posProductSearchIndex=new Map(state.products.map((product)=>[
+    product.id,
+    `${product.name} ${product.sku} ${product.category??''} ${product.units.map((unit)=>unit.barcode).join(' ')}`.toLocaleLowerCase('id')
+  ]));
+  posCategoryRenderKey='';
+}
+
+function posProductCard(product,favorites){
+  const unit = sortedProductUnits(product)[0];
+  const rule = product.priceRules.find((item) => item.customerGroupId === 'retail') ?? product.priceRules[0];
+  const empty = Number(product.stockBase ?? 0) <= 0;
+  return `<article class="product-card-shell"><button class="product-card ${empty ? 'out-of-stock' : ''}" data-product="${product.id}" data-unit="${unit.id}" ${empty ? 'disabled' : ''}>${productThumbnail(product)}<span class="product-list-copy"><span class="category">${escapeHtml(product.category)}</span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)}</small></span><span class="product-list-meta"><strong>${money.format(rule?.unitPriceBase ?? 0)}</strong><small class="${empty?'stock-empty':''}">${empty ? 'STOK KOSONG' : `Stok ${Number(product.stockBase).toLocaleString('id-ID')} pcs`}</small></span></button><button class="favorite-product ${favorites.has(product.id)?'active':''}" type="button" data-favorite-product="${product.id}" aria-label="${favorites.has(product.id)?'Hapus dari':'Tambahkan ke'} favorit" aria-pressed="${favorites.has(product.id)}">★</button></article>`;
+}
+
+function renderVisiblePosProducts(){
+  cancelAnimationFrame(posProductRenderFrame);
+  posProductRenderFrame=requestAnimationFrame(()=>{
+    const viewport=document.querySelector('#page-pos .pos-product-scroll');
+    const grid=el('product-grid');
+    if(!viewport||!grid)return;
+    if(!posProductMatches.length){
+      grid.innerHTML='<div class="empty-state compact">Tidak ada produk untuk filter ini.</div>';
+      return;
+    }
+    const visibleCount=Math.max(12,Math.ceil((viewport.clientHeight||520)/POS_PRODUCT_ROW_HEIGHT));
+    const start=Math.max(0,Math.floor(viewport.scrollTop/POS_PRODUCT_ROW_HEIGHT)-POS_PRODUCT_OVERSCAN);
+    const end=Math.min(posProductMatches.length,start+visibleCount+(POS_PRODUCT_OVERSCAN*2));
+    const favorites=favoriteProductIds();
+    grid.innerHTML=`<div class="pos-product-spacer" style="height:${start*POS_PRODUCT_ROW_HEIGHT}px" aria-hidden="true"></div>${posProductMatches.slice(start,end).map((product)=>posProductCard(product,favorites)).join('')}<div class="pos-product-spacer" style="height:${(posProductMatches.length-end)*POS_PRODUCT_ROW_HEIGHT}px" aria-hidden="true"></div>`;
+    bindProductImageFallbacks(grid);
+  });
+}
+
 function renderProducts(query = '') {
+  ensurePosProductSearchIndex();
   const normalized = query.trim().toLowerCase();
   const favorites=favoriteProductIds();
-  const list = state.products.filter((product) =>
-    (!normalized || `${product.name} ${product.sku} ${product.units.map((unit) => unit.barcode).join(' ')}`.toLowerCase().includes(normalized))
+  posProductMatches = state.products.filter((product) =>
+    (!normalized || posProductSearchIndex.get(product.id)?.includes(normalized))
     && (!state.posCategoryFilter || product.category===state.posCategoryFilter)
     && (!state.favoriteOnly || favorites.has(product.id))
   );
   renderPosCategoryFilters();
   el('favorite-filter').setAttribute('aria-pressed',String(state.favoriteOnly));
-  el('product-grid').innerHTML = list.map((product) => {
-    const unit = sortedProductUnits(product)[0];
-    const rule = product.priceRules.find((item) => item.customerGroupId === 'retail') ?? product.priceRules[0];
-    const empty = Number(product.stockBase ?? 0) <= 0;
-    return `<article class="product-card-shell"><button class="product-card ${empty ? 'out-of-stock' : ''}" data-product="${product.id}" data-unit="${unit.id}" ${empty ? 'disabled' : ''}>${productThumbnail(product)}<span class="product-list-copy"><span class="category">${escapeHtml(product.category)}</span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)}</small></span><span class="product-list-meta"><strong>${money.format(rule?.unitPriceBase ?? 0)}</strong><small class="${empty?'stock-empty':''}">${empty ? 'STOK KOSONG' : `Stok ${Number(product.stockBase).toLocaleString('id-ID')} pcs`}</small></span></button><button class="favorite-product ${favorites.has(product.id)?'active':''}" type="button" data-favorite-product="${product.id}" aria-label="${favorites.has(product.id)?'Hapus dari':'Tambahkan ke'} favorit" aria-pressed="${favorites.has(product.id)}">★</button></article>`;
-  }).join('') || '<div class="empty-state compact">Tidak ada produk untuk filter ini.</div>';
-  bindProductImageFallbacks(el('product-grid'));
-  document.querySelectorAll('.product-card').forEach((button) => button.addEventListener('click', () => choosePosProduct(button.dataset.product)));
-  document.querySelectorAll('.favorite-product').forEach((button)=>button.addEventListener('click',()=>{
-    const ids=favoriteProductIds();if(ids.has(button.dataset.favoriteProduct))ids.delete(button.dataset.favoriteProduct);else ids.add(button.dataset.favoriteProduct);
-    saveFavoriteProductIds(ids);renderProducts(el('product-search').value);
-  }));
+  const viewport=document.querySelector('#page-pos .pos-product-scroll');
+  if(viewport)viewport.scrollTop=0;
+  renderVisiblePosProducts();
 }
 
 async function loadProductManagement() {
@@ -6467,10 +6506,15 @@ if (typeof mobileSidebarMedia.addEventListener === 'function') mobileSidebarMedi
 else mobileSidebarMedia.addListener(syncSidebarMode);
 syncSidebarMode();
 el('current-outlet-select').addEventListener('change', switchActiveOutlet);
-el('product-search').addEventListener('input', (event) => renderProducts(event.target.value));
+el('product-search').addEventListener('input', (event) => {
+  clearTimeout(posProductSearchTimer);
+  const value=event.target.value;
+  posProductSearchTimer=setTimeout(()=>renderProducts(value),60);
+});
 el('product-search').addEventListener('keydown', (event) => {
   if (event.key !== 'Enter') return;
   event.preventDefault();
+  clearTimeout(posProductSearchTimer);
   const value = event.target.value.trim();
   const exact = barcodeMatch(value);
   if (exact) addScannedProduct(exact.product, exact.unit);
@@ -6479,6 +6523,20 @@ el('product-search').addEventListener('keydown', (event) => {
 });
 el('pos-category-filters').addEventListener('click',(event)=>{const button=event.target.closest('[data-category]');if(!button)return;state.posCategoryFilter=button.dataset.category;renderProducts(el('product-search').value);});
 el('favorite-filter').addEventListener('click',()=>{state.favoriteOnly=!state.favoriteOnly;renderProducts(el('product-search').value);});
+document.querySelector('#page-pos .pos-product-scroll').addEventListener('scroll',renderVisiblePosProducts,{passive:true});
+el('product-grid').addEventListener('click',(event)=>{
+  const favorite=event.target.closest('[data-favorite-product]');
+  if(favorite){
+    const ids=favoriteProductIds();
+    if(ids.has(favorite.dataset.favoriteProduct))ids.delete(favorite.dataset.favoriteProduct);else ids.add(favorite.dataset.favoriteProduct);
+    saveFavoriteProductIds(ids);
+    renderProducts(el('product-search').value);
+    return;
+  }
+  const product=event.target.closest('.product-card');
+  if(product&&!product.disabled)choosePosProduct(product.dataset.product);
+});
+window.addEventListener('resize',renderVisiblePosProducts,{passive:true});
 el('scan-camera-pos').addEventListener('click', () => openBarcodeCamera('pos'));
 el('close-barcode-camera').addEventListener('click', stopBarcodeCamera);
 el('cancel-barcode-camera').addEventListener('click', stopBarcodeCamera);

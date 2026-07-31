@@ -91,7 +91,7 @@ test('desktop menjaga sidebar penuh dan daftar keranjang tetap dapat digulir',as
   assert.match(css,/\.sidebar\{[\s\S]*position:fixed;[\s\S]*inset:0 auto 0 0/);
   assert.match(css,/\.cart-pane\{[\s\S]*min-height:0;[\s\S]*overflow:hidden/);
   assert.match(css,/\.cart-lines\{[\s\S]*overflow-y:auto/);
-  assert.match(css,/\.cart-summary\{[\s\S]*max-height:60%;[\s\S]*overflow-y:auto/);
+  assert.match(css,/\.cart-summary\{[\s\S]*max-height:52%;[\s\S]*padding-top:9px/);
   assert.match(css,/\.cart-line-main>div>strong\{[^}]*font-size:11px/);
   assert.match(css,/\.cart-line-meta\{[^}]*font-size:9px/);
 });
@@ -103,7 +103,20 @@ test('desktop menjaga kontrol kasir tetap terlihat dan hanya daftar barang yang 
   assert.match(css,/#page-pos \.catalog-pane>\.page-title,[\s\S]*#page-pos \.catalog-pane>\.pos-product-tools\{flex:0 0 auto\}/);
   assert.match(css,/#page-pos \.pos-product-scroll\{[\s\S]*min-height:0[\s\S]*flex:1[\s\S]*overflow-y:auto[\s\S]*scrollbar-gutter:stable/);
   assert.doesNotMatch(script,/posProductLimit|data-product-load-more/);
-  assert.match(script,/innerHTML = list\.map\(\(product\)/);
+  assert.match(script,/function renderVisiblePosProducts/);
+  assert.match(script,/POS_PRODUCT_OVERSCAN/);
+  assert.match(script,/posProductMatches\.slice\(start,end\)/);
+  assert.match(script,/product-grid'\)\.addEventListener\('click'/);
+  assert.match(css,/\.pos-product-spacer\{/);
+});
+
+test('aksi keranjang memakai ikon vektor ringkas dan memberi ruang lebih besar bagi daftar barang',async()=>{
+  const [,,html,,css]=await files();
+  assert.match(html,/class="cart-secondary-actions"[\s\S]*id="open-order-adjustment"[\s\S]*<svg class="cart-action-icon"/);
+  assert.match(html,/id="hold-cart"[\s\S]*<svg class="cart-action-icon"/);
+  assert.doesNotMatch(html,/id="hold-cart"[\s\S]{0,300}🔔/);
+  assert.match(css,/\.cart-summary \.cart-icon-action\{[\s\S]*width:34px/);
+  assert.match(css,/\.cart-summary\{max-height:52%;/);
 });
 
 test('ponsel mengunci kontrol kasir dan menggulir daftar produk secara mandiri',async()=>{

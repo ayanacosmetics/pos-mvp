@@ -1468,6 +1468,27 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
   #page-pos #product-grid{align-content:start}
 }
 
+/* Fast virtual POS catalogue and compact checkout controls. */
+#page-pos #product-grid{display:block}
+#page-pos .product-card-shell{height:80px;margin-bottom:8px;contain:layout paint style}
+.pos-product-spacer{width:1px;pointer-events:none}
+.cart-secondary-actions{display:flex!important;align-items:center;justify-content:space-between;gap:6px;margin:2px 0!important}
+.cart-action-icon{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.cart-secondary-actions .cart-compact-action{min-height:32px;margin:0;padding:4px 6px}
+.cart-summary .cart-icon-action{display:grid;flex:0 0 34px;width:34px;min-height:34px;margin:0;padding:0;border:1px solid #e1b875;border-radius:9px;background:#fff9ec;color:#8a5517}
+.cart-summary .cart-icon-action:hover:not(:disabled){border-color:#bd7b22;background:#fff2d8}
+.cart-summary{max-height:52%;padding-top:9px;padding-bottom:10px}
+.cart-summary>div{margin:3px 0}
+.cart-summary .voucher-checkout{margin-top:4px}
+.cart-summary .grand-total{margin-top:5px!important;padding-top:7px}
+.cart-summary .grand-total strong{font-size:20px}
+.cart-summary .sale-note-field{margin:2px 0 4px}
+.cart-summary .cart-checkout-actions{margin-top:4px;padding-top:3px}
+.keep-cart-button .cart-action-icon{width:17px;height:17px}
+@media(max-width:760px){
+  .cart-summary{padding-top:9px;padding-bottom:max(12px,env(safe-area-inset-bottom))}
+}
+
 /* Compact cart actions and line editor */
 .cart-line-editor{display:flex;width:100%;align-items:flex-start;justify-content:space-between;gap:9px;padding:0;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}
 .cart-line-editor:hover strong:first-child{color:var(--brand)}
