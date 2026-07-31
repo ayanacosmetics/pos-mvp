@@ -30,13 +30,27 @@ test('struk thermal membedakan poin Nusa dan saldo impor Kaspin', () => {
   const kaspin = new TextDecoder().decode(buildEscPosReceipt({
     ...base,pointsEarned:0,pointsBalance:20,pointsBalanceIsCurrent:true,sourceSystem:'KASPIN'
   }));
-  assert.match(earned, /Poin \+5 \| Saldo 25/);
-  assert.match(kaspin, /Saldo poin saat ini 20 \(Kaspin\)/);
+  assert.match(earned, /Poin bertambah\s+\+5/);
+  assert.match(earned, /Saldo setelah transaksi\s+25/);
+  assert.match(kaspin, /Poin bertambah\s+-/);
+  assert.match(kaspin, /Saldo impor saat ini\s+20/);
 });
 
 test('tampilan riwayat menjelaskan saldo pelanggan Kaspin', async () => {
   const app = await read('../apps/web/app.js');
   assert.match(app, /Saldo poin saat ini/);
-  assert.match(app, /Saldo setelah transaksi/);
-  assert.match(app, /data pelanggan Kaspin/);
+  assert.match(app, /Saldo poin setelah transaksi/);
+  assert.match(app, /Saldo poin impor saat ini/);
+});
+
+test('detail pelanggan menampilkan riwayat mutasi poin beserta struk dan pelaku', async () => {
+  const [api,app,html] = await Promise.all([
+    read('../api/index.mjs'),read('../apps/web/app.js'),read('../apps/web/index.html')
+  ]);
+  assert.match(api, /receiptNo:sales\.find/);
+  assert.match(api, /actor:actors\.find/);
+  assert.match(html, /id="statement-points"/);
+  assert.match(app, /Detail & log poin/);
+  assert.match(app, /Saldo saat itu/);
+  assert.match(app, /Pembalikan transaksi/);
 });

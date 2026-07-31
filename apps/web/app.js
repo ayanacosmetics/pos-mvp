@@ -854,7 +854,7 @@ function renderRelations() {
     const balance=Number(customer.account_balance??0),overdueBalance=Number(customer.overdue_balance??0);
     const tier=state.loyalty.tiers.find((item)=>item.id===customer.tier_id);
     const groupBadge=customer.group_id!=='retail'?`<span class="badge warning">${escapeHtml(customerGroupName(customer.group_id))}</span>`:'';
-    return `<article class="customer-account-card" data-customer-id="${escapeHtml(customer.id)}"><div><div class="customer-account-name"><strong>${escapeHtml(customer.name)}</strong>${groupBadge}${tier?`<span class="badge info">${escapeHtml(tier.name)}</span>`:''}${customer.credit_enabled?'<span class="badge info">Kredit aktif</span>':''}</div><small>${escapeHtml(customer.code)} · ${escapeHtml(customer.phone??'tanpa telepon')} · ${Number(customer.loyalty_points??0).toLocaleString('id-ID')} poin</small><br><small>Nilai transaksi ${money.format(customer.lifetime_spend??0)}${customer.last_purchase_at?` · terakhir ${new Date(customer.last_purchase_at).toLocaleDateString('id-ID')}`:' · belum bertransaksi'}</small></div><div class="customer-account-balance ${overdueBalance>0?'overdue':''}"><span>Saldo piutang</span><strong>${money.format(balance)}</strong><small>${overdueBalance>0?`${money.format(overdueBalance)} jatuh tempo`:`Sisa plafon ${money.format(customer.available_credit??0)}`}</small></div><div class="customer-account-actions"><button class="button secondary customer-statement" type="button">Lihat rekening</button>${['OWNER','ADMIN'].includes(state.session.user.role)?'<button class="button secondary edit-customer" type="button">Edit</button>':''}</div></article>`;
+    return `<article class="customer-account-card" data-customer-id="${escapeHtml(customer.id)}"><div><div class="customer-account-name"><strong>${escapeHtml(customer.name)}</strong>${groupBadge}${tier?`<span class="badge info">${escapeHtml(tier.name)}</span>`:''}${customer.credit_enabled?'<span class="badge info">Kredit aktif</span>':''}</div><small>${escapeHtml(customer.code)} · ${escapeHtml(customer.phone??'tanpa telepon')} · ${Number(customer.loyalty_points??0).toLocaleString('id-ID')} poin</small><br><small>Nilai transaksi ${money.format(customer.lifetime_spend??0)}${customer.last_purchase_at?` · terakhir ${new Date(customer.last_purchase_at).toLocaleDateString('id-ID')}`:' · belum bertransaksi'}</small></div><div class="customer-account-balance ${overdueBalance>0?'overdue':''}"><span>Saldo piutang</span><strong>${money.format(balance)}</strong><small>${overdueBalance>0?`${money.format(overdueBalance)} jatuh tempo`:`Sisa plafon ${money.format(customer.available_credit??0)}`}</small></div><div class="customer-account-actions"><button class="button secondary customer-statement" type="button">Detail & log poin</button>${['OWNER','ADMIN'].includes(state.session.user.role)?'<button class="button secondary edit-customer" type="button">Edit</button>':''}</div></article>`;
   }).join(''):'<div class="empty-state compact">Pelanggan tidak ditemukan.</div>';
   const canSeeSuppliers = state.session.permissions.includes('purchasing.receive');
   el('supplier-panel').classList.toggle('hidden', !canSeeSuppliers);
@@ -1235,9 +1235,16 @@ async function saveCustomer(event) {
 
 async function openCustomerStatement(customerId){
   try{
-    const data=await request(`/api/customers/${customerId}/statement`);state.activeCustomerStatement=data;
+    const [data,pointData]=await Promise.all([
+      request(`/api/customers/${customerId}/statement`),
+      request(`/api/customers/${customerId}/loyalty`)
+    ]);state.activeCustomerStatement=data;
     const customer=data.customer;el('statement-customer-name').textContent=customer.name;
-    el('statement-summary').innerHTML=`<div><span>Saldo piutang</span><strong>${money.format(customer.account_balance)}</strong></div><div><span>Sisa plafon</span><strong>${money.format(customer.available_credit)}</strong></div><div class="${customer.overdue_balance>0?'overdue':''}"><span>Jatuh tempo</span><strong>${money.format(customer.overdue_balance)}</strong></div>`;
+    el('statement-summary').innerHTML=`<div><span>Saldo poin</span><strong>${Number(customer.loyalty_points??0).toLocaleString('id-ID')}</strong></div><div><span>Saldo piutang</span><strong>${money.format(customer.account_balance)}</strong></div><div><span>Sisa plafon</span><strong>${money.format(customer.available_credit)}</strong></div><div class="${customer.overdue_balance>0?'overdue':''}"><span>Jatuh tempo</span><strong>${money.format(customer.overdue_balance)}</strong></div>`;
+    const pointLabels={EARN:'Poin dari transaksi',REDEEM:'Poin digunakan',ADJUST:'Penyesuaian / impor',EXPIRE:'Poin kedaluwarsa',REVERSAL:'Pembalikan transaksi'};
+    el('statement-points').innerHTML=pointData.entries.length
+      ? reportTable(['Waktu','Struk','Keterangan','Akun','Poin','Saldo saat itu'],pointData.entries.map((entry)=>`<tr><td>${new Date(entry.occurred_at).toLocaleString('id-ID')}</td><td>${escapeHtml(entry.receiptNo??'-')}</td><td><strong>${escapeHtml(pointLabels[entry.entry_type]??entry.entry_type)}</strong><br><small>${escapeHtml(entry.note??'')}</small></td><td>${escapeHtml(entry.actor?.display_name??'-')}</td><td class="${entry.points>=0?'positive':'negative'}"><strong>${entry.points>=0?'+':''}${Number(entry.points).toLocaleString('id-ID')}</strong></td><td><strong>${Number(entry.balanceAfter).toLocaleString('id-ID')}</strong></td></tr>`))
+      : '<div class="empty-state compact">Belum ada mutasi poin untuk pelanggan ini.</div>';
     el('customer-payment-amount').value=customer.account_balance||'';el('customer-payment-amount').max=customer.account_balance;
     el('customer-payment-form').classList.toggle('hidden',!(customer.account_balance>0));
     el('statement-invoices').innerHTML=reportTable(['Faktur','Tanggal','Jatuh tempo','Kredit','Terbayar','Sisa'],data.invoices.filter((invoice)=>invoice.outstanding>0).map((invoice)=>`<tr class="${invoice.overdue?'overdue-row':''}"><td><strong>${escapeHtml(invoice.receipt_no)}</strong></td><td>${new Date(invoice.occurred_at).toLocaleDateString('id-ID')}</td><td>${invoice.due_on?new Date(`${invoice.due_on}T00:00:00`).toLocaleDateString('id-ID'):'-'}</td><td>${money.format(invoice.creditAmount)}</td><td>${money.format(invoice.paidAmount)}</td><td><strong>${money.format(invoice.outstanding)}</strong></td></tr>`));
@@ -5368,9 +5375,7 @@ function buildReceiptMarkup(receipt,payments=[],options={}){
   const paymentRows=layout.showPaymentDetail?payments.map((payment)=>`<div><span>${escapeHtml(payment.method)}${payment.method==='CASH'&&payment.tendered?` · diterima ${money.format(payment.tendered)}`:''}</span><strong>${money.format(payment.amount)}</strong></div>`).join(''):'';
   const pointsEarned=Number(receipt.pointsEarned??0),pointsBalance=receipt.pointsBalance==null?null:Number(receipt.pointsBalance);
   const loyaltyBlock=layout.showLoyaltyPoints&&customer&&pointsBalance!=null
-    ? pointsEarned>0
-      ? `<p class="receipt-thanks">Poin +${pointsEarned.toLocaleString('id-ID')} · saldo ${pointsBalance.toLocaleString('id-ID')}${receipt.tierName?` · ${escapeHtml(receipt.tierName)}`:''}</p>`
-      : `<p class="receipt-thanks">${receipt.pointsBalanceIsCurrent?'Saldo poin saat ini':'Saldo setelah transaksi'} ${pointsBalance.toLocaleString('id-ID')}${receipt.sourceSystem==='KASPIN'?' · data pelanggan Kaspin':''}</p>`
+    ? `<div class="receipt-loyalty"><div><span>Poin bertambah</span><strong>${receipt.sourceSystem==='KASPIN'&&receipt.pointsBalanceIsCurrent?'Tidak tersedia':`+${pointsEarned.toLocaleString('id-ID')}`}</strong></div><div><span>${receipt.pointsBalanceIsCurrent?(receipt.sourceSystem==='KASPIN'?'Saldo poin impor saat ini':'Saldo poin saat ini'):'Saldo poin setelah transaksi'}</span><strong>${pointsBalance.toLocaleString('id-ID')}</strong></div>${receipt.tierName?`<small>${escapeHtml(receipt.tierName)}</small>`:''}</div>`
     :'';
   const voucher=receipt.issuedVoucher;
   const voucherBlock=voucher?`<div class="receipt-issued-voucher"><strong>VOUCHER BELANJA BERIKUTNYA</strong><span>${voucher.discountType==='PERCENT'?`Diskon ${Number(voucher.discountValue)}%`:`Potongan ${money.format(voucher.discountValue)}`}</span><div class="receipt-voucher-qr" data-code="${escapeHtml(voucher.code)}"></div><b>${escapeHtml(voucher.code)}</b><small>Min. belanja ${money.format(voucher.minPurchase)} · berlaku ${new Date(voucher.startsAt).toLocaleDateString('id-ID')}–${new Date(voucher.endsAt).toLocaleDateString('id-ID')}</small><small>Scan saat transaksi berikutnya · hanya 1 kali pakai</small></div>`:'';
@@ -5491,7 +5496,7 @@ async function completePayment(event) {
     try {
       const receipt = await request('/api/sales', { method: 'POST', headers: { 'idempotency-key': sale.key }, body: JSON.stringify(sale.payload) });
       toast(`Transaksi ${receipt.receiptNo} berhasil`);state.lastReceipt={...receipt,payments:structuredClone(state.paymentDraft),customer:selectedPosCustomer()};
-      renderReceipt(receipt,state.paymentDraft);
+      renderReceipt(state.lastReceipt,state.paymentDraft);
       refreshAfterPayment = true;
     } catch (error) {
       if (error.status) return toast(error.message);

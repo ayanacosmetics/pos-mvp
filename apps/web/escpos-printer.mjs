@@ -193,10 +193,12 @@ export function buildEscPosReceipt(receipt, payments = [], settings = {}, contex
   }
   if(layout.showLoyaltyPoints&&customer&&receipt.pointsBalance!=null){
     const earned=Number(receipt.pointsEarned??0),balance=Number(receipt.pointsBalance??0);
-    const pointText=earned>0
-      ? `Poin +${earned} | Saldo ${balance}`
-      : `${receipt.pointsBalanceIsCurrent?'Saldo poin saat ini':'Saldo setelah transaksi'} ${balance}${receipt.sourceSystem==='KASPIN'?' (Kaspin)':''}`;
-    for(const row of wrap(pointText,width))bytes.push(...lineBytes(row));
+    const importedKaspin=receipt.sourceSystem==='KASPIN'&&receipt.pointsBalanceIsCurrent;
+    bytes.push(...lineBytes(columns('Poin bertambah',importedKaspin?'-':`+${earned}`,width)));
+    bytes.push(...lineBytes(columns(
+      receipt.pointsBalanceIsCurrent?(importedKaspin?'Saldo impor saat ini':'Saldo poin saat ini'):'Saldo setelah transaksi',
+      String(balance),width
+    )));
   }
   if(receipt.issuedVoucher){
     const voucher=receipt.issuedVoucher;

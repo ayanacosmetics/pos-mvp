@@ -1479,7 +1479,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.31-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.32-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2677,7 +2677,17 @@ async function routeRequest(request, response, route) {
     requirePermission(session,'pos.sell');
     const customerId=route.split('/')[1],tenant=encodeURIComponent(context.tenantId);
     const entries=await rest('customer_point_entries',`tenant_id=eq.${tenant}&customer_id=eq.${encodeURIComponent(customerId)}&select=*&order=occurred_at.desc&limit=100`);
-    return send(response,200,{entries});
+    const saleIds=[...new Set(entries.map((entry)=>entry.sale_id).filter(Boolean))];
+    const actorIds=[...new Set(entries.map((entry)=>entry.actor_id).filter(Boolean))];
+    const [sales,actors]=await Promise.all([
+      saleIds.length?rest('sales',`tenant_id=eq.${tenant}&id=${inFilter(saleIds)}&select=id,receipt_no`):[],
+      actorIds.length?rest('profiles',`tenant_id=eq.${tenant}&user_id=${inFilter(actorIds)}&select=user_id,display_name,role`):[]
+    ]);
+    return send(response,200,{entries:entries.map((entry)=>({
+      ...entry,points:Number(entry.points),balanceAfter:Number(entry.balance_after),
+      receiptNo:sales.find((sale)=>sale.id===entry.sale_id)?.receipt_no??null,
+      actor:actors.find((actor)=>actor.user_id===entry.actor_id)??null
+    }))});
   }
 
   if (request.method === 'GET' && route === 'customer-credit/aging') {
