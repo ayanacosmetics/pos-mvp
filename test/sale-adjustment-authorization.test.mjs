@@ -56,6 +56,13 @@ test('diskon transaksi dibagi proporsional tanpa mengubah total akhir', () => {
   assert.equal(quote.grandTotal,99000);
 });
 
+test('diskon total barang tidak dikalikan jumlah item', () => {
+  const quote = applySaleAdjustment(baseQuote, { scope:'LINE',mode:'LINE_TOTAL_DISCOUNT',value:8000,reason:'Potongan total satu baris',productId:'p1',unitId:'u1' }, { approvedBy:'Owner' });
+  assert.equal(quote.lines[0].total,82000);
+  assert.equal(quote.manualAdjustment.discountAmount,8000);
+  assert.equal(quote.grandTotal,102000);
+});
+
 test('struk menyamarkan harga internal sebagai harga jual final', () => {
   const quote = applySaleAdjustment(simpleQuote, {
     scope:'LINE', mode:'FIXED_PRICE', value:80000, reason:'Harga khusus internal',
@@ -132,7 +139,7 @@ test('UI memisahkan harga internal dari diskon pelanggan dan struk', async () =>
   const api = await readFile(new URL('../api/index.mjs',import.meta.url),'utf8');
   assert.match(html,/PENYESUAIAN HARGA INTERNAL/);
   assert.match(html,/id="price-adjustment-summary"/);
-  assert.match(script,/isLine\s*\?\s*'<option value="FIXED_PRICE">Harga jual akhir per satuan<\/option>'/);
+  assert.match(script,/<option value="FIXED_PRICE">Ubah harga satuan<\/option>.*<option value="FIXED_DISCOUNT">Diskon per item<\/option>.*<option value="LINE_TOTAL_DISCOUNT">Diskon total barang<\/option>/);
   assert.doesNotMatch(script,/Promo & penyesuaian/);
   assert.match(script,/customerView\.discountTotal/);
   assert.match(api,/sale_adjustment_authorizations/);

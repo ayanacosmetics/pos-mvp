@@ -2354,7 +2354,7 @@ function renderCart() {
   el('open-order-adjustment').classList.toggle('hidden',!state.session.permissions.includes('sale.adjust'));
   if (!state.quote) {
     el('cart-lines').innerHTML = '<div class="empty-state">Belum ada barang.<br><small>Scan barcode atau pilih produk.</small></div>';
-    el('subtotal').textContent = money.format(0); el('discount').textContent = `−${money.format(0)}`; el('price-adjustment-summary').classList.add('hidden'); el('grand-total').textContent = money.format(0); el('pay-button').disabled = true; el('exact-cash-button').disabled = true; el('hold-cart').disabled = true;
+    el('subtotal').textContent = money.format(0); el('discount').textContent = `−${money.format(0)}`; el('price-adjustment-summary').classList.add('hidden'); el('grand-total').textContent = money.format(0); el('pay-button').disabled = true; el('exact-cash-button').disabled = true;
     renderSaleAuthorizationStatus();
     el('voucher-status').textContent='';el('remove-voucher').classList.add('hidden');
     return;
@@ -2363,8 +2363,8 @@ function renderCart() {
     const cartLine=state.cart[index],product=state.products.find((item)=>item.id===cartLine.productId),unit=product?.units.find((item)=>item.id===cartLine.unitId);
     const usedBase=state.cart.filter((item)=>item.productId===cartLine.productId).reduce((sum,item)=>sum+Number(item.qty)*Number(product?.units.find((candidate)=>candidate.id===item.unitId)?.factor??0),0);
     const atLimit=!product||!unit||usedBase+Number(unit.factor)>Number(product.stockBase??0);
-    const canAdjust=state.session.permissions.includes('sale.adjust');
-    return `<div class="cart-line"><div class="cart-line-main"><div><strong>${line.productName}</strong><br><small class="cart-line-meta">${line.qty} <button class="cart-unit-change" data-index="${index}" type="button" aria-label="Ganti satuan ${escapeHtml(line.productName)}">${escapeHtml(line.unitName)} <span aria-hidden="true">⌄</span></button> · ${money.format(line.gross / line.qty)} · stok ${product?.stockBase??0} pcs</small></div><strong>${money.format(line.total)}</strong></div><div class="cart-controls"><button data-index="${index}" data-delta="-1">−</button><span>${line.qty}</span><button data-index="${index}" data-delta="1" ${atLimit?'disabled title="Stok tidak mencukupi"':''}>+</button>${canAdjust?`<button class="manual-line-adjustment" data-index="${index}" type="button" ${state.saleAuthorization?'disabled':''}>Ubah harga</button>`:''}</div>${line.promotions.map((promo) => { const raised=Number(promo.discount)<0; return `<div class="promo-note ${promo.manual?'manual':''}">${promo.manual?'Harga manual ':''}${escapeHtml(promo.code)} v${promo.version}: ${raised?'+':'−'}${money.format(Math.abs(promo.discount))}${promo.approvedBy?` · ${escapeHtml(promo.approvedBy)}`:''}</div>`; }).join('')}</div>`;
+    const lineNote=String(cartLine.note??'').trim();
+    return `<div class="cart-line" data-cart-index="${index}"><button class="cart-line-main cart-line-editor" data-index="${index}" type="button" aria-label="Atur ${escapeHtml(line.productName)}"><span><strong>${escapeHtml(line.productName)}</strong><small class="cart-line-meta">${line.qty} ${escapeHtml(line.unitName)} · ${money.format(line.gross / line.qty)} · stok ${product?.stockBase??0} pcs</small>${lineNote?`<small class="cart-line-note">✎ ${escapeHtml(lineNote)}</small>`:''}</span><strong>${money.format(line.total)}</strong></button><div class="cart-controls"><button data-index="${index}" data-delta="-1">−</button><span>${line.qty}</span><button data-index="${index}" data-delta="1" ${atLimit?'disabled title="Stok tidak mencukupi"':''}>+</button><button class="cart-unit-change" data-index="${index}" type="button" aria-label="Ganti satuan ${escapeHtml(line.productName)}">${escapeHtml(line.unitName)} <span aria-hidden="true">⌄</span></button></div>${line.promotions.map((promo) => { const raised=Number(promo.discount)<0; return `<div class="promo-note ${promo.manual?'manual':''}">${promo.manual?'Harga manual ':''}${escapeHtml(promo.code)} v${promo.version}: ${raised?'+':'−'}${money.format(Math.abs(promo.discount))}${promo.approvedBy?` · ${escapeHtml(promo.approvedBy)}`:''}</div>`; }).join('')}</div>`;
   }).join('');
   document.querySelectorAll('.cart-controls button[data-delta]').forEach((button) => button.addEventListener('click', () => changeQty(Number(button.dataset.index), Number(button.dataset.delta))));
   document.querySelectorAll('.cart-unit-change').forEach((button) => button.addEventListener('click', () => {
@@ -2372,13 +2372,13 @@ function renderCart() {
     const line = state.cart[index];
     if (line) openUnitPicker(line.productId, { cartIndex: index });
   }));
-  document.querySelectorAll('.manual-line-adjustment').forEach((button) => button.addEventListener('click', () => openSaleAdjustmentDialog(Number(button.dataset.index))));
+  document.querySelectorAll('.cart-line-editor').forEach((button) => button.addEventListener('click', () => openSaleAdjustmentDialog(Number(button.dataset.index))));
   const receiptView=customerReceiptView(state.quote),internalAmount=receiptView.internalPriceAdjustment;
   el('subtotal').textContent = money.format(state.quote.subtotal);
   el('discount').textContent = `${Number(receiptView.discountTotal) < 0 ? '+' : '−'}${money.format(Math.abs(receiptView.discountTotal))}`;
   el('price-adjustment-summary').classList.toggle('hidden',!internalAmount);
   el('price-adjustment').textContent=`${Number(internalAmount)<0?'+':'−'}${money.format(Math.abs(internalAmount))}`;
-  el('grand-total').textContent = money.format(state.quote.grandTotal); el('pay-button').disabled = !state.currentShift; el('exact-cash-button').disabled = !state.currentShift; el('hold-cart').disabled = false;
+  el('grand-total').textContent = money.format(state.quote.grandTotal); el('pay-button').disabled = !state.currentShift; el('exact-cash-button').disabled = !state.currentShift;
   el('voucher-status').textContent=state.quote.voucher?`${state.quote.voucher.code}: hemat ${money.format(state.quote.voucher.discount)}`:(state.voucherCode?'Memverifikasi voucher...':'');
   el('remove-voucher').classList.toggle('hidden',!state.voucherCode);
   renderSaleAuthorizationStatus();
@@ -2412,42 +2412,55 @@ function renderSaleAuthorizationStatus() {
 }
 
 function openSaleAdjustmentDialog(lineIndex = null) {
-  if (!state.quote || state.saleAuthorization) return;
-  if (!state.session.permissions.includes('sale.adjust'))return toast('Akun Anda tidak memiliki hak mengubah harga atau diskon manual.');
-  if (!navigator.onLine) return toast('Perubahan harga manual memerlukan koneksi internet.');
+  if (!state.quote) return;
   state.adjustmentTargetIndex = lineIndex;
   const isLine = Number.isInteger(lineIndex);
+  if(state.saleAuthorization&&!isLine)return;
   const line = isLine ? state.quote.lines[lineIndex] : null;
-  el('adjustment-eyebrow').textContent=isLine?'PENYESUAIAN HARGA INTERNAL':'DISKON PELANGGAN';
-  el('adjustment-title').textContent = isLine ? 'Ubah harga jual barang' : 'Diskon transaksi';
+  const canAdjust=state.session.permissions.includes('sale.adjust')&&!state.saleAuthorization;
+  if(!isLine&&!canAdjust)return toast('Akun Anda tidak memiliki hak memberi diskon manual.');
+  if(!isLine&&!navigator.onLine)return toast('Diskon manual memerlukan koneksi internet.');
+  el('adjustment-eyebrow').textContent=isLine?'BARANG DI KERANJANG':'DISKON PELANGGAN';
+  el('adjustment-title').textContent = isLine ? 'Atur barang' : 'Diskon transaksi';
   el('adjustment-help').textContent=isLine
-    ? 'Tetapkan harga jual akhir untuk transaksi ini. Rinciannya hanya tersimpan di audit internal dan tidak dicetak pada struk.'
+    ? (canAdjust?'Ubah harga atau diskon untuk transaksi ini, serta tambahkan catatan singkat.':'Tambahkan catatan singkat untuk barang ini.')
     : 'Diskon ini diberikan kepada pelanggan dan akan ditampilkan sebagai diskon pada struk.';
   el('adjustment-target').innerHTML = isLine
     ? `<strong>${escapeHtml(line.productName)}</strong><small>${line.qty} ${escapeHtml(line.unitName)} · harga aktif ${money.format(line.total / line.qty)} per satuan</small>`
     : `<strong>Seluruh transaksi</strong><small>Total aktif ${money.format(state.quote.grandTotal)}</small>`;
-  el('adjustment-mode-field').classList.toggle('hidden',isLine);
-  el('adjustment-value-label').textContent=isLine?'Harga jual akhir per satuan':'Nilai diskon';
+  el('adjustment-price-fields').classList.toggle('hidden',isLine&&!canAdjust);
+  el('adjustment-line-note-field').classList.toggle('hidden',!isLine);
+  el('adjustment-mode-field').classList.remove('hidden');
+  el('adjustment-value-label').textContent=isLine?'Harga jual akhir per satuan':'Persentase diskon';
   el('adjustment-mode').innerHTML = isLine
-    ? '<option value="FIXED_PRICE">Harga jual akhir per satuan</option>'
+    ? '<option value="FIXED_PRICE">Ubah harga satuan</option><option value="FIXED_DISCOUNT">Diskon per item</option><option value="LINE_TOTAL_DISCOUNT">Diskon total barang</option>'
     : '<option value="PERCENT">Diskon persen</option><option value="FIXED_DISCOUNT">Potongan nominal</option>';
   el('adjustment-value').value = '';
   el('adjustment-reason').value = '';
+  el('adjustment-line-note').value=isLine?String(state.cart[lineIndex]?.note??''):'';
   el('adjustment-error').textContent = '';
   el('sale-adjustment-dialog').showModal();
-  el('approve-adjustment').textContent=isLine?'Simpan harga internal':'Terapkan diskon';
-  el('adjustment-value').focus();
+  el('approve-adjustment').textContent=isLine?'Simpan':'Terapkan diskon';
+  (isLine&&!canAdjust?el('adjustment-line-note'):el('adjustment-value')).focus();
 }
 
 async function approveSaleAdjustment(event) {
   event.preventDefault();
-  if (!navigator.onLine) return el('adjustment-error').textContent = 'Perubahan harga manual memerlukan koneksi internet.';
   const button = el('approve-adjustment');
   const line = Number.isInteger(state.adjustmentTargetIndex) ? state.cart[state.adjustmentTargetIndex] : null;
+  const note=String(el('adjustment-line-note').value??'').trim();
+  const adjustmentValue=Number(el('adjustment-value').value);
+  if(line)line.note=note;
+  if(line&&!el('adjustment-value').value){
+    el('sale-adjustment-dialog').close();
+    renderCart();
+    return toast(note?'Catatan barang disimpan.':'Catatan barang dikosongkan.');
+  }
+  if (!navigator.onLine) return el('adjustment-error').textContent = 'Harga atau diskon manual memerlukan koneksi internet.';
   const adjustment = {
     scope: line ? 'LINE' : 'ORDER',
     mode: el('adjustment-mode').value,
-    value: Number(el('adjustment-value').value),
+    value: adjustmentValue,
     reason: el('adjustment-reason').value,
     productId: line?.productId,
     unitId: line?.unitId
@@ -2468,12 +2481,12 @@ async function approveSaleAdjustment(event) {
     state.quote = result.quote;
     el('sale-adjustment-dialog').close();
     renderCart();
-    toast(`Harga manual disetujui oleh ${result.authorization.approvedBy}.`);
+    toast(`${line?'Perubahan barang':'Diskon transaksi'} disetujui oleh ${result.authorization.approvedBy}.`);
   } catch (error) {
     el('adjustment-error').textContent = error.message;
   } finally {
     button.disabled = false;
-    button.textContent = line ? 'Simpan harga internal' : 'Terapkan diskon';
+    button.textContent = line ? 'Simpan' : 'Terapkan diskon';
   }
 }
 
@@ -5225,12 +5238,37 @@ function localHeldSales(){
 
 function saveLocalHeldSales(rows){localStorage.setItem('pos_held_sales',JSON.stringify(rows));}
 
+function updateSaleNoteControl(){
+  const note=el('sale-note').value.trim();
+  el('sale-note-label').textContent=note?'Catatan ditambahkan':'Tambah catatan';
+  el('toggle-sale-note').classList.toggle('active',Boolean(note));
+}
+
+function clearSaleNote(){
+  el('sale-note').value='';
+  el('sale-note-panel').classList.add('hidden');
+  el('toggle-sale-note').setAttribute('aria-expanded','false');
+  updateSaleNoteControl();
+}
+
+function checkoutNotes(){
+  const transactionNote=el('sale-note').value.trim();
+  const itemNotes=state.cart.map((line)=>{
+    const note=String(line.note??'').trim();
+    if(!note)return '';
+    const product=state.products.find((item)=>item.id===line.productId);
+    return `- ${product?.name??'Barang'}: ${note}`;
+  }).filter(Boolean);
+  return [transactionNote,itemNotes.length?`Catatan barang:\n${itemNotes.join('\n')}`:''].filter(Boolean).join('\n');
+}
+
 async function loadHeldSales(){
   const local=localHeldSales().filter((hold)=>hold.userId===state.session.user.id&&hold.outletId===state.activeOutletId);
   let cloud=[];
   if(navigator.onLine)try{cloud=(await request('/api/held-sales')).holds??[];}catch{}
   state.heldSales=[...local,...cloud].sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));
   el('held-sales-count').textContent=state.heldSales.length;
+  el('hold-cart').title=state.cart.length?'Tahan transaksi ini':(state.heldSales.length?`Buka ${state.heldSales.length} transaksi ditahan`:'Belum ada transaksi ditahan');
   el('held-sales-list').innerHTML=state.heldSales.length?state.heldSales.map((hold)=>`<div class="held-sale-row" data-hold-id="${hold.id}" data-local="${Boolean(hold.local)}"><div><strong>${escapeHtml(hold.label)}</strong><small>${new Date(hold.createdAt).toLocaleString('id-ID')} · ${(hold.cart??[]).length} jenis barang</small></div><strong>${money.format(hold.quote?.grandTotal??0)}</strong><div><button class="button primary resume-held-sale" type="button">Lanjutkan</button><button class="button secondary cancel-held-sale" type="button">Batalkan</button></div></div>`).join(''):'<div class="empty-state compact">Belum ada transaksi ditahan.</div>';
 }
 
@@ -5246,7 +5284,7 @@ async function holdCurrentCart(){
     else{
       const rows=localHeldSales();rows.push({id:crypto.randomUUID(),local:true,userId:state.session.user.id,outletId:state.activeOutletId,label:payload.label,cart:payload.lines,quote:structuredClone(state.quote),customerId:payload.customerId,customerGroupId:payload.customerGroupId,notes:payload.notes,createdAt:new Date().toISOString()});saveLocalHeldSales(rows);
     }
-    state.cart=[];resetPosCustomer();el('sale-note').value='';invalidateSaleAuthorization();await updateQuote();await loadHeldSales();toast('Transaksi ditahan. Stok belum berkurang.');
+    state.cart=[];resetPosCustomer();clearSaleNote();invalidateSaleAuthorization();await updateQuote();await loadHeldSales();toast('Transaksi ditahan. Stok belum berkurang.');
   }catch(error){toast(error.message);}
 }
 
@@ -5263,7 +5301,7 @@ async function actOnHeldSale(holdId,action,isLocal){
     if(action==='resume'){
       resetPosCustomer();
       if(result.customerId&&state.customers.some((customer)=>customer.id===result.customerId))el('customer-select').value=result.customerId;
-      invalidateSaleAuthorization();el('customer-group').value=result.customerGroupId??'retail';el('sale-note').value=result.notes??'';state.cart=structuredClone(result.cart??[]);await updateQuote();
+      invalidateSaleAuthorization();el('customer-group').value=result.customerGroupId??'retail';el('sale-note').value=result.notes??'';updateSaleNoteControl();state.cart=structuredClone(result.cart??[]);await updateQuote();
       syncCustomerSearchLabel();
       el('held-sales-dialog').close();toast('Transaksi dilanjutkan.');
     }else toast('Transaksi ditahan dibatalkan.');
@@ -5484,7 +5522,7 @@ async function completePayment(event) {
   if(!navigator.onLine&&state.paymentDraft.length>1)return el('payment-error').textContent='Pembayaran gabungan memerlukan koneksi internet.';
   const sale = {
     key: crypto.randomUUID(), actorId: state.session.user.id, occurredAt: new Date().toISOString(), expectedTotal: state.quote.grandTotal,
-    payload: { lines: structuredClone(state.cart), offlineQuote: structuredClone(state.quote), customerId: el('customer-select').value || null, customerGroupId: el('customer-group').value, voucherCode:state.voucherCode||null, notes:el('sale-note').value.trim(), payments:structuredClone(state.paymentDraft),paymentMethod:({CASH:'Tunai',QRIS:'QRIS',TRANSFER:'Transfer',EDC:'EDC',CREDIT:'Piutang'})[state.paymentDraft[0].method], shiftId: state.currentShift.id, ...(state.saleAuthorization?{authorization:structuredClone(state.saleAuthorization)}:{}) }
+    payload: { lines: structuredClone(state.cart), offlineQuote: structuredClone(state.quote), customerId: el('customer-select').value || null, customerGroupId: el('customer-group').value, voucherCode:state.voucherCode||null, notes:checkoutNotes(), payments:structuredClone(state.paymentDraft),paymentMethod:({CASH:'Tunai',QRIS:'QRIS',TRANSFER:'Transfer',EDC:'EDC',CREDIT:'Piutang'})[state.paymentDraft[0].method], shiftId: state.currentShift.id, ...(state.saleAuthorization?{authorization:structuredClone(state.saleAuthorization)}:{}) }
   };
   let refreshAfterPayment = false;
   if (!navigator.onLine) {
@@ -5501,7 +5539,7 @@ async function completePayment(event) {
       await queueSale(sale); toast('Jaringan bermasalah. Transaksi diamankan di antrean.');
     }
   }
-  state.cart = []; resetPosCustomer();el('sale-note').value='';invalidateSaleAuthorization(); await updateQuote(); el('payment-dialog').close();
+  state.cart = []; resetPosCustomer();clearSaleNote();invalidateSaleAuthorization(); await updateQuote(); el('payment-dialog').close();
   if (refreshAfterPayment) {
     await refreshCatalog();
     if (state.session.permissions.includes('inventory.manage')) await loadInventory();
@@ -6290,7 +6328,7 @@ el('customer-search-results').addEventListener('click', (event) => {
 });
 el('clear-pos-customer').addEventListener('click',()=>selectPosCustomer(''));
 el('new-pos-customer').addEventListener('click',()=>{el('pos-customer-dialog').close();openCustomerEditor(null,'pos');});
-el('clear-cart').addEventListener('click', async () => { state.cart = []; resetPosCustomer();el('sale-note').value='';invalidateSaleAuthorization(); await updateQuote(); });
+el('clear-cart').addEventListener('click', async () => { state.cart = []; resetPosCustomer();clearSaleNote();invalidateSaleAuthorization(); await updateQuote(); });
 el('mobile-cart-jump').addEventListener('click',()=>setMobilePosView('cart'));
 el('mobile-cart-back').addEventListener('click',()=>setMobilePosView('catalog'));
 el('refresh-pos-history').addEventListener('click',()=>loadPosSales(el('pos-history-search').value,{reportScope:true}));
@@ -6333,6 +6371,10 @@ el('open-order-adjustment').addEventListener('click',()=>openSaleAdjustmentDialo
 el('sale-adjustment-form').addEventListener('submit',approveSaleAdjustment);
 el('close-sale-adjustment').addEventListener('click',()=>el('sale-adjustment-dialog').close());
 el('cancel-sale-adjustment').addEventListener('click',()=>el('sale-adjustment-dialog').close());
+el('adjustment-mode').addEventListener('change',()=>{
+  const labels={FIXED_PRICE:'Harga jual akhir per satuan',FIXED_DISCOUNT:'Potongan per item',LINE_TOTAL_DISCOUNT:'Potongan total barang',PERCENT:'Persentase diskon'};
+  el('adjustment-value-label').textContent=labels[el('adjustment-mode').value]??'Nilai diskon';
+});
 el('unit-picker-options').addEventListener('click', async (event) => {
   const option = event.target.closest('[data-unit-id]');
   const context = state.unitPicker;
@@ -6383,8 +6425,17 @@ el('cash-keypad').addEventListener('click',(event)=>{
   const replace=state.paymentKeypadFresh&&/^\d/.test(key);
   setCashTendered(appendMoneyKey(replace?0:active.payment.tendered,key),{fresh:false});
 });
-el('hold-cart').addEventListener('click',holdCurrentCart);
-el('open-held-sales').addEventListener('click',async()=>{await loadHeldSales();el('held-sales-dialog').showModal();});
+el('toggle-sale-note').addEventListener('click',()=>{
+  const panel=el('sale-note-panel'),open=panel.classList.toggle('hidden')===false;
+  el('toggle-sale-note').setAttribute('aria-expanded',String(open));
+  if(open)el('sale-note').focus();
+});
+el('sale-note').addEventListener('input',updateSaleNoteControl);
+el('hold-cart').addEventListener('click',async()=>{
+  if(state.cart.length)return holdCurrentCart();
+  await loadHeldSales();
+  el('held-sales-dialog').showModal();
+});
 el('close-held-sales').addEventListener('click',()=>el('held-sales-dialog').close());
 el('held-sales-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-hold-id]');if(!row)return;if(event.target.closest('.resume-held-sale'))actOnHeldSale(row.dataset.holdId,'resume',row.dataset.local==='true');if(event.target.closest('.cancel-held-sale'))actOnHeldSale(row.dataset.holdId,'cancel',row.dataset.local==='true');});
 el('close-receipt').addEventListener('click',()=>el('receipt-dialog').close());

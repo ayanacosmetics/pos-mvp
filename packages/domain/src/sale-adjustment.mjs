@@ -8,7 +8,7 @@ export function normalizeSaleAdjustment(input = {}) {
   const value = Number(input.value);
   const reason = String(input.reason ?? '').trim();
   if (!['LINE', 'ORDER'].includes(scope)) throw new Error('Sasaran penyesuaian harga tidak valid');
-  if (scope === 'LINE' && !['PERCENT', 'FIXED_PRICE', 'FIXED_DISCOUNT'].includes(mode)) throw new Error('Jenis penyesuaian barang tidak valid');
+  if (scope === 'LINE' && !['PERCENT', 'FIXED_PRICE', 'FIXED_DISCOUNT', 'LINE_TOTAL_DISCOUNT'].includes(mode)) throw new Error('Jenis penyesuaian barang tidak valid');
   if (scope === 'ORDER' && !['PERCENT', 'FIXED_DISCOUNT'].includes(mode)) throw new Error('Jenis diskon transaksi tidak valid');
   if (!Number.isFinite(value) || value <= 0) throw new Error('Nilai diskon atau harga baru harus lebih dari nol');
   if (mode === 'PERCENT' && value > 100) throw new Error('Persentase diskon maksimal 100%');
@@ -68,8 +68,10 @@ export function applySaleAdjustment(baseQuote, rawAdjustment, authorization = {}
       const requestedTotal = roundMoney(adjustment.value * Number(line.qty));
       if (requestedTotal === Number(line.total)) throw new Error('Harga baru sama dengan harga yang sedang aktif');
       manualDiscount = adjustLine(line, Number(line.total) - requestedTotal, authorization, `Harga ${adjustment.value} / ${line.unitName} · ${adjustment.reason}`);
-    } else {
+    } else if (adjustment.mode === 'FIXED_DISCOUNT') {
       manualDiscount = adjustLine(line, adjustment.value * Number(line.qty), authorization, `Potongan Rp${adjustment.value} / ${line.unitName} · ${adjustment.reason}`);
+    } else {
+      manualDiscount = adjustLine(line, adjustment.value, authorization, `Potongan total Rp${adjustment.value} · ${adjustment.reason}`);
     }
   } else {
     const available = quote.lines.reduce((sum, line) => sum + Number(line.total), 0);

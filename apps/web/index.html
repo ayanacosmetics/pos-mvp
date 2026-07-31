@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=150">
+  <link rel="stylesheet" href="/styles.css?v=151">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -177,7 +177,7 @@
           <button data-page="settings-data-reset" data-target-page="settings" data-settings-view="reset" class="feature-nav-item" data-permission="identity.manage"><span>Reset & pulihkan data</span><small>Hapus atau kembalikan backup</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Tombol Kasir ringkas · v2.16.39</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Editor keranjang ringkas · v2.16.40</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -211,10 +211,11 @@
               <div class="voucher-checkout"><input id="voucher-code" maxlength="30" placeholder="Scan atau masukkan voucher"><button id="apply-voucher" class="button secondary" type="button">Pakai</button><button id="remove-voucher" class="link-button hidden" type="button">Hapus</button></div>
               <small id="voucher-status" class="muted"></small>
               <div class="grand-total"><span>Total</span><strong id="grand-total">Rp0</strong></div>
-              <label class="sale-note-field">Catatan transaksi<textarea id="sale-note" rows="2" maxlength="500" placeholder="Contoh: titip diambil sore"></textarea></label>
+              <button id="toggle-sale-note" class="cart-compact-action" type="button" aria-expanded="false"><span aria-hidden="true">✎</span><span id="sale-note-label">Tambah catatan</span></button>
+              <label id="sale-note-panel" class="sale-note-field hidden">Catatan transaksi<textarea id="sale-note" rows="2" maxlength="500" placeholder="Contoh: titip diambil sore"></textarea></label>
               <button id="open-order-adjustment" class="button adjustment-button" type="button" disabled>Minta diskon transaksi</button>
               <div id="sale-authorization-status" class="sale-authorization-status hidden"></div>
-              <div class="cart-checkout-actions"><button id="hold-cart" class="button secondary" disabled>Tahan</button><button id="open-held-sales" class="button secondary">Ditahan <span id="held-sales-count">0</span></button><button id="exact-cash-button" class="button exact-cash-button" disabled>Uang pas</button><button id="pay-button" class="button primary" disabled>Bayar</button></div>
+              <div class="cart-checkout-actions"><button id="hold-cart" class="button secondary keep-cart-button" type="button" title="Simpan atau buka transaksi ditahan" aria-label="Simpan atau buka transaksi ditahan"><span aria-hidden="true">🔔</span><b id="held-sales-count">0</b></button><button id="exact-cash-button" class="button exact-cash-button" disabled>Uang pas</button><button id="pay-button" class="button primary" disabled>Bayar</button></div>
             </div>
           </aside>
         </div>
@@ -960,7 +961,7 @@
 
   <dialog id="supplier-statement-dialog"><div class="dialog-card customer-statement-dialog"><div class="comparison-heading"><div><p class="eyebrow">HUTANG SUPPLIER</p><h2 id="statement-supplier-name">Supplier</h2></div><button id="close-supplier-statement" class="icon-button" type="button">×</button></div><div id="supplier-statement-summary" class="statement-summary"></div><form id="supplier-payment-form" class="customer-payment-form"><p class="eyebrow">CATAT PEMBAYARAN</p><div class="form-grid compact"><label>Nominal<input id="supplier-payment-amount" type="number" min="1" required></label><label>Metode<select id="supplier-payment-method"><option value="TRANSFER">Transfer</option><option value="CASH">Tunai</option><option value="QRIS">QRIS</option><option value="EDC">Kartu / EDC</option></select></label><label id="supplier-payment-reference-wrap">Referensi<input id="supplier-payment-reference"></label><label>Catatan<input id="supplier-payment-note"></label></div><p id="supplier-payment-error" class="error"></p><button class="button primary" type="submit">Catat pembayaran supplier</button></form><div><p class="eyebrow">FAKTUR PEMBELIAN</p><div id="supplier-statement-bills" class="table-wrap"></div></div><div><p class="eyebrow">MUTASI HUTANG</p><div id="supplier-statement-entries" class="table-wrap"></div></div></div></dialog>
 
-  <dialog id="sale-adjustment-dialog"><form id="sale-adjustment-form" class="dialog-card adjustment-dialog"><div class="comparison-heading"><div><p id="adjustment-eyebrow" class="eyebrow">PENYESUAIAN HARGA INTERNAL</p><h2 id="adjustment-title">Harga jual manual</h2><p id="adjustment-help" class="muted">Rincian internal selalu tercatat pada audit.</p></div><button id="close-sale-adjustment" class="icon-button" type="button">×</button></div><div id="adjustment-target" class="adjustment-target"></div><div class="adjustment-fields"><label id="adjustment-mode-field"><span>Jenis diskon</span><select id="adjustment-mode"></select></label><label><span id="adjustment-value-label">Harga jual akhir per satuan</span><input id="adjustment-value" type="number" min="0.01" step="any" required placeholder="Contoh: 25000"></label></div><label>Alasan internal<textarea id="adjustment-reason" rows="3" minlength="5" required placeholder="Contoh: harga rak belum diperbarui"></textarea></label><div id="self-approval-note" class="self-approval-note"><strong>Diizinkan untuk akun ini</strong><small>Owner telah memberikan hak mengubah harga/diskon melalui checklist pengguna. Sandi Owner tidak diperlukan.</small></div><p id="adjustment-error" class="error"></p><div class="button-row"><button id="cancel-sale-adjustment" class="button secondary" type="button">Batal</button><button id="approve-adjustment" class="button primary" type="submit">Simpan harga internal</button></div></form></dialog>
+  <dialog id="sale-adjustment-dialog"><form id="sale-adjustment-form" class="dialog-card adjustment-dialog"><div class="comparison-heading"><div><p id="adjustment-eyebrow" class="eyebrow">PENYESUAIAN HARGA INTERNAL</p><h2 id="adjustment-title">Harga jual manual</h2><p id="adjustment-help" class="muted">Rincian internal selalu tercatat pada audit.</p></div><button id="close-sale-adjustment" class="icon-button" type="button">×</button></div><div id="adjustment-target" class="adjustment-target"></div><div id="adjustment-price-fields"><div class="adjustment-fields"><label id="adjustment-mode-field"><span>Jenis perubahan</span><select id="adjustment-mode"></select></label><label><span id="adjustment-value-label">Harga jual akhir per satuan</span><input id="adjustment-value" type="number" min="0.01" step="any" placeholder="Contoh: 25000"></label></div><label id="adjustment-reason-field">Alasan internal<textarea id="adjustment-reason" rows="2" minlength="5" placeholder="Contoh: harga rak belum diperbarui"></textarea></label><div id="self-approval-note" class="self-approval-note"><strong>Diizinkan untuk akun ini</strong><small>Owner telah memberikan hak mengubah harga/diskon melalui checklist pengguna. Sandi Owner tidak diperlukan.</small></div></div><label id="adjustment-line-note-field">Catatan singkat barang<input id="adjustment-line-note" maxlength="120" placeholder="Contoh: bungkus terpisah"></label><p id="adjustment-error" class="error"></p><div class="button-row"><button id="cancel-sale-adjustment" class="button secondary" type="button">Batal</button><button id="approve-adjustment" class="button primary" type="submit">Simpan</button></div></form></dialog>
 
   <dialog id="unit-picker-dialog"><div class="dialog-card unit-picker-dialog"><div class="comparison-heading"><div><p class="eyebrow">PILIH SATUAN JUAL</p><h2 id="unit-picker-product">Pilih satuan</h2><p id="unit-picker-help" class="muted">Harga dan stok dihitung otomatis sesuai isi satuan.</p></div><button id="close-unit-picker" class="icon-button" type="button" aria-label="Tutup pilihan satuan">×</button></div><div id="unit-picker-options" class="unit-picker-options"></div><small class="unit-picker-note">Barcode satuan besar yang terdaftar akan memilih satuan tersebut secara langsung.</small></div></dialog>
 
@@ -1033,6 +1034,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=150"></script>
+  <script type="module" src="/app.js?v=151"></script>
 </body>
 </html>
