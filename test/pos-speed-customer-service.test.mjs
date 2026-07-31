@@ -105,3 +105,10 @@ test('desktop menjaga kontrol kasir tetap terlihat dan hanya daftar barang yang 
   assert.doesNotMatch(script,/posProductLimit|data-product-load-more/);
   assert.match(script,/innerHTML = list\.map\(\(product\)/);
 });
+
+test('ponsel mengunci kontrol kasir dan menggulir daftar produk secara mandiri',async()=>{
+  const [,,,,css]=await files();
+  assert.match(css,/@media\(max-width:760px\)\{[\s\S]*#page-pos \.pos-layout:not\(\.mobile-cart-view\)\{[\s\S]*height:calc\(100dvh - 64px\)[\s\S]*overflow:hidden/);
+  assert.match(css,/#page-pos \.pos-layout:not\(\.mobile-cart-view\) \.catalog-pane\{[\s\S]*display:flex[\s\S]*height:100%[\s\S]*overflow:hidden/);
+  assert.match(css,/#page-pos \.pos-product-scroll\{[\s\S]*flex:1[\s\S]*overflow-y:auto[\s\S]*-webkit-overflow-scrolling:touch/);
+});
