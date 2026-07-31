@@ -1437,8 +1437,25 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
   #page-pos .catalog-pane>.search-row,
   #page-pos .catalog-pane>.customer-service-note,
   #page-pos .catalog-pane>.pos-product-tools{flex:0 0 auto}
-  #page-pos .catalog-pane>.page-title{margin-bottom:7px;padding-bottom:7px}
+  #page-pos .catalog-pane>.page-title{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:center;
+    gap:8px;
+    margin-bottom:7px;
+    padding-bottom:7px;
+  }
   #page-pos .catalog-pane>.page-title h1{font-size:25px}
+  #page-pos .pos-heading-actions{
+    display:grid;
+    grid-template-columns:38px auto;
+    align-items:center;
+    gap:6px;
+    flex-wrap:nowrap;
+  }
+  #page-pos .pos-heading-actions .button{min-height:38px;padding:8px 9px;white-space:nowrap}
+  #page-pos .pos-heading-actions .compact-button{width:38px;min-width:38px;padding:0}
+  #page-pos .pos-heading-actions #sync-button{order:initial;width:auto}
   #page-pos .catalog-pane>.search-row{margin-bottom:7px}
   #page-pos .catalog-pane>.customer-service-note{margin:0 0 7px}
   #page-pos .catalog-pane>.pos-product-tools{margin:0 0 6px}

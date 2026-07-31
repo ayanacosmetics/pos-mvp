@@ -111,4 +111,6 @@ test('ponsel mengunci kontrol kasir dan menggulir daftar produk secara mandiri',
   assert.match(css,/@media\(max-width:760px\)\{[\s\S]*#page-pos \.pos-layout:not\(\.mobile-cart-view\)\{[\s\S]*height:calc\(100dvh - 64px\)[\s\S]*overflow:hidden/);
   assert.match(css,/#page-pos \.pos-layout:not\(\.mobile-cart-view\) \.catalog-pane\{[\s\S]*display:flex[\s\S]*height:100%[\s\S]*overflow:hidden/);
   assert.match(css,/#page-pos \.pos-product-scroll\{[\s\S]*flex:1[\s\S]*overflow-y:auto[\s\S]*-webkit-overflow-scrolling:touch/);
+  assert.match(css,/#page-pos \.pos-heading-actions\{[\s\S]*grid-template-columns:38px auto[\s\S]*flex-wrap:nowrap/);
+  assert.match(css,/#page-pos \.pos-heading-actions #sync-button\{order:initial;width:auto\}/);
 });
