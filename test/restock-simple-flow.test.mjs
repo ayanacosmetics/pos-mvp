@@ -61,19 +61,24 @@ test('satu tombol membuat pesanan supplier dan mengajukannya untuk diproses', ()
   assert.match(app, /supplierId,locationId/);
 });
 
-test('surat pesanan dapat dicetak atau dibagikan dan bukan bukti bayar', () => {
-  for (const id of ['purchase-order-dialog','purchase-order-print-content','share-purchase-order','print-purchase-order']) {
+test('surat pesanan dapat dicetak atau dibagikan sebagai PDF ke supplier', () => {
+  for (const id of ['purchase-order-dialog','purchase-order-print-content','purchase-order-print-root','share-purchase-order','print-purchase-order']) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
   assert.match(app, /BUKAN BUKTI PEMBAYARAN/);
-  assert.match(app, /navigator\.share/);
-  assert.match(app, /navigator\.clipboard\.writeText/);
+  assert.match(app, /function purchaseOrderPdfBlob/);
+  assert.match(app, /navigator\.canShare\?\.\(\{files:\[file\]\}\)/);
+  assert.match(app, /files:\[file\]/);
+  assert.match(app, /https:\/\/wa\.me\/\$\{phone\}/);
+  assert.match(app, /Nomor WhatsApp supplier belum diisi/);
   assert.match(app, /class="button secondary po-print"/);
 });
 
 test('dokumen supplier memakai tata cetak A4 terpisah dari struk penjualan', () => {
-  assert.match(css, /body\.printing-purchase-order>\*:not\(#purchase-order-dialog\)/);
+  assert.match(css, /body\.printing-purchase-order>\*:not\(#purchase-order-print-root\)/);
+  assert.match(css, /body\.printing-purchase-order #purchase-order-print-root\{display:block!important/);
   assert.match(css, /\.supplier-order-sheet/);
   assert.match(css, /@page\{size:A4 portrait/);
-  assert.match(css, /body\.printing-purchase-order #receipt-dialog\{display:none!important\}/);
+  assert.match(app, /requestAnimationFrame\(\(\)=>requestAnimationFrame\(\(\)=>window\.print\(\)\)\)/);
+  assert.match(app, /window\.addEventListener\('afterprint',cleanup/);
 });

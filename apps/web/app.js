@@ -3101,15 +3101,12 @@ function purchaseOrderShareText(order) {
   return `${business.name??'Kasir Nusa'}\nSURAT PESANAN BARANG ${order.po_no}\nSupplier: ${order.supplier_name}\n\n${lines}\n\nEstimasi total: ${money.format(order.grand_total)}\nDokumen ini adalah permintaan barang, BUKAN BUKTI PEMBAYARAN.`;
 }
 
-function openPurchaseOrderPrint(orderId) {
-  const order=state.purchaseOrders.find((item)=>item.id===orderId);
-  if(!order)return;
-  state.printingPurchaseOrder=order;
+function purchaseOrderSheet(order) {
   const business=state.business??{};
   const supplier=state.suppliers.find((item)=>item.id===order.supplier_id);
   const location=state.locations.find((item)=>item.id===order.location_id);
   const rows=order.items.map((item,index)=>`<tr><td>${index+1}</td><td><strong>${escapeHtml(item.product_name)}</strong>${item.sku?`<small>${escapeHtml(item.sku)}</small>`:''}</td><td>${Number(item.ordered_qty).toLocaleString('id-ID')} pcs</td><td>${money.format(item.unit_cost)}</td><td>${money.format(item.line_total)}</td></tr>`).join('');
-  el('purchase-order-print-content').innerHTML=`<article class="supplier-order-sheet">
+  return `<article class="supplier-order-sheet">
     <header><div><span class="supplier-order-brand">${escapeHtml(business.name??'Kasir Nusa')}</span><small>${escapeHtml(business.address??'')}</small><small>${escapeHtml(business.phone??'')}</small></div><div><p>SURAT PESANAN BARANG</p><strong>${escapeHtml(order.po_no)}</strong></div></header>
     <div class="supplier-order-notice"><strong>BUKAN BUKTI PEMBAYARAN</strong><span>Dokumen ini adalah permintaan pengadaan barang kepada supplier.</span></div>
     <section class="supplier-order-meta"><div><span>Kepada supplier</span><strong>${escapeHtml(order.supplier_name)}</strong><small>${escapeHtml(supplier?.phone??'')}</small><small>${escapeHtml(supplier?.address??'')}</small></div><div><span>Dikirim ke</span><strong>${escapeHtml(location?.name??'-')}</strong><small>Dibuat ${new Date(order.created_at).toLocaleDateString('id-ID')}</small><small>${order.expected_on?`Diharapkan tiba ${new Date(`${order.expected_on}T00:00:00`).toLocaleDateString('id-ID')}`:'Tanggal tiba belum ditentukan'}</small></div></section>
@@ -3118,24 +3115,143 @@ function openPurchaseOrderPrint(orderId) {
     ${order.notes?`<section class="supplier-order-notes"><span>Catatan untuk supplier</span><p>${escapeHtml(order.notes)}</p></section>`:''}
     <footer><div><span>Dibuat oleh</span><strong>${escapeHtml(state.session?.user?.displayName??state.session?.user?.name??'-')}</strong></div><div><span>Konfirmasi supplier</span><strong>____________________</strong></div></footer>
   </article>`;
+}
+
+function openPurchaseOrderPrint(orderId) {
+  const order=state.purchaseOrders.find((item)=>item.id===orderId);
+  if(!order)return;
+  state.printingPurchaseOrder=order;
+  const sheet=purchaseOrderSheet(order);
+  el('purchase-order-print-content').innerHTML=sheet;
+  el('purchase-order-print-root').innerHTML=sheet;
   el('purchase-order-dialog').showModal();
+}
+
+function pdfAscii(value) {
+  return String(value??'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7e]/g,'-');
+}
+
+function pdfEscape(value) {
+  return pdfAscii(value).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
+}
+
+function wrapPdfText(value,max=82) {
+  const words=pdfAscii(value).split(/\s+/).filter(Boolean);
+  const lines=[];
+  let line='';
+  for(const word of words){
+    if(!line){line=word;continue;}
+    if(`${line} ${word}`.length<=max){line+=` ${word}`;continue;}
+    lines.push(line);line=word;
+  }
+  if(line)lines.push(line);
+  return lines.length?lines:[''];
+}
+
+function purchaseOrderPdfBlob(order) {
+  const business=state.business??{};
+  const supplier=state.suppliers.find((item)=>item.id===order.supplier_id);
+  const location=state.locations.find((item)=>item.id===order.location_id);
+  const lines=[
+    `${business.name??'Kasir Nusa'} - SURAT PESANAN BARANG`,
+    `Nomor: ${order.po_no}`,
+    `Supplier: ${order.supplier_name}${supplier?.phone?` | ${supplier.phone}`:''}`,
+    `Tujuan: ${location?.name??'-'} | Dibuat: ${new Date(order.created_at).toLocaleDateString('id-ID')}`,
+    'BUKAN BUKTI PEMBAYARAN',
+    ''
+  ];
+  order.items.forEach((item,index)=>{
+    lines.push(...wrapPdfText(`${index+1}. ${item.product_name} | ${Number(item.ordered_qty).toLocaleString('id-ID')} pcs | ${money.format(item.unit_cost)} | ${money.format(item.line_total)}`));
+  });
+  lines.push('',`Estimasi total: ${money.format(order.grand_total)}`);
+  if(order.notes)lines.push('',...wrapPdfText(`Catatan: ${order.notes}`));
+  lines.push('','Dokumen ini adalah permintaan pengadaan barang, bukan bukti pembayaran.');
+  const pages=[];
+  for(let index=0;index<lines.length;index+=43)pages.push(lines.slice(index,index+43));
+  const pageObjectNumbers=pages.map((_,index)=>3+(index*2));
+  const fontObjectNumber=3+(pages.length*2);
+  const objects=[];
+  objects[1]='<< /Type /Catalog /Pages 2 0 R >>';
+  objects[2]=`<< /Type /Pages /Kids [${pageObjectNumbers.map((number)=>`${number} 0 R`).join(' ')}] /Count ${pages.length} >>`;
+  pages.forEach((pageLines,index)=>{
+    const pageNumber=pageObjectNumbers[index];
+    const contentNumber=pageNumber+1;
+    const commands=['BT','/F1 10 Tf'];
+    pageLines.forEach((line,lineIndex)=>{
+      const y=795-(lineIndex*17);
+      commands.push(`1 0 0 1 48 ${y} Tm (${pdfEscape(line)}) Tj`);
+    });
+    commands.push('ET');
+    const stream=commands.join('\n');
+    objects[pageNumber]=`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontObjectNumber} 0 R >> >> /Contents ${contentNumber} 0 R >>`;
+    objects[contentNumber]=`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+  });
+  objects[fontObjectNumber]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+  let pdf='%PDF-1.4\n%NUSA-POS\n';
+  const offsets=[0];
+  for(let index=1;index<objects.length;index++){
+    offsets[index]=pdf.length;
+    pdf+=`${index} 0 obj\n${objects[index]}\nendobj\n`;
+  }
+  const xrefOffset=pdf.length;
+  pdf+=`xref\n0 ${objects.length}\n0000000000 65535 f \n`;
+  for(let index=1;index<objects.length;index++)pdf+=`${String(offsets[index]).padStart(10,'0')} 00000 n \n`;
+  pdf+=`trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return new Blob([pdf],{type:'application/pdf'});
+}
+
+function purchaseOrderFileName(order) {
+  return `pesanan-${pdfAscii(order.po_no).replace(/[^a-z0-9_-]+/gi,'-')}.pdf`;
+}
+
+function downloadPurchaseOrderPdf(blob,fileName) {
+  const link=document.createElement('a');
+  link.href=URL.createObjectURL(blob);
+  link.download=fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+}
+
+function supplierWhatsAppNumber(phone) {
+  let digits=String(phone??'').replace(/\D/g,'');
+  if(digits.startsWith('0'))digits=`62${digits.slice(1)}`;
+  else if(digits.startsWith('8'))digits=`62${digits}`;
+  return digits;
 }
 
 async function sharePurchaseOrder() {
   const order=state.printingPurchaseOrder;
   if(!order)return;
+  const supplier=state.suppliers.find((item)=>item.id===order.supplier_id);
+  const phone=supplierWhatsAppNumber(supplier?.phone);
+  if(!phone)return toast('Nomor WhatsApp supplier belum diisi. Lengkapi dahulu di menu Supplier.');
   const text=purchaseOrderShareText(order);
-  if(navigator.share){
-    try{await navigator.share({title:`Pesanan ${order.po_no}`,text});return;}catch(error){if(error.name==='AbortError')return;}
+  const pdf=purchaseOrderPdfBlob(order);
+  const file=typeof File==='function'?new File([pdf],purchaseOrderFileName(order),{type:'application/pdf'}):null;
+  if(file&&navigator.share&&navigator.canShare?.({files:[file]})){
+    try{
+      await navigator.share({title:`Pesanan ${order.po_no} untuk ${order.supplier_name}`,text,files:[file]});
+      return;
+    }catch(error){
+      if(error.name==='AbortError')return;
+    }
   }
-  await navigator.clipboard.writeText(text);
-  toast('Ringkasan pesanan disalin. Tempelkan ke chat supplier.');
+  downloadPurchaseOrderPdf(pdf,file?.name??purchaseOrderFileName(order));
+  toast('PDF sudah diunduh. Lampirkan file tersebut pada chat WhatsApp yang dibuka.');
+  window.location.href=`https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 }
 
 function printPurchaseOrder() {
+  const order=state.printingPurchaseOrder;
+  if(!order)return;
+  el('purchase-order-print-root').innerHTML=purchaseOrderSheet(order);
   document.body.classList.add('printing-purchase-order');
-  window.print();
-  setTimeout(()=>document.body.classList.remove('printing-purchase-order'),500);
+  const cleanup=()=>document.body.classList.remove('printing-purchase-order');
+  window.addEventListener('afterprint',cleanup,{once:true});
+  requestAnimationFrame(()=>requestAnimationFrame(()=>window.print()));
+  setTimeout(cleanup,60000);
 }
 
 function newPurchaseOrder() {

@@ -1034,7 +1034,7 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
 .planning-advanced form{padding:18px}
 .planning-advanced form h2{margin-top:0}
 .purchase-order-dialog{width:min(900px,94vw);max-height:92vh;overflow:auto;padding:22px}
-.supplier-order-sheet{padding:12px;color:#172e31;background:#fff}
+#purchase-order-print-root{display:none}.supplier-order-sheet{padding:12px;color:#172e31;background:#fff}
 .supplier-order-sheet header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding-bottom:18px;border-bottom:2px solid #172e31}
 .supplier-order-sheet header>div{display:grid;gap:3px}
 .supplier-order-sheet header>div:last-child{text-align:right}
@@ -1078,12 +1078,9 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
 }
 
 @media print{
-  body.printing-purchase-order>*:not(#purchase-order-dialog){display:none!important}
-  body.printing-purchase-order #receipt-dialog{display:none!important}
-  body.printing-purchase-order #purchase-order-dialog{position:static!important;display:block!important;width:100%!important;max-width:none!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}
-  body.printing-purchase-order #purchase-order-dialog::backdrop{display:none!important}
-  body.printing-purchase-order .purchase-order-dialog{width:auto!important;max-width:none!important;max-height:none!important;padding:0!important;overflow:visible!important}
-  body.printing-purchase-order .supplier-order-sheet{min-width:0!important;padding:0!important}
+  body.printing-purchase-order>*:not(#purchase-order-print-root){display:none!important}
+  body.printing-purchase-order #purchase-order-print-root{display:block!important;width:100%!important;margin:0!important;padding:0!important;background:#fff!important}
+  body.printing-purchase-order #purchase-order-print-root .supplier-order-sheet{display:block!important;min-width:0!important;padding:0!important}
   @page{size:A4 portrait;margin:12mm}
 }
 
