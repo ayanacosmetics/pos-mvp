@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=152">
+  <link rel="stylesheet" href="/styles.css?v=153">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -177,7 +177,7 @@
           <button data-page="settings-data-reset" data-target-page="settings" data-settings-view="reset" class="feature-nav-item" data-permission="identity.manage"><span>Reset & pulihkan data</span><small>Hapus atau kembalikan backup</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Restok barang baru · v2.16.41</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Tampilan restok rapi · v2.16.42</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -245,7 +245,7 @@
 
       <section id="page-restock" class="page">
         <div class="content-width">
-          <div class="page-title"><div><p class="eyebrow">ALUR RESTOK</p><h1>Pesan lalu terima barang</h1><p class="muted">Pilih stok yang menipis, kirim surat pesanan ke supplier, lalu catat barang ketika tiba.</p></div><span class="pill success">3 langkah utama</span></div>
+          <div class="page-title restock-page-title"><div><p class="eyebrow">ALUR RESTOK</p><h1>Pesan lalu terima barang</h1><p class="muted">Pilih stok yang menipis, kirim surat pesanan ke supplier, lalu catat barang ketika tiba.</p></div><span class="pill success">3 langkah utama</span></div>
           <div class="purchase-tabs hidden" role="tablist" aria-hidden="true"><button class="purchase-tab active" data-purchase-view="planning">Pilih barang</button><button class="purchase-tab" data-purchase-view="documents">Pesanan supplier</button><button class="purchase-tab" data-purchase-view="order">Ubah pesanan</button><button class="purchase-tab" data-purchase-view="receipt">Terima barang</button><button class="purchase-tab" data-purchase-view="supplier-return">Retur supplier</button></div>
 
           <div id="purchase-view-planning" class="purchase-view">
@@ -253,20 +253,20 @@
             <div class="planning-layout">
               <div class="surface planning-workspace">
                 <div class="document-toolbar planning-toolbar"><div><p class="eyebrow">LANGKAH 1</p><h2>Pilih barang untuk dipesan</h2><small>Produk otomatis diurutkan dari stok paling sedikit.</small></div><div><select id="planning-location" aria-label="Lokasi rencana restok"></select><select id="planning-supplier-filter" aria-label="Filter supplier"><option value="">Semua supplier</option></select><button id="refresh-restock-planning" class="button secondary" type="button">Muat ulang</button></div></div>
+                <details class="planning-settings planning-advanced">
+                  <summary>Pengaturan lanjutan</summary>
+                  <form id="purchase-planning-settings-form">
+                    <div><p class="eyebrow">ATURAN OTOMATIS</p><h2>Analisis & persetujuan</h2></div>
+                    <label>Rata-rata penjualan<input id="planning-lookback-days" type="number" min="7" max="365" value="30"><small>Jumlah hari histori yang dianalisis.</small></label>
+                    <label>Batas pesanan tanpa persetujuan<input id="planning-approval-threshold" type="number" min="0" step="1000" value="5000000"><small>Di atas nilai ini, Staff menunggu Owner/Admin.</small></label>
+                    <button id="save-planning-settings" class="button primary" type="submit">Simpan aturan</button>
+                    <p id="planning-settings-note" class="muted"></p>
+                  </form>
+                </details>
                 <div class="planning-list-tools"><label class="planning-search"><span class="sr-only">Cari barang</span><input id="planning-product-search" type="search" autocomplete="off" placeholder="Cari nama atau SKU"></label><label class="planning-needed-filter"><input id="planning-needed-only" type="checkbox"> Hanya barang yang disarankan sistem</label></div>
                 <div id="restock-planning-list"><div class="empty-state compact">Memuat rekomendasi restok...</div></div>
                 <div class="planning-draft-actions"><span><strong id="planning-selected-count">0 barang dipilih</strong><small>Tekan barang untuk mengisi jumlah, lalu pilih supplier tujuan.</small></span><label>Supplier tujuan<select id="planning-order-supplier" aria-label="Supplier tujuan pesanan"><option value="">Pilih supplier</option></select></label><button id="create-planning-draft" class="button primary" type="button" disabled>Buat pesanan supplier</button></div>
               </div>
-              <details class="surface planning-settings planning-advanced">
-                <summary>Pengaturan lanjutan</summary>
-                <form id="purchase-planning-settings-form">
-                  <p class="eyebrow">ATURAN OTOMATIS</p><h2>Analisis & persetujuan</h2>
-                  <label>Rata-rata penjualan<input id="planning-lookback-days" type="number" min="7" max="365" value="30"><small>Jumlah hari histori yang dianalisis.</small></label>
-                  <label>Batas pesanan tanpa persetujuan<input id="planning-approval-threshold" type="number" min="0" step="1000" value="5000000"><small>Di atas nilai ini, Staff menunggu Owner/Admin.</small></label>
-                  <button id="save-planning-settings" class="button primary full" type="submit">Simpan aturan</button>
-                  <p id="planning-settings-note" class="muted"></p>
-                </form>
-              </details>
             </div>
           </div>
 
@@ -1040,6 +1040,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=152"></script>
+  <script type="module" src="/app.js?v=153"></script>
 </body>
 </html>

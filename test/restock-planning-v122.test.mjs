@@ -40,10 +40,14 @@ test('UI v1.22 menyediakan filter, kebijakan restok, draft rekomendasi, dan tamp
     'purchase-view-planning','planning-location','planning-supplier-filter',
     'restock-planning-list','create-planning-draft','restock-policy-dialog'
   ]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(html, /class="page-title restock-page-title"/);
   assert.match(script, /function loadRestockPlanning/);
   assert.match(script, /function createPlanningDraft/);
   assert.match(script, /Pilih supplier tujuan pesanan/);
-  assert.match(css, /\.planning-layout/);
+  assert.match(css, /#page-restock \.planning-layout\{display:block\}/);
+  assert.match(css, /#page-restock \.planning-toolbar\{display:grid;grid-template-columns:/);
+  assert.match(css, /#page-restock \.planning-draft-actions\{display:grid;grid-template-columns:/);
+  assert.match(css, /#restock-planning-metrics:empty\{display:none\}/);
   assert.match(css, /@media\(max-width:700px\).*\.planning-row/);
 });
 

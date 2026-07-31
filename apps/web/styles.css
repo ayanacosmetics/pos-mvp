@@ -1165,6 +1165,58 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
 .history-receipt-layout{display:grid;gap:14px;justify-items:center}.history-receipt-paper{width:min(390px,100%);padding:26px;border:1px solid #d7dddb;border-radius:4px;background:#fff;box-shadow:0 14px 40px rgba(8,25,30,.09)}
 .history-receipt-details{width:min(520px,100%);padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}.history-receipt-details h2{margin:0 0 12px}.history-receipt-details>div{display:flex;justify-content:space-between;gap:18px;padding:9px 0;border-bottom:1px solid var(--line)}.history-receipt-details span{color:var(--muted);font-size:11px}.history-receipt-details strong{text-align:right;font-size:12px}
 @media(max-width:560px){.history-receipt-page{padding-top:8px}.history-receipt-toolbar{margin-bottom:10px}.history-back-button span{display:none}.history-receipt-paper{padding:22px 18px;border-radius:10px}}
+
+/* Restock planning workspace */
+#page-restock .content-width{padding-top:22px}
+#page-restock .restock-page-title{align-items:center;margin-bottom:16px;padding-bottom:14px}
+#page-restock .restock-page-title h1{font-size:clamp(26px,3vw,34px);line-height:1.08}
+#page-restock .restock-page-title .muted{margin-bottom:0}
+#restock-planning-metrics:empty{display:none}
+#restock-planning-metrics:not(:empty){margin-bottom:14px}
+#page-restock .planning-layout{display:block}
+#page-restock .planning-workspace{width:100%}
+#page-restock .planning-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) minmax(0,auto);align-items:center;padding:16px 18px}
+#page-restock .planning-toolbar>div:last-child{display:grid;grid-template-columns:minmax(150px,190px) minmax(150px,190px) auto;gap:8px;width:auto}
+#page-restock .planning-toolbar select{min-width:0}
+#page-restock .planning-toolbar .button{min-height:43px;padding:9px 14px;white-space:nowrap}
+#page-restock .planning-advanced{position:static;border:0;border-bottom:1px solid var(--line);border-radius:0;background:#f7f8f5}
+#page-restock .planning-advanced>summary{padding:10px 18px;color:var(--brand);font-size:11px}
+#page-restock .planning-advanced[open]>summary{border-bottom:1px solid var(--line)}
+#page-restock .planning-advanced form{display:grid;grid-template-columns:minmax(190px,.8fr) minmax(170px,1fr) minmax(240px,1.25fr) auto;align-items:end;gap:12px;padding:14px 18px}
+#page-restock .planning-advanced form>div{align-self:center}
+#page-restock .planning-advanced form h2{margin:0;font-size:18px}
+#page-restock .planning-advanced form label{margin:0}
+#page-restock .planning-advanced form .button{min-height:43px;white-space:nowrap}
+#page-restock .planning-advanced form>.muted{grid-column:1/-1;min-height:0;margin:0}
+#page-restock .planning-list-tools{display:grid;grid-template-columns:minmax(240px,440px) auto;justify-content:space-between;padding:11px 18px}
+#page-restock .planning-draft-actions{display:grid;grid-template-columns:minmax(220px,1fr) minmax(220px,280px) auto;padding:13px 18px}
+#page-restock .planning-draft-actions>label{min-width:0;margin:0}
+#page-restock .planning-draft-actions>.button{min-height:43px;white-space:nowrap}
+
+@media(max-width:980px){
+  #page-restock .planning-toolbar{grid-template-columns:1fr;align-items:start}
+  #page-restock .planning-toolbar>div:last-child{grid-template-columns:1fr 1fr auto;width:100%}
+  #page-restock .planning-advanced form{grid-template-columns:1fr 1fr}
+  #page-restock .planning-advanced form>div,#page-restock .planning-advanced form>.muted{grid-column:1/-1}
+  #page-restock .planning-draft-actions{grid-template-columns:minmax(0,1fr) minmax(210px,260px)}
+  #page-restock .planning-draft-actions>.button{grid-column:2}
+}
+@media(max-width:700px){
+  #page-restock .content-width{padding-top:14px}
+  #page-restock .restock-page-title{margin-bottom:10px;padding-bottom:10px}
+  #page-restock .restock-page-title .eyebrow,#page-restock .restock-page-title .muted{display:none}
+  #page-restock .restock-page-title h1{font-size:24px}
+  #page-restock .planning-toolbar{padding:13px 14px}
+  #page-restock .planning-toolbar>div:first-child small{font-size:10px}
+  #page-restock .planning-toolbar>div:last-child{grid-template-columns:1fr 1fr}
+  #page-restock .planning-toolbar .button{grid-column:1/-1}
+  #page-restock .planning-advanced>summary{padding-inline:14px}
+  #page-restock .planning-advanced form{grid-template-columns:1fr;padding:13px 14px}
+  #page-restock .planning-advanced form>*{grid-column:1!important}
+  #page-restock .planning-list-tools{grid-template-columns:1fr;gap:10px;padding:10px 14px}
+  #page-restock .planning-draft-actions{grid-template-columns:1fr;padding:12px 14px}
+  #page-restock .planning-draft-actions>.button{grid-column:1;width:100%}
+}
 @media print{
   body.history-receipt-print>*{display:none!important}
   body.history-receipt-print>#app-view{display:block!important}
