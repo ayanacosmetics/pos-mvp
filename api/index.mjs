@@ -747,6 +747,8 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
   return sales.map((sale) => {
     const customer = customers.find((item) => item.id === sale.customer_id) ?? null;
     const pointEntry=pointEntries.find((item)=>item.sale_id===sale.id&&item.entry_type==='EARN');
+    const reconstructedPointBalance=sale.source_system==='KASPIN'&&sale.source_payload?.pointsReconstructed===true
+      ?Number(sale.source_payload.pointsBalanceAfter):null;
     const cashier = sale.source_cashier || cashiers.find((item) => item.user_id === sale.cashier_id)?.display_name || 'Kasir';
     const saleReturns=customerReturns.filter((returned)=>returned.sale_id===sale.id);
     const saleReturnIds=new Set(saleReturns.map((returned)=>returned.id));
@@ -795,8 +797,10 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
       cashier,outletName:context.outlets.find((outlet)=>outlet.id===sale.outlet_id)?.name??context.outlet.name,customer,
       customerGroupId:sale.customer_group_id??customer?.group_id??'retail',notes:sale.notes ?? '',
       sourceSystem:sale.source_system??'NUSA',pointsEarned:Number(sale.points_earned??pointEntry?.points??0),
-      pointsBalance:pointEntry?Number(pointEntry.balance_after):customer?Number(customer.loyalty_points??0):null,
-      pointsBalanceIsCurrent:!pointEntry&&Boolean(customer),
+      pointsBalance:reconstructedPointBalance!=null
+        ?reconstructedPointBalance
+        :pointEntry?Number(pointEntry.balance_after):customer?Number(customer.loyalty_points??0):null,
+      pointsBalanceIsCurrent:reconstructedPointBalance==null&&!pointEntry&&Boolean(customer),
       creditAmount:Number(sale.credit_amount??0),paidCreditAmount:Number(sale.paid_credit_amount??0),
       voidReason:sale.void_reason ?? '',voidedAt:sale.voided_at ?? null,
       returnStatus,returnTotal,returnCost,netTotal,netCost,grossProfit:netTotal-netCost,
@@ -1479,7 +1483,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.32-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.33-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2183,6 +2187,7 @@ async function routeRequest(request, response, route) {
         p_file_name:input.fileName??null,p_rows:preview.rows
       });
       let reconciliation=null;
+      let pointReconstruction=null;
       try{
         reconciliation=await rpc('reconcile_kaspin_customer_sales_v1',{
           p_tenant_id:context.tenantId,p_actor_id:session.authUser.id
@@ -2190,9 +2195,16 @@ async function routeRequest(request, response, route) {
       }catch(error){
         if(!/reconcile_kaspin_customer_sales_v1|schema cache|function|PGRST202/i.test(error.message))throw error;
       }
+      try{
+        pointReconstruction=await rpc('reconstruct_kaspin_points_v1',{
+          p_tenant_id:context.tenantId,p_actor_id:session.authUser.id
+        });
+      }catch(error){
+        if(!/reconstruct_kaspin_points_v1|schema cache|function|PGRST202/i.test(error.message))throw error;
+      }
       return send(response,201,{
         kind:preview.kind,total:preview.rows.length,created:Number(result.created??0),
-        updated:Number(result.updated??0),duplicate:Boolean(result.duplicate),reconciliation
+        updated:Number(result.updated??0),duplicate:Boolean(result.duplicate),reconciliation,pointReconstruction
       });
     }
     let rows=preview.rows.map((row)=>({...row}));

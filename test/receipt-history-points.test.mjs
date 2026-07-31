@@ -10,7 +10,7 @@ test('API riwayat struk menyertakan poin transaksi dan saldo pelanggan', async (
   assert.match(api, /byChunks\('customer_point_entries','sale_id',saleIds/);
   assert.match(api, /entry_type==='EARN'/);
   assert.match(api, /pointsEarned:Number\(sale\.points_earned\?\?pointEntry\?\.points\?\?0\)/);
-  assert.match(api, /pointsBalanceIsCurrent:!pointEntry&&Boolean\(customer\)/);
+  assert.match(api, /reconstructedPointBalance==null&&!pointEntry&&Boolean\(customer\)/);
   assert.match(api, /sourceSystem:sale\.source_system\?\?'NUSA'/);
 });
 
@@ -51,6 +51,15 @@ test('detail pelanggan menampilkan riwayat mutasi poin beserta struk dan pelaku'
   assert.match(api, /actor:actors\.find/);
   assert.match(html, /id="statement-points"/);
   assert.match(app, /Detail & log poin/);
-  assert.match(app, /Saldo saat itu/);
+  assert.match(app, /Saldo setelah mutasi/);
   assert.match(app, /Pembalikan transaksi/);
+});
+
+test('poin impor Kaspin direkonstruksi per struk tanpa mengubah saldo akhir', async () => {
+  const migration = await read('../supabase/migrations/202607310056_kaspin_point_history_reconstruction.sql');
+  assert.match(migration, /floor\(greatest\(v_sale\.grand_total,0\)\/10000\)/);
+  assert.match(migration, /pointsBalanceAfter/);
+  assert.match(migration, /v_difference:=v_target_balance-v_running_balance/);
+  assert.match(migration, /Penyesuaian selisih saldo impor Kasir Pintar/);
+  assert.match(migration, /not exists\([\s\S]*ps\.source_system='KASPIN'/);
 });
