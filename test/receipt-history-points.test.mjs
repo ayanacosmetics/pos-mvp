@@ -50,7 +50,8 @@ test('detail pelanggan menampilkan riwayat mutasi poin beserta struk dan pelaku'
   assert.match(api, /receiptNo:sales\.find/);
   assert.match(api, /actor:actors\.find/);
   assert.match(html, /id="statement-points"/);
-  assert.match(app, /Detail & log poin/);
+  assert.match(app, /customer-directory-table/);
+  assert.match(app, /customer-statement/);
   assert.match(app, /Saldo setelah mutasi/);
   assert.match(app, /Pembalikan transaksi/);
 });
