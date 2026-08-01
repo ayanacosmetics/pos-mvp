@@ -5,9 +5,10 @@ import {readFile} from 'node:fs/promises';
 const root=new URL('../',import.meta.url);
 
 test('impor riwayat penjualan Kaspin membuat detail struk tanpa mengubah stok',async()=>{
-  const [sql,completeSql,api,html,app]=await Promise.all([
+  const [sql,completeSql,optimizedSql,api,html,app]=await Promise.all([
     readFile(new URL('supabase/migrations/202607310053_kaspin_sales_import.sql',root),'utf8'),
     readFile(new URL('supabase/migrations/202608020006_kaspin_complete_sales_history.sql',root),'utf8'),
+    readFile(new URL('supabase/migrations/202608020007_optimize_kaspin_sales_import.sql',root),'utf8'),
     readFile(new URL('api/index.mjs',root),'utf8'),
     readFile(new URL('apps/web/index.html',root),'utf8'),
     readFile(new URL('apps/web/app.js',root),'utf8')
@@ -26,6 +27,9 @@ test('impor riwayat penjualan Kaspin membuat detail struk tanpa mengubah stok',a
   assert.match(completeSql,/v_status='VOIDED'/);
   assert.doesNotMatch(completeSql,/insert into public\.stock_ledger/i);
   assert.doesNotMatch(completeSql,/update public\.stock_balances/i);
+  assert.match(optimizedSql,/jsonb_agg\(value\).*item_lines/s);
+  assert.match(optimizedSql,/jsonb_array_elements\(v_receipt\.item_lines\)/);
+  assert.doesNotMatch(optimizedSql,/jsonb_array_elements\(p_rows\)\s*\n\s*where trim\(value->>'transactionCode'\)=v_transaction_code/);
   assert.match(api,/previewKaspinSales/);
   assert.match(api,/import_kaspin_sales_v1/);
   assert.match(html,/value="KASPIN_SALES"/);
