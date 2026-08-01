@@ -85,7 +85,7 @@ test('backoffice menyediakan pengelolaan user, peran, outlet, dan status akun', 
     readFile(new URL('../apps/web/index.html', import.meta.url), 'utf8'),
     readFile(new URL('../apps/web/app.js', import.meta.url), 'utf8')
   ]);
-  assert.match(html, /data-page="users"[^>]+data-permission="identity\.manage"/);
+  assert.match(html, /data-page="users"[^>]+data-permission="identity\.manage_staff"/);
   assert.match(html, /id="create-user-form"/);
   assert.match(html, /data-page="users"[\s\S]*?<span>Kelola Staff<\/span>/);
   assert.match(html, /id="open-create-user"[^>]*>\+ Tambah staff<\/button>/);

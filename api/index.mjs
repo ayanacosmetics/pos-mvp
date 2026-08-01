@@ -8,8 +8,8 @@ import { validateJournalLines } from '../packages/domain/src/ledger.mjs';
 import { evaluateSafePricePolicy, normalizeSafePricePolicy } from '../packages/domain/src/safe-price-policy.mjs';
 
 const PERMISSIONS = {
-  OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner','multioutlet.view','multioutlet.manage','pilot.manage','sale.adjust','sale.void'],
-  ADMIN: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage','sale.adjust','sale.void'],
+  OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage_staff','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner','multioutlet.view','multioutlet.manage','pilot.manage','sale.adjust','sale.void'],
+  ADMIN: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage_staff','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage','sale.adjust','sale.void'],
   MANAGER: ['pos.sell','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage'],
   CASHIER: ['pos.sell','workforce.self'],
   PURCHASING: ['purchasing.view_cost','purchasing.receive','workforce.self'],
@@ -25,7 +25,11 @@ const ASSIGNABLE_PERMISSIONS=new Set([
 function effectivePermissions(profile) {
   if(profile?.role==='OWNER')return [...PERMISSIONS.OWNER];
   if(Array.isArray(profile?.custom_permissions)){
-    return [...new Set(profile.custom_permissions.filter((permission)=>ASSIGNABLE_PERMISSIONS.has(permission)))];
+    const permissions=profile.custom_permissions.filter((permission)=>ASSIGNABLE_PERMISSIONS.has(permission));
+    // Admin selalu dapat mengelola akun staff, tetapi izin ini tidak dapat
+    // diteruskan kepada peran operasional melalui daftar izin kustom.
+    if(profile?.role==='ADMIN')permissions.push('identity.manage_staff');
+    return [...new Set(permissions)];
   }
   return [...(PERMISSIONS[profile?.role]??[])];
 }
@@ -1536,7 +1540,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.49-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.50-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1932,7 +1936,7 @@ async function routeRequest(request, response, route) {
   }
 
   if (request.method === 'GET' && route === 'users') {
-    requirePermission(session, 'identity.manage');
+    requirePermission(session, 'identity.manage_staff');
     const config = env();
     const [profiles, assignments, authPage] = await Promise.all([
       rest('profiles', `tenant_id=eq.${context.tenantId}&select=*&order=created_at`),
@@ -1940,7 +1944,10 @@ async function routeRequest(request, response, route) {
       supabase('/auth/v1/admin/users?page=1&per_page=1000', { token: config.service })
     ]);
     const authUsers = authPage?.users ?? [];
-    return send(response, 200, { users: profiles.map((profile) => ({
+    const visibleProfiles=session.profile.role==='ADMIN'
+      ? profiles.filter((profile)=>!['OWNER','ADMIN'].includes(profile.role))
+      : profiles;
+    return send(response, 200, { users: visibleProfiles.map((profile) => ({
       id: profile.user_id, email: authUsers.find((user) => user.id === profile.user_id)?.email ?? null,
       displayName: profile.display_name, role: profile.role, active: profile.active, createdAt: profile.created_at,
       permissions:effectivePermissions(profile),customPermissions:profile.custom_permissions,
@@ -1949,13 +1956,16 @@ async function routeRequest(request, response, route) {
   }
 
   if (request.method === 'GET' && /^users\/[^/]+\/activity$/.test(route)) {
-    requirePermission(session, 'identity.manage');
+    requirePermission(session, 'identity.manage_staff');
     const userId = route.split('/')[1];
     const target = await rest('profiles', `tenant_id=eq.${context.tenantId}&user_id=eq.${encodeURIComponent(userId)}&select=user_id,display_name,role&limit=1`);
     if (!target[0]) {
       const error = new Error('Staff tidak ditemukan');
       error.status = 404;
       throw error;
+    }
+    if(session.profile.role==='ADMIN'&&['OWNER','ADMIN'].includes(target[0].role)){
+      throw Object.assign(new Error('Admin hanya dapat melihat aktivitas staff operasional'),{status:403});
     }
     const logs = await rest('audit_logs', `tenant_id=eq.${context.tenantId}&actor_id=eq.${encodeURIComponent(userId)}&select=id,action,entity_type,entity_id,details_json,occurred_at&order=occurred_at.desc&limit=100`);
     return send(response, 200, {
@@ -1968,8 +1978,11 @@ async function routeRequest(request, response, route) {
   }
 
   if (request.method === 'POST' && route === 'users') {
-    requirePermission(session, 'identity.manage');
+    requirePermission(session, 'identity.manage_staff');
     const input = bodyOf(request);
+    if(session.profile.role==='ADMIN'&&['OWNER','ADMIN'].includes(input.role)){
+      throw Object.assign(new Error('Admin hanya dapat membuat staff operasional'),{status:403});
+    }
     if (!input.email || !input.password || input.password.length < 8) { const error = new Error('Email dan kata sandi minimal 8 karakter wajib diisi'); error.status = 400; throw error; }
     const config = env();
     const created = await supabase('/auth/v1/admin/users', { method: 'POST', token: config.service, body: {
@@ -1992,9 +2005,12 @@ async function routeRequest(request, response, route) {
   }
 
   if (request.method === 'PATCH' && /^users\/[^/]+$/.test(route)) {
-    requirePermission(session, 'identity.manage');
+    requirePermission(session, 'identity.manage_staff');
     const userId = route.split('/')[1];
     const input = bodyOf(request);
+    if(session.profile.role==='ADMIN'&&['OWNER','ADMIN'].includes(input.role)){
+      throw Object.assign(new Error('Admin hanya dapat mengelola staff operasional'),{status:403});
+    }
     const permissions=normalizedAssignablePermissions(input.permissions,input.role);
     const profile = await rpc('manage_profile_access_v2', {
       p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_user_id: userId,

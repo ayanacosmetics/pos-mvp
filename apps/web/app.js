@@ -35,22 +35,31 @@ const el = (id) => document.getElementById(id);
 const posDevice = deviceIdentity();
 const roleLabels = { OWNER: 'Owner', ADMIN: 'Admin', MANAGER: 'Manajer Outlet', CASHIER: 'Kasir', PURCHASING: 'Pembelian', WAREHOUSE: 'Gudang' };
 const permissionOptions=[
-  ['pos.sell','Penjualan kasir','Transaksi, member, shift, dan pembayaran'],
-  ['sale.adjust','Ubah harga & diskon manual','Penyesuaian sensitif tanpa sandi Owner'],
-  ['sale.void','Void transaksi','Batalkan transaksi dan kembalikan stok'],
-  ['sales.return','Retur pelanggan','Proses pengembalian barang dan dana'],
-  ['purchasing.view_cost','Lihat harga modal','Harga beli dan perbandingan supplier'],
-  ['purchasing.receive','Restok & penerimaan','Pesanan serta penerimaan supplier'],
-  ['inventory.manage','Kelola stok','Transfer, opname, batch, dan jurnal stok'],
-  ['catalog.manage','Kelola produk & harga','Produk, satuan, barcode, dan harga jual'],
-  ['promotion.manage','Promo & loyalitas','Aturan promo, poin, tier, dan voucher'],
-  ['report.view','Lihat laporan','Pendapatan, keuntungan, produk, dan transaksi'],
-  ['audit.view','Audit & sinkronisasi','Jejak aktivitas dan konflik offline'],
-  ['workforce.self','Fitur karyawan sendiri','Jadwal, absensi, target, dan permintaan'],
-  ['workforce.manage','Kelola karyawan','Jadwal, target, aktivitas, rekonsiliasi'],
-  ['approval.manage','Putuskan persetujuan','Setujui permintaan operasional'],
-  ['multioutlet.view','Lihat multi-outlet','Ringkasan lintas cabang'],
-  ['multioutlet.manage','Kelola multi-outlet','Transfer, harga, dan promo cabang']
+  ['pos.sell','Penjualan kasir','Transaksi, pelanggan, shift, dan pembayaran','sales'],
+  ['sale.adjust','Ubah harga & diskon manual','Penyesuaian sensitif tanpa sandi Owner','sales'],
+  ['sale.void','Void transaksi','Batalkan transaksi dan kembalikan stok','sales'],
+  ['sales.return','Retur pelanggan','Proses pengembalian barang dan dana','sales'],
+  ['catalog.manage','Produk & harga','Produk, satuan, barcode, dan harga jual','stock'],
+  ['inventory.manage','Manajemen stok','Stok barang, transfer, opname, batch, dan jurnal','stock'],
+  ['purchasing.view_cost','Lihat harga modal','Harga beli dan perbandingan supplier','restock'],
+  ['purchasing.receive','Restok & supplier','Pesanan, penerimaan, retur, dan supplier','restock'],
+  ['promotion.manage','Pelanggan & pertumbuhan','Pelanggan, promo, poin, tier, dan voucher','relations'],
+  ['report.view','Laporan','Pendapatan, keuntungan, produk, dan transaksi','reports'],
+  ['audit.view','Audit & sinkronisasi','Jejak aktivitas dan konflik data offline','reports'],
+  ['workforce.self','Area karyawan sendiri','Jadwal, absensi, target, dan permintaan','workforce'],
+  ['workforce.manage','Kelola karyawan','Jadwal, target, aktivitas, dan rekonsiliasi','workforce'],
+  ['approval.manage','Persetujuan','Setujui permintaan operasional','workforce'],
+  ['multioutlet.view','Lihat multi-outlet','Ringkasan lintas cabang','outlets'],
+  ['multioutlet.manage','Kelola multi-outlet','Transfer, harga, dan promo cabang','outlets']
+];
+const permissionGroups=[
+  ['sales','Penjualan','Kasir, retur, diskon, dan pembatalan'],
+  ['stock','Barang & Stok','Katalog serta pergerakan persediaan'],
+  ['restock','Restok & Supplier','Pembelian, modal, dan penerimaan barang'],
+  ['relations','Relasi & Pertumbuhan','Pelanggan, promo, dan loyalitas'],
+  ['reports','Laporan & Audit','Laporan usaha dan jejak aktivitas'],
+  ['workforce','Karyawan','Area pribadi, pengelolaan, dan persetujuan'],
+  ['outlets','Multi-outlet','Akses dan pengelolaan lintas cabang']
 ];
 const permissionDefaults={
   CASHIER:['pos.sell','workforce.self'],
@@ -497,7 +506,7 @@ async function synchronizeData() {
     if (target === 'reports' && state.session.permissions.includes('report.view')) tasks.push(
       ['sales-products','sales-categories','sales-addons','stock-flow'].includes(state.reportView)?loadSalesAnalysis():loadReport()
     );
-    if (target === 'users' && state.session.permissions.includes('identity.manage')) tasks.push(loadUsers());
+    if (target === 'users' && state.session.permissions.includes('identity.manage_staff')) tasks.push(loadUsers());
     if (target === 'settings' && state.session.permissions.includes('identity.manage')) tasks.push(loadSettingsWorkspace());
     if (target === 'sync-review' && state.session.permissions.includes('audit.view')) tasks.push(loadSyncReview());
     if (['promotions', 'loyalty'].includes(target) && state.session.permissions.includes('promotion.manage')) tasks.push(loadPromotionManagement());
@@ -4089,12 +4098,33 @@ function renderPermissionOptions(containerId,selected,role){
     return;
   }
   const active=new Set(selected??permissionDefaults[role]??[]);
-  container.innerHTML=permissionOptions.map(([permission,label,description])=>`<label class="permission-option"><input type="checkbox" value="${permission}" ${active.has(permission)?'checked':''}><span><strong>${label}</strong><small>${description}</small></span></label>`).join('');
+  container.innerHTML=permissionGroups.map(([groupId,groupLabel,groupDescription])=>{
+    const options=permissionOptions.filter(([, , ,optionGroup])=>optionGroup===groupId);
+    const checked=options.filter(([permission])=>active.has(permission)).length;
+    return `<section class="permission-group" data-permission-group="${groupId}"><header><label class="permission-group-toggle"><input type="checkbox" ${checked===options.length?'checked':''}><span><strong>${groupLabel}</strong><small>${groupDescription}</small></span></label><small>${checked}/${options.length} aktif</small></header><div class="permission-group-items">${options.map(([permission,label,description])=>`<label class="permission-option"><input data-permission type="checkbox" value="${permission}" ${active.has(permission)?'checked':''}><span><strong>${label}</strong><small>${description}</small></span></label>`).join('')}</div></section>`;
+  }).join('');
+  const syncGroup=(group)=>{
+    const parent=group.querySelector('.permission-group-toggle input');
+    const children=[...group.querySelectorAll('input[data-permission]')];
+    const checked=children.filter((input)=>input.checked).length;
+    parent.checked=checked===children.length;
+    parent.indeterminate=checked>0&&checked<children.length;
+    group.querySelector('header > small').textContent=`${checked}/${children.length} aktif`;
+  };
+  container.querySelectorAll('.permission-group').forEach((group)=>{
+    const parent=group.querySelector('.permission-group-toggle input');
+    parent.addEventListener('change',()=>{
+      group.querySelectorAll('input[data-permission]').forEach((input)=>{input.checked=parent.checked;});
+      syncGroup(group);
+    });
+    group.querySelectorAll('input[data-permission]').forEach((input)=>input.addEventListener('change',()=>syncGroup(group)));
+    syncGroup(group);
+  });
 }
 
 function selectedPermissions(containerId,role){
   if(role==='OWNER')return null;
-  return [...el(containerId).querySelectorAll('input:checked')].map((input)=>input.value);
+  return [...el(containerId).querySelectorAll('input[data-permission]:checked')].map((input)=>input.value);
 }
 
 function renderUserMetrics() {
@@ -4113,7 +4143,8 @@ function renderUsers() {
   const query = el('user-search').value.trim().toLowerCase();
   const status = el('user-status-filter').value;
   const outletsById = new Map(state.outlets.map((outlet) => [outlet.id, outlet.name]));
-  const users = state.users.filter((user) => user.role !== 'OWNER').filter((user) => {
+  const ownerManaging=state.session?.role==='OWNER';
+  const users = state.users.filter((user) => user.role !== 'OWNER' && (ownerManaging || user.role !== 'ADMIN')).filter((user) => {
     const matchesQuery = !query || `${user.displayName} ${user.email ?? ''} ${roleLabels[user.role] ?? user.role}`.toLowerCase().includes(query);
     const matchesStatus = status === 'ALL' || (status === 'ACTIVE' ? user.active : !user.active);
     return matchesQuery && matchesStatus;
@@ -4143,6 +4174,7 @@ async function loadUsers() {
 
 function openCreateUserDialog() {
   el('create-user-form').reset();
+  el('new-user-role').querySelector('option[value="ADMIN"]').disabled=state.session?.role!=='OWNER';
   el('new-user-role').value = 'CASHIER';
   el('create-user-error').textContent = '';
   renderOutletOptions('new-user-outlets', state.outlets[0] ? [state.outlets[0].id] : [], 'CASHIER');
@@ -4181,6 +4213,7 @@ function openUserEditor(userId) {
   el('edit-user-title').textContent = user.displayName;
   el('edit-user-email').textContent = user.email ?? 'Email tidak tersedia';
   el('edit-user-name').value = user.displayName;
+  el('edit-user-role').querySelector('option[value="ADMIN"]').disabled=state.session?.role!=='OWNER';
   el('edit-user-role').value = user.role;
   el('edit-user-active').checked = user.active;
   el('edit-user-active').disabled = user.id === state.session.user.id;
