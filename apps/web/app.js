@@ -2137,13 +2137,43 @@ function localDate(value){
   return new Date(`${value}T00:00:00`).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
 }
 
+function currentDevicePosition(){
+  if(!navigator.geolocation)return Promise.reject(new Error('Perangkat ini tidak mendukung GPS.'));
+  return new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,(error)=>{
+    const message=error.code===1?'Izin lokasi ditolak. Aktifkan izin lokasi untuk Kasir Nusa.'
+      :error.code===2?'Lokasi belum ditemukan. Aktifkan GPS dan pindah ke area terbuka.'
+      :'Pemeriksaan GPS terlalu lama. Coba kembali.';
+    reject(new Error(message));
+  },{enableHighAccuracy:true,timeout:15000,maximumAge:0}));
+}
+
+async function attendancePhotoFromFile(file){
+  if(!file?.type?.match(/^image\/(png|jpeg|webp)$/))throw new Error('Ambil foto wajah berformat JPEG, PNG, atau WebP.');
+  if(file.size>8_000_000)throw new Error('Foto terlalu besar. Ambil ulang dengan kamera perangkat.');
+  const source=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('Foto gagal dibaca.'));reader.readAsDataURL(file);});
+  const image=await new Promise((resolve,reject)=>{const node=new Image();node.onload=()=>resolve(node);node.onerror=()=>reject(new Error('Foto tidak dapat dibuka.'));node.src=source;});
+  const size=Math.min(image.width,image.height),sourceX=Math.max(0,(image.width-size)/2),sourceY=Math.max(0,(image.height-size)/2);
+  const canvas=document.createElement('canvas');canvas.width=480;canvas.height=480;
+  const context=canvas.getContext('2d');context.drawImage(image,sourceX,sourceY,size,size,0,0,480,480);
+  let quality=.78,result=canvas.toDataURL('image/jpeg',quality);
+  while(result.length>620000&&quality>.45){quality-=.08;result=canvas.toDataURL('image/jpeg',quality);}
+  if(result.length>680000)throw new Error('Foto masih terlalu besar. Ambil ulang dengan pencahayaan lebih baik.');
+  return result;
+}
+
+async function openAttendancePhoto(attendanceId,event){
+  const viewer=window.open('about:blank','_blank');
+  try{const data=await request(`/api/workforce/attendance/${attendanceId}/photo?event=${event}`);if(viewer)viewer.location.href=data.url;else toast('Izinkan pop-up untuk membuka foto absensi.');}
+  catch(error){viewer?.close();toast(error.message);}
+}
+
 function renderWorkforceOverview(){
   const data=state.workforce.overview;
   if(!data)return;
   const active=data.activeAttendance;
   el('attendance-current').innerHTML=active
-    ? `<span class="status-badge submitted">SEDANG BEKERJA</span><h2>${new Date(active.clock_in_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</h2><p class="muted">${localDate(active.work_date)} · ${outletName(active.outlet_id)}</p>`
-    : '<span class="status-badge approved">BELUM ABSEN MASUK</span><p class="muted">Absensi dicatat menggunakan outlet dan perangkat aktif.</p>';
+    ? `<span class="status-badge submitted">SEDANG BEKERJA</span><h2>${new Date(active.clock_in_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</h2><p class="muted">${localDate(active.work_date)} · ${outletName(active.outlet_id)} · ${Math.round(Number(active.clock_in_distance_m??0))} m dari titik usaha</p>`
+    : '<span class="status-badge approved">BELUM ABSEN MASUK</span><p class="muted">GPS dan foto wajah wajib untuk absen masuk maupun keluar.</p>';
   el('attendance-action').textContent=active?'Absen keluar':'Absen masuk';
   el('attendance-action').dataset.action=active?'CLOCK_OUT':'CLOCK_IN';
   const profileOptions=data.profiles.map((item)=>`<option value="${escapeHtml(item.user_id)}">${escapeHtml(item.display_name)} · ${escapeHtml(roleLabels[item.role]??item.role)}</option>`).join('');
@@ -2154,18 +2184,29 @@ function renderWorkforceOverview(){
   el('target-outlet').innerHTML=`<option value="">Semua outlet</option>${outletOptions}`;
   const today=new Date().toISOString().slice(0,10);
   if(!el('schedule-date').value)el('schedule-date').value=today;
+  syncScheduleMode();
   if(!el('target-start').value)el('target-start').value=`${today.slice(0,7)}-01`;
   if(!el('target-end').value)el('target-end').value=new Date(Date.UTC(Number(today.slice(0,4)),Number(today.slice(5,7)),0)).toISOString().slice(0,10);
-  el('workforce-schedule-list').innerHTML=data.schedules.length?data.schedules.map((schedule)=>{
+  const dayNames=['Sen','Sel','Rab','Kam','Jum','Sab','Min'];
+  const ruleRows=(data.shiftRules??[]).map((rule)=>`<article class="workforce-row recurring-shift-row"><div><span class="status-badge approved">BERLAKU TERUS</span><strong>${escapeHtml(employeeName(rule.user_id))}</strong><small>${(rule.weekdays??[]).map((day)=>dayNames[Number(day)-1]).join(', ')} · ${escapeHtml(String(rule.starts_at).slice(0,5))}–${escapeHtml(String(rule.ends_at).slice(0,5))} · ${escapeHtml(outletName(rule.outlet_id))}</small></div><div><small>Mulai ${localDate(rule.effective_from)}</small><small>${escapeHtml(rule.note??'Sampai diubah manual')}</small></div></article>`);
+  const scheduleRows=data.schedules.map((schedule)=>{
     const attendance=data.attendance.find((item)=>item.schedule_id===schedule.id)
       ??data.attendance.find((item)=>item.user_id===schedule.user_id&&item.work_date===schedule.work_date);
-    return `<article class="workforce-row"><div><strong>${escapeHtml(employeeName(schedule.user_id))}</strong><small>${localDate(schedule.work_date)} · ${escapeHtml(String(schedule.starts_at).slice(0,5))}–${escapeHtml(String(schedule.ends_at).slice(0,5))} · ${escapeHtml(outletName(schedule.outlet_id))}</small></div><div>${attendance?`<span class="status-badge ${attendance.clock_out_at?'approved':'submitted'}">${escapeHtml(attendance.status)}</span><small>${new Date(attendance.clock_in_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}${attendance.clock_out_at?`–${new Date(attendance.clock_out_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`:''}</small>`:'<span class="status-badge">BELUM HADIR</span>'}</div></article>`;
-  }).join(''):'<div class="empty-state compact">Belum ada jadwal bulan ini.</div>';
+    return `<article class="workforce-row"><div><strong>${escapeHtml(employeeName(schedule.user_id))}</strong><small>${localDate(schedule.work_date)} · ${escapeHtml(String(schedule.starts_at).slice(0,5))}–${escapeHtml(String(schedule.ends_at).slice(0,5))} · ${escapeHtml(outletName(schedule.outlet_id))}</small></div><div>${attendance?attendanceSummaryMarkup(attendance):'<span class="status-badge">BELUM HADIR</span>'}</div></article>`;
+  });
+  const scheduledAttendanceIds=new Set(data.schedules.map((schedule)=>schedule.id));
+  const attendanceRows=data.attendance.filter((item)=>!item.schedule_id||!scheduledAttendanceIds.has(item.schedule_id)).map((attendance)=>`<article class="workforce-row attendance-history-row"><div><strong>${escapeHtml(employeeName(attendance.user_id))}</strong><small>${localDate(attendance.work_date)} · ${escapeHtml(outletName(attendance.outlet_id))}</small></div><div>${attendanceSummaryMarkup(attendance)}</div></article>`);
+  el('workforce-schedule-list').innerHTML=[...ruleRows,...scheduleRows,...attendanceRows].join('')||'<div class="empty-state compact">Belum ada jadwal atau kehadiran bulan ini.</div>';
   el('workforce-performance').innerHTML=data.performance.map((item)=>{
     const salesTarget=Number(item.target?.sales_target??0),transactionTarget=Number(item.target?.transaction_target??0);
     const salesProgress=salesTarget?Math.min(100,Number(item.salesTotal)/salesTarget*100):0;
     return `<article class="surface performance-card"><div><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(roleLabels[item.role]??item.role)}</small></div><h2>${money.format(item.salesTotal)}</h2><div class="target-progress"><span style="width:${salesProgress}%"></span></div><small>Target ${money.format(salesTarget)} · ${item.transactions}/${transactionTarget} transaksi</small><div class="commission-value"><span>Komisi berjalan</span><strong>${money.format(item.commission)}</strong></div></article>`;
   }).join('')||'<div class="empty-state compact">Belum ada data kinerja.</div>';
+}
+
+function attendanceSummaryMarkup(attendance){
+  const photoButtons=`<span class="attendance-photo-actions">${attendance.clock_in_photo_available?`<button class="link-button view-attendance-photo" type="button" data-attendance-id="${attendance.id}" data-event="in">Foto masuk</button>`:''}${attendance.clock_out_photo_available?`<button class="link-button view-attendance-photo" type="button" data-attendance-id="${attendance.id}" data-event="out">Foto keluar</button>`:''}</span>`;
+  return `<span class="status-badge ${attendance.clock_out_at?'approved':'submitted'}">${escapeHtml(attendance.status)}</span><small>${new Date(attendance.clock_in_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}${attendance.clock_out_at?`–${new Date(attendance.clock_out_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`:''} · ${Math.round(Number(attendance.clock_in_distance_m??0))} m</small>${photoButtons}`;
 }
 
 async function loadWorkforceOverview(){
@@ -2175,14 +2216,37 @@ async function loadWorkforceOverview(){
 
 async function clockAttendance(){
   const button=el('attendance-action');button.disabled=true;
-  try{await request('/api/workforce/attendance',{method:'POST',body:JSON.stringify({action:button.dataset.action,note:el('attendance-note').value})});el('attendance-note').value='';toast(button.dataset.action==='CLOCK_IN'?'Absensi masuk tercatat':'Absensi keluar tercatat');await loadWorkforceOverview();}
+  try{
+    if(!state.attendancePhotoDataUrl)throw new Error('Ambil foto wajah terbaru terlebih dahulu.');
+    el('attendance-location-status').textContent='Memeriksa lokasi GPS...';
+    const position=await currentDevicePosition();
+    el('attendance-location-status').textContent=`Akurasi GPS ±${Math.round(position.coords.accuracy)} meter. Mengirim absensi...`;
+    const result=await request('/api/workforce/attendance',{method:'POST',body:JSON.stringify({action:button.dataset.action,
+      note:el('attendance-note').value,latitude:position.coords.latitude,longitude:position.coords.longitude,
+      accuracy:position.coords.accuracy,photoDataUrl:state.attendancePhotoDataUrl})});
+    el('attendance-note').value='';el('attendance-selfie').value='';state.attendancePhotoDataUrl=null;
+    el('attendance-selfie-preview').textContent='Ambil foto wajah';
+    el('attendance-location-status').textContent=`Absensi valid · ${Math.round(Number(result.distanceM??0))} meter dari titik usaha.`;
+    toast(button.dataset.action==='CLOCK_IN'?'Absensi masuk tercatat':'Absensi keluar tercatat');await loadWorkforceOverview();
+  }
   catch(error){toast(error.message);}finally{button.disabled=false;}
 }
 
 async function saveEmployeeSchedule(event){
   event.preventDefault();
-  try{await request('/api/workforce/schedules',{method:'POST',body:JSON.stringify({userId:el('schedule-user').value,outletId:el('schedule-outlet').value,workDate:el('schedule-date').value,startsAt:el('schedule-start').value,endsAt:el('schedule-end').value,note:el('schedule-note').value})});toast('Jadwal karyawan tersimpan');el('schedule-note').value='';await loadWorkforceOverview();}
+  const mode=el('schedule-mode').value;
+  const weekdays=[...el('schedule-weekdays').querySelectorAll('input:checked')].map((input)=>Number(input.value));
+  try{await request('/api/workforce/schedules',{method:'POST',body:JSON.stringify({mode,userId:el('schedule-user').value,outletId:el('schedule-outlet').value,workDate:el('schedule-date').value,weekdays,startsAt:el('schedule-start').value,endsAt:el('schedule-end').value,note:el('schedule-note').value})});toast(mode==='RECURRING'?'Jadwal tetap berlaku sampai diubah':'Jadwal tanggal khusus tersimpan');el('schedule-note').value='';await loadWorkforceOverview();}
   catch(error){toast(error.message);}
+}
+
+function syncScheduleMode(){
+  const recurring=el('schedule-mode').value==='RECURRING';
+  el('schedule-weekdays').classList.toggle('hidden',!recurring);
+  el('schedule-date-label').textContent=recurring?'Berlaku mulai':'Tanggal kerja';
+  el('schedule-mode-help').textContent=recurring
+    ?'Jadwal ini terus berulang. Jadwal baru untuk staff dan outlet yang sama akan menutup aturan sebelumnya.'
+    :'Jadwal ini hanya berlaku pada satu tanggal dan dapat menggantikan jadwal berulang hari tersebut.';
 }
 
 async function saveEmployeeTarget(event){
@@ -4523,6 +4587,12 @@ function renderSettings() {
   el('setting-business-email').value = business.email ?? '';
   el('setting-business-tax').value = business.taxId ?? '';
   el('setting-business-address').value = business.address ?? '';
+  el('setting-attendance-latitude').value = business.attendanceLatitude ?? '';
+  el('setting-attendance-longitude').value = business.attendanceLongitude ?? '';
+  el('setting-attendance-radius').value = String(business.attendanceRadiusM ?? 100);
+  el('business-location-status').textContent=business.attendanceLatitude===null||business.attendanceLatitude===undefined
+    ?'Koordinat belum diatur. Staff belum dapat melakukan absensi.'
+    :`Titik absensi aktif dengan radius ${Number(business.attendanceRadiusM??100)} meter.`;
   el('setting-business-footer').value = business.receiptFooter ?? '';
   populateReceiptLayoutControls();
   const outletOptions = state.settings.outlets.filter((outlet) => outlet.active).map((outlet) => `<option value="${escapeHtml(outlet.id)}">${escapeHtml(outlet.name)}</option>`).join('');
@@ -4712,6 +4782,9 @@ async function saveBusinessSettings(event) {
       name: el('setting-business-name').value.trim(), legalName: el('setting-business-legal').value.trim(),
       phone: el('setting-business-phone').value.trim(), email: el('setting-business-email').value.trim(),
       taxId: el('setting-business-tax').value.trim(), address: el('setting-business-address').value.trim(),
+      attendanceLatitude:el('setting-attendance-latitude').value,
+      attendanceLongitude:el('setting-attendance-longitude').value,
+      attendanceRadiusM:Number(el('setting-attendance-radius').value),
       receiptFooter: el('setting-business-footer').value.trim(),logoUrl:state.business.logoUrl??''
     }) });
     state.business = data.business;
@@ -4719,6 +4792,18 @@ async function saveBusinessSettings(event) {
     toast('Identitas usaha berhasil disimpan');
   } catch (error) { toast(error.message); }
   finally { button.disabled = false; }
+}
+
+async function useCurrentBusinessLocation(){
+  const button=el('use-current-business-location');button.disabled=true;
+  el('business-location-status').textContent='Mencari lokasi perangkat...';
+  try{
+    const position=await currentDevicePosition();
+    el('setting-attendance-latitude').value=position.coords.latitude.toFixed(6);
+    el('setting-attendance-longitude').value=position.coords.longitude.toFixed(6);
+    el('business-location-status').textContent=`Lokasi ditemukan dengan akurasi ±${Math.round(position.coords.accuracy)} meter. Simpan identitas usaha untuk mengaktifkan.`;
+  }catch(error){el('business-location-status').textContent=error.message;toast(error.message);}
+  finally{button.disabled=false;}
 }
 
 async function saveReceiptSettings(event) {
@@ -7328,6 +7413,7 @@ el('request-data-restore-otp').addEventListener('click',requestDataRestoreOtp);
 el('data-restore-form').addEventListener('submit',executeDataRestore);
 el('install-app').addEventListener('click', installPwa);
 el('business-settings-form').addEventListener('submit', saveBusinessSettings);
+el('use-current-business-location').addEventListener('click',useCurrentBusinessLocation);
 el('receipt-settings-form').addEventListener('submit',saveReceiptSettings);
 el('receipt-settings-form').addEventListener('input',(event)=>{
   if(event.target.id==='setting-receipt-logo-file')return;
@@ -7414,7 +7500,15 @@ el('cash-movement').addEventListener('click', addCashMovement);
 el('close-shift').addEventListener('click', closeShift);
 el('refresh-workforce').addEventListener('click',loadWorkforceOverview);
 el('attendance-action').addEventListener('click',clockAttendance);
+el('attendance-selfie').addEventListener('change',async(event)=>{
+  try{
+    state.attendancePhotoDataUrl=await attendancePhotoFromFile(event.target.files?.[0]);
+    el('attendance-selfie-preview').innerHTML=`<img src="${state.attendancePhotoDataUrl}" alt="Pratinjau foto wajah"><span>Foto siap digunakan</span>`;
+  }catch(error){state.attendancePhotoDataUrl=null;event.target.value='';toast(error.message);}
+});
+el('schedule-mode').addEventListener('change',syncScheduleMode);
 el('schedule-form').addEventListener('submit',saveEmployeeSchedule);
+el('workforce-schedule-list').addEventListener('click',(event)=>{const button=event.target.closest('.view-attendance-photo');if(button)openAttendancePhoto(button.dataset.attendanceId,button.dataset.event);});
 el('target-form').addEventListener('submit',saveEmployeeTarget);
 el('refresh-approvals').addEventListener('click',loadApprovals);
 el('approval-request-form').addEventListener('submit',submitApprovalRequest);

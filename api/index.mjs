@@ -188,6 +188,52 @@ async function uploadPublicMedia(tenantId, kind, dataUrl) {
   return `${config.url}/storage/v1/object/public/pos-media/${objectPath}`;
 }
 
+async function uploadAttendancePhoto(tenantId,dataUrl) {
+  const match=String(dataUrl??'').match(/^data:image\/(jpeg|png|webp);base64,([a-z0-9+/=\s]+)$/i);
+  if(!match)throw Object.assign(new Error('Foto wajah wajib diambil dalam format JPEG, PNG, atau WebP'),{status:400});
+  const contentType=`image/${match[1].toLowerCase()}`;
+  const bytes=Buffer.from(match[2].replace(/\s/g,''),'base64');
+  if(!bytes.length||bytes.length>500000)throw Object.assign(new Error('Foto wajah terlalu besar setelah diperkecil'),{status:400});
+  const extension=contentType==='image/jpeg'?'jpg':contentType.split('/')[1];
+  const objectPath=`${tenantId}/attendance/${new Date().toISOString().slice(0,10)}/${randomBytes(18).toString('hex')}.${extension}`;
+  const config=env();
+  const upload=await fetch(`${config.url}/storage/v1/object/attendance-media/${objectPath}`,{
+    method:'POST',headers:{apikey:config.service,authorization:`Bearer ${config.service}`,
+      'content-type':contentType,'x-upsert':'false'},body:bytes
+  });
+  if(!upload.ok){
+    const detail=await upload.text();
+    throw Object.assign(new Error(/bucket.*not found/i.test(detail)
+      ?'Penyimpanan foto absensi belum aktif. Jalankan migrasi absensi terbaru.'
+      :'Foto absensi gagal disimpan. Coba lagi.'),{status:upload.status});
+  }
+  return objectPath;
+}
+
+async function deleteAttendancePhoto(objectPath) {
+  const config=env();
+  await fetch(`${config.url}/storage/v1/object/attendance-media/${objectPath}`,{
+    method:'DELETE',headers:{apikey:config.service,authorization:`Bearer ${config.service}`}
+  }).catch(()=>null);
+}
+
+async function signedAttendancePhotoUrl(objectPath) {
+  const config=env();
+  const response=await fetch(`${config.url}/storage/v1/object/sign/attendance-media/${objectPath}`,{
+    method:'POST',headers:{apikey:config.service,authorization:`Bearer ${config.service}`,'content-type':'application/json'},
+    body:JSON.stringify({expiresIn:120})
+  });
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok||!data.signedURL)throw Object.assign(new Error('Foto absensi belum dapat dibuka'),{status:response.status||500});
+  return data.signedURL.startsWith('http')?data.signedURL:`${config.url}${data.signedURL}`;
+}
+
+function distanceMeters(lat1,lon1,lat2,lon2){
+  const radians=(value)=>value*Math.PI/180;
+  const a=Math.sin(radians(lat2-lat1)/2)**2+Math.cos(radians(lat1))*Math.cos(radians(lat2))*Math.sin(radians(lon2-lon1)/2)**2;
+  return 6371000*2*Math.asin(Math.sqrt(a));
+}
+
 const rest = (table, query = '', options = {}) => supabase(`/rest/v1/${table}${query ? `?${query}` : ''}`, options);
 async function restAll(table,query='',options={}){
   const rows=[];
@@ -593,7 +639,10 @@ function businessPayload(row = {}) {
     id: row.id ?? null, name: row.name ?? 'Kasir Nusa', legalName: row.legal_name ?? '',
     phone: row.phone ?? '', email: row.email ?? '', address: row.address ?? '', taxId: row.tax_id ?? '',
     currency: row.currency ?? 'IDR', receiptFooter: row.receipt_footer ?? 'Terima kasih telah berbelanja.',
-    logoUrl: row.logo_url ?? '', receiptLayout
+    logoUrl: row.logo_url ?? '', receiptLayout,
+    attendanceLatitude:row.attendance_latitude===null||row.attendance_latitude===undefined?null:Number(row.attendance_latitude),
+    attendanceLongitude:row.attendance_longitude===null||row.attendance_longitude===undefined?null:Number(row.attendance_longitude),
+    attendanceRadiusM:Number(row.attendance_radius_m??100)
   };
 }
 
@@ -1548,7 +1597,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.51-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.52-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -1865,11 +1914,18 @@ async function routeRequest(request, response, route) {
     const current=input.logoUrl===undefined
       ?(await rest('tenants',`id=eq.${encodeURIComponent(context.tenantId)}&select=logo_url&limit=1`))[0]
       :null;
-    const row = await rpc('save_business_settings', {
+    const latitude=input.attendanceLatitude===''||input.attendanceLatitude===null||input.attendanceLatitude===undefined?null:Number(input.attendanceLatitude);
+    const longitude=input.attendanceLongitude===''||input.attendanceLongitude===null||input.attendanceLongitude===undefined?null:Number(input.attendanceLongitude);
+    if((latitude===null)!==(longitude===null)||latitude!==null&&(!Number.isFinite(latitude)||!Number.isFinite(longitude))){
+      throw Object.assign(new Error('Koordinat lintang dan bujur harus diisi bersama'),{status:400});
+    }
+    const row = await rpc('save_business_settings_v2', {
       p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_name: input.name,
       p_legal_name: input.legalName ?? '', p_phone: input.phone ?? '', p_email: input.email ?? '',
       p_address: input.address ?? '', p_tax_id: input.taxId ?? '', p_receipt_footer: input.receiptFooter ?? '',
-      p_logo_url: normalizeReceiptLogo(input.logoUrl??current?.logo_url??'')
+      p_logo_url: normalizeReceiptLogo(input.logoUrl??current?.logo_url??''),
+      p_attendance_latitude:latitude,p_attendance_longitude:longitude,
+      p_attendance_radius_m:Number(input.attendanceRadiusM??100)
     });
     return send(response, 200, { business: businessPayload(row) });
   }
@@ -2943,9 +2999,10 @@ async function routeRequest(request, response, route) {
     const monthStart=`${today.slice(0,7)}-01`;
     const monthEnd=new Date(Date.UTC(Number(today.slice(0,4)),Number(today.slice(5,7)),0)).toISOString().slice(0,10);
     const userFilter=canManage?'':`&user_id=eq.${encodeURIComponent(session.authUser.id)}`;
-    const [profiles,schedules,attendance,targets,sales]=await Promise.all([
+    const [profiles,schedules,shiftRules,attendance,targets,sales]=await Promise.all([
       rest('profiles',`tenant_id=eq.${tenant}&active=eq.true${canManage?'':`&user_id=eq.${encodeURIComponent(session.authUser.id)}`}&select=user_id,display_name,role&order=display_name`),
       rest('employee_schedules',`tenant_id=eq.${tenant}${userFilter}&work_date=gte.${monthStart}&work_date=lte.${monthEnd}&select=*&order=work_date,starts_at`),
+      rest('employee_shift_rules',`tenant_id=eq.${tenant}${userFilter}&active=eq.true&select=*&order=effective_from.desc`),
       rest('attendance_records',`tenant_id=eq.${tenant}${userFilter}&work_date=gte.${monthStart}&work_date=lte.${monthEnd}&select=*&order=clock_in_at.desc`),
       rest('employee_targets',`tenant_id=eq.${tenant}${userFilter}&period_start=lte.${today}&period_end=gte.${today}&active=eq.true&select=*`),
       rest('sales',`tenant_id=eq.${tenant}${canManage?'':`&cashier_id=eq.${encodeURIComponent(session.authUser.id)}`}&occurred_at=gte.${monthStart}T00:00:00Z&occurred_at=lt.${new Date(Date.UTC(Number(today.slice(0,4)),Number(today.slice(5,7)),1)).toISOString()}&status=eq.COMPLETED&select=id,cashier_id,outlet_id,grand_total,occurred_at`)
@@ -2961,9 +3018,12 @@ async function routeRequest(request, response, route) {
       });
       return {userId:profile.user_id,displayName:profile.display_name,role:profile.role,target,salesTotal,transactions:employeeSales.length,commission};
     });
+    const safeAttendance=attendance.map(({clock_in_photo_path,clock_out_photo_path,...item})=>({
+      ...item,clock_in_photo_available:Boolean(clock_in_photo_path),clock_out_photo_available:Boolean(clock_out_photo_path)
+    }));
     return send(response,200,{
-      canManage,today,profiles,outlets:context.outlets,schedules,attendance,targets,performance,
-      activeAttendance:attendance.find((item)=>item.user_id===session.authUser.id&&!item.clock_out_at)??null
+      canManage,today,profiles,outlets:context.outlets,schedules,shiftRules,attendance:safeAttendance,targets,performance,
+      activeAttendance:safeAttendance.find((item)=>item.user_id===session.authUser.id&&!item.clock_out_at)??null
     });
   }
 
@@ -2975,6 +3035,16 @@ async function routeRequest(request, response, route) {
     if(!context.outlets.some((outlet)=>outlet.id===input.outletId))throw Object.assign(new Error('Outlet tidak dapat diakses'),{status:403});
     if(!/^\d{4}-\d{2}-\d{2}$/.test(String(input.workDate??''))||!/^\d{2}:\d{2}$/.test(String(input.startsAt??''))||!/^\d{2}:\d{2}$/.test(String(input.endsAt??''))){
       throw Object.assign(new Error('Tanggal dan jam jadwal tidak valid'),{status:400});
+    }
+    if(input.mode==='RECURRING'){
+      const weekdays=[...new Set((input.weekdays??[]).map(Number))].filter((day)=>Number.isInteger(day)&&day>=1&&day<=7);
+      if(!weekdays.length)throw Object.assign(new Error('Pilih minimal satu hari kerja'),{status:400});
+      const rule=await rpc('save_employee_shift_rule_v1',{
+        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_user_id:input.userId,
+        p_outlet_id:input.outletId,p_effective_from:input.workDate,p_weekdays:weekdays,
+        p_starts_at:input.startsAt,p_ends_at:input.endsAt,p_note:String(input.note??'').trim().slice(0,240)
+      });
+      return send(response,201,{...rule,mode:'RECURRING'});
     }
     const rows=await rest('employee_schedules','',{method:'POST',prefer:'return=representation',body:{
       tenant_id:context.tenantId,user_id:input.userId,outlet_id:input.outletId,work_date:input.workDate,
@@ -2990,11 +3060,46 @@ async function routeRequest(request, response, route) {
   if(request.method==='POST'&&route==='workforce/attendance'){
     requirePermission(session,'workforce.self');
     const input=bodyOf(request);
-    const result=await rpc('clock_employee_attendance',{
-      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_outlet_id:context.outlet.id,
-      p_device_id:request.headers['x-device-id']||null,p_action:input.action,p_note:String(input.note??'').trim().slice(0,240)
-    });
-    return send(response,200,result);
+    const latitude=Number(input.latitude),longitude=Number(input.longitude),accuracy=Number(input.accuracy);
+    if(!Number.isFinite(latitude)||!Number.isFinite(longitude)||!Number.isFinite(accuracy)||latitude< -90||latitude>90||longitude< -180||longitude>180){
+      throw Object.assign(new Error('Aktifkan GPS dan izinkan akses lokasi untuk absensi'),{status:400});
+    }
+    const tenant=(await rest('tenants',`id=eq.${context.tenantId}&select=attendance_latitude,attendance_longitude,attendance_radius_m&limit=1`))[0];
+    if(!tenant||tenant.attendance_latitude===null||tenant.attendance_longitude===null){
+      throw Object.assign(new Error('Owner belum mengatur koordinat absensi usaha'),{status:409});
+    }
+    if(accuracy<0||accuracy>Math.max(Number(tenant.attendance_radius_m??100),100)){
+      throw Object.assign(new Error('Akurasi GPS terlalu rendah. Pindah ke area terbuka lalu coba lagi'),{status:400});
+    }
+    const distance=distanceMeters(Number(tenant.attendance_latitude),Number(tenant.attendance_longitude),latitude,longitude);
+    if(distance>Number(tenant.attendance_radius_m??100)){
+      throw Object.assign(new Error(`Anda berada ${Math.round(distance)} meter dari lokasi usaha. Batas absensi ${Number(tenant.attendance_radius_m??100)} meter`),{status:403});
+    }
+    const photoPath=await uploadAttendancePhoto(context.tenantId,input.photoDataUrl);
+    try{
+      const result=await rpc('clock_employee_attendance_v2',{
+        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_outlet_id:context.outlet.id,
+        p_device_id:request.headers['x-device-id']||null,p_action:input.action,
+        p_note:String(input.note??'').trim().slice(0,240),p_latitude:latitude,p_longitude:longitude,
+        p_accuracy_m:accuracy,p_photo_path:photoPath
+      });
+      return send(response,200,result);
+    }catch(error){await deleteAttendancePhoto(photoPath);throw error;}
+  }
+
+  const attendancePhotoMatch=route.match(/^workforce\/attendance\/([^/]+)\/photo$/);
+  if(request.method==='GET'&&attendancePhotoMatch){
+    requirePermission(session,'workforce.self');
+    const attendanceId=attendancePhotoMatch[1],event=queryValue(request,'event')==='out'?'out':'in';
+    const rows=await rest('attendance_records',`tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(attendanceId)}&select=user_id,clock_in_photo_path,clock_out_photo_path&limit=1`);
+    const attendance=rows[0];
+    if(!attendance)throw Object.assign(new Error('Absensi tidak ditemukan'),{status:404});
+    if(attendance.user_id!==session.authUser.id&&!session.permissions.includes('workforce.manage')){
+      throw Object.assign(new Error('Anda tidak dapat membuka foto absensi ini'),{status:403});
+    }
+    const path=event==='out'?attendance.clock_out_photo_path:attendance.clock_in_photo_path;
+    if(!path)throw Object.assign(new Error('Foto absensi tidak tersedia'),{status:404});
+    return send(response,200,{url:await signedAttendancePhotoUrl(path),expiresIn:120});
   }
 
   if(request.method==='POST'&&route==='workforce/targets'){

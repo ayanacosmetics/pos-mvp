@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=162">
+  <link rel="stylesheet" href="/styles.css?v=163">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -198,7 +198,7 @@
           <button data-page="settings-data-reset" data-target-page="settings" data-settings-view="reset" class="feature-nav-item" data-permission="identity.manage"><span>Reset & pulihkan data</span><small>Hapus atau kembalikan backup</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Akses struk tanpa laba · v2.16.51</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Absensi GPS & shift elastis · v2.16.52</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -664,6 +664,10 @@
             <label>Email<input id="setting-business-email" type="email"></label>
             <label>NPWP / identitas pajak<input id="setting-business-tax"></label>
             <label>Alamat<textarea id="setting-business-address" rows="3"></textarea></label>
+            <label>Lintang lokasi absensi<input id="setting-attendance-latitude" type="number" min="-90" max="90" step="0.000001" placeholder="-8.409518"></label>
+            <label>Bujur lokasi absensi<input id="setting-attendance-longitude" type="number" min="-180" max="180" step="0.000001" placeholder="115.188919"></label>
+            <label>Radius absensi (meter)<input id="setting-attendance-radius" type="number" min="20" max="1000" step="10" value="100"></label>
+            <div class="settings-wide attendance-location-setting"><button id="use-current-business-location" class="button secondary" type="button">Gunakan lokasi perangkat sekarang</button><small id="business-location-status">Koordinat dipakai untuk memastikan staff berada di lokasi usaha ketika absen.</small></div>
             <label class="settings-wide">Pesan penutup struk<input id="setting-business-footer" maxlength="160" placeholder="Terima kasih telah berbelanja."></label>
           </div>
           <div class="button-row"><button class="button primary" type="submit">Simpan identitas usaha</button></div>
@@ -856,8 +860,8 @@
       <section id="page-workforce-schedule" class="page"><div class="content-width">
         <div class="page-title"><div><p class="eyebrow">OPERASIONAL KARYAWAN</p><h1>Jadwal dan absensi</h1><p class="muted">Catat kehadiran dari perangkat aktif dan lihat jadwal kerja bulanan.</p></div><button id="refresh-workforce" class="button secondary" type="button">Muat ulang</button></div>
         <div class="workforce-grid">
-          <section class="surface attendance-card"><p class="eyebrow">ABSENSI SAYA</p><div id="attendance-current"></div><label>Catatan opsional<input id="attendance-note" maxlength="240" placeholder="Contoh: menggantikan shift sore"></label><button id="attendance-action" class="button primary" type="button">Absen masuk</button></section>
-          <form id="schedule-form" class="surface" data-permission="workforce.manage"><p class="eyebrow">BUAT JADWAL</p><label>Karyawan<select id="schedule-user" required></select></label><label>Outlet<select id="schedule-outlet" required></select></label><div class="form-grid compact"><label>Tanggal<input id="schedule-date" type="date" required></label><label>Mulai<input id="schedule-start" type="time" value="08:00" required></label><label>Selesai<input id="schedule-end" type="time" value="17:00" required></label></div><label>Catatan<input id="schedule-note" maxlength="240"></label><button class="button primary" type="submit">Simpan jadwal</button></form>
+          <section class="surface attendance-card"><p class="eyebrow">ABSENSI SAYA</p><div id="attendance-current"></div><div class="attendance-proof"><label class="attendance-selfie-picker">Foto wajah saat ini<input id="attendance-selfie" type="file" accept="image/*" capture="user" required><span id="attendance-selfie-preview">Ambil foto wajah</span></label><div id="attendance-location-status" class="attendance-location-status">GPS akan diperiksa saat tombol absensi ditekan.</div></div><label>Catatan opsional<input id="attendance-note" maxlength="240" placeholder="Contoh: menggantikan shift sore"></label><button id="attendance-action" class="button primary" type="button">Absen masuk</button></section>
+          <form id="schedule-form" class="surface" data-permission="workforce.manage"><p class="eyebrow">ATUR JADWAL</p><label>Karyawan<select id="schedule-user" required></select></label><label>Outlet<select id="schedule-outlet" required></select></label><label>Jenis jadwal<select id="schedule-mode"><option value="RECURRING">Berlaku terus sampai diubah</option><option value="ONCE">Sekali pada tanggal tertentu</option></select></label><div class="form-grid compact"><label><span id="schedule-date-label">Berlaku mulai</span><input id="schedule-date" type="date" required></label><label>Mulai<input id="schedule-start" type="time" value="08:00" required></label><label>Selesai<input id="schedule-end" type="time" value="17:00" required></label></div><fieldset id="schedule-weekdays" class="schedule-weekdays"><legend>Hari kerja</legend><label><input type="checkbox" value="1" checked> Sen</label><label><input type="checkbox" value="2" checked> Sel</label><label><input type="checkbox" value="3" checked> Rab</label><label><input type="checkbox" value="4" checked> Kam</label><label><input type="checkbox" value="5" checked> Jum</label><label><input type="checkbox" value="6"> Sab</label><label><input type="checkbox" value="7"> Min</label></fieldset><small id="schedule-mode-help" class="muted">Jadwal ini terus berulang. Menyimpan jadwal baru untuk staff dan outlet yang sama akan menutup aturan sebelumnya.</small><label>Catatan<input id="schedule-note" maxlength="240"></label><button class="button primary" type="submit">Simpan jadwal</button></form>
         </div>
         <section class="surface workforce-list-section"><div class="settings-section-head"><div><p class="eyebrow">JADWAL BULAN INI</p><h2>Kehadiran dan jam kerja</h2></div></div><div id="workforce-schedule-list"></div></section>
       </div></section>
@@ -1061,6 +1065,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=162"></script>
+  <script type="module" src="/app.js?v=163"></script>
 </body>
 </html>

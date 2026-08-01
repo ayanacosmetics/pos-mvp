@@ -19,8 +19,8 @@ test('versi kandidat final tampil pada API, aplikasi, dan cache PWA', async () =
     readFile(new URL('../apps/web/service-worker.js', import.meta.url), 'utf8'),
     readFile(new URL('../package.json', import.meta.url), 'utf8')
   ]);
-  assert.match(api, /2\.16\.51-cloud/);
-  assert.match(html, /Akses struk tanpa laba .* v2\.16\.51/);
-  assert.match(worker, /nusa-pos-shell-v162/);
-  assert.equal(JSON.parse(pkgText).version, '2.16.51');
+  assert.match(api, /2\.16\.52-cloud/);
+  assert.match(html, /Absensi GPS & shift elastis .* v2\.16\.52/);
+  assert.match(worker, /nusa-pos-shell-v163/);
+  assert.equal(JSON.parse(pkgText).version, '2.16.52');
 });
