@@ -53,6 +53,14 @@ kode frontend, dokumentasi publik, atau chat.
 - Kandidat: aplikasi `2.17.0`, API `2.17.0-cloud`, cache `v166`; `npm test` lulus 298/298.
 - Belum commit/push/deploy. Jalankan hanya `supabase/migrations/202608010005_future_product_catalog.sql`, konfirmasi berhasil, lalu commit/push/deploy.
 
+## Kandidat lokal v2.17.1 — migrasi Kaspin satu layar
+
+- Tombol sementara `Migrasi Kasir Pintar` menerima sampai sembilan file export dalam satu dialog, memeriksa pasangan file, lalu menjalankan urutan aman: barang → pelanggan → supplier → multi satuan → harga → FIFO pembelian → riwayat penjualan.
+- Barang wajib; file lain opsional. Pembelian+modal dan detail+ringkasan penjualan wajib dipilih berpasangan.
+- Proses berhenti pada tahap pertama yang gagal dan menjelaskan bahwa tahap sebelumnya sudah tersimpan; pengguna harus Reset Semua Data sebelum mengulang paket.
+- SKU internal dan kode lama tetap digunakan. Bila kode lama sama pada beberapa barang, pembelian/penjualan dicocokkan lagi dengan nama produk agar varian tidak tertukar.
+- Kandidat: aplikasi `2.17.1`, API `2.17.1-cloud`, cache `v167`. Menu ditandai sebagai alat migrasi sementara agar dapat dihapus setelah migrasi resmi.
+
 ## 3. Status rilis
 
 ### Rilis v2.16.4 Tabel Produk Ringkas

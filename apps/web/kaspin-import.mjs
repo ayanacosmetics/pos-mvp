@@ -274,6 +274,37 @@ export function parseKaspinCustomerWorkbook(XLSX,arrayBuffer){
   };
 }
 
+export function parseKaspinSupplierWorkbook(XLSX,arrayBuffer){
+  const workbook=XLSX.read(arrayBuffer,{type:'array',cellDates:true});
+  let source=null;
+  for(const sheetName of workbook.SheetNames){
+    const matrix=XLSX.utils.sheet_to_json(workbook.Sheets[sheetName],{header:1,raw:true,defval:''});
+    const headerIndex=matrix.findIndex((row)=>{
+      const headers=row.map(normalizedHeader);
+      return headers.some((item)=>['nama_supplier_edit','nama_supplier','nama'].includes(item))&&headers.some((item)=>['kode_supplier_edit','kode_supplier','kode','no_hp','telepon'].includes(item));
+    });
+    if(headerIndex>=0){source={sheetName,matrix,headerIndex,headers:matrix[headerIndex].map(normalizedHeader)};break;}
+  }
+  if(!source)return null;
+  const indexOf=(...names)=>names.map((name)=>source.headers.indexOf(name)).find((index)=>index>=0)??-1;
+  const indexes={
+    code:indexOf('kode_supplier_edit','kode_supplier','kode'),name:indexOf('nama_supplier_edit','nama_supplier','nama'),
+    phone:indexOf('no_hp','nomor_telepon','telepon'),address:indexOf('alamat_supplier_edit','alamat_supplier','alamat')
+  };
+  const rows=[],issues=[];
+  source.matrix.slice(source.headerIndex+1).forEach((cells,index)=>{
+    if(!cells.some((value)=>text(value)!==''))return;
+    if(cells.some((value)=>/petunjuk|jangan diubah/i.test(text(value))))return;
+    const rowNo=source.headerIndex+index+2,name=text(cells[indexes.name]);
+    const phone=indexes.phone>=0?identifier(cells[indexes.phone]).replace(/\D/g,''):'';
+    const explicitCode=indexes.code>=0?identifier(cells[indexes.code]).replace(/\s+/g,''):'';
+    const code=(explicitCode||`KSP-SUP-${phone||shortStableHash(name)}`).toUpperCase();
+    if(!name){issues.push({row:rowNo,message:'nama supplier kosong'});return;}
+    rows.push({code,name,phone,address:indexes.address>=0?text(cells[indexes.address]):''});
+  });
+  return {rows,report:{source:'KASPIN',fileType:'Supplier',sheetName:source.sheetName,total:rows.length+issues.length,mapped:rows.length,skipped:issues.length,issues}};
+}
+
 function sheetWithHeaders(XLSX,workbook,required){
   for(const sheetName of workbook.SheetNames){
     const matrix=XLSX.utils.sheet_to_json(workbook.Sheets[sheetName],{header:1,raw:true,defval:''});

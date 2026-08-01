@@ -19,6 +19,8 @@ test('katalog masa depan memisahkan etalase, barcode bersama, opsi, dan SKU jual
   assert.match(api,/import_product_catalog_v1/);
   assert.match(api,/familyBarcodes:/);
   assert.match(api,/variantOptions:/);
+  assert.match(api,/function kaspinProductResolver/);
+  assert.match(api,/resolveProduct\(productCode,raw\.productName\)/);
   assert.match(app,/function sharedBarcodeProducts/);
   assert.match(app,/function openVariantPicker/);
   assert.match(app,/data-family=/);

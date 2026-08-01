@@ -1262,6 +1262,27 @@ function normalizeImportRows(kind, rawRows) {
   return { rows, errors };
 }
 
+function kaspinProductResolver(products,units){
+  const byId=new Map(products.map((product)=>[product.id,product]));
+  const direct=new Map(products.map((product)=>[String(product.sku).trim().toUpperCase(),product]));
+  units.forEach((unit)=>{if(unit.barcode&&byId.has(unit.product_id))direct.set(String(unit.barcode).trim().toUpperCase(),byId.get(unit.product_id));});
+  const legacy=new Map();
+  products.forEach((product)=>{const code=String(product.legacy_code??'').trim().toUpperCase();if(!code)return;if(!legacy.has(code))legacy.set(code,[]);legacy.get(code).push(product);});
+  const cleanName=(value)=>String(value??'').toLocaleLowerCase('id').normalize('NFKD').replace(/[^a-z0-9]+/g,' ').trim();
+  return(code,name)=>{
+    const key=String(code??'').trim().toUpperCase();
+    if(direct.has(key))return direct.get(key);
+    const candidates=legacy.get(key)??[];
+    if(candidates.length===1)return candidates[0];
+    const wanted=cleanName(name);
+    if(!wanted)return null;
+    const exact=candidates.filter((product)=>cleanName(product.name)===wanted);
+    if(exact.length===1)return exact[0];
+    const close=candidates.filter((product)=>{const candidate=cleanName(product.name);return candidate.includes(wanted)||wanted.includes(candidate);});
+    return close.length===1?close[0]:null;
+  };
+}
+
 async function previewKaspinFifo(context,input){
   const errors=[],warnings=[],locationId=input.locationId||null;
   if(!context.locationIds.includes(locationId))errors.push({row:0,field:'locationId',message:'Pilih lokasi stok yang benar'});
@@ -1275,15 +1296,11 @@ async function previewKaspinFifo(context,input){
     restAll('product_units',`tenant_id=eq.${context.tenantId}&barcode=not.is.null&select=product_id,barcode`),
     locationId?restAll('stock_balances',`tenant_id=eq.${context.tenantId}&location_id=eq.${locationId}&select=product_id,quantity,avg_cost`):Promise.resolve([])
   ]);
-  const productById=new Map(products.map((product)=>[product.id,product]));
-  const lookup=new Map(products.map((product)=>[String(product.sku).trim().toUpperCase(),product]));
-  const ambiguousCodes=new Set();
-  products.forEach((product)=>{const code=String(product.legacy_code??'').trim().toUpperCase();if(!code)return;if(lookup.has(code)&&lookup.get(code).id!==product.id)ambiguousCodes.add(code);else lookup.set(code,product);});
-  units.forEach((unit)=>{if(unit.barcode&&productById.has(unit.product_id))lookup.set(String(unit.barcode).trim().toUpperCase(),productById.get(unit.product_id));});
+  const resolveProduct=kaspinProductResolver(products,units);
   const balanceByProduct=new Map(balances.map((balance)=>[balance.product_id,balance]));
   const rows=[];
   rawRows.forEach((raw,index)=>{
-    const productCode=String(raw.productCode??'').trim().toUpperCase(),product=ambiguousCodes.has(productCode)?null:lookup.get(productCode);
+    const productCode=String(raw.productCode??'').trim().toUpperCase(),product=resolveProduct(productCode,raw.productName);
     const quantity=importNumber(raw.quantity),unitCost=importNumber(raw.unitCost),occurredAt=new Date(raw.occurredAt);
     if(!product){warnings.push({row:index+2,message:`Pembelian ${raw.productName||productCode||'-'} dilewati karena kode ${productCode||'-'} belum ada di Nusa POS`});return;}
     if(!String(raw.transactionCode??'').trim()||!(quantity>0)||!(unitCost>=0)||Number.isNaN(occurredAt.getTime())){
@@ -1298,7 +1315,7 @@ async function previewKaspinFifo(context,input){
   });
   const capitalByProduct=new Map();
   rawCapital.forEach((raw,index)=>{
-    const productCode=String(raw.productCode??'').trim().toUpperCase(),product=ambiguousCodes.has(productCode)?null:lookup.get(productCode);
+    const productCode=String(raw.productCode??'').trim().toUpperCase(),product=resolveProduct(productCode,raw.productName);
     const stock=importNumber(raw.stock),remainingCapital=importNumber(raw.remainingCapital);
     if(!product){warnings.push({row:index+2,message:`Modal ${raw.productName||productCode||'-'} dilewati karena kode ${productCode||'-'} belum ada di Nusa POS`});return;}
     if(!(stock>=0)||!(remainingCapital>=0)){warnings.push({row:index+2,message:`Modal ${productCode} dilewati karena stok atau sisa modal tidak valid`});return;}
@@ -1324,16 +1341,12 @@ async function previewKaspinSales(context,input){
     restAll('products',`tenant_id=eq.${context.tenantId}&select=id,sku,name,legacy_code`),
     restAll('product_units',`tenant_id=eq.${context.tenantId}&barcode=not.is.null&select=product_id,barcode`)
   ]);
-  const productById=new Map(products.map((product)=>[product.id,product]));
-  const lookup=new Map(products.map((product)=>[String(product.sku).trim().toUpperCase(),product]));
-  const ambiguousCodes=new Set();
-  products.forEach((product)=>{const code=String(product.legacy_code??'').trim().toUpperCase();if(!code)return;if(lookup.has(code)&&lookup.get(code).id!==product.id)ambiguousCodes.add(code);else lookup.set(code,product);});
-  units.forEach((unit)=>{if(unit.barcode&&productById.has(unit.product_id))lookup.set(String(unit.barcode).trim().toUpperCase(),productById.get(unit.product_id));});
+  const resolveProduct=kaspinProductResolver(products,units);
 
   const candidateRows=[],invalidTransactions=new Set();
   rawRows.forEach((raw,index)=>{
     const transactionCode=String(raw.transactionCode??'').trim();
-    const productCode=String(raw.productCode??'').trim().toUpperCase(),product=ambiguousCodes.has(productCode)?null:lookup.get(productCode);
+    const productCode=String(raw.productCode??'').trim().toUpperCase(),product=resolveProduct(productCode,raw.productName);
     const quantity=importNumber(raw.quantity),unitCost=importNumber(raw.unitCost),unitPrice=importNumber(raw.unitPrice);
     const lineGross=importNumber(raw.lineGross),grandTotal=importNumber(raw.grandTotal),occurredAt=new Date(raw.occurredAt);
     if(!transactionCode||!product||!(quantity>0)||!(unitCost>=0)||!(unitPrice>=0)||!(lineGross>=0)||!(grandTotal>=0)||Number.isNaN(occurredAt.getTime())){
@@ -1692,7 +1705,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.17.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.17.1-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {

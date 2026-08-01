@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
-import {parseKaspinProductWorkbook,parseKaspinProductExtensionWorkbook,parseKaspinFifoWorkbooks,parseKaspinSalesWorkbooks,parseKaspinCustomerWorkbook} from '../apps/web/kaspin-import.mjs';
+import {parseKaspinProductWorkbook,parseKaspinProductExtensionWorkbook,parseKaspinFifoWorkbooks,parseKaspinSalesWorkbooks,parseKaspinCustomerWorkbook,parseKaspinSupplierWorkbook} from '../apps/web/kaspin-import.mjs';
 
 async function sheetJs(){
   const source=await readFile(new URL('../apps/web/vendor/xlsx.full.min.js',import.meta.url),'utf8');
@@ -161,6 +161,32 @@ test('parser pelanggan Kaspin mempertahankan Member, Grosir, email, dan poin',as
   });
   assert.equal(parsed.rows[1].code,'GR-01');
   assert.equal(parsed.rows[1].groupId,'grosir');
+});
+
+test('parser supplier Kaspin menerima nama kolom export dan membuat kode stabil',async()=>{
+  const XLSX=await sheetJs(),workbook=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([
+    ['alasan_gagal','kode_supplier_edit','nama_supplier_edit','no_hp','alamat'],
+    ['Petunjuk','Kode','Nama','Telepon','Alamat'],
+    ['','SUP-01','Supplier Resmi',628123456789,'Makassar'],
+    ['','','Supplier Tanpa Kode',628987654321,'Gowa']
+  ]),'supplier');
+  const parsed=parseKaspinSupplierWorkbook(XLSX,XLSX.write(workbook,{bookType:'xlsx',type:'array'}));
+  assert.equal(parsed.report.mapped,2);
+  assert.deepEqual({...parsed.rows[0]},{code:'SUP-01',name:'Supplier Resmi',phone:'628123456789',address:'Makassar'});
+  assert.equal(parsed.rows[1].code,'KSP-SUP-628987654321');
+});
+
+test('satu dialog migrasi Kaspin menerima paket lengkap dan menjalankan urutan aman',async()=>{
+  const [html,app]=await Promise.all([
+    readFile(new URL('../apps/web/index.html',import.meta.url),'utf8'),
+    readFile(new URL('../apps/web/app.js',import.meta.url),'utf8')
+  ]);
+  for(const id of ['open-kaspin-migration','kaspin-migration-dialog','kaspin-migration-products','kaspin-migration-customers','kaspin-migration-suppliers','kaspin-migration-units','kaspin-migration-prices','kaspin-migration-purchases','kaspin-migration-capital','kaspin-migration-sales','kaspin-migration-sales-summary','inspect-kaspin-migration','run-kaspin-migration'])assert.ok(html.includes(`id="${id}"`));
+  assert.match(app,/async function inspectKaspinMigrationPackage/);
+  assert.match(app,/async function runKaspinMigration/);
+  const inspect=app.slice(app.indexOf('async function inspectKaspinMigrationPackage'),app.indexOf('async function runKaspinMigration'));
+  for(const order of ["add('products'","add('customers'","add('suppliers'","add('units'","add('prices'","add('purchases'","add('sales'"])assert.ok(inspect.includes(order));
 });
 
 test('halaman impor menghubungkan pilihan Kasir Pintar dan parser ke cache PWA',async()=>{

@@ -8,9 +8,10 @@ import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, uni
 import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
 import { createProductExportWorkbook, createTemplateWorkbook, productExportRows, productExtensionExportRows, workbookMatrix, workbookTemplates } from './product-workbook.mjs';
 import { barcodeModuleCount, barcodeSvg, labelSize, normalizeCode128Text } from './product-labels.mjs';
-import { parseKaspinProductWorkbook, parseKaspinProductExtensionWorkbook, parseKaspinFifoWorkbooks, parseKaspinSalesWorkbooks, parseKaspinCustomerWorkbook } from './kaspin-import.mjs';
+import { parseKaspinProductWorkbook, parseKaspinProductExtensionWorkbook, parseKaspinFifoWorkbooks, parseKaspinSalesWorkbooks, parseKaspinCustomerWorkbook, parseKaspinSupplierWorkbook } from './kaspin-import.mjs';
 
 const storedAuth = loadAuth();
+let kaspinMigrationPackage=null;
 const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, dataResetScopesSignature:'', dataRestoreSnapshot:null,dataRestoreOtpReady:false, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productAdminPage:1, selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', importSourceReport:null, productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
@@ -1811,6 +1812,78 @@ async function loadPromotionManagement(){
     state.promotionVersions=data.promotions??[];state.loyalty=loyalty;renderPromotionList();renderLoyalty();
   }
   catch(error){toast(error.message);}
+}
+
+const kaspinMigrationInputs=['products','customers','suppliers','units','prices','purchases','capital','sales','sales-summary'];
+
+function renderKaspinMigrationLocations(){
+  const select=el('kaspin-migration-location');
+  select.innerHTML=state.locations.map((location)=>`<option value="${location.id}">${escapeHtml(location.name)} · ${location.kind==='WAREHOUSE'?'Gudang':'Toko'}</option>`).join('');
+  const store=state.locations.find((location)=>location.kind==='STORE');
+  if(store)select.value=store.id;
+}
+
+function renderKaspinMigrationSteps(steps){
+  el('kaspin-migration-results').innerHTML=steps.map((step)=>`<div class="kaspin-migration-step ${step.status??'ready'}" data-migration-step="${escapeHtml(step.id)}"><span>${step.status==='done'?'✓':step.status==='error'?'!':step.status==='running'?'…':'○'}</span><div><strong>${escapeHtml(step.label)}</strong><small>${escapeHtml(step.message??`${step.rows.length.toLocaleString('id-ID')} baris dikenali`)}</small></div></div>`).join('');
+}
+
+async function inspectKaspinMigrationPackage(){
+  const button=el('inspect-kaspin-migration');
+  el('kaspin-migration-error').textContent='';el('run-kaspin-migration').disabled=true;kaspinMigrationPackage=null;
+  try{
+    if(!window.XLSX)throw new Error('Komponen Excel belum siap. Muat ulang aplikasi.');
+    const files=Object.fromEntries(kaspinMigrationInputs.map((id)=>[id,el(`kaspin-migration-${id}`).files[0]??null]));
+    if(!files.products)throw new Error('Data Barang.xlsx wajib dipilih.');
+    if(Boolean(files.purchases)!==Boolean(files.capital))throw new Error('Transaksi_Pembelian dan Laporan_Modal harus dipilih berpasangan.');
+    if(Boolean(files.sales)!==Boolean(files['sales-summary']))throw new Error('Laporan Penjualan Barang dan Laporan Data Penjualan harus dipilih berpasangan.');
+    button.disabled=true;button.textContent='Memeriksa semua file…';
+    const buffers={};
+    await Promise.all(Object.entries(files).filter(([,file])=>file).map(async([id,file])=>{buffers[id]=await file.arrayBuffer();}));
+    const steps=[];
+    const add=(id,label,kind,mode,fileNames,parsed,{location=false}={})=>{
+      if(!parsed)throw new Error(`${label}: format file tidak dikenali. Pastikan memilih export yang benar dari Kasir Pintar.`);
+      if(!parsed.rows.length)throw new Error(`${label}: tidak ada baris yang dapat dimigrasikan.`);
+      const skipped=Number(parsed.report?.skipped??0)+Number(parsed.report?.deferred??0);
+      steps.push({id,label,kind,mode,fileName:fileNames,rows:parsed.rows,capitalRows:parsed.capitalRows??[],source:'KASPIN',locationId:location?el('kaspin-migration-location').value:null,report:parsed.report,status:'ready',message:`${parsed.rows.length.toLocaleString('id-ID')} baris dikenali${skipped?` · ${skipped} dilewati`:''}`});
+    };
+    add('products','Barang utama & stok awal','PRODUCTS','CREATE_ONLY',files.products.name,parseKaspinProductWorkbook(window.XLSX,buffers.products,{useCodeAsBarcode:true,useInternalSku:true}),{location:true});
+    if(files.customers)add('customers','Pelanggan, tipe & poin','CUSTOMERS','GENERAL',files.customers.name,parseKaspinCustomerWorkbook(window.XLSX,buffers.customers));
+    if(files.suppliers)add('suppliers','Supplier','SUPPLIERS','GENERAL',files.suppliers.name,parseKaspinSupplierWorkbook(window.XLSX,buffers.suppliers));
+    if(files.units)add('units','Multi satuan','PRODUCT_UNITS','UPDATE_ONLY',files.units.name,parseKaspinProductExtensionWorkbook(window.XLSX,buffers.units,'PRODUCT_UNITS',{useInternalSku:true}));
+    if(files.prices)add('prices','Harga pelanggan/grosir','PRODUCT_PRICES','UPDATE_ONLY',files.prices.name,parseKaspinProductExtensionWorkbook(window.XLSX,buffers.prices,'PRODUCT_PRICES',{useInternalSku:true}));
+    if(files.purchases)add('purchases','Pembelian & modal FIFO','KASPIN_FIFO','GENERAL',`${files.purchases.name} + ${files.capital.name}`,parseKaspinFifoWorkbooks(window.XLSX,buffers.purchases,buffers.capital),{location:true});
+    if(files.sales)add('sales','Penjualan & detail struk','KASPIN_SALES','GENERAL',`${files.sales.name} + ${files['sales-summary'].name}`,parseKaspinSalesWorkbooks(window.XLSX,buffers.sales,buffers['sales-summary']));
+    kaspinMigrationPackage={steps};renderKaspinMigrationSteps(steps);
+    el('run-kaspin-migration').disabled=!el('kaspin-migration-reset-confirm').checked;
+    el('kaspin-migration-error').textContent=`${steps.length} tahap siap. Belum ada data yang disimpan.`;
+  }catch(error){el('kaspin-migration-results').innerHTML=`<div class="empty-state compact">${escapeHtml(error.message)}</div>`;el('kaspin-migration-error').textContent=error.message;}
+  finally{button.disabled=false;button.textContent='Periksa semua file';}
+}
+
+async function runKaspinMigration(){
+  if(!kaspinMigrationPackage?.steps.length)return;
+  if(!el('kaspin-migration-reset-confirm').checked)return toast('Konfirmasikan bahwa data Nusa sudah direset.');
+  const button=el('run-kaspin-migration');button.disabled=true;el('inspect-kaspin-migration').disabled=true;
+  el('kaspin-migration-error').textContent='Migrasi berjalan. Jangan menutup aplikasi.';
+  for(const step of kaspinMigrationPackage.steps){
+    step.status='running';step.message='Memvalidasi di database…';renderKaspinMigrationSteps(kaspinMigrationPackage.steps);
+    try{
+      const input={kind:step.kind,mode:step.mode,source:step.source,locationId:step.locationId,rows:step.rows,capitalRows:step.capitalRows};
+      const preview=await request('/api/imports/preview',{method:'POST',body:JSON.stringify(input)});
+      if(!preview.valid){const first=preview.errors?.[0];throw new Error(`${preview.errors?.length??1} kesalahan${first?.message?`: ${first.message}`:''}`);}
+      step.message='Menyimpan…';renderKaspinMigrationSteps(kaspinMigrationPackage.steps);
+      const result=await request('/api/imports/commit',{method:'POST',headers:{'idempotency-key':crypto.randomUUID()},body:JSON.stringify({...input,rows:preview.rows,capitalRows:preview.capitalRows??[],fileName:step.fileName,valid:true})});
+      step.status='done';step.message=`Selesai · ${Number(result.created??0).toLocaleString('id-ID')} baru · ${Number(result.updated??0).toLocaleString('id-ID')} diperbarui`;
+      renderKaspinMigrationSteps(kaspinMigrationPackage.steps);
+    }catch(error){
+      step.status='error';step.message=error.message;renderKaspinMigrationSteps(kaspinMigrationPackage.steps);
+      el('kaspin-migration-error').textContent=`Migrasi berhenti pada ${step.label}. Tahap sebelumnya sudah tersimpan. Perbaiki sumber masalah, Reset Semua Data, lalu ulangi paket lengkap.`;
+      el('inspect-kaspin-migration').disabled=false;return;
+    }
+  }
+  el('kaspin-migration-error').textContent='Migrasi lengkap selesai. Periksa jumlah produk, stok, modal, pelanggan, supplier, dan transaksi sebelum melanjutkan pemetaan etalase.';
+  button.textContent='Migrasi selesai';
+  try{await refreshCatalog();if(state.session.permissions.includes('inventory.manage'))await loadInventory();await loadImportHistory();}catch(error){toast('Migrasi tersimpan. Muat ulang halaman untuk memperbarui tampilan.');}
 }
 
 function downloadJsonSnapshot(snapshot,fileName) {
@@ -7459,6 +7532,16 @@ el('close-user-editor').addEventListener('click', () => el('edit-user-dialog').c
 el('cancel-user-edit').addEventListener('click', () => el('edit-user-dialog').close());
 el('open-product-dialog').addEventListener('click', () => openProductEditor());
 el('open-price-policy').addEventListener('click',openPricePolicy);
+el('open-kaspin-migration').addEventListener('click',()=>{renderKaspinMigrationLocations();el('kaspin-migration-dialog').showModal();});
+el('close-kaspin-migration').addEventListener('click',()=>el('kaspin-migration-dialog').close());
+kaspinMigrationInputs.forEach((id)=>el(`kaspin-migration-${id}`).addEventListener('change',(event)=>{
+  el(`kaspin-migration-${id}-name`).textContent=event.target.files[0]?.name??'Belum dipilih';
+  kaspinMigrationPackage=null;el('run-kaspin-migration').disabled=true;
+  el('kaspin-migration-results').innerHTML='<div class="empty-state compact">File berubah. Periksa kembali seluruh paket.</div>';
+}));
+el('kaspin-migration-reset-confirm').addEventListener('change',()=>{el('run-kaspin-migration').disabled=!kaspinMigrationPackage||!el('kaspin-migration-reset-confirm').checked;});
+el('inspect-kaspin-migration').addEventListener('click',inspectKaspinMigrationPackage);
+el('run-kaspin-migration').addEventListener('click',runKaspinMigration);
 el('open-import-products').addEventListener('click',()=>openProductImportWorkspace('PRODUCTS',{mode:'CREATE_ONLY'}));
 el('open-export-products').addEventListener('click',()=>openProductImportWorkspace('PRODUCTS',{mode:'UPDATE_ONLY'}));
 el('back-to-products').addEventListener('click',()=>showPage('products'));
