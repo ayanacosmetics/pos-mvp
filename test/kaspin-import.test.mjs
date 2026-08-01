@@ -209,6 +209,9 @@ test('satu dialog migrasi Kaspin menerima paket lengkap dan menjalankan urutan a
   assert.match(html,/id="kaspin-migration-sales"[^>]*multiple/);
   assert.match(app,/async function inspectKaspinMigrationPackage/);
   assert.match(app,/async function runKaspinMigration/);
+  assert.match(app,/function kaspinMigrationStepIssues/);
+  assert.match(app,/data-migration-detail/);
+  assert.match(app,/Baris yang tidak ikut dimigrasikan/);
   const inspect=app.slice(app.indexOf('async function inspectKaspinMigrationPackage'),app.indexOf('async function runKaspinMigration'));
   for(const order of ["add('products'","add('customers'","add('suppliers'","add('units'","add('prices'","add('purchases'","add('sales'"])assert.ok(inspect.includes(order));
 });

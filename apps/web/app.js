@@ -12,6 +12,7 @@ import { parseKaspinProductWorkbook, parseKaspinProductExtensionWorkbook, parseK
 
 const storedAuth = loadAuth();
 let kaspinMigrationPackage=null;
+const kaspinMigrationExpandedSteps=new Set();
 const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, dataResetScopesSignature:'', dataRestoreSnapshot:null,dataRestoreOtpReady:false, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productAdminPage:1, selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', importSourceReport:null, productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
@@ -1823,13 +1824,28 @@ function renderKaspinMigrationLocations(){
   if(store)select.value=store.id;
 }
 
+function kaspinMigrationStepIssues(step){
+  return [
+    ...(step.report?.issues??[]).map((issue)=>({...issue,kind:'Dilewati'})),
+    ...(step.report?.deferredRows??[]).map((issue)=>({...issue,kind:'Ditunda'}))
+  ];
+}
+
 function renderKaspinMigrationSteps(steps){
-  el('kaspin-migration-results').innerHTML=steps.map((step)=>`<div class="kaspin-migration-step ${step.status??'ready'}" data-migration-step="${escapeHtml(step.id)}"><span>${step.status==='done'?'✓':step.status==='error'?'!':step.status==='running'?'…':'○'}</span><div><strong>${escapeHtml(step.label)}</strong><small>${escapeHtml(step.message??`${step.rows.length.toLocaleString('id-ID')} baris dikenali`)}</small></div></div>`).join('');
+  el('kaspin-migration-results').innerHTML=steps.map((step)=>{
+    const issues=kaspinMigrationStepIssues(step),expanded=kaspinMigrationExpandedSteps.has(step.id);
+    const toggle=issues.length?`<button class="kaspin-migration-detail-toggle" type="button" data-migration-detail="${escapeHtml(step.id)}" aria-expanded="${expanded}">${expanded?'Tutup detail':`Lihat ${issues.length.toLocaleString('id-ID')} alasan`}</button>`:'';
+    const detail=expanded&&issues.length?`<div class="kaspin-migration-issue-panel"><strong>Baris yang tidak ikut dimigrasikan</strong><ol>${issues.map((issue)=>{
+      const identity=[issue.source,issue.sku,issue.name].filter(Boolean).join(' · ');
+      return `<li><span><b>${escapeHtml(issue.kind)} · Baris ${escapeHtml(String(issue.row??'—'))}</b>${identity?` · ${escapeHtml(identity)}`:''}</span><small>${escapeHtml(issue.message??'Alasan tidak tersedia')}</small></li>`;
+    }).join('')}</ol></div>`:'';
+    return `<div class="kaspin-migration-step ${step.status??'ready'}" data-migration-step="${escapeHtml(step.id)}"><span>${step.status==='done'?'✓':step.status==='error'?'!':step.status==='running'?'…':'○'}</span><div><strong>${escapeHtml(step.label)}</strong><small>${escapeHtml(step.message??`${step.rows.length.toLocaleString('id-ID')} baris dikenali`)}</small></div>${toggle}${detail}</div>`;
+  }).join('');
 }
 
 async function inspectKaspinMigrationPackage(){
   const button=el('inspect-kaspin-migration');
-  el('kaspin-migration-error').textContent='';el('run-kaspin-migration').disabled=true;kaspinMigrationPackage=null;
+  el('kaspin-migration-error').textContent='';el('run-kaspin-migration').disabled=true;kaspinMigrationPackage=null;kaspinMigrationExpandedSteps.clear();
   try{
     if(!window.XLSX)throw new Error('Komponen Excel belum siap. Muat ulang aplikasi.');
     const files=Object.fromEntries(kaspinMigrationInputs.map((id)=>[id,['sales','sales-summary'].includes(id)?[...el(`kaspin-migration-${id}`).files]:(el(`kaspin-migration-${id}`).files[0]??null)]));
@@ -7540,9 +7556,16 @@ el('close-kaspin-migration').addEventListener('click',()=>el('kaspin-migration-d
 kaspinMigrationInputs.forEach((id)=>el(`kaspin-migration-${id}`).addEventListener('change',(event)=>{
   const selected=[...event.target.files];
   el(`kaspin-migration-${id}-name`).textContent=selected.length>1?`${selected.length} file dipilih`:(selected[0]?.name??'Belum dipilih');
-  kaspinMigrationPackage=null;el('run-kaspin-migration').disabled=true;
+  kaspinMigrationPackage=null;kaspinMigrationExpandedSteps.clear();el('run-kaspin-migration').disabled=true;
   el('kaspin-migration-results').innerHTML='<div class="empty-state compact">File berubah. Periksa kembali seluruh paket.</div>';
 }));
+el('kaspin-migration-results').addEventListener('click',(event)=>{
+  const button=event.target.closest('[data-migration-detail]');
+  if(!button||!kaspinMigrationPackage)return;
+  const id=button.dataset.migrationDetail;
+  if(kaspinMigrationExpandedSteps.has(id))kaspinMigrationExpandedSteps.delete(id);else kaspinMigrationExpandedSteps.add(id);
+  renderKaspinMigrationSteps(kaspinMigrationPackage.steps);
+});
 el('kaspin-migration-reset-confirm').addEventListener('change',()=>{el('run-kaspin-migration').disabled=!kaspinMigrationPackage||!el('kaspin-migration-reset-confirm').checked;});
 el('inspect-kaspin-migration').addEventListener('click',inspectKaspinMigrationPackage);
 el('run-kaspin-migration').addEventListener('click',runKaspinMigration);
