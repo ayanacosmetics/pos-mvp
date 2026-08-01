@@ -415,9 +415,11 @@ export function parseKaspinSalesWorkbookSets(XLSX,detailBuffers,transactionBuffe
     transactionSheet.matrix.slice(1).forEach((cells)=>{
       const transactionCode=identifier(get(cells,transactionIndexes,'kode_transaksi'));
       if(!transactionCode||transactionCode.toLowerCase()==='total semua')return;
+      const grandTotal=number(get(cells,transactionIndexes,'total_pendapatan'));
+      const returnReason=text(get(cells,transactionIndexes,'alasan_retur'));
       transactions.set(transactionCode,{
         occurredAt:isoDateTime(get(cells,transactionIndexes,'waktu')),
-        grandTotal:number(get(cells,transactionIndexes,'total_pendapatan')),
+        grandTotal,
         profit:number(get(cells,transactionIndexes,'keuntungan')),
         tendered:number(get(cells,transactionIndexes,'bayar')),
         change:number(get(cells,transactionIndexes,'uang_kembalian')),
@@ -427,7 +429,9 @@ export function parseKaspinSalesWorkbookSets(XLSX,detailBuffers,transactionBuffe
         paymentMethod:text(get(cells,transactionIndexes,'metode_pembayaran')),
         customerEmail:text(get(cells,transactionIndexes,'email_pelanggan')),
         customerName:text(get(cells,transactionIndexes,'nama_pelanggan')),
-        note:text(get(cells,transactionIndexes,'keterangan'))
+        note:text(get(cells,transactionIndexes,'keterangan')),
+        returnReason,
+        status:grandTotal===0?'VOIDED':'COMPLETED'
       });
     });
   });
@@ -469,10 +473,13 @@ export function parseKaspinSalesWorkbookSets(XLSX,detailBuffers,transactionBuffe
   });});
   return {
     rows,
+    receipts:[...transactions].map(([transactionCode,summary])=>({transactionCode,...summary})),
     report:{
       source:'KASPIN',fileType:'Penjualan & detail struk',sheetName:`${detailSheets.map((sheet)=>sheet.sheetName).join(', ')} + ${transactionSheets.map((sheet)=>sheet.sheetName).join(', ')}`,
       total:rows.length+issues.length,mapped:rows.length,skipped:issues.length,issues,
-      salesLines:rows.length,receipts:new Set(rows.map((row)=>row.transactionCode)).size,
+      salesLines:rows.length,receipts:transactions.size,
+      itemizedReceipts:new Set(rows.map((row)=>row.transactionCode)).size,
+      voidedReceipts:[...transactions.values()].filter((row)=>row.status==='VOIDED').length,
       missingTransactions:missingTransactions.size
     }
   };

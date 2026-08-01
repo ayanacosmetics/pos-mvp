@@ -905,6 +905,14 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
         promotions:item.promotion_snapshot ?? []
       };
     });
+    const legacyLines=Array.isArray(sale.source_payload?.legacyLines)?sale.source_payload.legacyLines:[];
+    legacyLines.forEach((line,index)=>{
+      const qty=Math.max(0,Number(line.quantity??0)),gross=Math.max(0,Number(line.lineGross??0));
+      lines.push({saleItemId:`legacy-${sale.id}-${index}`,productId:null,
+        productName:String(line.productName??line.productCode??'Produk lama'),qty,unitName:'pcs',baseQty:qty,
+        returnedBaseQty:0,returnedQty:0,returnedTotal:0,gross,discount:0,total:gross,promotions:[],
+        legacy:true,productCode:String(line.productCode??'')});
+    });
     const adjustmentId=lines.flatMap((line)=>line.promotions)
       .find((promotion)=>promotion.manual&&promotion.id)?.id;
     const savedAdjustment=adjustments.find((adjustment)=>adjustment.id===adjustmentId);
@@ -978,16 +986,19 @@ export function filteredSalesReport(sales,{timezone,staffId='',paymentState='ALL
     .sort((a,b)=>a.name.localeCompare(b.name,'id'));
   const selected=sales.filter((sale)=>saleMatchesReportFilter(sale,{staffId,paymentState,paymentMethods}));
   const daily=new Map();
-  const metrics={netSales:0,grossProfit:0,returnTotal:0,transactionCount:0};
+  const metrics={netSales:0,grossProfit:0,returnTotal:0,transactionCount:0,activityCount:0,voidedCount:0};
   for(const sale of selected){
-    if(sale.status==='VOIDED')continue;
+    const date=todayInTimeZone(new Date(sale.occurredAt),timezone);
+    const row=daily.get(date)??{date,grossSales:0,returns:0,netSales:0,grossProfit:0,transactionCount:0,activityCount:0,voidedCount:0,returnCount:0};
+    row.activityCount+=1;metrics.activityCount+=1;
+    if(sale.status==='VOIDED'){
+      row.voidedCount+=1;metrics.voidedCount+=1;daily.set(date,row);continue;
+    }
     const total=Math.max(0,Number(sale.netTotal??0));
     const cost=Math.max(0,Number(sale.netCost??0));
     const paidRatio=saleSettlementRatio(sale);
     const revenue=includeCreditRevenue?total:total*paidRatio;
     const profit=includeCreditProfit?total-cost:(total-cost)*paidRatio;
-    const date=todayInTimeZone(new Date(sale.occurredAt),timezone);
-    const row=daily.get(date)??{date,grossSales:0,returns:0,netSales:0,grossProfit:0,transactionCount:0,returnCount:0};
     row.grossSales+=Number(sale.quote?.grandTotal??0);row.returns+=Number(sale.returnTotal??0);
     row.netSales+=revenue;row.grossProfit+=profit;row.transactionCount+=1;
     if(Number(sale.returnTotal)>0)row.returnCount+=1;
@@ -1388,24 +1399,50 @@ async function previewKaspinFifo(context,input){
 }
 
 async function previewKaspinSales(context,input){
-  const errors=[],warnings=[],rawRows=Array.isArray(input.rows)?input.rows:[];
+  const errors=[],warnings=[],rawRows=Array.isArray(input.rows)?input.rows:[],rawReceipts=Array.isArray(input.receipts)?input.receipts:[];
   if(!rawRows.length)errors.push({row:0,field:'file',message:'File penjualan tidak memiliki baris yang dapat dibaca'});
-  if(rawRows.length>10000)errors.push({row:0,field:'file',message:'Maksimal 10.000 baris per file'});
+  if(rawRows.length+rawReceipts.length>12000)errors.push({row:0,field:'file',message:'Maksimal 12.000 baris dan struk per paket'});
   const [products,units]=await Promise.all([
     restAll('products',`tenant_id=eq.${context.tenantId}&select=id,sku,name,legacy_code`),
     restAll('product_units',`tenant_id=eq.${context.tenantId}&barcode=not.is.null&select=product_id,barcode`)
   ]);
   const resolveProduct=kaspinProductResolver(products,units);
 
-  const candidateRows=[],invalidTransactions=new Set();
+  const receiptMap=new Map();
+  const receiptSources=rawReceipts.length?rawReceipts:[...new Map(rawRows.map((row)=>[String(row.transactionCode??'').trim(),row])).values()];
+  receiptSources.forEach((raw,index)=>{
+    const transactionCode=String(raw.transactionCode??'').trim(),occurredAt=new Date(raw.occurredAt);
+    const grandTotal=importNumber(raw.grandTotal),profit=importNumber(raw.profit);
+    if(!transactionCode||!(grandTotal>=0)||Number.isNaN(occurredAt.getTime())){
+      warnings.push({row:index+2,message:`Aktivitas ${transactionCode||'-'} dilewati karena tanggal atau total tidak valid`});return;
+    }
+    receiptMap.set(transactionCode,{
+      receiptOnly:true,transactionCode,occurredAt:occurredAt.toISOString(),grandTotal,
+      profit:profit==null?null:profit,tendered:Math.max(0,importNumber(raw.tendered)??grandTotal),
+      change:Math.max(0,importNumber(raw.change)??0),transactionDiscount:Math.max(0,importNumber(raw.transactionDiscount)??0),
+      cashier:String(raw.cashier??'').trim(),paymentType:String(raw.paymentType??'').trim(),
+      paymentMethod:String(raw.paymentMethod??'').trim()||'Cash',customerEmail:String(raw.customerEmail??'').trim(),
+      customerName:String(raw.customerName??'').trim(),note:String(raw.note??'').trim(),
+      status:String(raw.status??'').toUpperCase()==='VOIDED'||grandTotal===0?'VOIDED':'COMPLETED',
+      voidReason:String(raw.returnReason??raw.voidReason??'').trim()||(grandTotal===0?'Transaksi Rp0 dari riwayat Kasir Pintar':''),
+      legacyLines:[]
+    });
+  });
+  rawRows.filter((row)=>row.receiptOnly&&Array.isArray(row.legacyLines)).forEach((row)=>{
+    const receipt=receiptMap.get(String(row.transactionCode??'').trim());
+    if(receipt)receipt.legacyLines=row.legacyLines.map((line)=>({...line}));
+  });
+  const candidateRows=[];
   rawRows.forEach((raw,index)=>{
+    if(raw.receiptOnly)return;
     const transactionCode=String(raw.transactionCode??'').trim();
     const productCode=String(raw.productCode??'').trim().toUpperCase(),product=resolveProduct(productCode,raw.productName);
     const quantity=importNumber(raw.quantity),unitCost=importNumber(raw.unitCost),unitPrice=importNumber(raw.unitPrice);
     const lineGross=importNumber(raw.lineGross),grandTotal=importNumber(raw.grandTotal),occurredAt=new Date(raw.occurredAt);
     if(!transactionCode||!product||!(quantity>0)||!(unitCost>=0)||!(unitPrice>=0)||!(lineGross>=0)||!(grandTotal>=0)||Number.isNaN(occurredAt.getTime())){
-      invalidTransactions.add(transactionCode||`BARIS-${index+2}`);
-      warnings.push({row:index+2,message:`Struk ${transactionCode||'-'} dilewati karena produk ${raw.productName||productCode||'-'} belum cocok atau datanya tidak valid`});
+      const receipt=receiptMap.get(transactionCode);
+      if(receipt)receipt.legacyLines.push({productCode,productName:String(raw.productName??'Produk lama').trim()||'Produk lama',quantity,unitCost,unitPrice,lineGross});
+      warnings.push({row:index+2,message:`Detail ${raw.productName||productCode||'-'} pada struk ${transactionCode||'-'} disimpan sebagai arsip karena produknya belum cocok atau datanya tidak valid`});
       return;
     }
     candidateRows.push({
@@ -1421,13 +1458,16 @@ async function previewKaspinSales(context,input){
       note:String(raw.note??'').trim()
     });
   });
-  const rows=candidateRows.filter((row)=>!invalidTransactions.has(row.transactionCode));
-  const transactionCount=new Set(rows.map((row)=>row.transactionCode)).size;
-  if(!rows.length)errors.push({row:0,field:'file',message:'Tidak ada detail struk yang cocok dengan produk Nusa POS'});
+  const rows=[...receiptMap.values(),...candidateRows];
+  const transactionCount=receiptMap.size;
+  if(!rows.length)errors.push({row:0,field:'file',message:'Tidak ada aktivitas penjualan yang dapat dimigrasikan'});
   return {
     valid:errors.length===0,kind:'KASPIN_SALES',mode:'MIXED',outletId:context.outlet.id,
     rows,errors,warnings,
-    summary:{total:rows.length,create:transactionCount,update:0,error:errors.length}
+    summary:{total:rows.length,create:transactionCount,update:0,error:errors.length,
+      completed:[...receiptMap.values()].filter((row)=>row.status==='COMPLETED').length,
+      voided:[...receiptMap.values()].filter((row)=>row.status==='VOIDED').length,
+      archivedLines:[...receiptMap.values()].reduce((sum,row)=>sum+row.legacyLines.length,0)}
   };
 }
 
@@ -2538,7 +2578,7 @@ async function routeRequest(request, response, route) {
         p_file_name:input.fileName??null,p_outlet_id:preview.outletId,p_rows:preview.rows
       });
       const history=await reconcileKaspinCustomerHistory(context,session);
-      return send(response,201,{kind:preview.kind,total:preview.rows.length,created:Number(result.created??0),updated:0,duplicate:Boolean(result.duplicate),receipts:Number(result.receipts??0),items:Number(result.items??0),...history});
+      return send(response,201,{kind:preview.kind,total:preview.rows.length,created:Number(result.created??0),updated:0,duplicate:Boolean(result.duplicate),receipts:Number(result.receipts??0),completed:Number(result.completed??0),voided:Number(result.voided??0),items:Number(result.items??0),...history});
     }
     if(preview.kind==='CUSTOMERS'&&String(input.source??'').toUpperCase()==='KASPIN'){
       const result=await rpc('import_kaspin_customers_v1',{

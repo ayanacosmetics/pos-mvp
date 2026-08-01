@@ -15,10 +15,12 @@ test('filter laporan membedakan tunai, piutang, dan multipayment',()=>{
   const sales=[
     {...base,id:'cash',netTotal:100000,netCost:60000,grossProfit:40000,quote:{grandTotal:100000},payments:[{method:'CASH',amount:100000}]},
     {...base,id:'credit',netTotal:200000,netCost:100000,grossProfit:100000,quote:{grandTotal:200000},payments:[{method:'CREDIT',amount:200000}]},
-    {...base,id:'split',netTotal:300000,netCost:180000,grossProfit:120000,quote:{grandTotal:300000},payments:[{method:'CASH',amount:100000},{method:'CREDIT',amount:200000}]}
+    {...base,id:'split',netTotal:300000,netCost:180000,grossProfit:120000,quote:{grandTotal:300000},payments:[{method:'CASH',amount:100000},{method:'CREDIT',amount:200000}]},
+    {...base,id:'void',status:'VOIDED',netTotal:0,netCost:0,grossProfit:0,quote:{grandTotal:0},payments:[{method:'CASH',amount:0}]}
   ];
   const all=filteredSalesReport(sales,{timezone:'Asia/Makassar',paymentMethods:['CASH','CREDIT','MULTIPAYMENT']});
   assert.equal(all.metrics.transactionCount,3);assert.equal(all.metrics.netSales,200000);assert.equal(all.metrics.grossProfit,260000);
+  assert.equal(all.metrics.activityCount,4);assert.equal(all.metrics.voidedCount,1);assert.equal(all.daily[0].activityCount,4);
   const split=filteredSalesReport(sales,{timezone:'Asia/Makassar',paymentState:'CREDIT',paymentMethods:['MULTIPAYMENT'],includeCreditRevenue:true,includeCreditProfit:false});
   assert.equal(split.metrics.transactionCount,1);assert.equal(split.metrics.netSales,300000);assert.equal(split.metrics.grossProfit,40000);
 });

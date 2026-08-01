@@ -1629,7 +1629,7 @@ async function inspectImportFile() {
     if(kind==='PRODUCT_VARIANTS')rows=rows.filter((row)=>String(row.familyCode??'').trim()||String(row.variantGroup??'').trim()||String(row.variantName??'').trim());
     if(!rows.length)throw new Error(kaspin?.report?.issues?.[0]?.message??'Tidak ada baris yang dapat diimpor.');
     state.importSourceReport=kaspin?.report??null;
-    const input = { kind, mode:state.productImportMode, source:kaspin?.report?.source??source, locationId: ['PRODUCTS','KASPIN_FIFO'].includes(kind) ? el('import-location').value : null, rows,capitalRows:kaspin?.capitalRows??[],customerGroups:kaspin?.customerGroups??[] };
+    const input = { kind, mode:state.productImportMode, source:kaspin?.report?.source??source, locationId: ['PRODUCTS','KASPIN_FIFO'].includes(kind) ? el('import-location').value : null, rows,receipts:kaspin?.receipts??[],capitalRows:kaspin?.capitalRows??[],customerGroups:kaspin?.customerGroups??[] };
     const preview = await request('/api/imports/preview', { method:'POST', body:JSON.stringify(input) });
     state.importDraft = { ...input, rows: preview.rows,capitalRows:preview.capitalRows??[], fileName: `${file.name}${capitalFile?` + ${capitalFile.name}`:''}`, idempotencyKey: crypto.randomUUID(), valid: preview.valid };
     renderImportPreview(preview,state.importSourceReport);
@@ -1863,7 +1863,7 @@ async function inspectKaspinMigrationPackage(){
       if(!parsed)throw new Error(`${label}: format file tidak dikenali. Pastikan memilih export yang benar dari Kasir Pintar.`);
       if(!parsed.rows.length)throw new Error(`${label}: tidak ada baris yang dapat dimigrasikan.`);
       const skipped=Number(parsed.report?.skipped??0)+Number(parsed.report?.deferred??0);
-      steps.push({id,label,kind,mode,fileName:fileNames,rows:parsed.rows,capitalRows:parsed.capitalRows??[],customerGroups:parsed.customerGroups??[],source:'KASPIN',locationId:location?el('kaspin-migration-location').value:null,report:parsed.report,status:'ready',message:`${parsed.rows.length.toLocaleString('id-ID')} baris dikenali${parsed.customerGroups?.length?` · ${parsed.customerGroups.length.toLocaleString('id-ID')} tipe pelanggan`:''}${skipped?` · ${skipped} dilewati`:''}`});
+      steps.push({id,label,kind,mode,fileName:fileNames,rows:parsed.rows,receipts:parsed.receipts??[],capitalRows:parsed.capitalRows??[],customerGroups:parsed.customerGroups??[],source:'KASPIN',locationId:location?el('kaspin-migration-location').value:null,report:parsed.report,status:'ready',message:`${parsed.rows.length.toLocaleString('id-ID')} baris dikenali${parsed.receipts?.length?` · ${parsed.receipts.length.toLocaleString('id-ID')} aktivitas transaksi`:''}${parsed.customerGroups?.length?` · ${parsed.customerGroups.length.toLocaleString('id-ID')} tipe pelanggan`:''}${skipped?` · ${skipped} dilewati`:''}`});
     };
     add('products','Barang utama & stok awal','PRODUCTS','CREATE_ONLY',files.products.name,parseKaspinProductWorkbook(window.XLSX,buffers.products,{useCodeAsBarcode:true,useInternalSku:true}),{location:true});
     if(files.customers)add('customers','Pelanggan, tipe & poin','CUSTOMERS','GENERAL',files.customers.name,parseKaspinCustomerWorkbook(window.XLSX,buffers.customers));
@@ -1887,7 +1887,7 @@ async function runKaspinMigration(){
   for(const step of kaspinMigrationPackage.steps){
     step.status='running';step.message='Memvalidasi di database…';renderKaspinMigrationSteps(kaspinMigrationPackage.steps);
     try{
-      const input={kind:step.kind,mode:step.mode,source:step.source,locationId:step.locationId,rows:step.rows,capitalRows:step.capitalRows,customerGroups:step.customerGroups??[]};
+      const input={kind:step.kind,mode:step.mode,source:step.source,locationId:step.locationId,rows:step.rows,receipts:step.receipts??[],capitalRows:step.capitalRows,customerGroups:step.customerGroups??[]};
       const preview=await request('/api/imports/preview',{method:'POST',body:JSON.stringify(input)});
       if(!preview.valid){const first=preview.errors?.[0];throw new Error(`${preview.errors?.length??1} kesalahan${first?.message?`: ${first.message}`:''}`);}
       step.message='Menyimpan…';renderKaspinMigrationSteps(kaspinMigrationPackage.steps);
@@ -5470,7 +5470,7 @@ async function loadFilteredSalesReport(){
   state.report={...(state.report??{}),period:data.period,metrics:{...(state.report?.metrics??{}),...data.metrics},daily:data.daily??[]};
   renderSalesStaffOptions(data.staff??[]);
   renderSalesMetricCards(state.report.metrics);
-  el('report-status').textContent=`${salesPeriodTitle(state.salesPeriodLevel,state.salesPeriodValue)} · ${Number(data.metrics.transactionCount).toLocaleString('id-ID')} transaksi sesuai filter${data.truncated?' · hanya 10.000 transaksi terbaru':''}`;
+  el('report-status').textContent=`${salesPeriodTitle(state.salesPeriodLevel,state.salesPeriodValue)} · ${Number(data.metrics.activityCount??data.metrics.transactionCount).toLocaleString('id-ID')} aktivitas transaksi sesuai filter${data.truncated?' · hanya 10.000 transaksi terbaru':''}`;
   return data;
 }
 
@@ -5556,7 +5556,7 @@ function renderSalesMetricCards(metrics){
 function renderSelectedSalesMetric(){
   const metrics=state.salesMetrics??{};
   const values={
-    transactions:['Jumlah transaksi',Number(metrics.transactionCount??0).toLocaleString('id-ID'),'transaksi selesai pada periode ini'],
+    transactions:['Jumlah transaksi',Number(metrics.activityCount??metrics.transactionCount??0).toLocaleString('id-ID'),`${Number(metrics.transactionCount??0).toLocaleString('id-ID')} selesai · ${Number(metrics.voidedCount??0).toLocaleString('id-ID')} batal/retur`],
     revenue:['Pendapatan',money.format(metrics.netSales??0),'penjualan bersih setelah retur'],
     profit:['Keuntungan',money.format(metrics.grossProfit??0),'laba kotor setelah harga pokok dan retur'],
     returns:['Retur pelanggan',money.format(metrics.returnTotal??0),'nilai barang yang dikembalikan pelanggan']
@@ -5591,20 +5591,20 @@ function renderSalesPeriodBreakdown(){
   }
   if(showTransactions||!report)return;
   if(level==='MONTH'){
-    const rows=[...(report.daily??[])].filter((item)=>Number(item.transactionCount)||Number(item.returns)).reverse();
+    const rows=[...(report.daily??[])].filter((item)=>Number(item.activityCount??item.transactionCount)||Number(item.returns)).reverse();
     el('sales-period-heading').innerHTML=salesPeriodHeading('TRANSAKSI PER HARI',salesPeriodTitle(level,state.salesPeriodValue),'Tekan Detail untuk membuka seluruh struk pada tanggal tersebut.');
-    el('sales-period-list').innerHTML=rows.map((item)=>salesPeriodRow({label:new Date(`${item.date}T00:00:00`).toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long'}),caption:`Retur ${money.format(item.returns)}`,transactions:item.transactionCount,netSales:item.netSales,grossProfit:item.grossProfit,level:'DAY',value:item.date})).join('')||'<div class="empty-state compact">Belum ada transaksi pada bulan ini.</div>';
+    el('sales-period-list').innerHTML=rows.map((item)=>salesPeriodRow({label:new Date(`${item.date}T00:00:00`).toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long'}),caption:`Batal/retur ${Number(item.voidedCount??0).toLocaleString('id-ID')} · Retur ${money.format(item.returns)}`,transactions:item.activityCount??item.transactionCount,netSales:item.netSales,grossProfit:item.grossProfit,level:'DAY',value:item.date})).join('')||'<div class="empty-state compact">Belum ada transaksi pada bulan ini.</div>';
     return;
   }
   if(level==='YEAR'){
     const months=new Map();
     for(const item of report.daily??[]){
-      const key=item.date.slice(0,7),current=months.get(key)??{transactions:0,netSales:0,grossProfit:0,returns:0};
-      current.transactions+=Number(item.transactionCount);current.netSales+=Number(item.netSales);current.grossProfit+=Number(item.grossProfit);current.returns+=Number(item.returns);months.set(key,current);
+      const key=item.date.slice(0,7),current=months.get(key)??{transactions:0,voided:0,netSales:0,grossProfit:0,returns:0};
+      current.transactions+=Number(item.activityCount??item.transactionCount);current.voided+=Number(item.voidedCount??0);current.netSales+=Number(item.netSales);current.grossProfit+=Number(item.grossProfit);current.returns+=Number(item.returns);months.set(key,current);
     }
     const rows=[...months.entries()].filter(([,item])=>item.transactions||item.returns).reverse();
     el('sales-period-heading').innerHTML=salesPeriodHeading('PENJUALAN PER BULAN',salesPeriodTitle(level,state.salesPeriodValue),'Tekan Detail untuk melihat transaksi per tanggal dalam bulan tersebut.');
-    el('sales-period-list').innerHTML=rows.map(([month,item])=>salesPeriodRow({label:new Date(`${month}-01T00:00:00`).toLocaleDateString('id-ID',{month:'long',year:'numeric'}),caption:`Retur ${money.format(item.returns)}`,transactions:item.transactions,netSales:item.netSales,grossProfit:item.grossProfit,level:'MONTH',value:month})).join('')||'<div class="empty-state compact">Belum ada transaksi pada tahun ini.</div>';
+    el('sales-period-list').innerHTML=rows.map(([month,item])=>salesPeriodRow({label:new Date(`${month}-01T00:00:00`).toLocaleDateString('id-ID',{month:'long',year:'numeric'}),caption:`Batal/retur ${item.voided.toLocaleString('id-ID')} · Retur ${money.format(item.returns)}`,transactions:item.transactions,netSales:item.netSales,grossProfit:item.grossProfit,level:'MONTH',value:month})).join('')||'<div class="empty-state compact">Belum ada transaksi pada tahun ini.</div>';
   }
 }
 
@@ -5618,12 +5618,12 @@ async function loadSalesAllTime(){
     await loadFilteredSalesReport();
     const years=new Map();
     for(const item of state.report.daily??[]){
-      const year=item.date.slice(0,4),current=years.get(year)??{netSales:0,grossProfit:0,returnTotal:0,transactionCount:0};
-      current.netSales+=Number(item.netSales);current.grossProfit+=Number(item.grossProfit);current.returnTotal+=Number(item.returns);current.transactionCount+=Number(item.transactionCount);years.set(year,current);
+      const year=item.date.slice(0,4),current=years.get(year)??{netSales:0,grossProfit:0,returnTotal:0,transactionCount:0,voidedCount:0};
+      current.netSales+=Number(item.netSales);current.grossProfit+=Number(item.grossProfit);current.returnTotal+=Number(item.returns);current.transactionCount+=Number(item.activityCount??item.transactionCount);current.voidedCount+=Number(item.voidedCount??0);years.set(year,current);
     }
     state.salesYears=[...years.entries()].sort(([a],[b])=>b.localeCompare(a)).map(([year,metrics])=>({year,metrics}));
     el('sales-period-heading').innerHTML=salesPeriodHeading('PENJUALAN PER TAHUN','Seluruh riwayat usaha','Tekan Detail untuk membuka laporan bulanan pada tahun tersebut.');
-    el('sales-period-list').innerHTML=state.salesYears.filter((item)=>Number(item.metrics.transactionCount)||Number(item.metrics.returnTotal)).map((item)=>salesPeriodRow({label:`Tahun ${item.year}`,caption:`Retur ${money.format(item.metrics.returnTotal)}`,transactions:item.metrics.transactionCount,netSales:item.metrics.netSales,grossProfit:item.metrics.grossProfit,level:'YEAR',value:String(item.year)})).join('')||'<div class="empty-state compact">Belum ada transaksi penjualan.</div>';
+    el('sales-period-list').innerHTML=state.salesYears.filter((item)=>Number(item.metrics.transactionCount)||Number(item.metrics.returnTotal)).map((item)=>salesPeriodRow({label:`Tahun ${item.year}`,caption:`Batal/retur ${Number(item.metrics.voidedCount??0).toLocaleString('id-ID')} · Retur ${money.format(item.metrics.returnTotal)}`,transactions:item.metrics.transactionCount,netSales:item.metrics.netSales,grossProfit:item.metrics.grossProfit,level:'YEAR',value:String(item.year)})).join('')||'<div class="empty-state compact">Belum ada transaksi penjualan.</div>';
   }catch(error){el('report-status').textContent=`Laporan belum dapat dimuat: ${error.message}`;toast(error.message);}
   finally{el('report-status').classList.remove('loading');}
 }

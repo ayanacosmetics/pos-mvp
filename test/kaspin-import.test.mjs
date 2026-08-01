@@ -129,13 +129,17 @@ test('parser penjualan Kaspin menggabungkan detail barang dengan total struk',as
   ]),'Transaksi_Barang');
   XLSX.utils.book_append_sheet(transactions,XLSX.utils.aoa_to_sheet([
     ['Kode Transaksi','Waktu','Total Pendapatan','Total Uang Real','Keuntungan','Bayar','Uang Kembalian','Kasir','Tipe Pembayaran','Metode Pembayaran','Email Pelanggan','Nama Pelanggan','Jatuh Tempo','Diskon','Nama Diskon','Pajak','Keterangan'],
-    ['TRX-1','2026-06-01 10:00:00',9000,9000,2000,10000,1000,'Kasir Lama','tunai','Cash','','',null,1000,'Diskon toko',0,'Migrasi']
+    ['TRX-1','2026-06-01 10:00:00',9000,9000,2000,10000,1000,'Kasir Lama','tunai','Cash','','',null,1000,'Diskon toko',0,'Migrasi'],
+    ['VOID-1','2026-06-01 11:00:00',0,0,0,0,0,'Kasir Lama','tunai','Cash','','',null,0,'',0,'Dibatalkan']
   ]),'Transaksi');
   const parsed=parseKaspinSalesWorkbooks(
     XLSX,XLSX.write(details,{bookType:'xlsx',type:'array'}),XLSX.write(transactions,{bookType:'xlsx',type:'array'})
   );
-  assert.equal(parsed.report.receipts,1);
+  assert.equal(parsed.report.receipts,2);
+  assert.equal(parsed.report.itemizedReceipts,1);
+  assert.equal(parsed.report.voidedReceipts,1);
   assert.equal(parsed.report.salesLines,1);
+  assert.equal(parsed.receipts.find((row)=>row.transactionCode==='VOID-1').status,'VOIDED');
   assert.equal(parsed.rows[0].transactionCode,'TRX-1');
   assert.equal(parsed.rows[0].productCode,'0000000000001');
   assert.equal(parsed.rows[0].lineGross,10000);
