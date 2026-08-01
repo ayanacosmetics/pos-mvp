@@ -1905,6 +1905,18 @@ async function runKaspinMigration(){
   try{await refreshCatalog();if(state.session.permissions.includes('inventory.manage'))await loadInventory();await loadImportHistory();}catch(error){toast('Migrasi tersimpan. Muat ulang halaman untuk memperbarui tampilan.');}
 }
 
+async function reconcileKaspinCustomers(){
+  const button=el('reconcile-kaspin-customers');button.disabled=true;button.textContent='Menghubungkan…';
+  try{
+    const result=await request('/api/imports/kaspin/reconcile-customers',{method:'POST',body:'{}'});
+    const linked=Number(result.reconciliation?.linkedReceipts??0),updated=Number(result.reconciliation?.customersUpdated??0),unmatched=Number(result.reconciliation?.unmatchedReceipts??0);
+    el('kaspin-migration-error').textContent=`Riwayat pelanggan diperbarui: ${linked.toLocaleString('id-ID')} struk baru terhubung, ${updated.toLocaleString('id-ID')} pelanggan dihitung ulang${unmatched?`, ${unmatched.toLocaleString('id-ID')} struk belum cocok`:''}.`;
+    await refreshCatalog();await loadCrmDashboard();
+    toast(`Riwayat pelanggan diperbarui · ${linked.toLocaleString('id-ID')} struk terhubung`);
+  }catch(error){el('kaspin-migration-error').textContent=error.message;toast(error.message);}
+  finally{button.disabled=false;button.textContent='Hubungkan riwayat pelanggan';}
+}
+
 function downloadJsonSnapshot(snapshot,fileName) {
   const content=JSON.stringify(snapshot,null,2);
   const link=document.createElement('a');
@@ -7569,6 +7581,7 @@ el('kaspin-migration-results').addEventListener('click',(event)=>{
 el('kaspin-migration-reset-confirm').addEventListener('change',()=>{el('run-kaspin-migration').disabled=!kaspinMigrationPackage||!el('kaspin-migration-reset-confirm').checked;});
 el('inspect-kaspin-migration').addEventListener('click',inspectKaspinMigrationPackage);
 el('run-kaspin-migration').addEventListener('click',runKaspinMigration);
+el('reconcile-kaspin-customers').addEventListener('click',reconcileKaspinCustomers);
 el('open-import-products').addEventListener('click',()=>openProductImportWorkspace('PRODUCTS',{mode:'CREATE_ONLY'}));
 el('open-export-products').addEventListener('click',()=>openProductImportWorkspace('PRODUCTS',{mode:'UPDATE_ONLY'}));
 el('back-to-products').addEventListener('click',()=>showPage('products'));

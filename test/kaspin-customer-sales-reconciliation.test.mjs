@@ -28,3 +28,10 @@ test('impor pelanggan berikutnya otomatis menjalankan rekonsiliasi dan memberi h
   assert.match(api,/reconciliation/);
   assert.match(app,/struk lama terhubung ke pelanggan/);
 });
+
+test('impor penjualan dan alat migrasi dapat merekonsiliasi pelanggan setelah struk tersedia',()=>{
+  assert.match(api,/preview\.kind==='KASPIN_SALES'[\s\S]*reconcileKaspinCustomerHistory\(context,session\)/);
+  assert.match(api,/imports\/kaspin\/reconcile-customers/);
+  assert.match(app,/reconcileKaspinCustomers/);
+  assert.match(app,/Hubungkan riwayat pelanggan/);
+});

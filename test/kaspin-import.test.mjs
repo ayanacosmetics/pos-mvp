@@ -210,7 +210,7 @@ test('satu dialog migrasi Kaspin menerima paket lengkap dan menjalankan urutan a
     readFile(new URL('../apps/web/index.html',import.meta.url),'utf8'),
     readFile(new URL('../apps/web/app.js',import.meta.url),'utf8')
   ]);
-  for(const id of ['open-kaspin-migration','kaspin-migration-dialog','kaspin-migration-products','kaspin-migration-customers','kaspin-migration-suppliers','kaspin-migration-units','kaspin-migration-prices','kaspin-migration-purchases','kaspin-migration-capital','kaspin-migration-sales','kaspin-migration-sales-summary','inspect-kaspin-migration','run-kaspin-migration'])assert.ok(html.includes(`id="${id}"`));
+  for(const id of ['open-kaspin-migration','kaspin-migration-dialog','kaspin-migration-products','kaspin-migration-customers','kaspin-migration-suppliers','kaspin-migration-units','kaspin-migration-prices','kaspin-migration-purchases','kaspin-migration-capital','kaspin-migration-sales','kaspin-migration-sales-summary','reconcile-kaspin-customers','inspect-kaspin-migration','run-kaspin-migration'])assert.ok(html.includes(`id="${id}"`));
   assert.match(html,/id="kaspin-migration-sales"[^>]*multiple/);
   assert.match(app,/async function inspectKaspinMigrationPackage/);
   assert.match(app,/async function runKaspinMigration/);

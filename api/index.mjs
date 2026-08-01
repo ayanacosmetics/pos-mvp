@@ -1297,6 +1297,25 @@ async function ensureKaspinCustomerGroups(context,definitions){
   return requested;
 }
 
+async function reconcileKaspinCustomerHistory(context,session){
+  let reconciliation=null,pointReconstruction=null;
+  try{
+    reconciliation=await rpc('reconcile_kaspin_customer_sales_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id
+    });
+  }catch(error){
+    if(!/reconcile_kaspin_customer_sales_v1|schema cache|function|PGRST202/i.test(error.message))throw error;
+  }
+  try{
+    pointReconstruction=await rpc('reconstruct_kaspin_points_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id
+    });
+  }catch(error){
+    if(!/reconstruct_kaspin_points_v1|schema cache|function|PGRST202/i.test(error.message))throw error;
+  }
+  return {reconciliation,pointReconstruction};
+}
+
 function kaspinProductResolver(products,units){
   const byId=new Map(products.map((product)=>[product.id,product]));
   const direct=new Map(products.map((product)=>[String(product.sku).trim().toUpperCase(),product]));
@@ -2485,6 +2504,12 @@ async function routeRequest(request, response, route) {
     }));
   }
 
+  if(request.method==='POST'&&route==='imports/kaspin/reconcile-customers'){
+    requirePermission(session,'audit.view');
+    if(!['OWNER','ADMIN'].includes(session.profile.role))throw Object.assign(new Error('Hanya Owner atau Admin yang dapat menghubungkan riwayat pelanggan'),{status:403});
+    return send(response,200,await reconcileKaspinCustomerHistory(context,session));
+  }
+
   if (request.method === 'POST' && route === 'imports/preview') {
     requirePermission(session, 'audit.view');
     if (!['OWNER','ADMIN'].includes(session.profile.role)) { const error = new Error('Hanya Owner atau Admin yang dapat mengimpor data'); error.status = 403; throw error; }
@@ -2512,29 +2537,15 @@ async function routeRequest(request, response, route) {
         p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:key,
         p_file_name:input.fileName??null,p_outlet_id:preview.outletId,p_rows:preview.rows
       });
-      return send(response,201,{kind:preview.kind,total:preview.rows.length,created:Number(result.created??0),updated:0,duplicate:Boolean(result.duplicate),receipts:Number(result.receipts??0),items:Number(result.items??0)});
+      const history=await reconcileKaspinCustomerHistory(context,session);
+      return send(response,201,{kind:preview.kind,total:preview.rows.length,created:Number(result.created??0),updated:0,duplicate:Boolean(result.duplicate),receipts:Number(result.receipts??0),items:Number(result.items??0),...history});
     }
     if(preview.kind==='CUSTOMERS'&&String(input.source??'').toUpperCase()==='KASPIN'){
       const result=await rpc('import_kaspin_customers_v1',{
         p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:key,
         p_file_name:input.fileName??null,p_rows:preview.rows
       });
-      let reconciliation=null;
-      let pointReconstruction=null;
-      try{
-        reconciliation=await rpc('reconcile_kaspin_customer_sales_v1',{
-          p_tenant_id:context.tenantId,p_actor_id:session.authUser.id
-        });
-      }catch(error){
-        if(!/reconcile_kaspin_customer_sales_v1|schema cache|function|PGRST202/i.test(error.message))throw error;
-      }
-      try{
-        pointReconstruction=await rpc('reconstruct_kaspin_points_v1',{
-          p_tenant_id:context.tenantId,p_actor_id:session.authUser.id
-        });
-      }catch(error){
-        if(!/reconstruct_kaspin_points_v1|schema cache|function|PGRST202/i.test(error.message))throw error;
-      }
+      const {reconciliation,pointReconstruction}=await reconcileKaspinCustomerHistory(context,session);
       return send(response,201,{
         kind:preview.kind,total:preview.rows.length,created:Number(result.created??0),
         updated:Number(result.updated??0),duplicate:Boolean(result.duplicate),reconciliation,pointReconstruction
