@@ -281,15 +281,15 @@ export function parseKaspinSupplierWorkbook(XLSX,arrayBuffer){
     const matrix=XLSX.utils.sheet_to_json(workbook.Sheets[sheetName],{header:1,raw:true,defval:''});
     const headerIndex=matrix.findIndex((row)=>{
       const headers=row.map(normalizedHeader);
-      return headers.some((item)=>['nama_supplier_edit','nama_supplier','nama'].includes(item))&&headers.some((item)=>['kode_supplier_edit','kode_supplier','kode','no_hp','telepon'].includes(item));
+      return headers.some((item)=>['nama_supplier_edit','nama_supplier','nama_suplier_edit','nama_suplier','nama'].includes(item))&&headers.some((item)=>['kode_supplier_edit','kode_supplier','kode_suplier_edit','kode_suplier','kode','no_hp','telepon'].includes(item));
     });
     if(headerIndex>=0){source={sheetName,matrix,headerIndex,headers:matrix[headerIndex].map(normalizedHeader)};break;}
   }
   if(!source)return null;
   const indexOf=(...names)=>names.map((name)=>source.headers.indexOf(name)).find((index)=>index>=0)??-1;
   const indexes={
-    code:indexOf('kode_supplier_edit','kode_supplier','kode'),name:indexOf('nama_supplier_edit','nama_supplier','nama'),
-    phone:indexOf('no_hp','nomor_telepon','telepon'),address:indexOf('alamat_supplier_edit','alamat_supplier','alamat')
+    code:indexOf('kode_supplier_edit','kode_supplier','kode_suplier_edit','kode_suplier','kode'),name:indexOf('nama_supplier_edit','nama_supplier','nama_suplier_edit','nama_suplier','nama'),
+    phone:indexOf('no_hp','nomor_telepon','telepon'),address:indexOf('alamat_supplier_edit','alamat_supplier','alamat_suplier_edit','alamat_suplier','alamat')
   };
   const rows=[],issues=[];
   source.matrix.slice(source.headerIndex+1).forEach((cells,index)=>{

@@ -166,7 +166,7 @@ test('parser pelanggan Kaspin mempertahankan Member, Grosir, email, dan poin',as
 test('parser supplier Kaspin menerima nama kolom export dan membuat kode stabil',async()=>{
   const XLSX=await sheetJs(),workbook=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([
-    ['alasan_gagal','kode_supplier_edit','nama_supplier_edit','no_hp','alamat'],
+    ['alasan_gagal','kode_suplier_edit','nama_suplier_edit','no_hp','alamat'],
     ['Petunjuk','Kode','Nama','Telepon','Alamat'],
     ['','SUP-01','Supplier Resmi',628123456789,'Makassar'],
     ['','','Supplier Tanpa Kode',628987654321,'Gowa']

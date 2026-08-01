@@ -10,7 +10,7 @@ test('Nusa Commerce memakai identitas rilis dan aset shell terbaru', () => {
   assert.match(html, /Migrasi lengkap Kaspin .* v2\.17\.1/);
   assert.match(html, /styles\.css\?v=166/);
   assert.match(html, /app\.js\?v=166/);
-  assert.match(worker, /nusa-pos-shell-v167/);
+  assert.match(worker, /nusa-pos-shell-v168/);
   assert.match(worker, /styles\.css\?v=166/);
   assert.match(worker, /app\.js\?v=166/);
 });
