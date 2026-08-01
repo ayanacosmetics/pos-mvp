@@ -21,6 +21,6 @@ test('versi kandidat final tampil pada API, aplikasi, dan cache PWA', async () =
   ]);
   assert.match(api, /2\.17\.0-cloud/);
   assert.match(html, /Etalase & varian aman .* v2\.17\.0/);
-  assert.match(worker, /nusa-pos-shell-v165/);
+  assert.match(worker, /nusa-pos-shell-v166/);
   assert.equal(JSON.parse(pkgText).version, '2.17.0');
 });

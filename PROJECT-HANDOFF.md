@@ -50,7 +50,7 @@ kode frontend, dokumentasi publik, atau chat.
 - Impor Kaspin membuat SKU internal `KP-`, mempertahankan kode lama, dan menandai kode duplikat sebagai kandidat barcode bersama.
 - Export/import massal mencakup `PRODUCT_FAMILIES`, `PRODUCT_VARIANTS`, dan `PRODUCT_OPTIONS`.
 - Restok/PO selalu memilih SKU konkret; backup, reset, dry-run restore, dan restore ikut menjaga struktur etalase/varian.
-- Kandidat: aplikasi `2.17.0`, API `2.17.0-cloud`, cache `v165`; `npm test` lulus 298/298.
+- Kandidat: aplikasi `2.17.0`, API `2.17.0-cloud`, cache `v166`; `npm test` lulus 298/298.
 - Belum commit/push/deploy. Jalankan hanya `supabase/migrations/202608010005_future_product_catalog.sql`, konfirmasi berhasil, lalu commit/push/deploy.
 
 ## 3. Status rilis
