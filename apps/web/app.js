@@ -44,7 +44,8 @@ const permissionOptions=[
   ['purchasing.view_cost','Lihat harga modal','Harga beli dan perbandingan supplier','restock'],
   ['purchasing.receive','Restok & supplier','Pesanan, penerimaan, retur, dan supplier','restock'],
   ['promotion.manage','Pelanggan & pertumbuhan','Pelanggan, promo, poin, tier, dan voucher','relations'],
-  ['report.view','Laporan','Pendapatan, keuntungan, produk, dan transaksi','reports'],
+  ['report.transactions','Riwayat transaksi & cetak struk','Daftar transaksi harian tanpa pendapatan dan keuntungan','reports'],
+  ['report.view','Laporan usaha lengkap','Pendapatan, keuntungan, produk, pembelian, dan outlet','reports'],
   ['audit.view','Audit & sinkronisasi','Jejak aktivitas dan konflik data offline','reports'],
   ['workforce.self','Area karyawan sendiri','Jadwal, absensi, target, dan permintaan','workforce'],
   ['workforce.manage','Kelola karyawan','Jadwal, target, aktivitas, dan rekonsiliasi','workforce'],
@@ -65,7 +66,7 @@ const permissionDefaults={
   CASHIER:['pos.sell','workforce.self'],
   PURCHASING:['purchasing.view_cost','purchasing.receive','workforce.self'],
   WAREHOUSE:['inventory.manage','workforce.self'],
-  MANAGER:['pos.sell','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage'],
+  MANAGER:['pos.sell','inventory.manage','sales.return','catalog.manage','promotion.manage','report.transactions','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage'],
   ADMIN:permissionOptions.map(([permission])=>permission)
 };
 const defaultReceiptLayout={
@@ -503,7 +504,8 @@ async function synchronizeData() {
     if (target === 'restock' && state.session.permissions.includes('purchasing.view_cost')) {
       tasks.push(loadPurchaseOrders(), loadRestockPlanning(), loadRecentSupplierReturns());
     }
-    if (target === 'reports' && state.session.permissions.includes('report.view')) tasks.push(
+    if(target==='reports'&&state.reportView==='receipts'&&state.session.permissions.includes('report.transactions'))tasks.push(loadReceiptHistoryReport());
+    else if (target === 'reports' && state.session.permissions.includes('report.view')) tasks.push(
       ['sales-products','sales-categories','sales-addons','stock-flow'].includes(state.reportView)?loadSalesAnalysis():loadReport()
     );
     if (target === 'users' && state.session.permissions.includes('identity.manage_staff')) tasks.push(loadUsers());
@@ -5721,6 +5723,11 @@ function historyReceiptShareText(sale){
 function openHistoryReceiptPage(sale){
   if(!sale)return;
   state.historyReceiptSale=sale;state.lastReceipt=sale;
+  const receiptOnly=state.reportView==='receipts';
+  el('history-receipt-menu').querySelector('[data-history-receipt-action="return"]').classList.toggle('hidden',!state.session.permissions.includes('sales.return'));
+  el('history-receipt-menu').querySelector('[data-history-receipt-action="void"]').classList.toggle('hidden',!state.session.permissions.includes('sale.void'));
+  el('history-receipt-menu').querySelector('[data-history-receipt-action="edit"]').classList.toggle('hidden',receiptOnly);
+  el('history-receipt-menu').querySelector('[data-history-receipt-action="delete"]').classList.toggle('hidden',receiptOnly);
   el('history-receipt-number').textContent=sale.receiptNo;
   el('history-receipt-content').innerHTML=buildReceiptMarkup(sale,sale.payments??[]);
   bindReceiptImageFallbacks(el('history-receipt-content'));renderReceiptVoucherQrs(el('history-receipt-content'));
@@ -5895,10 +5902,17 @@ function closePurchaseReportReceipt(){
 
 function renderPosSales(){
   const visible=filteredPosSales();
+  const receiptOnly=state.reportView==='receipts';
   el('pos-history-list').innerHTML=visible.length?visible.map((sale)=>{
     const amounts=saleReportAmounts(sale);
     return `<button class="pos-history-row sales-day-card ${sale.id===state.selectedPosSaleId?'active':''}" type="button" data-pos-sale-id="${sale.id}"><span class="sales-day-identity"><small>Nomor struk</small><strong>${escapeHtml(sale.receiptNo)}</strong><small>${escapeHtml(sale.customer?.name??'Pelanggan umum')} · ${escapeHtml(sale.cashier)}</small></span><span class="sales-day-metric"><small>Waktu transaksi</small><strong>${new Date(sale.occurredAt).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</strong></span><span class="sales-day-metric"><small>Pendapatan</small><strong>${money.format(amounts.revenue)}</strong></span><span class="sales-day-metric"><small>Keuntungan</small><strong>${money.format(amounts.profit)}</strong></span><span class="${sale.status==='VOIDED'?'void-label':sale.returnStatus!=='NONE'?'return-label':''}">${sale.status==='VOIDED'?'VOID':saleReturnLabel(sale)||'Selesai'}</span></button>`;
   }).join(''):'<div class="empty-state compact">Transaksi tidak ditemukan dengan filter ini.</div>';
+  if(receiptOnly)el('pos-history-list').querySelectorAll('.sales-day-card').forEach((row)=>{
+    const metrics=[...row.querySelectorAll('.sales-day-metric')];
+    metrics.slice(1).forEach((metric)=>metric.remove());
+    if(metrics[0]?.querySelector('small'))metrics[0].querySelector('small').textContent='Waktu transaksi';
+    row.classList.add('receipt-safe-row');
+  });
   const selected=state.posSales.find((sale)=>sale.id===state.selectedPosSaleId);
   if(selected)renderPosSaleDetail(selected);
   else el('pos-history-detail').innerHTML='<div class="empty-state compact">Pilih transaksi untuk melihat detail.</div>';
@@ -6040,6 +6054,21 @@ function syncPurchaseReportShell(){
   el('sales-metric-value').classList.add('hidden');
 }
 
+async function loadReceiptHistoryReport(){
+  if(!el('report-from').value||!el('report-to').value)applyReportPreset();
+  renderReportOutletOptions();
+  const from=el('report-from').value,to=el('report-to').value;
+  if(!from||!to||from>to)return toast('Periode riwayat transaksi tidak valid.');
+  el('report-status').classList.add('loading');
+  el('report-status').textContent='Memuat riwayat transaksi...';
+  try{
+    await loadPosSales(el('pos-history-search').value.trim(),{reportScope:true});
+    el('report-status').textContent=`${state.posSales.length.toLocaleString('id-ID')} struk ditemukan · nilai pendapatan dan keuntungan disembunyikan`;
+  }catch(error){
+    el('report-status').textContent=`Riwayat transaksi belum dapat dimuat: ${error.message}`;
+  }finally{el('report-status').classList.remove('loading');}
+}
+
 function showReportView(name='summary'){
   const page=el('page-reports'),primary=page.querySelector('.report-grid.report-primary'),grids=[...page.querySelectorAll('.report-grid')],secondary=grids.find((grid)=>grid!==primary);
   if(page.classList.contains('receipt-page-open'))closeHistoryReceiptPage();
@@ -6048,6 +6077,7 @@ function showReportView(name='summary'){
   const sales=el('report-sales-workspace'),purchaseWorkspace=el('report-purchase-workspace'),audit=el('audit-logs').closest('.surface');
   state.reportView=name;
   const headings={
+    receipts:['Riwayat transaksi & struk','Cari transaksi harian, buka struk asli, cetak ulang, atau lanjutkan proses retur tanpa melihat pendapatan dan keuntungan.'],
     summary:['Kinerja usaha','Pendapatan bersih dan laba sudah memperhitungkan retur pada periode terpilih.'],
     performance:['Kinerja produk & outlet','Bandingkan omzet, laba, jumlah terjual, dan kontribusi setiap outlet.'],
     purchases:['Laporan pembelian','Nilai penerimaan dan retur pembelian dirangkum per supplier.'],
@@ -6061,7 +6091,7 @@ function showReportView(name='summary'){
   };
   el('report-page-title').textContent=headings[name]?.[0]??headings.summary[0];
   el('report-page-description').textContent=headings[name]?.[1]??headings.summary[1];
-  el('export-report').classList.toggle('hidden',['sales-products','sales-categories','sales-addons','stock-flow','purchases-history'].includes(name));
+  el('export-report').classList.toggle('hidden',['receipts','sales-products','sales-categories','sales-addons','stock-flow','purchases-history'].includes(name));
   el('refresh-report').classList.toggle('hidden',name==='purchases-history');
   if(name!=='sales')el('sales-period-breakdown').classList.add('hidden');
   cards.classList.toggle('hidden',!['summary','sales'].includes(name));
@@ -6090,6 +6120,13 @@ function showReportView(name='summary'){
   }
   syncSalesReportShell();
   syncPurchaseReportShell();
+  if(name==='receipts'){
+    el('report-filter-panel').classList.remove('hidden');
+    el('report-status').classList.remove('hidden');
+    el('report-cards').classList.add('hidden');
+    sales.classList.remove('hidden');
+    loadReceiptHistoryReport();
+  }
   if(['sales-products','sales-categories','sales-addons','stock-flow'].includes(name)&&state.session)loadSalesAnalysis();
 }
 
@@ -6660,7 +6697,7 @@ el('mobile-cart-jump').addEventListener('click',()=>setMobilePosView('cart'));
 el('mobile-cart-back').addEventListener('click',()=>setMobilePosView('catalog'));
 el('refresh-pos-history').addEventListener('click',()=>loadPosSales(el('pos-history-search').value,{reportScope:true}));
 el('pos-history-search').addEventListener('input',(event)=>{clearTimeout(event.currentTarget.searchTimer);event.currentTarget.searchTimer=setTimeout(()=>loadPosSales(event.currentTarget.value,{reportScope:true}),250);});
-el('pos-history-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-pos-sale-id]');if(!row)return;const sale=state.posSales.find((item)=>item.id===row.dataset.posSaleId);state.selectedPosSaleId=row.dataset.posSaleId;renderPosSales();if(state.reportView==='sales'&&sale)openHistoryReceiptPage(sale);});
+el('pos-history-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-pos-sale-id]');if(!row)return;const sale=state.posSales.find((item)=>item.id===row.dataset.posSaleId);state.selectedPosSaleId=row.dataset.posSaleId;renderPosSales();if(['sales','receipts'].includes(state.reportView)&&sale)openHistoryReceiptPage(sale);});
 el('back-history-receipt').addEventListener('click',closeHistoryReceiptPage);
 el('history-receipt-menu-toggle').addEventListener('click',toggleHistoryReceiptMenu);
 el('history-receipt-menu-backdrop').addEventListener('click',closeHistoryReceiptMenu);
@@ -6998,11 +7035,13 @@ el('purge-telemetry').addEventListener('click',async()=>{
   }catch(error){toast(error.message);}
 });
 el('refresh-report').addEventListener('click',()=>{
+  if(state.reportView==='receipts')return loadReceiptHistoryReport();
   if(['sales-products','sales-categories','sales-addons','stock-flow'].includes(state.reportView))return loadSalesAnalysis();
   return state.reportView==='sales'&&state.salesPeriodLevel==='ALL'?loadSalesAllTime():loadReport();
 });
 el('apply-report-filter').addEventListener('click',()=>{
   if(matchMedia('(max-width:760px)').matches)el('report-filter-panel').open=false;
+  if(state.reportView==='receipts')return loadReceiptHistoryReport();
   if(state.reportView==='sales'){
     const preset=el('report-preset').value;
     if(state.salesPeriodLevel==='ALL'&&preset==='CUSTOM')return loadSalesAllTime();

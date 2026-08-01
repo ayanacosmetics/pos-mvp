@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=161">
+  <link rel="stylesheet" href="/styles.css?v=162">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -138,6 +138,7 @@
         </div>
         <button data-nav-group="insights" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg></span><span>Laporan<small>Transaksi dan operasional</small></span><b>›</b></button>
         <div data-nav-panel="insights" class="feature-nav-panel">
+          <button data-page="reports-receipts" data-target-page="reports" data-report-view="receipts" class="feature-nav-item" data-permission="report.transactions"><span>Riwayat transaksi</span><small>Cari dan cetak struk tanpa laporan keuangan</small></button>
           <button data-page="reports-summary" data-target-page="reports" data-report-view="summary" class="feature-nav-item" data-permission="report.view"><span>Ringkasan</span><small>Omzet, laba, tren harian</small></button>
           <button id="sales-report-subnav-toggle" class="feature-subnav-toggle" type="button" data-permission="report.view" aria-expanded="false"><span>Laporan penjualan</span><small>Transaksi, barang, kategori, add-on, stok</small><b>›</b></button>
           <div id="sales-report-subnav" class="feature-subnav-panel">
@@ -197,7 +198,7 @@
           <button data-page="settings-data-reset" data-target-page="settings" data-settings-view="reset" class="feature-nav-item" data-permission="identity.manage"><span>Reset & pulihkan data</span><small>Hapus atau kembalikan backup</small></button>
         </div>
       </nav>
-      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Akses staff berkelompok · v2.16.50</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
+      <div class="sidebar-footer"><div id="user-name"></div><small id="user-role"></small><small class="release-version">Akses struk tanpa laba · v2.16.51</small><button id="switch-account" class="link-button switch-account hidden" type="button">Ganti Owner</button><button id="logout" class="link-button" type="button">Keluar</button></div>
     </aside>
     <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Tutup menu" tabindex="-1"></button>
 
@@ -1060,6 +1061,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=161"></script>
+  <script type="module" src="/app.js?v=162"></script>
 </body>
 </html>

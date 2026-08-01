@@ -63,7 +63,7 @@ test('POS menyediakan produk cepat dan riwayat berpindah ke laporan transaksi',a
   assert.match(script,/reportScope:true/);
   assert.match(script,/notes:el\('sale-note'\)\.value\.trim\(\)/);
   assert.match(api,/route === 'pos-sales'/);
-  assert.match(api,/reportScope\?'report\.view':'pos\.sell'/);
+  assert.match(api,/requireAnyPermission\(session,\['report\.transactions','report\.view'\]\)/);
   assert.match(api,/limit:reportScope\?500:50/);
   assert.match(api,/complete_sale_v7/);
 });

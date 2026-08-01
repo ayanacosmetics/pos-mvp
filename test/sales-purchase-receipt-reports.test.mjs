@@ -115,7 +115,7 @@ test('laporan penjualan menyatukan ringkasan keuntungan dan riwayat struk', () =
 });
 
 test('klik penjualan membuka struk pelanggan asli', () => {
-  assert.match(app, /state\.reportView==='sales'&&sale/);
+  assert.match(app, /\['sales','receipts'\]\.includes\(state\.reportView\)&&sale/);
   assert.match(app, /openHistoryReceiptPage\(sale\)/);
   assert.match(html, /id="report-sale-receipt-page"/);
   assert.match(html, /id="back-history-receipt"/);

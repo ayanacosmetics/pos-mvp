@@ -9,7 +9,8 @@ test('akses staff dikelompokkan dan laporan dapat dipilih tersendiri',async()=>{
     read('apps/web/app.js'),read('apps/web/index.html'),read('apps/web/styles.css')
   ]);
   assert.match(app,/\['reports','Laporan & Audit'/);
-  assert.match(app,/\['report\.view','Laporan'/);
+  assert.match(app,/\['report\.transactions','Riwayat transaksi & cetak struk'/);
+  assert.match(app,/\['report\.view','Laporan usaha lengkap'/);
   assert.match(app,/data-permission-group=/);
   assert.match(app,/input\[data-permission\]:checked/);
   assert.match(html,/Hak akses per kelompok menu/);

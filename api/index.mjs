@@ -8,16 +8,16 @@ import { validateJournalLines } from '../packages/domain/src/ledger.mjs';
 import { evaluateSafePricePolicy, normalizeSafePricePolicy } from '../packages/domain/src/safe-price-policy.mjs';
 
 const PERMISSIONS = {
-  OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage_staff','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner','multioutlet.view','multioutlet.manage','pilot.manage','sale.adjust','sale.void'],
-  ADMIN: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','identity.manage_staff','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage','sale.adjust','sale.void'],
-  MANAGER: ['pos.sell','inventory.manage','sales.return','catalog.manage','promotion.manage','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage'],
+  OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.transactions','report.view','audit.view','identity.manage_staff','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner','multioutlet.view','multioutlet.manage','pilot.manage','sale.adjust','sale.void'],
+  ADMIN: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.transactions','report.view','audit.view','identity.manage_staff','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage','sale.adjust','sale.void'],
+  MANAGER: ['pos.sell','inventory.manage','sales.return','catalog.manage','promotion.manage','report.transactions','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage'],
   CASHIER: ['pos.sell','workforce.self'],
   PURCHASING: ['purchasing.view_cost','purchasing.receive','workforce.self'],
   WAREHOUSE: ['inventory.manage','workforce.self']
 };
 const ASSIGNABLE_PERMISSIONS=new Set([
   'pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage',
-  'sales.return','catalog.manage','promotion.manage','report.view','audit.view',
+  'sales.return','catalog.manage','promotion.manage','report.transactions','report.view','audit.view',
   'workforce.self','workforce.manage','approval.manage','multioutlet.view',
   'multioutlet.manage','sale.adjust','sale.void'
 ]);
@@ -28,6 +28,7 @@ function effectivePermissions(profile) {
     const permissions=profile.custom_permissions.filter((permission)=>ASSIGNABLE_PERMISSIONS.has(permission));
     // Admin selalu dapat mengelola akun staff, tetapi izin ini tidak dapat
     // diteruskan kepada peran operasional melalui daftar izin kustom.
+    if(permissions.includes('report.view'))permissions.push('report.transactions');
     if(profile?.role==='ADMIN')permissions.push('identity.manage_staff');
     return [...new Set(permissions)];
   }
@@ -330,6 +331,13 @@ function authPayload(auth, profile) {
     user: { id: auth.user.id, displayName: profile.display_name, role: profile.role },
     permissions: effectivePermissions(profile)
   };
+}
+
+function requireAnyPermission(session, permissions) {
+  if (!session) { const error = new Error('Sesi tidak valid'); error.status = 401; throw error; }
+  if (!permissions.some((permission)=>session.permissions.includes(permission))) {
+    const error = new Error('Anda tidak memiliki hak untuk tindakan ini'); error.status = 403; throw error;
+  }
 }
 
 function groupRows(rows,keyOf) {
@@ -1540,7 +1548,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.50-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.51-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -3920,7 +3928,8 @@ async function routeRequest(request, response, route) {
 
   if (request.method === 'GET' && route === 'pos-sales') {
     const reportScope=queryValue(request,'scope')==='report';
-    requirePermission(session, reportScope?'report.view':'pos.sell');
+    if(reportScope)requireAnyPermission(session,['report.transactions','report.view']);
+    else requirePermission(session,'pos.sell');
     const outletId=queryValue(request,'outletId');
     const from=queryValue(request,'from'),to=queryValue(request,'to');
     if(reportScope&&(!/^\d{4}-\d{2}-\d{2}$/.test(from??'')||!/^\d{4}-\d{2}-\d{2}$/.test(to??'')||from>to)){
@@ -3930,9 +3939,15 @@ async function routeRequest(request, response, route) {
       throw Object.assign(new Error('Outlet riwayat transaksi tidak dapat diakses'),{status:403});
     }
     const outletIds=reportScope?(outletId?[outletId]:context.outlets.map((outlet)=>outlet.id)):[context.outlet.id];
-    return send(response, 200, { sales: await loadPosSales(context, queryValue(request,'q') ?? '', {
+    const sales=await loadPosSales(context, queryValue(request,'q') ?? '', {
       outletIds,from:reportScope?from:null,to:reportScope?to:null,limit:reportScope?500:50
-    }) });
+    });
+    const safeSales=!session.permissions.includes('report.view')?sales.map((sale)=>{
+      const {grossProfit,netCost,returnCost,...safe}=sale;
+      const {manualAdjustment,...quote}=safe.quote??{};
+      return {...safe,quote};
+    }):sales;
+    return send(response, 200, { sales:safeSales });
   }
 
   const inventorySaleReceiptMatch=route.match(/^inventory-sales\/([^/]+)\/receipt$/);
