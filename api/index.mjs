@@ -3649,12 +3649,16 @@ async function routeRequest(request, response, route) {
   if(request.method==='GET'&&inventoryProductMatch){
     requirePermission(session,'inventory.manage');
     const productId=inventoryProductMatch[1],scope=`tenant_id=eq.${context.tenantId}&product_id=eq.${encodeURIComponent(productId)}`;
-    const [products,balances,batches,ledger,allocations]=await Promise.all([
+    const [products,balances,batches,ledger,allocations,kaspinSales,kaspinSaleItems,kaspinPurchaseItems,openingEntries]=await Promise.all([
       rest('products',`tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(productId)}&select=id,sku,name,category,brand,image_url,minimum_stock,track_expiry,active&limit=1`),
       rest('stock_balances',`${scope}&location_id=${inFilter(context.locationIds)}&select=*&order=location_id`),
       rest('inventory_batches',`${scope}&location_id=${inFilter(context.locationIds)}&select=*&order=received_at.desc&limit=200`),
       rest('stock_ledger',`${scope}&location_id=${inFilter(context.locationIds)}&select=*&order=occurred_at.desc&limit=200`),
-      rest('sale_stock_allocations',`${scope}&select=*&order=occurred_at.desc&limit=200`).catch(()=>[])
+      rest('sale_stock_allocations',`${scope}&select=*&order=occurred_at.desc&limit=200`).catch(()=>[]),
+      restAll('sales',`tenant_id=eq.${context.tenantId}&source_system=eq.KASPIN&select=id,receipt_no,occurred_at,source_cashier,status`),
+      restAll('sale_items',`${scope}&select=id,sale_id,base_qty,cost_total`),
+      restAll('purchase_receipt_items',`${scope}&document_no=like.KASPIN-*&select=id,receipt_id,base_qty,unit_cost,supplier_name,document_no,received_at`),
+      rest('stock_ledger',`${scope}&location_id=${inFilter(context.locationIds)}&event_type=in.(OPENING_IMPORT,OPENING_BALANCE)&select=balance_after,occurred_at&order=occurred_at.asc&limit=1`)
     ]);
     if(!products[0])throw Object.assign(new Error('Produk tidak ditemukan'),{status:404});
     const canViewCost=session.permissions.includes('purchasing.view_cost');
@@ -3689,6 +3693,42 @@ async function routeRequest(request, response, route) {
       ...returns.map((item)=>[item.id,{documentNo:item.return_no,reason:item.reason,saleId:item.sale_id,canOpenReceipt:true}]),
       ...supplierReturns.map((item)=>[item.id,{documentNo:item.return_no,reason:`${item.reason}${item.supplier_name?` · ${item.supplier_name}`:''}`}])
     ]);
+    const kaspinSaleById=new Map(kaspinSales.map((sale)=>[sale.id,sale]));
+    const legacyByReference=new Map();
+    kaspinSaleItems.forEach((item)=>{
+      const sale=kaspinSaleById.get(item.sale_id);
+      if(!sale||sale.status==='VOIDED')return;
+      const key=`sale:${sale.id}`,existing=legacyByReference.get(key);
+      if(existing){existing.delta-=Number(item.base_qty);existing.costTotal+=Number(item.cost_total??0);return;}
+      legacyByReference.set(key,{
+        id:`kaspin-sale-${sale.id}`,locationId:context.locations.find((location)=>location.outlet_id===context.outlet.id)?.id??context.locationIds[0],
+        delta:-Number(item.base_qty),eventType:'KASPIN_SALE',referenceId:sale.id,occurredAt:sale.occurred_at,
+        actorName:sale.source_cashier||'Kasir Pintar',actorRole:'KASPIN',documentNo:sale.receipt_no,
+        reason:'Penjualan sebelum migrasi dari Kasir Pintar',saleId:sale.id,canOpenReceipt:true,
+        costTotal:Number(item.cost_total??0),legacy:true,balanceEstimated:true
+      });
+    });
+    kaspinPurchaseItems.forEach((item)=>{
+      const key=`purchase:${item.receipt_id}`,existing=legacyByReference.get(key);
+      if(existing){existing.delta+=Number(item.base_qty);existing.costTotal+=Number(item.base_qty)*Number(item.unit_cost??0);return;}
+      legacyByReference.set(key,{
+        id:`kaspin-purchase-${item.receipt_id}`,locationId:balances[0]?.location_id??context.locationIds[0],
+        delta:Number(item.base_qty),eventType:'KASPIN_PURCHASE',referenceId:item.receipt_id,occurredAt:item.received_at,
+        actorName:'Kasir Pintar',actorRole:'KASPIN',documentNo:item.document_no,
+        reason:`Pembelian sebelum migrasi${item.supplier_name?` dari ${item.supplier_name}`:''}`,
+        canOpenReceipt:false,costTotal:Number(item.base_qty)*Number(item.unit_cost??0),legacy:true,balanceEstimated:true
+      });
+    });
+    const legacyLedger=[...legacyByReference.values()].sort((a,b)=>new Date(a.occurredAt)-new Date(b.occurredAt));
+    const snapshotBalance=Number(openingEntries[0]?.balance_after??balances.reduce((sum,item)=>sum+Number(item.quantity??0),0));
+    let reconstructedBalance=snapshotBalance-legacyLedger.reduce((sum,item)=>sum+Number(item.delta),0);
+    legacyLedger.forEach((item)=>{
+      reconstructedBalance+=Number(item.delta);
+      item.balanceAfter=reconstructedBalance;
+      if(canViewCost)item.unitCost=Math.abs(Number(item.delta))>0?Number(item.costTotal??0)/Math.abs(Number(item.delta)):0;
+      item.locationName=locations.get(item.locationId)?.name??'Toko Utama';
+      delete item.costTotal;
+    });
     const visibleBatches=batches.map((batch)=>({
       id:batch.id,locationId:batch.location_id,locationName:locations.get(batch.location_id)?.name??'Lokasi',
       batchNo:batch.batch_no??'-',expiresOn:batch.expires_on,receivedAt:batch.received_at,
@@ -3703,7 +3743,7 @@ async function routeRequest(request, response, route) {
         quantity:Number(balance.quantity),...(canViewCost?{averageCost:Number(balance.avg_cost)}:{})
       })),
       batches:visibleBatches,
-      ledger:ledger.map((item)=>{
+      ledger:[...ledger.map((item)=>{
         const actor=actors.find((profile)=>profile.user_id===item.actor_id);
         const document=documents.get(item.reference_id)??{};
         return {
@@ -3715,7 +3755,7 @@ async function routeRequest(request, response, route) {
         saleId:document.saleId??null,canOpenReceipt:Boolean(document.canOpenReceipt),
         batchNo:document.batchNo??null,expiresOn:document.expiresOn??null,
         ...(canViewCost?{unitCost:Number(item.unit_cost)}:{})
-      }}),
+      }}),...legacyLedger].sort((a,b)=>new Date(b.occurredAt)-new Date(a.occurredAt)),
       allocations:canViewCost?allocations.filter((item)=>visibleLedgerIds.has(item.stock_ledger_id)).map((item)=>({
         id:item.id,saleId:item.sale_id,batchId:item.batch_id,lineIndex:item.line_index,
         quantity:Number(item.base_qty),unitCost:Number(item.unit_cost),costTotal:Number(item.cost_total),

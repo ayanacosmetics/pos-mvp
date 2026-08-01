@@ -4107,7 +4107,10 @@ function stockEventLabel(eventType) {
     STOCK_COUNT:'Stok opname',
     TRANSFER_IN:'Transfer masuk',
     TRANSFER_OUT:'Transfer keluar',
-    OPENING_BALANCE:'Saldo awal'
+    OPENING_BALANCE:'Saldo awal',
+    OPENING_IMPORT:'Saldo migrasi',
+    KASPIN_SALE:'Penjualan Kasir Pintar',
+    KASPIN_PURCHASE:'Pembelian Kasir Pintar'
   })[eventType] ?? String(eventType ?? 'Pergerakan stok').replaceAll('_', ' ');
 }
 
@@ -4149,19 +4152,21 @@ function renderStockProductLog() {
     const expanded=state.stockLogEntryId===entry.id;
     const reason=entry.reason||entry.note||'Tidak ada keterangan tambahan.';
     const reference=entry.documentNo||entry.referenceId||'-';
+    const snapshot=entry.eventType==='OPENING_IMPORT';
+    const incoming=snapshot?0:Math.max(Number(entry.delta),0),outgoing=snapshot?0:Math.max(-Number(entry.delta),0);
     return `<article class="stock-log-item ${expanded?'expanded':''}">
       <button class="stock-log-row stock-log-button" type="button" data-stock-log-id="${escapeHtml(entry.id)}" aria-expanded="${expanded}">
-      <span class="stock-log-delta ${Number(entry.delta) >= 0 ? 'in' : 'out'}">${Number(entry.delta) >= 0 ? '+' : ''}${Number(entry.delta).toLocaleString('id-ID')}</span>
-      <span><strong>${escapeHtml(stockEventLabel(entry.eventType))}</strong><small>${new Date(entry.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(entry.locationName)}</small><small>${escapeHtml(entry.actorName||'Sistem')} · ${escapeHtml(reason)}</small>${layerText ? `<small class="stock-layer-cost">${layerText}</small>` : ''}</span>
-      <span><small>Saldo setelahnya</small><strong>${Number(entry.balanceAfter).toLocaleString('id-ID')} pcs</strong>${detail.canViewCost && entry.unitCost != null ? `<small>Modal ${money.format(entry.unitCost)} / pcs</small>` : ''}</span>
+      <span class="stock-log-identity"><strong>${escapeHtml(stockEventLabel(entry.eventType))}${entry.legacy?' <em>Riwayat Kaspin</em>':''}</strong><small>${new Date(entry.occurredAt).toLocaleString('id-ID')} · ${escapeHtml(entry.locationName)}</small><small>${escapeHtml(entry.actorName||'Sistem')} · ${escapeHtml(reason)}</small>${layerText ? `<small class="stock-layer-cost">${layerText}</small>` : ''}</span>
+      <span class="stock-log-flow"><span class="in"><small>Masuk</small><strong>${incoming.toLocaleString('id-ID')}</strong></span><span class="out"><small>Keluar</small><strong>${outgoing.toLocaleString('id-ID')}</strong></span><span class="balance"><small>Stok${entry.balanceEstimated?'*':''}</small><strong>${Number(entry.balanceAfter).toLocaleString('id-ID')}</strong></span></span>
       <b aria-hidden="true">${expanded?'⌃':'›'}</b>
       </button>
       ${expanded?`<div class="stock-log-detail">
         <div><small>Penyebab</small><strong>${escapeHtml(reason)}</strong></div>
         <div><small>Dilakukan oleh</small><strong>${escapeHtml(entry.actorName||'Sistem')}</strong><span>${escapeHtml(entry.actorRole||'Akun sistem')}</span></div>
         <div><small>Waktu & lokasi</small><strong>${new Date(entry.occurredAt).toLocaleString('id-ID')}</strong><span>${escapeHtml(entry.locationName)}</span></div>
-        <div><small>Perubahan stok</small><strong>${Number(entry.delta)>=0?'+':''}${Number(entry.delta).toLocaleString('id-ID')} pcs</strong><span>Saldo menjadi ${Number(entry.balanceAfter).toLocaleString('id-ID')} pcs</span></div>
+        <div><small>Perubahan stok</small><strong>${snapshot?'Snapshot migrasi':`${Number(entry.delta)>=0?'+':''}${Number(entry.delta).toLocaleString('id-ID')} pcs`}</strong><span>Saldo menjadi ${Number(entry.balanceAfter).toLocaleString('id-ID')} pcs</span></div>
         <div><small>Referensi dokumen</small><strong>${escapeHtml(reference)}</strong><span>${escapeHtml(stockEventLabel(entry.eventType))}</span></div>
+        ${entry.balanceEstimated?'<div class="stock-log-detail-wide stock-history-note"><small>Saldo riwayat</small><strong>Dihitung mundur dari saldo akhir saat migrasi</strong><span>Barang masuk/keluar berasal dari transaksi Kasir Pintar; penyesuaian stok lama yang tidak diekspor tidak dapat diberi tanggal pasti.</span></div>':''}
         ${entry.batchNo?`<div><small>Batch</small><strong>${escapeHtml(entry.batchNo)}</strong><span>${entry.expiresOn?`EXP ${escapeHtml(displayExpiryDate(entry.expiresOn))}`:'Tanpa EXP'}</span></div>`:''}
         ${layerText?`<div class="stock-log-detail-wide"><small>Lapisan modal yang dipakai</small><strong>${layerText}</strong></div>`:''}
         ${entry.canOpenReceipt&&entry.saleId?`<div class="stock-log-detail-action"><button class="button primary" type="button" data-open-stock-sale="${escapeHtml(entry.saleId)}">Buka struk${entry.documentNo?` ${escapeHtml(entry.documentNo)}`:''}</button></div>`:''}

@@ -44,10 +44,49 @@ test('manajemen stok menyediakan daftar dan semua tindakan per barang', async ()
     assert.ok(app.includes(`function ${functionName}`));
   }
   for(const detail of ['data-stock-log-id','Dilakukan oleh','Penyebab','data-open-stock-sale']) assert.ok(app.includes(detail));
+  for(const detail of ['Masuk','Keluar','Riwayat Kaspin','balanceEstimated']) assert.ok(app.includes(detail));
   assert.ok(api.includes("route.match(/^inventory-products\\/([^/]+)\\/adjustments$/)"));
   assert.ok(api.includes("route.match(/^inventory-products\\/([^/]+)$/)"));
   assert.ok(api.includes("route.match(/^inventory-sales\\/([^/]+)\\/receipt$/)"));
   for(const field of ['actorName','documentNo','canOpenReceipt']) assert.ok(api.includes(field));
+});
+
+test('log barang menggabungkan pembelian dan penjualan Kaspin tanpa mengubah stok akhir', async () => {
+  const originalFetch=globalThis.fetch;
+  const previous={url:process.env.SUPABASE_URL,anon:process.env.SUPABASE_ANON_KEY,service:process.env.SUPABASE_SERVICE_ROLE_KEY};
+  process.env.SUPABASE_URL='https://stock-history.supabase.test';
+  process.env.SUPABASE_ANON_KEY='anon';
+  process.env.SUPABASE_SERVICE_ROLE_KEY='service';
+  globalThis.fetch=async(url)=>{
+    const target=String(url);
+    if(target.endsWith('/auth/v1/user'))return reply({id:ids.user});
+    if(target.includes('/rest/v1/profiles?'))return reply([{user_id:ids.user,tenant_id:ids.tenant,display_name:'Owner',role:'OWNER',active:true}]);
+    if(target.includes('/rest/v1/outlets?'))return reply([{id:ids.outlet,name:'Toko Utama',active:true}]);
+    if(target.includes('/rest/v1/stock_locations?'))return reply([{id:ids.location,outlet_id:ids.outlet,name:'Toko Utama',kind:'STORE',active:true}]);
+    if(target.includes('/rest/v1/products?'))return reply([{id:ids.product,sku:'KP-8994460553218',name:'SCORA BRIGHT ME UP SUNSCREEN',category:'sunscreen',brand:'',minimum_stock:0,track_expiry:false,active:true}]);
+    if(target.includes('/rest/v1/stock_balances?'))return reply([{tenant_id:ids.tenant,location_id:ids.location,product_id:ids.product,quantity:'5',avg_cost:'41000'}]);
+    if(target.includes('/rest/v1/inventory_batches?'))return reply([]);
+    if(target.includes('/rest/v1/stock_ledger?'))return reply([{id:'opening',tenant_id:ids.tenant,location_id:ids.location,product_id:ids.product,delta:'5',balance_after:'5',unit_cost:'41000',event_type:'OPENING_IMPORT',reference_id:null,actor_id:null,occurred_at:'2026-08-01T15:20:50Z'}]);
+    if(target.includes('/rest/v1/sale_stock_allocations?'))return reply([]);
+    if(target.includes('/rest/v1/sales?')&&target.includes('source_system=eq.KASPIN'))return reply([{id:'sale-kaspin',receipt_no:'KASPIN-001',occurred_at:'2026-07-31T02:41:31Z',source_cashier:'Kasir Pintar',status:'COMPLETED'}]);
+    if(target.includes('/rest/v1/sale_items?'))return reply([{id:'sale-line',sale_id:'sale-kaspin',base_qty:'1',cost_total:'41000'}]);
+    if(target.includes('/rest/v1/purchase_receipt_items?'))return reply([{id:'purchase-line',receipt_id:'purchase-kaspin',base_qty:'6',unit_cost:'41000',supplier_name:'Supplier 1',document_no:'KASPIN-BUY-001',received_at:'2026-07-30T09:33:30Z'}]);
+    return reply({message:`Mock belum menangani ${target}`},500);
+  };
+  try{
+    const result=await call('GET',`inventory-products/${ids.product}`);
+    assert.equal(result.status,200);
+    assert.deepEqual(result.body.ledger.map((entry)=>[entry.eventType,entry.delta,entry.balanceAfter]),[
+      ['OPENING_IMPORT',5,5],['KASPIN_SALE',-1,5],['KASPIN_PURCHASE',6,6]
+    ]);
+    assert.equal(result.body.balances[0].quantity,5);
+    assert.equal(result.body.ledger[1].balanceEstimated,true);
+  }finally{
+    globalThis.fetch=originalFetch;
+    if(previous.url===undefined)delete process.env.SUPABASE_URL;else process.env.SUPABASE_URL=previous.url;
+    if(previous.anon===undefined)delete process.env.SUPABASE_ANON_KEY;else process.env.SUPABASE_ANON_KEY=previous.anon;
+    if(previous.service===undefined)delete process.env.SUPABASE_SERVICE_ROLE_KEY;else process.env.SUPABASE_SERVICE_ROLE_KEY=previous.service;
+  }
 });
 
 test('manajemen stok memuat produk setelah batas 1.000 baris Supabase', async () => {
