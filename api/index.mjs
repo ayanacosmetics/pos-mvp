@@ -3611,9 +3611,9 @@ async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'inventory') {
     requirePermission(session, 'inventory.manage');
     const [balances, ledger, products] = await Promise.all([
-      rest('stock_balances', `tenant_id=eq.${context.tenantId}&location_id=${inFilter(context.locationIds)}&select=*&order=location_id`),
+      restAll('stock_balances', `tenant_id=eq.${context.tenantId}&location_id=${inFilter(context.locationIds)}&select=*&order=location_id`),
       rest('stock_ledger', `tenant_id=eq.${context.tenantId}&location_id=${inFilter(context.locationIds)}&select=*&order=occurred_at.desc&limit=50`),
-      rest('products', `tenant_id=eq.${context.tenantId}&select=id,sku,name,category,brand,image_url,minimum_stock,track_expiry,active&order=name`)
+      restAll('products', `tenant_id=eq.${context.tenantId}&select=id,sku,name,category,brand,image_url,minimum_stock,track_expiry,active&order=name`)
     ]);
     const canViewCost=session.permissions.includes('purchasing.view_cost');
     return send(response, 200, {
@@ -3727,8 +3727,8 @@ async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'expiry-dashboard') {
     requirePermission(session, 'inventory.manage');
     const [batches, products] = await Promise.all([
-      rest('inventory_batches', `tenant_id=eq.${context.tenantId}&location_id=${inFilter(context.locationIds)}&available_qty=gt.0&select=*&order=expires_on.asc.nullslast,received_at.asc`),
-      rest('products', `tenant_id=eq.${context.tenantId}&select=id,sku,name,brand`)
+      restAll('inventory_batches', `tenant_id=eq.${context.tenantId}&location_id=${inFilter(context.locationIds)}&available_qty=gt.0&select=*&order=expires_on.asc.nullslast,received_at.asc`),
+      restAll('products', `tenant_id=eq.${context.tenantId}&select=id,sku,name,brand`)
     ]);
     const dashboard = summarizeExpiryBatches({
       rows: batches,

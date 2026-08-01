@@ -50,6 +50,45 @@ test('manajemen stok menyediakan daftar dan semua tindakan per barang', async ()
   for(const field of ['actorName','documentNo','canOpenReceipt']) assert.ok(api.includes(field));
 });
 
+test('manajemen stok memuat produk setelah batas 1.000 baris Supabase', async () => {
+  const originalFetch = globalThis.fetch;
+  const previous = {
+    url:process.env.SUPABASE_URL,
+    anon:process.env.SUPABASE_ANON_KEY,
+    service:process.env.SUPABASE_SERVICE_ROLE_KEY
+  };
+  process.env.SUPABASE_URL = 'https://stock-pagination.supabase.test';
+  process.env.SUPABASE_ANON_KEY = 'anon';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service';
+  const firstPage=Array.from({length:1000},(_,index)=>({
+    id:`product-${index}`,sku:`SKU-${index}`,name:`Produk ${index}`,
+    category:'Kategori',brand:'',minimum_stock:0,track_expiry:false,active:true
+  }));
+  const lastProduct={id:'product-scora',sku:'KP-8994460553218',name:'SCORA BRIGHT ME UP SUNSCREEN',category:'sunscreen',brand:'',minimum_stock:0,track_expiry:false,active:true};
+  globalThis.fetch = async (url) => {
+    const target=String(url);
+    if(target.endsWith('/auth/v1/user'))return reply({id:ids.user});
+    if(target.includes('/rest/v1/profiles?'))return reply([{user_id:ids.user,tenant_id:ids.tenant,display_name:'Owner',role:'OWNER',active:true}]);
+    if(target.includes('/rest/v1/outlets?'))return reply([{id:ids.outlet,name:'Toko Utama',active:true}]);
+    if(target.includes('/rest/v1/stock_locations?'))return reply([{id:ids.location,outlet_id:ids.outlet,name:'Toko Utama',kind:'STORE',active:true}]);
+    if(target.includes('/rest/v1/stock_balances?'))return reply([]);
+    if(target.includes('/rest/v1/stock_ledger?'))return reply([]);
+    if(target.includes('/rest/v1/products?'))return reply(target.includes('offset=1000')?[lastProduct]:firstPage);
+    return reply({message:`Mock belum menangani ${target}`},500);
+  };
+  try{
+    const result=await call('GET','inventory');
+    assert.equal(result.status,200);
+    assert.equal(result.body.products.length,1001);
+    assert.equal(result.body.products.at(-1).sku,'KP-8994460553218');
+  }finally{
+    globalThis.fetch=originalFetch;
+    if(previous.url===undefined)delete process.env.SUPABASE_URL;else process.env.SUPABASE_URL=previous.url;
+    if(previous.anon===undefined)delete process.env.SUPABASE_ANON_KEY;else process.env.SUPABASE_ANON_KEY=previous.anon;
+    if(previous.service===undefined)delete process.env.SUPABASE_SERVICE_ROLE_KEY;else process.env.SUPABASE_SERVICE_ROLE_KEY=previous.service;
+  }
+});
+
 test('lapisan HPP transaksi memakai FEFO/FIFO dan mencatat modal batch aktual', async () => {
   const sql = await read('../supabase/migrations/202607290044_stock_management_fifo_cost.sql');
   for (const name of ['sale_stock_allocations','stock_adjustments','adjust_product_stock_v1','price_sale_item_from_layers_v1','restore_voided_sale_layers_v1']) {
