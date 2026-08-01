@@ -8,7 +8,7 @@ import { productBaseQuantity, shouldChooseUnitAfterScan, sortedProductUnits, uni
 import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
 import { createProductExportWorkbook, createTemplateWorkbook, productExportRows, productExtensionExportRows, workbookMatrix, workbookTemplates } from './product-workbook.mjs';
 import { barcodeModuleCount, barcodeSvg, labelSize, normalizeCode128Text } from './product-labels.mjs';
-import { parseKaspinProductWorkbook, parseKaspinProductExtensionWorkbook, parseKaspinFifoWorkbooks, parseKaspinSalesWorkbooks, parseKaspinCustomerWorkbook, parseKaspinSupplierWorkbook } from './kaspin-import.mjs';
+import { parseKaspinProductWorkbook, parseKaspinProductExtensionWorkbook, parseKaspinFifoWorkbooks, parseKaspinSalesWorkbooks, parseKaspinSalesWorkbookSets, parseKaspinCustomerWorkbook, parseKaspinSupplierWorkbook } from './kaspin-import.mjs';
 
 const storedAuth = loadAuth();
 let kaspinMigrationPackage=null;
@@ -1832,13 +1832,16 @@ async function inspectKaspinMigrationPackage(){
   el('kaspin-migration-error').textContent='';el('run-kaspin-migration').disabled=true;kaspinMigrationPackage=null;
   try{
     if(!window.XLSX)throw new Error('Komponen Excel belum siap. Muat ulang aplikasi.');
-    const files=Object.fromEntries(kaspinMigrationInputs.map((id)=>[id,el(`kaspin-migration-${id}`).files[0]??null]));
+    const files=Object.fromEntries(kaspinMigrationInputs.map((id)=>[id,['sales','sales-summary'].includes(id)?[...el(`kaspin-migration-${id}`).files]:(el(`kaspin-migration-${id}`).files[0]??null)]));
     if(!files.products)throw new Error('Data Barang.xlsx wajib dipilih.');
     if(Boolean(files.purchases)!==Boolean(files.capital))throw new Error('Transaksi_Pembelian dan Laporan_Modal harus dipilih berpasangan.');
-    if(Boolean(files.sales)!==Boolean(files['sales-summary']))throw new Error('Laporan Penjualan Barang dan Laporan Data Penjualan harus dipilih berpasangan.');
+    if(Boolean(files.sales.length)!==Boolean(files['sales-summary'].length))throw new Error('Laporan Penjualan Barang dan Laporan Data Penjualan harus dipilih berpasangan.');
     button.disabled=true;button.textContent='Memeriksa semua file…';
     const buffers={};
-    await Promise.all(Object.entries(files).filter(([,file])=>file).map(async([id,file])=>{buffers[id]=await file.arrayBuffer();}));
+    await Promise.all(Object.entries(files).map(async([id,file])=>{
+      if(Array.isArray(file)){buffers[id]=await Promise.all(file.map((item)=>item.arrayBuffer()));return;}
+      if(file)buffers[id]=await file.arrayBuffer();
+    }));
     const steps=[];
     const add=(id,label,kind,mode,fileNames,parsed,{location=false}={})=>{
       if(!parsed)throw new Error(`${label}: format file tidak dikenali. Pastikan memilih export yang benar dari Kasir Pintar.`);
@@ -1852,7 +1855,7 @@ async function inspectKaspinMigrationPackage(){
     if(files.units)add('units','Multi satuan','PRODUCT_UNITS','UPDATE_ONLY',files.units.name,parseKaspinProductExtensionWorkbook(window.XLSX,buffers.units,'PRODUCT_UNITS',{useInternalSku:true}));
     if(files.prices)add('prices','Harga pelanggan/grosir','PRODUCT_PRICES','UPDATE_ONLY',files.prices.name,parseKaspinProductExtensionWorkbook(window.XLSX,buffers.prices,'PRODUCT_PRICES',{useInternalSku:true}));
     if(files.purchases)add('purchases','Pembelian & modal FIFO','KASPIN_FIFO','GENERAL',`${files.purchases.name} + ${files.capital.name}`,parseKaspinFifoWorkbooks(window.XLSX,buffers.purchases,buffers.capital),{location:true});
-    if(files.sales)add('sales','Penjualan & detail struk','KASPIN_SALES','GENERAL',`${files.sales.name} + ${files['sales-summary'].name}`,parseKaspinSalesWorkbooks(window.XLSX,buffers.sales,buffers['sales-summary']));
+    if(files.sales.length)add('sales','Penjualan & detail struk','KASPIN_SALES','GENERAL',`${files.sales.map((file)=>file.name).join(' + ')} + ${files['sales-summary'].map((file)=>file.name).join(' + ')}`,parseKaspinSalesWorkbookSets(window.XLSX,buffers.sales,buffers['sales-summary']));
     kaspinMigrationPackage={steps};renderKaspinMigrationSteps(steps);
     el('run-kaspin-migration').disabled=!el('kaspin-migration-reset-confirm').checked;
     el('kaspin-migration-error').textContent=`${steps.length} tahap siap. Belum ada data yang disimpan.`;
@@ -7535,7 +7538,8 @@ el('open-price-policy').addEventListener('click',openPricePolicy);
 el('open-kaspin-migration').addEventListener('click',()=>{renderKaspinMigrationLocations();el('kaspin-migration-dialog').showModal();});
 el('close-kaspin-migration').addEventListener('click',()=>el('kaspin-migration-dialog').close());
 kaspinMigrationInputs.forEach((id)=>el(`kaspin-migration-${id}`).addEventListener('change',(event)=>{
-  el(`kaspin-migration-${id}-name`).textContent=event.target.files[0]?.name??'Belum dipilih';
+  const selected=[...event.target.files];
+  el(`kaspin-migration-${id}-name`).textContent=selected.length>1?`${selected.length} file dipilih`:(selected[0]?.name??'Belum dipilih');
   kaspinMigrationPackage=null;el('run-kaspin-migration').disabled=true;
   el('kaspin-migration-results').innerHTML='<div class="empty-state compact">File berubah. Periksa kembali seluruh paket.</div>';
 }));

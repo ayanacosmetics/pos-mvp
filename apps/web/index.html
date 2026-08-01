@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=166">
+  <link rel="stylesheet" href="/styles.css?v=167">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -998,8 +998,8 @@
     <label class="kaspin-file-slot" for="kaspin-migration-prices"><span><strong>5. Data Harga Grosir.xlsx</strong><small>Opsional · harga terintegrasi tipe pelanggan</small></span><em id="kaspin-migration-prices-name">Belum dipilih</em><input id="kaspin-migration-prices" type="file" accept=".xlsx,.xls"></label>
     <label class="kaspin-file-slot paired" for="kaspin-migration-purchases"><span><strong>6A. Transaksi_Pembelian.xlsx</strong><small>Opsional berpasangan dengan Laporan Modal</small></span><em id="kaspin-migration-purchases-name">Belum dipilih</em><input id="kaspin-migration-purchases" type="file" accept=".xlsx,.xls"></label>
     <label class="kaspin-file-slot paired" for="kaspin-migration-capital"><span><strong>6B. Laporan_Modal.xlsx</strong><small>Wajib jika 6A dipilih</small></span><em id="kaspin-migration-capital-name">Belum dipilih</em><input id="kaspin-migration-capital" type="file" accept=".xlsx,.xls"></label>
-    <label class="kaspin-file-slot paired" for="kaspin-migration-sales"><span><strong>7A. Laporan Penjualan Barang.xlsx</strong><small>Opsional · detail barang per transaksi</small></span><em id="kaspin-migration-sales-name">Belum dipilih</em><input id="kaspin-migration-sales" type="file" accept=".xlsx,.xls"></label>
-    <label class="kaspin-file-slot paired" for="kaspin-migration-sales-summary"><span><strong>7B. Laporan Data Penjualan.xlsx</strong><small>Wajib jika 7A dipilih; harus memuat ID Struk</small></span><em id="kaspin-migration-sales-summary-name">Belum dipilih</em><input id="kaspin-migration-sales-summary" type="file" accept=".xlsx,.xls"></label>
+    <label class="kaspin-file-slot paired" for="kaspin-migration-sales"><span><strong>7A. Laporan Penjualan Barang bulanan</strong><small>Opsional · pilih semua bulan sekaligus</small></span><em id="kaspin-migration-sales-name">Belum dipilih</em><input id="kaspin-migration-sales" type="file" accept=".xlsx,.xls" multiple></label>
+    <label class="kaspin-file-slot paired" for="kaspin-migration-sales-summary"><span><strong>7B. Laporan Data Penjualan</strong><small>Pilih semua file yang memuat ID Struk</small></span><em id="kaspin-migration-sales-summary-name">Belum dipilih</em><input id="kaspin-migration-sales-summary" type="file" accept=".xlsx,.xls" multiple></label>
   </div><label class="migration-confirm"><input id="kaspin-migration-reset-confirm" type="checkbox"><span>Saya sudah mereset data Nusa dan tidak sedang menjalankan transaksi.</span></label><div id="kaspin-migration-results" class="kaspin-migration-results"><div class="empty-state compact">Pilih file wajib dan file opsional yang tersedia.</div></div><p id="kaspin-migration-error" class="error"></p><div class="button-row"><button id="inspect-kaspin-migration" class="button secondary" type="button">Periksa semua file</button><button id="run-kaspin-migration" class="button primary" type="button" disabled>Mulai migrasi lengkap</button></div></div></dialog>
 
   <dialog id="barcode-camera-dialog"><div class="dialog-card barcode-camera-dialog"><div class="comparison-heading"><div><p class="eyebrow">SCAN BARCODE DENGAN KAMERA</p><h2>Arahkan kamera ke barcode</h2></div><button id="close-barcode-camera" class="icon-button" type="button">×</button></div><div class="barcode-camera-stage"><video id="barcode-camera-video" autoplay muted playsinline></video><div class="barcode-camera-guide"></div></div><p id="barcode-camera-status" class="muted">Menyiapkan kamera...</p><button id="cancel-barcode-camera" class="button secondary full" type="button">Batal</button></div></dialog>
@@ -1079,6 +1079,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=166"></script>
+  <script type="module" src="/app.js?v=167"></script>
 </body>
 </html>

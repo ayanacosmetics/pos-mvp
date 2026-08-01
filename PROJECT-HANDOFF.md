@@ -59,7 +59,7 @@ kode frontend, dokumentasi publik, atau chat.
 - Barang wajib; file lain opsional. Pembelian+modal dan detail+ringkasan penjualan wajib dipilih berpasangan.
 - Proses berhenti pada tahap pertama yang gagal dan menjelaskan bahwa tahap sebelumnya sudah tersimpan; pengguna harus Reset Semua Data sebelum mengulang paket.
 - SKU internal dan kode lama tetap digunakan. Bila kode lama sama pada beberapa barang, pembelian/penjualan dicocokkan lagi dengan nama produk agar varian tidak tertukar.
-- Kandidat: aplikasi `2.17.1`, API `2.17.1-cloud`, cache `v168`. Parser supplier menerima ejaan `Supplier` maupun `Suplier`; menu ditandai sebagai alat sementara agar dapat dihapus setelah migrasi resmi.
+- Kandidat: aplikasi `2.17.1`, API `2.17.1-cloud`, cache `v169`. Parser supplier menerima ejaan `Supplier` maupun `Suplier`; laporan penjualan menerima semua file bulanan sekaligus dan mencocokkan kode transaksi lintas file. Menu ditandai sebagai alat sementara agar dapat dihapus setelah migrasi resmi.
 
 ## 3. Status rilis
 

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
-import {parseKaspinProductWorkbook,parseKaspinProductExtensionWorkbook,parseKaspinFifoWorkbooks,parseKaspinSalesWorkbooks,parseKaspinCustomerWorkbook,parseKaspinSupplierWorkbook} from '../apps/web/kaspin-import.mjs';
+import {parseKaspinProductWorkbook,parseKaspinProductExtensionWorkbook,parseKaspinFifoWorkbooks,parseKaspinSalesWorkbooks,parseKaspinSalesWorkbookSets,parseKaspinCustomerWorkbook,parseKaspinSupplierWorkbook} from '../apps/web/kaspin-import.mjs';
 
 async function sheetJs(){
   const source=await readFile(new URL('../apps/web/vendor/xlsx.full.min.js',import.meta.url),'utf8');
@@ -144,6 +144,29 @@ test('parser penjualan Kaspin menggabungkan detail barang dengan total struk',as
   assert.equal(parsed.rows[0].change,1000);
 });
 
+test('paket migrasi menerima tiga laporan penjualan bulanan sekaligus',async()=>{
+  const XLSX=await sheetJs(),details=[];
+  for(let month=1;month<=3;month++){
+    const workbook=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([
+      ['Kode Transaksi','Timestamp','Kategori','Kode Barang','Nama Barang','Jumlah','Harga Beli','Harga Jual','Total'],
+      [`TRX-${month}`,`2026-0${month}-01 10:00:00`,'Snack','0001','Produk',1,3000,5000,5000]
+    ]),`Bulan_${month}`);
+    details.push(XLSX.write(workbook,{bookType:'xlsx',type:'array'}));
+  }
+  const summary=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(summary,XLSX.utils.aoa_to_sheet([
+    ['Kode Transaksi','Waktu','Total Pendapatan','Keuntungan','Bayar','Uang Kembalian'],
+    ['TRX-1','2026-01-01 10:00:00',5000,2000,5000,0],
+    ['TRX-2','2026-02-01 10:00:00',5000,2000,5000,0],
+    ['TRX-3','2026-03-01 10:00:00',5000,2000,5000,0]
+  ]),'Semua_Transaksi');
+  const parsed=parseKaspinSalesWorkbookSets(XLSX,details,[XLSX.write(summary,{bookType:'xlsx',type:'array'})]);
+  assert.equal(parsed.rows.length,3);
+  assert.equal(parsed.report.receipts,3);
+  assert.equal(parsed.report.skipped,0);
+});
+
 test('parser pelanggan Kaspin mempertahankan Member, Grosir, email, dan poin',async()=>{
   const XLSX=await sheetJs(),workbook=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([
@@ -183,6 +206,7 @@ test('satu dialog migrasi Kaspin menerima paket lengkap dan menjalankan urutan a
     readFile(new URL('../apps/web/app.js',import.meta.url),'utf8')
   ]);
   for(const id of ['open-kaspin-migration','kaspin-migration-dialog','kaspin-migration-products','kaspin-migration-customers','kaspin-migration-suppliers','kaspin-migration-units','kaspin-migration-prices','kaspin-migration-purchases','kaspin-migration-capital','kaspin-migration-sales','kaspin-migration-sales-summary','inspect-kaspin-migration','run-kaspin-migration'])assert.ok(html.includes(`id="${id}"`));
+  assert.match(html,/id="kaspin-migration-sales"[^>]*multiple/);
   assert.match(app,/async function inspectKaspinMigrationPackage/);
   assert.match(app,/async function runKaspinMigration/);
   const inspect=app.slice(app.indexOf('async function inspectKaspinMigrationPackage'),app.indexOf('async function runKaspinMigration'));
