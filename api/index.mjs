@@ -47,7 +47,7 @@ function normalizedAssignablePermissions(value,role) {
 
 const BACKUP_TABLES = [
   'tenants','profiles','outlets','stock_locations','user_outlets',
-  'customer_price_groups','customers','loyalty_settings','customer_tiers','customer_point_entries','vouchers','voucher_redemptions','receipt_voucher_campaigns','customer_account_entries','customer_payment_receipts','customer_payment_allocations','suppliers','supplier_bills','supplier_payable_entries','supplier_payment_receipts','supplier_payment_allocations','products','product_units','price_rules','promotions','promotion_versions','promotion_redemptions',
+  'customer_price_groups','customers','loyalty_settings','customer_tiers','customer_point_entries','vouchers','voucher_redemptions','receipt_voucher_campaigns','customer_account_entries','customer_payment_receipts','customer_payment_allocations','suppliers','supplier_bills','supplier_payable_entries','supplier_payment_receipts','supplier_payment_allocations','product_families','product_family_barcodes','products','product_variant_options','product_units','price_rules','promotions','promotion_versions','promotion_redemptions',
   'shifts','cash_movements','shift_reconciliations','sales','sale_items','payments','parked_sales','sale_adjustment_authorizations',
   'employee_schedules','attendance_records','employee_targets','approval_policies','approval_requests',
   'backup_exports','pilot_runs','pilot_check_results','production_incidents','recovery_drills',
@@ -59,7 +59,7 @@ const BACKUP_TABLES = [
   'pos_devices','sync_commands','document_sequences','audit_logs','import_jobs'
 ];
 const RESTORE_TABLES = [
-  'suppliers','products','product_units','price_rules','customer_tiers','customers','loyalty_settings',
+  'suppliers','product_families','product_family_barcodes','products','product_variant_options','product_units','price_rules','customer_tiers','customers','loyalty_settings',
   'promotions','promotion_versions','promotion_outlets','receipt_voucher_campaigns',
   'employee_schedules','attendance_records','employee_targets','approval_policies','approval_requests',
   'shifts','cash_movements','shift_reconciliations','sales','vouchers','parked_sales',
@@ -74,6 +74,7 @@ const RESTORE_TABLES = [
   'stock_counts','stock_count_items','restock_policies','outlet_price_overrides','accounting_periods',
   'journal_entries','journal_lines','outlet_expenses','sync_commands','import_jobs'
 ];
+const OPTIONAL_CATALOG_TABLES = new Set(['product_families','product_family_barcodes','product_variant_options']);
 
 const env = () => ({
   url: process.env.SUPABASE_URL?.replace(/\/$/, ''),
@@ -398,20 +399,29 @@ function groupRows(rows,keyOf) {
 
 async function loadCatalog(tenantId, locationId, outletId = null) {
   const tenant = encodeURIComponent(tenantId);
-  const [products, units, rules, balances, overrides] = await Promise.all([
+  const [products, units, rules, balances, overrides, families, familyBarcodes, variantOptions] = await Promise.all([
     restAll('products', `tenant_id=eq.${tenant}&active=eq.true&select=*&order=name`),
     restAll('product_units', `tenant_id=eq.${tenant}&select=*`),
     restAll('price_rules', `tenant_id=eq.${tenant}&select=*`),
     locationId ? restAll('stock_balances', `tenant_id=eq.${tenant}&location_id=eq.${encodeURIComponent(locationId)}&select=*`) : Promise.resolve([]),
-    outletId ? restAll('outlet_price_overrides', `tenant_id=eq.${tenant}&outlet_id=eq.${encodeURIComponent(outletId)}&active=eq.true&select=*`).catch(()=>[]) : Promise.resolve([])
+    outletId ? restAll('outlet_price_overrides', `tenant_id=eq.${tenant}&outlet_id=eq.${encodeURIComponent(outletId)}&active=eq.true&select=*`).catch(()=>[]) : Promise.resolve([]),
+    restAll('product_families',`tenant_id=eq.${tenant}&active=eq.true&select=*`).catch(()=>[]),
+    restAll('product_family_barcodes',`tenant_id=eq.${tenant}&select=*`).catch(()=>[]),
+    restAll('product_variant_options',`tenant_id=eq.${tenant}&select=*`).catch(()=>[])
   ]);
   const unitsByProduct=groupRows(units,(item)=>item.product_id);
   const rulesByProduct=groupRows(rules,(item)=>item.product_id);
   const balancesByProduct=new Map(balances.map((item)=>[item.product_id,item]));
   const overridesByProduct=groupRows(overrides,(item)=>item.product_id);
+  const familyById=new Map(families.map((item)=>[item.id,item]));
+  const barcodesByFamily=groupRows(familyBarcodes,(item)=>item.family_id);
+  const optionsByProduct=groupRows(variantOptions,(item)=>item.product_id);
   return products.map((product) => ({
-    id: product.id, sku: product.sku, name: product.name, category: product.category, brand: product.brand, imageUrl:product.image_url, active: product.active,
+    id: product.id, sku: product.sku, name: product.name, category: product.category, brand: product.brand, imageUrl:product.image_url, active: product.active,legacyCode:product.legacy_code??null,
     variantGroup: product.variant_group, variantName: product.variant_name, minimumStock: Number(product.minimum_stock ?? 0), trackExpiry: Boolean(product.track_expiry), trackStock: product.track_stock !== false,
+    familyId:product.family_id??null,familyCode:familyById.get(product.family_id)?.code??null,familyName:familyById.get(product.family_id)?.name??product.variant_group??null,
+    familyBarcodes:(barcodesByFamily.get(product.family_id)??[]).map((item)=>item.barcode),
+    variantOptions:(optionsByProduct.get(product.id)??[]).map((item)=>({name:item.option_name,value:item.option_value,position:Number(item.position??1)})).sort((a,b)=>a.position-b.position||a.name.localeCompare(b.name,'id')),
     stockBase: Number(balancesByProduct.get(product.id)?.quantity ?? 0),
     units: (unitsByProduct.get(product.id)??[]).map((unit) => ({ id: unit.id, name: unit.name, factor: Number(unit.factor_to_base), barcode: unit.barcode })).sort((a,b)=>a.factor-b.factor),
     priceRules: [
@@ -461,15 +471,21 @@ async function loadSupplierAccounts(tenantId){
 
 async function loadManagedProducts(tenantId,{includeCost=false}={}) {
   const tenant=encodeURIComponent(tenantId);
-  const [products,units,rules,balances]=await Promise.all([
+  const [products,units,rules,balances,families,familyBarcodes,variantOptions]=await Promise.all([
     restAll('products',`tenant_id=eq.${tenant}&select=*&order=active.desc,name`),
     restAll('product_units',`tenant_id=eq.${tenant}&select=*`),
     restAll('price_rules',`tenant_id=eq.${tenant}&starts_at=is.null&ends_at=is.null&select=*`),
-    restAll('stock_balances',`tenant_id=eq.${tenant}&select=product_id,quantity${includeCost?',avg_cost':''}`)
+    restAll('stock_balances',`tenant_id=eq.${tenant}&select=product_id,quantity${includeCost?',avg_cost':''}`),
+    restAll('product_families',`tenant_id=eq.${tenant}&select=*`).catch(()=>[]),
+    restAll('product_family_barcodes',`tenant_id=eq.${tenant}&select=*`).catch(()=>[]),
+    restAll('product_variant_options',`tenant_id=eq.${tenant}&select=*`).catch(()=>[])
   ]);
   const unitsByProduct=groupRows(units,(item)=>item.product_id);
   const rulesByProduct=groupRows(rules,(item)=>item.product_id);
   const balancesByProduct=groupRows(balances,(item)=>item.product_id);
+  const familyById=new Map(families.map((item)=>[item.id,item]));
+  const barcodesByFamily=groupRows(familyBarcodes,(item)=>item.family_id);
+  const optionsByProduct=groupRows(variantOptions,(item)=>item.product_id);
   return products.map((product)=>{
     const productBalances=balancesByProduct.get(product.id)??[];
     const stockBase=productBalances.reduce((sum,balance)=>sum+Number(balance.quantity),0);
@@ -478,8 +494,11 @@ async function loadManagedProducts(tenantId,{includeCost=false}={}) {
       ? productBalances.reduce((sum,balance)=>sum+(Math.max(0,Number(balance.quantity))*Number(balance.avg_cost??0)),0)/costQuantity
       : Math.max(0,...productBalances.map((balance)=>Number(balance.avg_cost??0)));
     return {
-      id:product.id,sku:product.sku,name:product.name,category:product.category,brand:product.brand,imageUrl:product.image_url,active:product.active,
+      id:product.id,sku:product.sku,name:product.name,category:product.category,brand:product.brand,imageUrl:product.image_url,active:product.active,legacyCode:product.legacy_code??null,
       variantGroup:product.variant_group,variantName:product.variant_name,minimumStock:Number(product.minimum_stock??0),trackExpiry:Boolean(product.track_expiry),trackStock:product.track_stock!==false,
+      familyId:product.family_id??null,familyCode:familyById.get(product.family_id)?.code??null,familyName:familyById.get(product.family_id)?.name??product.variant_group??null,
+      familyBarcodes:(barcodesByFamily.get(product.family_id)??[]).map((item)=>item.barcode),
+      variantOptions:(optionsByProduct.get(product.id)??[]).map((item)=>({name:item.option_name,value:item.option_value,position:Number(item.position??1)})).sort((a,b)=>a.position-b.position||a.name.localeCompare(b.name,'id')),
       stockBase,...(includeCost?{averageCost:Math.round(weightedCost*100)/100}:{}),
       units:(unitsByProduct.get(product.id)??[]).map((unit)=>({id:unit.id,name:unit.name,factor:Number(unit.factor_to_base),barcode:unit.barcode})).sort((a,b)=>a.factor-b.factor),
       priceRules:(rulesByProduct.get(product.id)??[]).map((rule)=>({id:rule.id,customerGroupId:rule.customer_group_id,minBaseQty:Number(rule.min_base_qty),unitPriceBase:Number(rule.unit_price_base),priority:rule.priority}))
@@ -535,6 +554,13 @@ function normalizeProductInput(input,id=null) {
     if(unit.barcode)barcodes.add(unit.barcode);
   }
   return normalized;
+}
+
+async function assertNoSharedBarcodeConflict(tenantId,input){
+  const barcodes=(input.units??[]).map((unit)=>String(unit.barcode??'').trim()).filter(Boolean);
+  if(!barcodes.length)return;
+  const shared=await restAll('product_family_barcodes',`tenant_id=eq.${tenantId}&barcode=${inFilter(barcodes)}&select=barcode`).catch(()=>[]);
+  if(shared.length)throw Object.assign(new Error(`Barcode ${shared[0].barcode} adalah barcode bersama etalase dan tidak boleh dipakai langsung oleh SKU`),{status:409});
 }
 
 async function previewSafePricePolicy(tenantId,input) {
@@ -1133,7 +1159,7 @@ function normalizeImportRows(kind, rawRows) {
     const rowNo = index + 2;
     if (kind === 'PRODUCTS') {
       const row = {
-        sku: String(raw.sku ?? '').trim().toUpperCase(), name: String(raw.name ?? '').trim(),
+        sku: String(raw.sku ?? '').trim().toUpperCase(), name: String(raw.name ?? '').trim(),legacyCode:String(raw.legacyCode??'').trim(),
         category: String(raw.category ?? '').trim() || 'Lainnya', brand: String(raw.brand ?? '').trim(),
         baseUnit: String(raw.baseUnit ?? '').trim() || 'pcs', baseBarcode: String(raw.baseBarcode ?? '').trim(),
         retailPrice: importNumber(raw.retailPrice), wholesalePrice: importNumber(raw.wholesalePrice),
@@ -1165,6 +1191,16 @@ function normalizeImportRows(kind, rawRows) {
       rows.push(row);
       return;
     }
+    if(kind==='PRODUCT_FAMILIES'){
+      const row={familyCode:String(raw.familyCode??'').trim().toUpperCase(),familyName:String(raw.familyName??'').trim(),sharedBarcode:String(raw.sharedBarcode??'').trim()};
+      if(!row.familyCode)addError(rowNo,'familyCode','Kode etalase wajib diisi');
+      if(!row.familyName)addError(rowNo,'familyName','Nama etalase wajib diisi');
+      if(row.familyCode&&!/^[A-Z0-9][A-Z0-9-]{1,49}$/.test(row.familyCode))addError(rowNo,'familyCode','Kode etalase hanya boleh memakai huruf, angka, dan tanda hubung');
+      if(seenCodes.has(row.familyCode))addError(rowNo,'familyCode',`Kode etalase ${row.familyCode} muncul lebih dari sekali`);
+      if(row.sharedBarcode&&seenBarcodes.has(row.sharedBarcode))addError(rowNo,'sharedBarcode',`Barcode bersama ${row.sharedBarcode} muncul lebih dari sekali`);
+      if(row.familyCode)seenCodes.add(row.familyCode);if(row.sharedBarcode)seenBarcodes.add(row.sharedBarcode);
+      rows.push(row);return;
+    }
     if(kind==='PRODUCT_UNITS'){
       const row={sku:String(raw.sku??'').trim().toUpperCase(),unitName:String(raw.unitName??'').trim(),factor:importNumber(raw.factor),barcode:String(raw.barcode??'').trim(),unitPriceTotal:importNumber(raw.unitPriceTotal)};
       const key=`${row.sku}:${row.unitName.toLowerCase()}`;
@@ -1179,12 +1215,23 @@ function normalizeImportRows(kind, rawRows) {
       rows.push(row);return;
     }
     if(kind==='PRODUCT_VARIANTS'){
-      const row={sku:String(raw.sku??'').trim().toUpperCase(),variantGroup:String(raw.variantGroup??'').trim(),variantName:String(raw.variantName??'').trim()};
+      const row={sku:String(raw.sku??'').trim().toUpperCase(),familyCode:String(raw.familyCode??'').trim().toUpperCase(),variantGroup:String(raw.variantGroup??'').trim(),variantName:String(raw.variantName??'').trim()};
       if(!row.sku)addError(rowNo,'sku','SKU wajib diisi');
+      if(!row.familyCode)addError(rowNo,'familyCode','Kode etalase wajib diisi');
       if(!row.variantGroup)addError(rowNo,'variantGroup','Kelompok varian wajib diisi');
       if(!row.variantName)addError(rowNo,'variantName','Nama varian wajib diisi');
       if(seenCodes.has(row.sku))addError(rowNo,'sku',`SKU ${row.sku} muncul lebih dari sekali`);
       seenCodes.add(row.sku);rows.push(row);return;
+    }
+    if(kind==='PRODUCT_OPTIONS'){
+      const row={sku:String(raw.sku??'').trim().toUpperCase(),optionName:String(raw.optionName??'').trim(),optionValue:String(raw.optionValue??'').trim(),position:importNumber(raw.position)??1};
+      const key=`${row.sku}:${row.optionName.toLowerCase()}`;
+      if(!row.sku)addError(rowNo,'sku','SKU wajib diisi');
+      if(!row.optionName)addError(rowNo,'optionName','Nama opsi wajib diisi');
+      if(!row.optionValue)addError(rowNo,'optionValue','Nilai opsi wajib diisi');
+      if(!(row.position>=1&&row.position<=99))addError(rowNo,'position','Urutan harus 1 sampai 99');
+      if(seenCodes.has(key))addError(rowNo,'optionName',`Opsi ${row.optionName} untuk SKU ${row.sku} muncul lebih dari sekali`);
+      seenCodes.add(key);rows.push(row);return;
     }
     if(kind==='PRODUCT_PRICES'){
       const row={sku:String(raw.sku??'').trim().toUpperCase(),customerGroup:String(raw.customerGroup??'').trim(),minQty:importNumber(raw.minQty),unitPrice:importNumber(raw.unitPrice)};
@@ -1224,17 +1271,19 @@ async function previewKaspinFifo(context,input){
   if(rawRows.length>10000||rawCapital.length>10000)errors.push({row:0,field:'file',message:'Maksimal 10.000 baris per file'});
 
   const [products,units,balances]=await Promise.all([
-    restAll('products',`tenant_id=eq.${context.tenantId}&select=id,sku,name`),
+    restAll('products',`tenant_id=eq.${context.tenantId}&select=id,sku,name,legacy_code`),
     restAll('product_units',`tenant_id=eq.${context.tenantId}&barcode=not.is.null&select=product_id,barcode`),
     locationId?restAll('stock_balances',`tenant_id=eq.${context.tenantId}&location_id=eq.${locationId}&select=product_id,quantity,avg_cost`):Promise.resolve([])
   ]);
   const productById=new Map(products.map((product)=>[product.id,product]));
   const lookup=new Map(products.map((product)=>[String(product.sku).trim().toUpperCase(),product]));
+  const ambiguousCodes=new Set();
+  products.forEach((product)=>{const code=String(product.legacy_code??'').trim().toUpperCase();if(!code)return;if(lookup.has(code)&&lookup.get(code).id!==product.id)ambiguousCodes.add(code);else lookup.set(code,product);});
   units.forEach((unit)=>{if(unit.barcode&&productById.has(unit.product_id))lookup.set(String(unit.barcode).trim().toUpperCase(),productById.get(unit.product_id));});
   const balanceByProduct=new Map(balances.map((balance)=>[balance.product_id,balance]));
   const rows=[];
   rawRows.forEach((raw,index)=>{
-    const productCode=String(raw.productCode??'').trim().toUpperCase(),product=lookup.get(productCode);
+    const productCode=String(raw.productCode??'').trim().toUpperCase(),product=ambiguousCodes.has(productCode)?null:lookup.get(productCode);
     const quantity=importNumber(raw.quantity),unitCost=importNumber(raw.unitCost),occurredAt=new Date(raw.occurredAt);
     if(!product){warnings.push({row:index+2,message:`Pembelian ${raw.productName||productCode||'-'} dilewati karena kode ${productCode||'-'} belum ada di Nusa POS`});return;}
     if(!String(raw.transactionCode??'').trim()||!(quantity>0)||!(unitCost>=0)||Number.isNaN(occurredAt.getTime())){
@@ -1249,7 +1298,7 @@ async function previewKaspinFifo(context,input){
   });
   const capitalByProduct=new Map();
   rawCapital.forEach((raw,index)=>{
-    const productCode=String(raw.productCode??'').trim().toUpperCase(),product=lookup.get(productCode);
+    const productCode=String(raw.productCode??'').trim().toUpperCase(),product=ambiguousCodes.has(productCode)?null:lookup.get(productCode);
     const stock=importNumber(raw.stock),remainingCapital=importNumber(raw.remainingCapital);
     if(!product){warnings.push({row:index+2,message:`Modal ${raw.productName||productCode||'-'} dilewati karena kode ${productCode||'-'} belum ada di Nusa POS`});return;}
     if(!(stock>=0)||!(remainingCapital>=0)){warnings.push({row:index+2,message:`Modal ${productCode} dilewati karena stok atau sisa modal tidak valid`});return;}
@@ -1272,17 +1321,19 @@ async function previewKaspinSales(context,input){
   if(!rawRows.length)errors.push({row:0,field:'file',message:'File penjualan tidak memiliki baris yang dapat dibaca'});
   if(rawRows.length>10000)errors.push({row:0,field:'file',message:'Maksimal 10.000 baris per file'});
   const [products,units]=await Promise.all([
-    restAll('products',`tenant_id=eq.${context.tenantId}&select=id,sku,name`),
+    restAll('products',`tenant_id=eq.${context.tenantId}&select=id,sku,name,legacy_code`),
     restAll('product_units',`tenant_id=eq.${context.tenantId}&barcode=not.is.null&select=product_id,barcode`)
   ]);
   const productById=new Map(products.map((product)=>[product.id,product]));
   const lookup=new Map(products.map((product)=>[String(product.sku).trim().toUpperCase(),product]));
+  const ambiguousCodes=new Set();
+  products.forEach((product)=>{const code=String(product.legacy_code??'').trim().toUpperCase();if(!code)return;if(lookup.has(code)&&lookup.get(code).id!==product.id)ambiguousCodes.add(code);else lookup.set(code,product);});
   units.forEach((unit)=>{if(unit.barcode&&productById.has(unit.product_id))lookup.set(String(unit.barcode).trim().toUpperCase(),productById.get(unit.product_id));});
 
   const candidateRows=[],invalidTransactions=new Set();
   rawRows.forEach((raw,index)=>{
     const transactionCode=String(raw.transactionCode??'').trim();
-    const productCode=String(raw.productCode??'').trim().toUpperCase(),product=lookup.get(productCode);
+    const productCode=String(raw.productCode??'').trim().toUpperCase(),product=ambiguousCodes.has(productCode)?null:lookup.get(productCode);
     const quantity=importNumber(raw.quantity),unitCost=importNumber(raw.unitCost),unitPrice=importNumber(raw.unitPrice);
     const lineGross=importNumber(raw.lineGross),grandTotal=importNumber(raw.grandTotal),occurredAt=new Date(raw.occurredAt);
     if(!transactionCode||!product||!(quantity>0)||!(unitCost>=0)||!(unitPrice>=0)||!(lineGross>=0)||!(grandTotal>=0)||Number.isNaN(occurredAt.getTime())){
@@ -1318,10 +1369,45 @@ async function previewImport(context, input) {
   if(kind==='KASPIN_FIFO')return previewKaspinFifo(context,input);
   if(kind==='KASPIN_SALES')return previewKaspinSales(context,input);
   const mode=['CREATE_ONLY','UPDATE_ONLY'].includes(String(input.mode??'').toUpperCase())?String(input.mode).toUpperCase():'MIXED';
-  const supported=['PRODUCTS','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES','CUSTOMERS','SUPPLIERS'];
+  const supported=['PRODUCTS','PRODUCT_FAMILIES','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_OPTIONS','PRODUCT_PRICES','CUSTOMERS','SUPPLIERS'];
   if (!supported.includes(kind)) return { valid: false, kind, rows: [], errors: [{ row: 0, field: 'kind', message: 'Jenis impor tidak valid' }] };
   const normalized = normalizeImportRows(kind, input.rows);
   const locationId = input.locationId || null;
+  if(kind==='PRODUCT_FAMILIES'){
+    const [families,unitBarcodes,familyBarcodes]=await Promise.all([
+      restAll('product_families',`tenant_id=eq.${context.tenantId}&select=id,code,name`),
+      restAll('product_units',`tenant_id=eq.${context.tenantId}&barcode=not.is.null&select=barcode`),
+      restAll('product_family_barcodes',`tenant_id=eq.${context.tenantId}&select=family_id,barcode`)
+    ]);
+    const existing=new Map(families.map((row)=>[String(row.code).toUpperCase(),row]));
+    const unitCodes=new Set(unitBarcodes.map((row)=>String(row.barcode)));
+    const ownerByBarcode=new Map(familyBarcodes.map((row)=>[String(row.barcode),row.family_id]));
+    normalized.rows.forEach((row,index)=>{
+      if(row.sharedBarcode&&unitCodes.has(row.sharedBarcode))normalized.errors.push({row:index+2,field:'sharedBarcode',message:'Barcode bersama sudah dipakai langsung oleh satu SKU'});
+      const owner=ownerByBarcode.get(row.sharedBarcode),family=existing.get(row.familyCode);
+      if(row.sharedBarcode&&owner&&owner!==family?.id)normalized.errors.push({row:index+2,field:'sharedBarcode',message:'Barcode bersama sudah dipakai etalase lain'});
+    });
+    return {valid:normalized.errors.length===0,kind,mode,rows:normalized.rows,errors:normalized.errors,summary:{total:normalized.rows.length,create:normalized.rows.filter((row)=>!existing.has(row.familyCode)).length,update:normalized.rows.filter((row)=>existing.has(row.familyCode)).length,error:normalized.errors.length}};
+  }
+  if(['PRODUCT_VARIANTS','PRODUCT_OPTIONS'].includes(kind)){
+    const [products,families]=await Promise.all([
+      restAll('products',`tenant_id=eq.${context.tenantId}&select=id,sku`),
+      kind==='PRODUCT_VARIANTS'?restAll('product_families',`tenant_id=eq.${context.tenantId}&select=id,code,name`):Promise.resolve([])
+    ]);
+    const productCodes=new Set(products.map((row)=>String(row.sku).toUpperCase()));
+    const familyByCode=new Map(families.map((row)=>[String(row.code).toUpperCase(),row]));
+    const namesByInputCode=new Map();
+    normalized.rows.forEach((row,index)=>{
+      if(!productCodes.has(row.sku))normalized.errors.push({row:index+2,field:'sku',message:`SKU ${row.sku||'-'} belum ada. Import Barang utama terlebih dahulu`});
+      if(kind==='PRODUCT_VARIANTS'){
+        const previousName=namesByInputCode.get(row.familyCode),existing=familyByCode.get(row.familyCode);
+        if(previousName&&previousName.toLocaleLowerCase('id')!==row.variantGroup.toLocaleLowerCase('id'))normalized.errors.push({row:index+2,field:'variantGroup',message:`Kode etalase ${row.familyCode} memakai lebih dari satu nama`});
+        if(existing&&existing.name.toLocaleLowerCase('id')!==row.variantGroup.toLocaleLowerCase('id'))normalized.errors.push({row:index+2,field:'variantGroup',message:`Kode etalase ${row.familyCode} sudah bernama ${existing.name}`});
+        namesByInputCode.set(row.familyCode,row.variantGroup);
+      }
+    });
+    return {valid:normalized.errors.length===0,kind,mode,rows:normalized.rows,errors:normalized.errors,summary:{total:normalized.rows.length,create:kind==='PRODUCT_VARIANTS'?[...namesByInputCode.keys()].filter((code)=>!familyByCode.has(code)).length:0,update:normalized.rows.length,error:normalized.errors.length}};
+  }
   if (kind === 'PRODUCTS' && normalized.rows.some((row) => row.openingQty !== null) && !context.locationIds.includes(locationId)) {
     normalized.errors.push({ row: 0, field: 'locationId', message: 'Pilih lokasi untuk stok awal' });
   }
@@ -1340,13 +1426,18 @@ async function previewImport(context, input) {
     });
   }
   if (kind === 'PRODUCTS') {
-    const units = await restAll('product_units', `tenant_id=eq.${context.tenantId}&barcode=not.is.null&select=product_id,barcode`);
+    const [units,familyBarcodes] = await Promise.all([
+      restAll('product_units', `tenant_id=eq.${context.tenantId}&barcode=not.is.null&select=product_id,barcode`),
+      restAll('product_family_barcodes',`tenant_id=eq.${context.tenantId}&select=barcode`).catch(()=>[])
+    ]);
+    const sharedCodes=new Set(familyBarcodes.map((row)=>String(row.barcode)));
     const productCodeById = new Map(existing.map((row) => [row.id,String(row.sku).toUpperCase()]));
     const barcodeOwner = new Map(units.map((unit) => [unit.barcode,productCodeById.get(unit.product_id)]));
     normalized.rows.forEach((row,index) => {
       for (const [field,barcode] of [['baseBarcode',row.baseBarcode],['bulkBarcode',row.bulkBarcode]]) {
         const owner = barcodeOwner.get(barcode);
         if (barcode && owner && owner !== row.sku) normalized.errors.push({ row: index+2, field, message: `Barcode sudah digunakan SKU ${owner}` });
+        if(barcode&&sharedCodes.has(barcode))normalized.errors.push({row:index+2,field,message:'Barcode adalah barcode bersama etalase dan tidak boleh dipakai langsung oleh SKU'});
       }
     });
     normalized.rows.forEach((row,index) => {
@@ -1403,7 +1494,11 @@ async function buildBackup(context, session) {
     const query = table === 'tenants'
       ? `id=eq.${context.tenantId}&select=*`
       : `tenant_id=eq.${context.tenantId}&select=*`;
-    return [table, await rest(table, query)];
+    try{return [table,await rest(table,query)];}
+    catch(error){
+      if(OPTIONAL_CATALOG_TABLES.has(table))return [table,[]];
+      throw error;
+    }
   }));
   const tables = Object.fromEntries(entries);
   const payload = {
@@ -1597,7 +1692,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.53-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.17.0-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2298,6 +2393,7 @@ async function routeRequest(request, response, route) {
   if (request.method === 'POST' && route === 'products') {
     requirePermission(session, 'catalog.manage');
     const input = normalizeProductInput(bodyOf(request));
+    await assertNoSharedBarcodeConflict(context.tenantId,input);
     return send(response, 201, await rpc('save_product_v6', { p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_product: input }));
   }
 
@@ -2324,6 +2420,7 @@ async function routeRequest(request, response, route) {
     requirePermission(session, 'catalog.manage');
     const productId=route.split('/')[1];
     const input=normalizeProductInput(bodyOf(request),productId);
+    await assertNoSharedBarcodeConflict(context.tenantId,input);
     return send(response,200,await rpc('save_product_v6',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_product:input}));
   }
 
@@ -2388,6 +2485,19 @@ async function routeRequest(request, response, route) {
         kind:preview.kind,total:preview.rows.length,created:Number(result.created??0),
         updated:Number(result.updated??0),duplicate:Boolean(result.duplicate),reconciliation,pointReconstruction
       });
+    }
+    if(['PRODUCT_FAMILIES','PRODUCT_VARIANTS','PRODUCT_OPTIONS'].includes(preview.kind)){
+      const tasks=[];
+      for(let index=0;index<preview.rows.length;index+=500)tasks.push(preview.rows.slice(index,index+500));
+      const results=[];
+      for(let index=0;index<tasks.length;index+=1){
+        results.push(await rpc('import_product_catalog_v1',{
+          p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,
+          p_idempotency_key:tasks.length===1?key:`${key}:${index+1}`,
+          p_kind:preview.kind,p_file_name:input.fileName??null,p_rows:tasks[index]
+        }));
+      }
+      return send(response,201,{kind:preview.kind,total:preview.rows.length,created:results.reduce((sum,item)=>sum+Number(item.created??0),0),updated:results.reduce((sum,item)=>sum+Number(item.updated??0),0),duplicate:results.length>0&&results.every((item)=>item.duplicate),chunks:results.length});
     }
     let rows=preview.rows.map((row)=>({...row}));
     if(preview.kind==='PRODUCTS'){
@@ -2475,13 +2585,13 @@ async function routeRequest(request, response, route) {
     if(!email)throw Object.assign(new Error('Email akun Owner belum tersedia'),{status:422});
     let simulation;
     try{
-      simulation=await rpc('dry_run_restore_tenant_backup_v1',{
+      simulation=await rpc('dry_run_restore_tenant_backup_v2',{
         p_tenant_id:context.tenantId,
         p_actor_id:session.authUser.id,
         p_tables:restorePayload(snapshot)
       });
     }catch(error){
-      if(/dry_run_restore_tenant_backup_v1|schema cache|function|PGRST202/i.test(error.message)){
+      if(/dry_run_restore_tenant_backup_v2|schema cache|function|PGRST202/i.test(error.message)){
         throw Object.assign(new Error('Pemulihan belum aktif di database. Jalankan migrasi pemulihan terbaru terlebih dahulu.'),{status:503});
       }
       throw Object.assign(new Error('Kesiapan pemulihan belum dapat diverifikasi'),{status:503});
@@ -2531,11 +2641,11 @@ async function routeRequest(request, response, route) {
     }});
     let result;
     try{
-      result=await rpc('restore_tenant_backup_v1',{
+      result=await rpc('restore_tenant_backup_v2',{
         p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_tables:restorePayload(snapshot)
       });
     }catch(error){
-      if(/restore_tenant_backup_v1|schema cache|function/i.test(error.message))throw Object.assign(new Error('Pemulihan belum aktif di database. Jalankan migrasi pemulihan terbaru.'),{status:503});
+      if(/restore_tenant_backup_v2|schema cache|function/i.test(error.message))throw Object.assign(new Error('Pemulihan belum aktif di database. Jalankan migrasi pemulihan terbaru.'),{status:503});
       throw Object.assign(new Error(`Pemulihan dibatalkan seluruhnya: ${error.message}`),{status:409});
     }
     return send(response,200,{...result,fileName,snapshot:currentSnapshot,totalRows});
@@ -2547,15 +2657,23 @@ async function routeRequest(request, response, route) {
     const email=String(session.authUser.email??'').trim().toLowerCase();
     if(!email)throw Object.assign(new Error('Email akun Owner belum tersedia'),{status:422});
     try{
-      await rpc('reset_tenant_data_v1',{
+      await rpc('reset_tenant_data_v2',{
         p_tenant_id:'00000000-0000-0000-0000-000000000000',
         p_actor_id:'00000000-0000-0000-0000-000000000000',
         p_scopes:['TRANSACTIONS']
       });
       throw new Error('Pemeriksaan reset tidak berhenti pada pengaman Owner');
-    }catch(error){
-      if(/Hanya Owner aktif/i.test(error.message)){}else if(/reset_tenant_data_v1|schema cache|function|PGRST202/i.test(error.message)){
-        throw Object.assign(new Error('Fitur reset belum aktif di database. Pasang migrasi reset data terbaru terlebih dahulu.'),{status:503});
+      }catch(error){
+      if(/Hanya Owner aktif/i.test(error.message)){}else if(/reset_tenant_data_v2|schema cache|function|PGRST202/i.test(error.message)){
+        try{
+          await rpc('reset_tenant_data_v1',{
+            p_tenant_id:'00000000-0000-0000-0000-000000000000',
+            p_actor_id:'00000000-0000-0000-0000-000000000000',p_scopes:['TRANSACTIONS']
+          });
+          throw new Error('Pemeriksaan reset lama tidak berhenti pada pengaman Owner');
+        }catch(legacyError){
+          if(!/Hanya Owner aktif/i.test(legacyError.message))throw Object.assign(new Error('Fitur reset belum aktif di database. Pasang migrasi reset data terbaru terlebih dahulu.'),{status:503});
+        }
       }else{
         throw Object.assign(new Error('Kesiapan reset data belum dapat diverifikasi'),{status:503});
       }
@@ -2602,11 +2720,11 @@ async function routeRequest(request, response, route) {
     }});
     let result;
     try{
-      result=await rpc('reset_tenant_data_v1',{
+      result=await rpc('reset_tenant_data_v2',{
         p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_scopes:scopes
       });
     }catch(error){
-      if(/reset_tenant_data_v1|schema cache|function/i.test(error.message))throw Object.assign(new Error('Fitur reset belum aktif di database. Jalankan migrasi reset data terbaru terlebih dahulu.'),{status:503});
+      if(/reset_tenant_data_v2|schema cache|function/i.test(error.message))throw Object.assign(new Error('Fitur reset belum aktif di database. Jalankan migrasi reset data terbaru terlebih dahulu.'),{status:503});
       if(/violates foreign key constraint/i.test(error.message)){
         const constraint=error.message.match(/constraint\s+"([^"]+)"/i)?.[1];
         throw Object.assign(new Error(`Reset dibatalkan seluruhnya karena relasi database belum diperbarui${constraint?` (${constraint})`:''}. Jalankan migrasi reset terbaru lalu minta OTP baru.`),{status:409});

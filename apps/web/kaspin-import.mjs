@@ -26,6 +26,29 @@ function identifier(value){
   return source;
 }
 
+export function kaspinInternalSku(value){
+  const legacy=identifier(value);
+  if(!legacy)return '';
+  const safe=legacy.toUpperCase().normalize('NFKD').replace(/[^A-Z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+  return safe?`KP-${safe}`:'';
+}
+
+function mappedKaspinSku(value,useInternalSku){
+  const legacy=identifier(value);
+  return useInternalSku?kaspinInternalSku(legacy):legacy;
+}
+
+function shortStableHash(value){
+  let hash=2166136261;
+  for(const character of text(value).toLocaleLowerCase('id')){hash^=character.codePointAt(0);hash=Math.imul(hash,16777619);}
+  return (hash>>>0).toString(16).toUpperCase().padStart(8,'0');
+}
+
+function kaspinFamilyCode(value){
+  const name=text(value),slug=name.toUpperCase().normalize('NFKD').replace(/[^A-Z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,30)||'ETALASE';
+  return `KP-${slug}-${shortStableHash(name)}`;
+}
+
 function number(value){
   if(value===''||value===null||value===undefined)return null;
   const parsed=Number(value);
@@ -77,7 +100,7 @@ function baseUnit(value){
   return /^[a-zA-Z]{1,12}$/.test(source)?source:'pcs';
 }
 
-export function parseKaspinProductWorkbook(XLSX,arrayBuffer,{useCodeAsBarcode=true}={}){
+export function parseKaspinProductWorkbook(XLSX,arrayBuffer,{useCodeAsBarcode=true,useInternalSku=true}={}){
   const workbook=XLSX.read(arrayBuffer,{type:'array',cellDates:true});
   const source=findKaspinSheet(XLSX,workbook);
   if(!source)return null;
@@ -87,7 +110,8 @@ export function parseKaspinProductWorkbook(XLSX,arrayBuffer,{useCodeAsBarcode=tr
   source.matrix.slice(2).forEach((cells,index)=>{
     if(!cells.some((value)=>text(value)!==''))return;
     const excelRow=index+3;
-    const sku=identifier(get(cells,'kode_barang_edit'));
+    const legacyCode=identifier(get(cells,'kode_barang_edit'));
+    const sku=mappedKaspinSku(legacyCode,useInternalSku);
     const name=text(get(cells,'nama_barang_edit'));
     const retailPrice=number(get(cells,'harga_jual_edit'));
     const openingQty=number(get(cells,'stok_edit'));
@@ -110,11 +134,11 @@ export function parseKaspinProductWorkbook(XLSX,arrayBuffer,{useCodeAsBarcode=tr
       return;
     }
     rows.push({
-      sku,name,
+      sku,name,legacyCode,
       category:text(get(cells,'kategori'))||'Lainnya',
       brand:'',
       baseUnit:baseUnit(get(cells,'berat_dan_satuan')),
-      baseBarcode:useCodeAsBarcode?sku:'',
+      baseBarcode:useCodeAsBarcode?legacyCode:'',
       retailPrice,
       openingQty,
       openingCost:openingCost??0,
@@ -124,18 +148,28 @@ export function parseKaspinProductWorkbook(XLSX,arrayBuffer,{useCodeAsBarcode=tr
       trackExpiry:false
     });
   });
+  const sharedBarcodeCandidates=[];
+  if(useCodeAsBarcode&&useInternalSku){
+    const byBarcode=new Map();
+    rows.forEach((row)=>{if(row.baseBarcode){if(!byBarcode.has(row.baseBarcode))byBarcode.set(row.baseBarcode,[]);byBarcode.get(row.baseBarcode).push(row);}});
+    byBarcode.forEach((members,barcode)=>{
+      if(members.length<2)return;
+      members.forEach((row)=>{row.sku=`${kaspinInternalSku(barcode)}-${shortStableHash(row.name)}`;row.baseBarcode='';});
+      sharedBarcodeCandidates.push({barcode,count:members.length,products:members.map((row)=>({sku:row.sku,name:row.name}))});
+    });
+  }
   const detailedTypeRows=Object.entries(types).filter(([type])=>type.toLowerCase()!=='default').reduce((sum,[,count])=>sum+count,0);
   return {
     rows,
     report:{
       source:'KASPIN',sheetName:source.sheetName,total:rows.length+issues.length+deferred.length,
       mapped:rows.length,skipped:issues.length,deferred:deferred.length,issues,deferredRows:deferred,types,
-      detailedTypeRows,serviceRows:serviceRows.length,useCodeAsBarcode
+      detailedTypeRows,serviceRows:serviceRows.length,useCodeAsBarcode,useInternalSku,sharedBarcodeCandidates
     }
   };
 }
 
-export function parseKaspinProductExtensionWorkbook(XLSX,arrayBuffer,kind){
+export function parseKaspinProductExtensionWorkbook(XLSX,arrayBuffer,kind,{useInternalSku=true}={}){
   const workbook=XLSX.read(arrayBuffer,{type:'array',cellDates:true});
   const source=findExtensionSheet(XLSX,workbook,kind);
   if(!source)return null;
@@ -145,7 +179,7 @@ export function parseKaspinProductExtensionWorkbook(XLSX,arrayBuffer,kind){
   source.matrix.slice(1).forEach((cells,index)=>{
     if(!cells.some((value)=>text(value)!==''))return;
     const excelRow=index+2;
-    const sku=identifier(get(cells,'kode_barang'));
+    const sku=mappedKaspinSku(get(cells,'kode_barang'),useInternalSku);
     if(kind==='PRODUCT_UNITS'){
       const unitName=text(get(cells,'tipe_satuan'));
       const factor=number(get(cells,'jumlah_per_satuan'));
@@ -177,7 +211,7 @@ export function parseKaspinProductExtensionWorkbook(XLSX,arrayBuffer,kind){
       rows.push({sku,customerGroup,minQty,unitPrice});
       return;
     }
-    const childSku=identifier(get(cells,'kode'));
+    const childSku=mappedKaspinSku(get(cells,'kode'),useInternalSku);
     const variantGroup=text(get(cells,'nama_barang'));
     const parts=[
       [text(get(cells,'label')),text(get(cells,'variasi'))],
@@ -189,7 +223,7 @@ export function parseKaspinProductExtensionWorkbook(XLSX,arrayBuffer,kind){
     if(!variantGroup)reasons.push('nama induk varian kosong');
     if(!parts.length)reasons.push('nama variasi kosong');
     if(reasons.length){issues.push({row:excelRow,sku:childSku,message:reasons.join(', ')});return;}
-    rows.push({sku:childSku,variantGroup,variantName:parts.join(' · ')});
+    rows.push({sku:childSku,familyCode:kaspinFamilyCode(variantGroup),variantGroup,variantName:parts.join(' · ')});
   });
   const labels={PRODUCT_UNITS:'Multi Satuan',PRODUCT_VARIANTS:'Varian',PRODUCT_PRICES:'Harga Grosir'};
   return {
@@ -197,7 +231,7 @@ export function parseKaspinProductExtensionWorkbook(XLSX,arrayBuffer,kind){
     report:{
       source:'KASPIN',sheetName:source.sheetName,fileType:labels[kind],total:rows.length+issues.length+skippedRows.length,
       mapped:rows.length,skipped:issues.length+skippedRows.length,issues:[...issues,...skippedRows],
-      ignored:skippedRows.length
+      ignored:skippedRows.length,useInternalSku
     }
   };
 }

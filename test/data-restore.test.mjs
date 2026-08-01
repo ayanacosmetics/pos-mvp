@@ -55,7 +55,7 @@ function installOwnerMock(snapshot,{simulate=true}={}) {
     if(target.includes('/rest/v1/outlets?'))return reply([{id:ids.outlet,name:'Toko Utama',active:true}]);
     if(target.includes('/rest/v1/stock_locations?'))return reply([{id:ids.location,outlet_id:ids.outlet,name:'Toko',kind:'STORE',active:true}]);
     if(target.includes('/rest/v1/backup_exports?'))return reply([{id:'77777777-7777-4777-8777-777777777777',checksum_sha256:snapshot.checksum}]);
-    if(target.endsWith('/rest/v1/rpc/dry_run_restore_tenant_backup_v1'))return reply({valid:simulate,restoredRows:3,error:simulate?undefined:'relasi rusak'});
+    if(target.endsWith('/rest/v1/rpc/dry_run_restore_tenant_backup_v2'))return reply({valid:simulate,restoredRows:3,error:simulate?undefined:'relasi rusak'});
     if(target.endsWith('/auth/v1/otp'))return reply({});
     if(target.endsWith('/rest/v1/audit_logs'))return reply([]);
     return reply({message:`Mock belum menangani ${target}`},500);
@@ -113,7 +113,7 @@ test('OTP pemulihan baru dikirim setelah simulasi atomik berhasil',async()=>{
     const result=await call('data-restore/otp',{snapshot});
     assert.equal(result.status,200);
     assert.equal(result.body.emailMasked,'ow***@example.com');
-    const simulation=mock.calls.find((entry)=>entry.target.endsWith('/rest/v1/rpc/dry_run_restore_tenant_backup_v1'));
+    const simulation=mock.calls.find((entry)=>entry.target.endsWith('/rest/v1/rpc/dry_run_restore_tenant_backup_v2'));
     assert.equal(simulation.body.p_tenant_id,ids.tenant);
     assert.ok(mock.calls.some((entry)=>entry.target.endsWith('/auth/v1/otp')));
   }finally{mock.restore();}

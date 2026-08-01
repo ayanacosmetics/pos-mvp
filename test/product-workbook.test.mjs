@@ -30,7 +30,7 @@ test('template barang adalah workbook sederhana dengan SKU opsional dan panduan'
 
 test('multi satuan, varian, dan harga pelanggan memakai file terpisah serta lolos roundtrip',async()=>{
   const XLSX=await sheetJs();
-  for(const kind of ['PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES']){
+  for(const kind of ['PRODUCT_FAMILIES','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_OPTIONS','PRODUCT_PRICES']){
     const workbook=createTemplateWorkbook(XLSX,kind),binary=XLSX.write(workbook,{bookType:'xlsx',type:'array'}),matrix=workbookMatrix(XLSX,binary,kind);
     assert.deepEqual([...workbook.SheetNames],[workbookTemplates[kind].sheet,'Panduan']);
     assert.deepEqual(Array.from(matrix[0].slice(0,workbookTemplates[kind].headers.length)),workbookTemplates[kind].headers);
@@ -55,8 +55,8 @@ test('export barang dapat difilter dan diurutkan menurut nomor barang, barcode, 
 });
 
 test('export setiap jenis produk menghasilkan sheet dan jumlah baris yang sesuai',async()=>{
-  const XLSX=await sheetJs(),products=[{sku:'SKU-1',name:'Produk',category:'Tes',active:true,variantGroup:'Warna',variantName:'Merah',units:[{name:'pcs',factor:1,barcode:'1'},{name:'dus',factor:12,barcode:'12'}],priceRules:[{customerGroupId:'retail',minBaseQty:1,unitPriceBase:1000},{customerGroupId:'member',minBaseQty:1,unitPriceBase:900}]}];
-  for(const [kind,count] of [['PRODUCTS',1],['PRODUCT_UNITS',2],['PRODUCT_VARIANTS',1],['PRODUCT_PRICES',1]]){
+  const XLSX=await sheetJs(),products=[{sku:'SKU-1',name:'Produk',category:'Tes',active:true,familyCode:'FAM-1',familyName:'Warna',familyBarcodes:['999'],variantGroup:'Warna',variantName:'Merah',variantOptions:[{name:'Warna',value:'Merah',position:1}],units:[{name:'pcs',factor:1,barcode:'1'},{name:'dus',factor:12,barcode:'12'}],priceRules:[{customerGroupId:'retail',minBaseQty:1,unitPriceBase:1000},{customerGroupId:'member',minBaseQty:1,unitPriceBase:900}]}];
+  for(const [kind,count] of [['PRODUCTS',1],['PRODUCT_FAMILIES',1],['PRODUCT_UNITS',2],['PRODUCT_VARIANTS',1],['PRODUCT_OPTIONS',1],['PRODUCT_PRICES',1]]){
     const result=createProductExportWorkbook(XLSX,products,{status:'ALL'},kind);
     assert.equal(result.count,count);assert.equal(result.workbook.SheetNames[0],workbookTemplates[kind].sheet);
   }

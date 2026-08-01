@@ -101,6 +101,8 @@ let posProductIndexSource = null;
 let posProductRenderFrame = 0;
 let posProductSearchTimer = 0;
 let posCategoryRenderKey = '';
+let variantPickerProducts=[];
+let variantPickerTarget='pos';
 const POS_PRODUCT_ROW_HEIGHT = 88;
 const POS_PRODUCT_OVERSCAN = 8;
 
@@ -564,12 +566,33 @@ function ensurePosProductSearchIndex(){
   posProductIndexSource=state.products;
   posProductSearchIndex=new Map(state.products.map((product)=>[
     product.id,
-    `${product.name} ${product.sku} ${product.category??''} ${product.units.map((unit)=>unit.barcode).join(' ')}`.toLocaleLowerCase('id')
+    `${product.name} ${product.sku} ${product.category??''} ${product.familyName??product.variantGroup??''} ${product.variantName??''} ${(product.variantOptions??[]).map((option)=>`${option.name} ${option.value}`).join(' ')} ${product.units.map((unit)=>unit.barcode).join(' ')} ${(product.familyBarcodes??[]).join(' ')}`.toLocaleLowerCase('id')
   ]));
   posCategoryRenderKey='';
 }
 
-function posProductCard(product,favorites){
+function posCatalogEntries(products){
+  const entries=[],families=new Map();
+  products.forEach((product)=>{
+    const key=product.familyId||product.familyCode||(product.variantGroup?`legacy:${product.variantGroup.toLocaleLowerCase('id')}`:null);
+    if(!key)return entries.push({kind:'SKU',id:product.id,product,products:[product]});
+    if(!families.has(key))families.set(key,{kind:'FAMILY',id:String(key),products:[],name:product.familyName||product.variantGroup});
+    families.get(key).products.push(product);
+  });
+  families.forEach((entry)=>entries.push(entry.products.length>1?entry:{kind:'SKU',id:entry.products[0].id,product:entry.products[0],products:entry.products}));
+  return entries.sort((a,b)=>String(a.name??a.product?.name??'').localeCompare(String(b.name??b.product?.name??''),'id',{numeric:true,sensitivity:'base'}));
+}
+
+function posProductCard(entry,favorites){
+  if(entry.kind==='FAMILY'){
+    const representative=entry.products.find((product)=>product.imageUrl)||entry.products[0];
+    const available=entry.products.filter((product)=>product.trackStock===false||Number(product.stockBase??0)>0);
+    const prices=entry.products.map((product)=>product.priceRules.find((item)=>item.customerGroupId==='retail'&&Number(item.minBaseQty)===1)?.unitPriceBase).filter((value)=>Number(value)>0);
+    const minimum=prices.length?Math.min(...prices):0,totalStock=entry.products.reduce((sum,product)=>sum+Math.max(0,Number(product.stockBase??0)),0);
+    const ids=entry.products.map((product)=>product.id),allFavorite=ids.every((id)=>favorites.has(id));
+    return `<article class="product-card-shell family-card-shell"><button class="product-card ${available.length?'':'out-of-stock'}" data-family="${escapeHtml(entry.id)}" ${available.length?'':'disabled'}>${productThumbnail(representative)}<span class="product-list-copy"><span class="category">${escapeHtml(representative.category)}</span><strong>${escapeHtml(entry.name)}</strong><small>${entry.products.length} kombinasi varian</small></span><span class="product-list-meta"><strong>${minimum?`Mulai ${money.format(minimum)}`:'-'}</strong><small class="${available.length?'':'stock-empty'}">${available.length?`Total stok ${totalStock.toLocaleString('id-ID')} pcs`:'STOK KOSONG'}</small></span></button><button class="favorite-product ${allFavorite?'active':''}" type="button" data-favorite-products="${escapeHtml(ids.join(','))}" aria-label="${allFavorite?'Hapus dari':'Tambahkan ke'} favorit" aria-pressed="${allFavorite}">★</button></article>`;
+  }
+  const product=entry.product;
   const unit = sortedProductUnits(product)[0];
   const rule = product.priceRules.find((item) => item.customerGroupId === 'retail') ?? product.priceRules[0];
   const tracksStock=product.trackStock!==false,empty=tracksStock&&Number(product.stockBase??0)<=0;
@@ -590,7 +613,7 @@ function renderVisiblePosProducts(){
     const start=Math.max(0,Math.floor(viewport.scrollTop/POS_PRODUCT_ROW_HEIGHT)-POS_PRODUCT_OVERSCAN);
     const end=Math.min(posProductMatches.length,start+visibleCount+(POS_PRODUCT_OVERSCAN*2));
     const favorites=favoriteProductIds();
-    grid.innerHTML=`<div class="pos-product-spacer" style="height:${start*POS_PRODUCT_ROW_HEIGHT}px" aria-hidden="true"></div>${posProductMatches.slice(start,end).map((product)=>posProductCard(product,favorites)).join('')}<div class="pos-product-spacer" style="height:${(posProductMatches.length-end)*POS_PRODUCT_ROW_HEIGHT}px" aria-hidden="true"></div>`;
+    grid.innerHTML=`<div class="pos-product-spacer" style="height:${start*POS_PRODUCT_ROW_HEIGHT}px" aria-hidden="true"></div>${posProductMatches.slice(start,end).map((entry)=>posProductCard(entry,favorites)).join('')}<div class="pos-product-spacer" style="height:${(posProductMatches.length-end)*POS_PRODUCT_ROW_HEIGHT}px" aria-hidden="true"></div>`;
     bindProductImageFallbacks(grid);
   });
 }
@@ -599,11 +622,12 @@ function renderProducts(query = '') {
   ensurePosProductSearchIndex();
   const normalized = query.trim().toLowerCase();
   const favorites=favoriteProductIds();
-  posProductMatches = state.products.filter((product) =>
+  const matchingProducts=state.products.filter((product) =>
     (!normalized || posProductSearchIndex.get(product.id)?.includes(normalized))
     && (!state.posCategoryFilter || product.category===state.posCategoryFilter)
     && (!state.favoriteOnly || favorites.has(product.id))
   );
+  posProductMatches=posCatalogEntries(matchingProducts);
   renderPosCategoryFilters();
   el('favorite-filter').setAttribute('aria-pressed',String(state.favoriteOnly));
   const viewport=document.querySelector('#page-pos .pos-product-scroll');
@@ -638,9 +662,11 @@ function renderProductExportFilters(){
   updateProductExportCount();
 }
 
+const productWorkbookKinds=['PRODUCTS','PRODUCT_FAMILIES','PRODUCT_VARIANTS','PRODUCT_OPTIONS','PRODUCT_UNITS','PRODUCT_PRICES'];
+
 function updateProductExportCount(){
   if(!el('export-product-count'))return;
-  const kind=['PRODUCTS','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES'].includes(el('import-kind')?.value)?el('import-kind').value:'PRODUCTS';
+  const kind=productWorkbookKinds.includes(el('import-kind')?.value)?el('import-kind').value:'PRODUCTS';
   const rows=kind==='PRODUCTS'?productExportRows(state.managedProducts,productExportFilters()):productExtensionExportRows(state.managedProducts,kind,productExportFilters());
   el('export-product-count').textContent=`${rows.length.toLocaleString('id-ID')} baris ${workbookTemplates[kind].sheet} akan diexport.`;
 }
@@ -648,10 +674,10 @@ function updateProductExportCount(){
 function exportProductsXlsx(){
   try{
     if(!window.XLSX)throw new Error('Komponen Excel belum siap. Muat ulang aplikasi.');
-    const kind=['PRODUCTS','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES'].includes(el('import-kind').value)?el('import-kind').value:'PRODUCTS';
+    const kind=productWorkbookKinds.includes(el('import-kind').value)?el('import-kind').value:'PRODUCTS';
     const {workbook,count}=createProductExportWorkbook(window.XLSX,state.managedProducts,productExportFilters(),kind);
     if(!count)throw new Error('Tidak ada barang yang cocok dengan filter export');
-    const names={PRODUCTS:'barang',PRODUCT_UNITS:'satuan-barang',PRODUCT_VARIANTS:'varian-barang',PRODUCT_PRICES:'harga-pelanggan'};
+    const names={PRODUCTS:'barang',PRODUCT_FAMILIES:'etalase-barang',PRODUCT_UNITS:'satuan-barang',PRODUCT_VARIANTS:'pemetaan-varian',PRODUCT_OPTIONS:'opsi-varian',PRODUCT_PRICES:'harga-pelanggan'};
     window.XLSX.writeFile(workbook,`${names[kind]}-kasir-nusa-${new Date().toISOString().slice(0,10)}.xlsx`,{compression:true});
     toast(`${count.toLocaleString('id-ID')} baris berhasil diexport`);
   }catch(error){toast(error.message);}
@@ -1378,7 +1404,9 @@ async function recordSupplierPayment(event){
 const importAliases = {
   PRODUCTS: { no_barang_sku:'sku',sku:'sku',nama_barang:'name',nama:'name',kategori:'category',merek:'brand',satuan_terkecil:'baseUnit',satuan_dasar:'baseUnit',barcode_satuan_terkecil:'baseBarcode',barcode_satuan_dasar:'baseBarcode',barcode_dasar:'baseBarcode',harga_umum:'retailPrice',harga_ecer:'retailPrice',harga_grosir:'wholesalePrice',min_qty_grosir:'tierQty',harga_per_pcs_grosir:'tierPrice',satuan_besar:'bulkUnit',isi_dalam_pcs:'bulkFactor',isi_satuan_besar:'bulkFactor',barcode_satuan_besar:'bulkBarcode',aturan_stok:'trackStock',pakai_stok:'trackStock',stok_awal:'openingQty',modal_per_pcs:'openingCost',modal_per_satuan_dasar:'openingCost',modal_awal:'openingCost',nomor_batch:'batchNo',tanggal_exp:'expiresOn',stok_minimum:'minimumStock',pantau_exp:'trackExpiry' },
   PRODUCT_UNITS: { no_barang_sku:'sku',sku:'sku',nama_satuan:'unitName',satuan:'unitName',isi_dalam_satuan_dasar:'factor',isi:'factor',barcode:'barcode' },
-  PRODUCT_VARIANTS: { no_barang_sku:'sku',sku:'sku',kelompok_varian:'variantGroup',nama_varian:'variantName' },
+  PRODUCT_FAMILIES: { kode_etalase:'familyCode',nama_etalase:'familyName',barcode_bersama:'sharedBarcode' },
+  PRODUCT_VARIANTS: { no_barang_sku:'sku',sku:'sku',kode_etalase:'familyCode',kelompok_varian:'variantGroup',nama_varian:'variantName' },
+  PRODUCT_OPTIONS: { no_barang_sku:'sku',sku:'sku',nama_opsi:'optionName',nilai_opsi:'optionValue',urutan:'position' },
   PRODUCT_PRICES: { no_barang_sku:'sku',sku:'sku',tipe_pelanggan:'customerGroup',tipe_harga:'customerGroup',minimal_pembelian:'minQty',min_qty:'minQty',harga_per_satuan_dasar:'unitPrice',harga:'unitPrice' },
   CUSTOMERS: { kode:'code',nama:'name',telepon:'phone',kelompok:'groupId' },
   SUPPLIERS: { kode:'code',nama:'name',telepon:'phone',alamat:'address' }
@@ -1433,7 +1461,7 @@ function syncImportKindUi() {
     el('export-products-xlsx').textContent=`Export ${template.sheet}`;
   }
   el('download-import-template').classList.toggle('hidden',fifo||sales||state.productImportMode==='UPDATE_ONLY');
-  el('export-products-xlsx').classList.toggle('hidden',!['PRODUCTS','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES'].includes(kind));
+  el('export-products-xlsx').classList.toggle('hidden',!productWorkbookKinds.includes(kind));
   el('import-capital-file-zone').classList.toggle('hidden',!(fifo||sales));
   el('import-file-title').textContent=fifo?'Pilih Transaksi Pembelian Kaspin':sales?'Pilih Laporan Penjualan Barang bulanan':'Pilih file Excel';
   el('import-secondary-file-title').textContent=sales?'Pilih Laporan Data Penjualan':'Pilih Laporan Modal';
@@ -1445,9 +1473,10 @@ function syncImportKindUi() {
 function syncImportSourceUi(){
   const kind=el('import-kind').value;
   const supported=(state.productImportMode==='CREATE_ONLY'&&kind==='PRODUCTS')||
-    (state.productImportMode==='UPDATE_ONLY'&&['PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES'].includes(kind));
+    (state.productImportMode==='UPDATE_ONLY'&&['PRODUCT_FAMILIES','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_OPTIONS','PRODUCT_PRICES'].includes(kind));
   el('import-source-options').classList.toggle('hidden',!supported||['KASPIN_FIFO','KASPIN_SALES'].includes(kind));
   el('kaspin-barcode-option').classList.toggle('hidden',!supported||kind!=='PRODUCTS'||el('import-source').value==='NUSA');
+  el('kaspin-internal-sku-option').classList.toggle('hidden',!supported||el('import-source').value==='NUSA'||!['PRODUCTS','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES'].includes(kind));
 }
 
 function syncProductImportModeUi(){
@@ -1512,8 +1541,8 @@ function mapCsvRows(kind, matrix) {
   const headers = matrix[0].map((header) => String(header).trim().toLowerCase().replaceAll(' ','_'));
   const mappedHeaders = headers.map((header) => aliases[header] ?? null);
   const requiredByKind={
-    PRODUCTS:['name','retailPrice'],PRODUCT_UNITS:['sku','unitName','factor'],
-    PRODUCT_VARIANTS:['sku','variantGroup','variantName'],PRODUCT_PRICES:['sku','customerGroup','minQty','unitPrice'],
+    PRODUCTS:['name','retailPrice'],PRODUCT_FAMILIES:['familyCode','familyName'],PRODUCT_UNITS:['sku','unitName','factor'],
+    PRODUCT_VARIANTS:['sku','familyCode','variantGroup','variantName'],PRODUCT_OPTIONS:['sku','optionName','optionValue'],PRODUCT_PRICES:['sku','customerGroup','minQty','unitPrice'],
     CUSTOMERS:['code','name'],SUPPLIERS:['code','name']
   };
   const required = requiredByKind[kind]??[];
@@ -1530,6 +1559,8 @@ function renderImportSourceReport(report){
   if(report.deferred)notes.push(`${report.deferred} induk varian/multisatuan belum diimpor dari file ini dan menunggu file detail tipe produk Kaspin.`);
   if(report.detailedTypeRows)notes.push(`${report.detailedTypeRows} barang bertipe selain Default dibuat sebagai barang utama dahulu; detail varian/multisatuan memerlukan file tipe produk Kaspin.`);
   if(report.serviceRows)notes.push(`${report.serviceRows} barang bertanda jasa/tanpa batas stok dibawa sebagai produk dengan stok sesuai file.`);
+  if(report.useInternalSku)notes.push('SKU internal Nusa dibuat stabil dengan awalan KP-. Kode asli Kaspin tetap dipakai untuk pencocokan barcode dan riwayat.');
+  if(report.sharedBarcodeCandidates?.length)notes.push(`${report.sharedBarcodeCandidates.length} barcode muncul pada beberapa produk. Barcode tersebut tidak ditempelkan ke SKU dan harus ditetapkan sekali sebagai barcode bersama setelah produk dipetakan ke etalase.`);
   const subject=report.fileType??'Barang';
   const fifoSummary=report.purchaseLines?` · ${report.receipts} transaksi · ${report.purchaseLines} baris pembelian · ${report.capitalLines} baris modal`:'';
   const salesSummary=report.salesLines?` · ${report.receipts} struk · ${report.salesLines} baris barang`:'';
@@ -1546,15 +1577,17 @@ function renderImportPreview(preview,sourceReport=null) {
   el('import-errors').innerHTML = `${renderImportSourceReport(sourceReport)}${preview.warnings?.length ? `<div class="import-source-report warning"><strong>${preview.warnings.length} baris dilewati tanpa menggagalkan impor</strong>${preview.warnings.slice(0,12).map((warning)=>`<p>${escapeHtml(warning.message)}</p>`).join('')}</div>`:''}${preview.errors.length ? `<div class="import-error-list"><strong>${preview.errors.length} hal perlu diperbaiki</strong>${preview.errors.slice(0,20).map((error) => `<p>Baris ${error.row || '—'} · ${escapeHtml(error.message)}</p>`).join('')}</div>` : ''}`;
   const keysByKind={
     PRODUCTS:['sku','name','baseUnit','retailPrice','trackStock','openingQty','minimumStock','trackExpiry'],
+    PRODUCT_FAMILIES:['familyCode','familyName','sharedBarcode'],
     PRODUCT_UNITS:['sku','unitName','factor','unitPriceTotal','barcode'],
-    PRODUCT_VARIANTS:['sku','variantGroup','variantName'],
+    PRODUCT_VARIANTS:['sku','familyCode','variantGroup','variantName'],
+    PRODUCT_OPTIONS:['sku','optionName','optionValue','position'],
     PRODUCT_PRICES:['sku','customerGroup','minQty','unitPrice'],
     KASPIN_FIFO:['transactionCode','occurredAt','productCode','productName','quantity','unitCost'],
     KASPIN_SALES:['transactionCode','occurredAt','productCode','productName','quantity','lineGross','grandTotal'],
     CUSTOMERS:['code','name','phone','email','groupId','loyaltyPoints'],SUPPLIERS:['code','name','phone','address']
   };
   const keys=keysByKind[preview.kind]??[];
-  const labels = { sku:'No. barang / SKU',name:'Nama',baseUnit:'Satuan dasar',retailPrice:'Harga umum',trackStock:'Aturan stok (0/1)',openingQty:'Stok awal',minimumStock:'Stok minimum',trackExpiry:'Pantau EXP',unitName:'Nama satuan',factor:'Isi satuan dasar',unitPriceTotal:'Harga per satuan',barcode:'Barcode',variantGroup:'Kelompok varian',variantName:'Nama varian',customerGroup:'Tipe pelanggan',minQty:'Minimal beli',unitPrice:'Harga / satuan dasar',code:'Kode',phone:'Telepon',email:'Email',groupId:'Tipe pelanggan',loyaltyPoints:'Poin',address:'Alamat',transactionCode:'Transaksi',occurredAt:'Tanggal',productCode:'Kode barang',productName:'Nama barang',quantity:'Jumlah',unitCost:'Modal / pcs',lineGross:'Total barang',grandTotal:'Total struk' };
+  const labels = { sku:'No. barang / SKU',name:'Nama',baseUnit:'Satuan dasar',retailPrice:'Harga umum',trackStock:'Aturan stok (0/1)',openingQty:'Stok awal',minimumStock:'Stok minimum',trackExpiry:'Pantau EXP',familyCode:'Kode etalase',familyName:'Nama etalase',sharedBarcode:'Barcode bersama',unitName:'Nama satuan',factor:'Isi satuan dasar',unitPriceTotal:'Harga per satuan',barcode:'Barcode',variantGroup:'Kelompok varian',variantName:'Nama varian',optionName:'Nama opsi',optionValue:'Nilai opsi',position:'Urutan',customerGroup:'Tipe pelanggan',minQty:'Minimal beli',unitPrice:'Harga / satuan dasar',code:'Kode',phone:'Telepon',email:'Email',groupId:'Tipe pelanggan',loyaltyPoints:'Poin',address:'Alamat',transactionCode:'Transaksi',occurredAt:'Tanggal',productCode:'Kode barang',productName:'Nama barang',quantity:'Jumlah',unitCost:'Modal / pcs',lineGross:'Total barang',grandTotal:'Total struk' };
   el('import-preview').innerHTML = `<table><thead><tr><th>Baris</th>${keys.map((key) => `<th>${labels[key]}</th>`).join('')}</tr></thead><tbody>${preview.rows.slice(0,50).map((row,index) => `<tr><td>${index+2}</td>${keys.map((key) => `<td>${escapeHtml(row[key] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table>${preview.rows.length>50?'<p class="muted import-more">Menampilkan 50 baris pertama.</p>':''}`;
   el('commit-import').disabled = !preview.valid;
   el('import-message').textContent = preview.valid ? `${summary.total} baris sudah lolos pemeriksaan dan belum disimpan.` : 'Perbaiki file sesuai pesan, lalu pilih kembali file tersebut.';
@@ -1581,16 +1614,17 @@ async function inspectImportFile() {
       ?parseKaspinSalesWorkbooks(window.XLSX,buffer,await capitalFile.arrayBuffer())
       :!isCsv&&source!=='NUSA'
       ?(kind==='PRODUCTS'
-        ?parseKaspinProductWorkbook(window.XLSX,buffer,{useCodeAsBarcode:el('kaspin-code-as-barcode').checked})
+        ?parseKaspinProductWorkbook(window.XLSX,buffer,{useCodeAsBarcode:el('kaspin-code-as-barcode').checked,useInternalSku:el('kaspin-use-internal-sku').checked})
         :kind==='CUSTOMERS'
           ?parseKaspinCustomerWorkbook(window.XLSX,buffer)
-          :parseKaspinProductExtensionWorkbook(window.XLSX,buffer,kind))
+          :parseKaspinProductExtensionWorkbook(window.XLSX,buffer,kind,{useInternalSku:el('kaspin-use-internal-sku').checked}))
       :null;
     if(kind==='KASPIN_FIFO'&&!kaspin)throw new Error('File tidak cocok. Pilih Transaksi_Pembelian dan Laporan_Modal dari Kasir Pintar.');
     if(kind==='KASPIN_SALES'&&!kaspin)throw new Error('File tidak cocok. Pilih Laporan Penjualan Barang bulanan dan Laporan Data Penjualan dari Kasir Pintar.');
     if(source==='KASPIN'&&!kaspin)throw new Error('File ini bukan export Kasir Pintar yang sesuai dengan jenis data yang dipilih.');
     const matrix=kaspin?null:(isCsv?parseCsv(await file.text()):workbookMatrix(window.XLSX,buffer,kind));
-    const rows=kaspin?.rows??mapCsvRows(kind,matrix);
+    let rows=kaspin?.rows??mapCsvRows(kind,matrix);
+    if(kind==='PRODUCT_VARIANTS')rows=rows.filter((row)=>String(row.familyCode??'').trim()||String(row.variantGroup??'').trim()||String(row.variantName??'').trim());
     if(!rows.length)throw new Error(kaspin?.report?.issues?.[0]?.message??'Tidak ada baris yang dapat diimpor.');
     state.importSourceReport=kaspin?.report??null;
     const input = { kind, mode:state.productImportMode, source:kaspin?.report?.source??source, locationId: ['PRODUCTS','KASPIN_FIFO'].includes(kind) ? el('import-location').value : null, rows,capitalRows:kaspin?.capitalRows??[] };
@@ -1637,7 +1671,7 @@ async function loadImportHistory() {
   try {
     const data = await request('/api/imports');
     state.importJobs = data.jobs ?? [];
-    const labels = { PRODUCTS:'Produk',PRODUCT_UNITS:'Satuan barang',PRODUCT_VARIANTS:'Varian barang',PRODUCT_PRICES:'Harga pelanggan',KASPIN_FIFO:'Pembelian & modal FIFO',KASPIN_SALES:'Penjualan & detail struk',CUSTOMERS:'Pelanggan',SUPPLIERS:'Supplier' };
+    const labels = { PRODUCTS:'Produk',PRODUCT_FAMILIES:'Etalase barang',PRODUCT_UNITS:'Satuan barang',PRODUCT_VARIANTS:'Pemetaan varian',PRODUCT_OPTIONS:'Opsi varian',PRODUCT_PRICES:'Harga pelanggan',KASPIN_FIFO:'Pembelian & modal FIFO',KASPIN_SALES:'Penjualan & detail struk',CUSTOMERS:'Pelanggan',SUPPLIERS:'Supplier' };
     el('import-history-list').innerHTML = state.importJobs.length ? state.importJobs.map((job) => `<div class="import-history-row"><div><strong>${labels[job.import_kind] ?? job.import_kind}</strong><small>${escapeHtml(job.file_name ?? 'Tanpa nama file')} · ${new Intl.DateTimeFormat('id-ID',{dateStyle:'medium',timeStyle:'short'}).format(new Date(job.created_at))}</small></div><div><strong>${job.total_rows} baris</strong><small>${job.created_rows} baru · ${job.updated_rows} diperbarui</small></div><span class="badge ok">Selesai</span></div>`).join('') : '<div class="empty-state compact">Belum ada riwayat impor.</div>';
   } catch (error) { el('import-history-list').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`; }
 }
@@ -2508,6 +2542,39 @@ function openUnitPicker(productId, { cartIndex = null, scanFallback = false } = 
   if (!dialog.open) dialog.showModal();
 }
 
+function variantDisplayName(product){
+  const options=(product.variantOptions??[]).map((option)=>`${option.name}: ${option.value}`);
+  return options.length?options.join(' · '):(product.variantName||product.name);
+}
+
+function familyProductsByKey(key){
+  return state.products.filter((product)=>String(product.familyId||product.familyCode||(product.variantGroup?`legacy:${product.variantGroup.toLocaleLowerCase('id')}`:''))===String(key));
+}
+
+function openVariantPicker(products,{target='pos',sharedBarcode=false}={}){
+  variantPickerProducts=[...products].sort((a,b)=>variantDisplayName(a).localeCompare(variantDisplayName(b),'id',{numeric:true,sensitivity:'base'}));
+  variantPickerTarget=target;
+  if(!variantPickerProducts.length)return toast('Etalase tidak memiliki varian aktif.');
+  const familyName=variantPickerProducts[0].familyName||variantPickerProducts[0].variantGroup||variantPickerProducts[0].name;
+  el('variant-picker-family').textContent=familyName;
+  el('variant-picker-help').textContent=sharedBarcode?'Barcode bersama dikenali. Pilih varian yang sedang diproses.':'Pilih kombinasi warna, ukuran, atau opsi lainnya.';
+  el('variant-picker-options').innerHTML=variantPickerProducts.map((product)=>{
+    const empty=product.trackStock!==false&&Number(product.stockBase??0)<=0;
+    const retail=product.priceRules.find((rule)=>rule.customerGroupId==='retail'&&Number(rule.minBaseQty)===1)?.unitPriceBase??0;
+    return `<button class="variant-picker-option" type="button" data-variant-product="${escapeHtml(product.id)}" ${empty?'disabled':''}><span><strong>${escapeHtml(variantDisplayName(product))}</strong><small>${escapeHtml(product.sku)} · ${product.units.length>1?`${product.units.length} satuan jual`:'satuan tunggal'}</small></span><span><strong>${money.format(retail)}</strong><small class="${empty?'stock-empty':''}">${product.trackStock===false?'Tanpa stok':empty?'Stok kosong':`Stok ${Number(product.stockBase).toLocaleString('id-ID')} pcs`}</small></span></button>`;
+  }).join('');
+  if(!el('variant-picker-dialog').open)el('variant-picker-dialog').showModal();
+}
+
+async function chooseVariantProduct(productId){
+  const product=variantPickerProducts.find((item)=>item.id===productId);
+  if(!product)return;
+  el('variant-picker-dialog').close();
+  if(variantPickerTarget==='pos')return choosePosProduct(product.id);
+  const unit=sortedProductUnits(product)[0];
+  if(['po','restock'].includes(variantPickerTarget)&&unit)return choosePurchaseProduct(variantPickerTarget,product.id,unit.id);
+}
+
 function choosePosProduct(productId) {
   const product = state.products.find((item) => item.id === productId);
   const units = sortedProductUnits(product);
@@ -2878,8 +2945,18 @@ function barcodeMatch(value) {
     .find(({ unit }) => String(unit.barcode ?? '') === String(value ?? '').trim());
 }
 
+function sharedBarcodeProducts(value){
+  const barcode=String(value??'').trim();
+  const matched=state.products.filter((product)=>(product.familyBarcodes??[]).some((item)=>String(item)===barcode));
+  if(!matched.length)return [];
+  const familyKey=matched[0].familyId||matched[0].familyCode;
+  return state.products.filter((product)=>(product.familyId||product.familyCode)===familyKey);
+}
+
 async function handleCameraBarcode(value) {
   const exact = barcodeMatch(value);
+  const familyMatches=exact?[]:sharedBarcodeProducts(value);
+  if(familyMatches.length)return openVariantPicker(familyMatches,{target:barcodeCameraTarget,sharedBarcode:true});
   if (!exact && barcodeCameraTarget === 'pos' && await tryScannedVoucher(value)) return;
   if(!exact&&barcodeCameraTarget==='restock'&&state.session.permissions.includes('catalog.manage')&&['OWNER','ADMIN'].includes(state.session.user.role))return openRestockNewProduct(value);
   if (!exact) return toast(`Barcode ${value} belum terdaftar pada produk.`);
@@ -2973,6 +3050,8 @@ async function handleNativeScannerBarcode(value) {
   if (!barcode) return;
   if (!el('page-pos').classList.contains('active')) return toast('Buka halaman Kasir sebelum memindai barang.');
   const exact = barcodeMatch(barcode);
+  const familyMatches=exact?[]:sharedBarcodeProducts(barcode);
+  if(familyMatches.length)return openVariantPicker(familyMatches,{target:'pos',sharedBarcode:true});
   if (!exact && await tryScannedVoucher(barcode)) return;
   if (!exact) return toast(`Barcode ${barcode} belum terdaftar pada produk.`);
   await addScannedProduct(exact.product, exact.unit);
@@ -6858,6 +6937,7 @@ el('product-search').addEventListener('keydown', (event) => {
   const value = event.target.value.trim();
   const exact = barcodeMatch(value);
   if (exact) addScannedProduct(exact.product, exact.unit);
+  else if(sharedBarcodeProducts(value).length)openVariantPicker(sharedBarcodeProducts(value),{target:'pos',sharedBarcode:true});
   else if(/^[A-Za-z0-9]{10}$/.test(value))tryScannedVoucher(value);
   event.target.value='';
 });
@@ -6865,6 +6945,11 @@ el('pos-category-filters').addEventListener('click',(event)=>{const button=event
 el('favorite-filter').addEventListener('click',()=>{state.favoriteOnly=!state.favoriteOnly;renderProducts(el('product-search').value);});
 document.querySelector('#page-pos .pos-product-scroll').addEventListener('scroll',renderVisiblePosProducts,{passive:true});
 el('product-grid').addEventListener('click',(event)=>{
+  const familyFavorite=event.target.closest('[data-favorite-products]');
+  if(familyFavorite){
+    const favorites=favoriteProductIds(),ids=familyFavorite.dataset.favoriteProducts.split(',').filter(Boolean),remove=ids.every((id)=>favorites.has(id));
+    ids.forEach((id)=>remove?favorites.delete(id):favorites.add(id));saveFavoriteProductIds(favorites);renderProducts(el('product-search').value);return;
+  }
   const favorite=event.target.closest('[data-favorite-product]');
   if(favorite){
     const ids=favoriteProductIds();
@@ -6874,6 +6959,7 @@ el('product-grid').addEventListener('click',(event)=>{
     return;
   }
   const product=event.target.closest('.product-card');
+  if(product?.dataset.family&&!product.disabled)return openVariantPicker(familyProductsByKey(product.dataset.family),{target:'pos'});
   if(product&&!product.disabled)choosePosProduct(product.dataset.product);
 });
 window.addEventListener('resize',renderVisiblePosProducts,{passive:true});
@@ -6957,6 +7043,8 @@ el('unit-picker-options').addEventListener('click', async (event) => {
   await addToCart(context.productId, option.dataset.unitId);
 });
 el('close-unit-picker').addEventListener('click',()=>el('unit-picker-dialog').close());
+el('close-variant-picker').addEventListener('click',()=>el('variant-picker-dialog').close());
+el('variant-picker-options').addEventListener('click',(event)=>{const button=event.target.closest('[data-variant-product]');if(button&&!button.disabled)chooseVariantProduct(button.dataset.variantProduct);});
 el('unit-picker-dialog').addEventListener('close',()=>{state.unitPicker=null;});
 el('pay-button').addEventListener('click',openPaymentDialog);
 el('exact-cash-button').addEventListener('click',openPaymentDialog);
@@ -7519,6 +7607,7 @@ el('import-source').addEventListener('change',()=>{
   if(el('import-file').files[0])inspectImportFile();
 });
 el('kaspin-code-as-barcode').addEventListener('change',()=>{if(el('import-file').files[0])inspectImportFile();});
+el('kaspin-use-internal-sku').addEventListener('change',()=>{if(el('import-file').files[0])inspectImportFile();});
 el('import-location').addEventListener('change', () => { if (el('import-file').files[0]) inspectImportFile(); });
 el('commit-import').addEventListener('click', commitImport);
 el('refresh-imports').addEventListener('click', loadImportHistory);

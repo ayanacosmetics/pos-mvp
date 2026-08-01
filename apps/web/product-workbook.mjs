@@ -29,9 +29,19 @@ export const workbookTemplates={
     notes:[['no_barang_sku','Wajib','SKU produk yang sudah tersimpan.','Teks','KOS-001'],['nama_satuan','Wajib','Nama satuan jual. Satu SKU boleh memiliki banyak baris satuan.','Teks','pak'],['isi_dalam_satuan_dasar','Wajib','Jumlah satuan dasar di dalam satu satuan ini. Satuan dasar selalu bernilai 1.','Angka lebih dari 0','6'],['barcode','Opsional','Barcode khusus satuan ini.','Teks; unik bila diisi','899000000006']]},
   PRODUCT_VARIANTS:{
     file:'template-varian-barang-kasir-nusa.xlsx',sheet:'Varian Barang',
-    headers:['no_barang_sku','kelompok_varian','nama_varian'],
-    examples:[['LIP-RED','Lip Tint Velvet','Merah'],['LIP-PINK','Lip Tint Velvet','Pink'],['LIP-NUDE','Lip Tint Velvet','Nude']],
-    notes:[['no_barang_sku','Wajib','Setiap varian harus merupakan SKU yang sudah tersimpan.','Teks','LIP-RED'],['kelompok_varian','Wajib','Nama induk yang menyatukan beberapa SKU varian.','Teks','Lip Tint Velvet'],['nama_varian','Wajib','Pembeda yang dilihat kasir, misalnya warna, ukuran, atau aroma.','Teks','Merah']]},
+    headers:['no_barang_sku','nama_barang_referensi','barcode_referensi','kode_etalase','kelompok_varian','nama_varian'],
+    examples:[['LIP-RED','Lip Tint Velvet Merah','899000000001','LIP-VELVET','Lip Tint Velvet','Merah'],['LIP-NUDE-05','Lip Tint Velvet Nude 5 ml','899000000002','LIP-VELVET','Lip Tint Velvet','Nude · 5 ml']],
+    notes:[['no_barang_sku','Wajib untuk baris yang dipetakan','Setiap kombinasi varian harus merupakan SKU yang sudah tersimpan. Baris yang kolom pemetaannya kosong akan dilewati.','Teks','LIP-RED'],['nama_barang_referensi','Informasi; jangan diubah','Nama produk saat file diexport, untuk membantu pemetaan.','Teks','Lip Tint Velvet Merah'],['barcode_referensi','Informasi; jangan diubah','Barcode SKU saat file diexport.','Teks','899000000001'],['kode_etalase','Wajib untuk varian','Kode stabil yang menghubungkan SKU dengan etalase. Buat kode yang sama untuk seluruh kombinasi.','Huruf, angka, tanda hubung','LIP-VELVET'],['kelompok_varian','Wajib untuk varian','Nama etalase/keluarga yang menyatukan beberapa SKU.','Teks','Lip Tint Velvet'],['nama_varian','Wajib untuk varian','Nama kombinasi yang dilihat kasir, misalnya Merah · 5 ml.','Teks','Merah · 5 ml']]},
+  PRODUCT_FAMILIES:{
+    file:'template-etalase-barang-kasir-nusa.xlsx',sheet:'Etalase Barang',
+    headers:['kode_etalase','nama_etalase','barcode_bersama'],
+    examples:[['LIP-VELVET','Lip Tint Velvet','899000009999']],
+    notes:[['kode_etalase','Wajib','Kode etalase yang stabil dan unik.','Huruf, angka, tanda hubung','LIP-VELVET'],['nama_etalase','Wajib','Nama yang tampil sebagai satu etalase di kasir.','Teks','Lip Tint Velvet'],['barcode_bersama','Opsional','Barcode produsen yang membuka pilihan varian. Jangan salin barcode ini ke setiap SKU.','Teks; unik antar-etalase','899000009999']]},
+  PRODUCT_OPTIONS:{
+    file:'template-opsi-varian-kasir-nusa.xlsx',sheet:'Opsi Varian',
+    headers:['no_barang_sku','nama_opsi','nilai_opsi','urutan'],
+    examples:[['LIP-NUDE-05','Warna','Nude',1],['LIP-NUDE-05','Ukuran','5 ml',2]],
+    notes:[['no_barang_sku','Wajib','SKU kombinasi yang sudah tersimpan.','Teks','LIP-NUDE-05'],['nama_opsi','Wajib','Dimensi pilihan, misalnya Warna atau Ukuran.','Teks','Warna'],['nilai_opsi','Wajib','Nilai untuk SKU ini.','Teks','Nude'],['urutan','Opsional','Urutan tampilan opsi.','Angka 1 atau lebih','1']]},
   PRODUCT_PRICES:{
     file:'template-harga-pelanggan-kasir-nusa.xlsx',sheet:'Harga Pelanggan',
     headers:['no_barang_sku','tipe_pelanggan','minimal_pembelian','harga_per_satuan_dasar'],
@@ -117,7 +127,13 @@ export function productExportRows(products,filters={}){
 export function productExtensionExportRows(products,kind,filters={}){
   const selected=filteredProducts(products,filters);
   if(kind==='PRODUCT_UNITS')return selected.flatMap((product)=>(product.units??[]).map((unit)=>({no_barang_sku:product.sku,nama_satuan:unit.name,isi_dalam_satuan_dasar:Number(unit.factor),barcode:unit.barcode??''}))).sort((a,b)=>compare(a.no_barang_sku,b.no_barang_sku)||a.isi_dalam_satuan_dasar-b.isi_dalam_satuan_dasar);
-  if(kind==='PRODUCT_VARIANTS')return selected.filter((product)=>product.variantGroup||product.variantName).map((product)=>({no_barang_sku:product.sku,kelompok_varian:product.variantGroup??'',nama_varian:product.variantName??''})).sort((a,b)=>compare(a.kelompok_varian,b.kelompok_varian)||compare(a.nama_varian,b.nama_varian));
+  if(kind==='PRODUCT_FAMILIES'){
+    const families=new Map();
+    selected.forEach((product)=>{if(product.familyCode&&product.familyName&&!families.has(product.familyCode))families.set(product.familyCode,{kode_etalase:product.familyCode,nama_etalase:product.familyName,barcode_bersama:product.familyBarcodes?.[0]??''});});
+    return [...families.values()].sort((a,b)=>compare(a.nama_etalase,b.nama_etalase));
+  }
+  if(kind==='PRODUCT_VARIANTS')return selected.map((product)=>({no_barang_sku:product.sku,nama_barang_referensi:product.name,barcode_referensi:(product.units??[]).find((unit)=>Number(unit.factor)===1)?.barcode??product.legacyCode??'',kode_etalase:product.familyCode??'',kelompok_varian:product.familyName??product.variantGroup??'',nama_varian:product.variantName??''})).sort((a,b)=>Number(!a.kelompok_varian)-Number(!b.kelompok_varian)||compare(a.kelompok_varian,b.kelompok_varian)||compare(a.nama_varian,b.nama_varian)||compare(a.no_barang_sku,b.no_barang_sku));
+  if(kind==='PRODUCT_OPTIONS')return selected.flatMap((product)=>(product.variantOptions??[]).map((option)=>({no_barang_sku:product.sku,nama_opsi:option.name,nilai_opsi:option.value,urutan:Number(option.position??1)}))).sort((a,b)=>compare(a.no_barang_sku,b.no_barang_sku)||a.urutan-b.urutan||compare(a.nama_opsi,b.nama_opsi));
   if(kind==='PRODUCT_PRICES')return selected.flatMap((product)=>(product.priceRules??[]).filter((rule)=>rule.customerGroupId&&rule.customerGroupId!=='retail').map((rule)=>({no_barang_sku:product.sku,tipe_pelanggan:rule.customerGroupId,minimal_pembelian:Number(rule.minBaseQty),harga_per_satuan_dasar:Number(rule.unitPriceBase)}))).sort((a,b)=>compare(a.no_barang_sku,b.no_barang_sku)||compare(a.tipe_pelanggan,b.tipe_pelanggan)||a.minimal_pembelian-b.minimal_pembelian);
   throw new Error('Jenis export produk tidak dikenal');
 }

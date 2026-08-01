@@ -43,6 +43,16 @@ Rahasia Supabase hanya boleh berada di environment variables. Jangan pernah
 menaruh atau menampilkan `SUPABASE_SERVICE_ROLE_KEY` di browser, screenshot,
 kode frontend, dokumentasi publik, atau chat.
 
+## Kandidat lokal v2.17.0 — 2026-08-01 (belum dipasang ke produksi)
+
+- Etalase berisi SKU kombinasi datar; stok, modal, harga, satuan, batch/EXP, dan histori tetap terpisah per SKU.
+- Barcode SKU unik langsung memilih SKU. Barcode bersama etalase membuka pemilih varian, dan database melarang kedua jenis barcode bertumpang tindih.
+- Impor Kaspin membuat SKU internal `KP-`, mempertahankan kode lama, dan menandai kode duplikat sebagai kandidat barcode bersama.
+- Export/import massal mencakup `PRODUCT_FAMILIES`, `PRODUCT_VARIANTS`, dan `PRODUCT_OPTIONS`.
+- Restok/PO selalu memilih SKU konkret; backup, reset, dry-run restore, dan restore ikut menjaga struktur etalase/varian.
+- Kandidat: aplikasi `2.17.0`, API `2.17.0-cloud`, cache `v165`; `npm test` lulus 298/298.
+- Belum commit/push/deploy. Jalankan hanya `supabase/migrations/202608010005_future_product_catalog.sql`, konfirmasi berhasil, lalu commit/push/deploy.
+
 ## 3. Status rilis
 
 ### Rilis v2.16.4 Tabel Produk Ringkas

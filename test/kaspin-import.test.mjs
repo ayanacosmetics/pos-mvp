@@ -35,9 +35,9 @@ test('parser Kaspin mempertahankan seluruh digit kode dan melewati baris invalid
   assert.equal(parsed.report.deferred,1);
   assert.equal(parsed.report.deferredRows[0].row,5);
   assert.equal(parsed.report.issues[0].row,6);
-  assert.equal(parsed.rows[0].sku,'8993137697170');
+  assert.equal(parsed.rows[0].sku,'KP-8993137697170');
   assert.equal(parsed.rows[0].baseBarcode,'8993137697170');
-  assert.equal(parsed.rows[1].sku,'0000000000001');
+  assert.equal(parsed.rows[1].sku,'KP-0000000000001');
   assert.equal(parsed.rows[1].baseBarcode,'0000000000001');
   assert.equal(parsed.rows[0].batchNo,'SALDO-AWAL-KASPIN');
   assert.equal(parsed.rows[0].openingQty,5);
@@ -51,6 +51,22 @@ test('file biasa tidak salah dideteksi sebagai export Kaspin',async()=>{
   assert.equal(parseKaspinProductWorkbook(XLSX,XLSX.write(workbook,{bookType:'xlsx',type:'array'})),null);
 });
 
+test('kode Kaspin ganda menjadi kandidat barcode bersama dan SKU tetap unik',async()=>{
+  const XLSX=await sheetJs(),workbook=XLSX.utils.book_new();
+  const headers=['alasan_gagal','kode_barang_edit','nama_barang_edit','barang_jasa_edit','show_toko_edit','harga_jual_edit','harga_beli_edit','minimum_stok','stok_edit','tipe_diskon','diskon','berat_dan_satuan','berat','letak_rak','keterangan','kategori','tipe_barang'];
+  XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([
+    headers,headers.map(()=> 'Petunjuk'),
+    ['','8990000000001','Lip Cream Merah',0,0,20000,10000,0,4,0,0,'pcs',0,'','','Lip Cream','Default'],
+    ['','8990000000001','Lip Cream Nude',0,0,20000,10000,0,6,0,0,'pcs',0,'','','Lip Cream','Default']
+  ]),'barang');
+  const parsed=parseKaspinProductWorkbook(XLSX,XLSX.write(workbook,{bookType:'xlsx',type:'array'}));
+  assert.equal(new Set(parsed.rows.map((row)=>row.sku)).size,2);
+  assert.deepEqual(parsed.rows.map((row)=>row.baseBarcode),['','']);
+  assert.deepEqual(parsed.rows.map((row)=>row.legacyCode),['8990000000001','8990000000001']);
+  assert.equal(parsed.report.sharedBarcodeCandidates[0].barcode,'8990000000001');
+  assert.equal(parsed.report.sharedBarcodeCandidates[0].count,2);
+});
+
 test('parser Kaspin membaca multi satuan beserta harga jual satuannya',async()=>{
   const XLSX=await sheetJs(),workbook=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([
@@ -62,8 +78,8 @@ test('parser Kaspin membaca multi satuan beserta harga jual satuannya',async()=>
   assert.equal(parsed.report.fileType,'Multi Satuan');
   assert.equal(parsed.report.mapped,2);
   assert.deepEqual(parsed.rows.map((row)=>({...row})),[
-    {sku:'0000000000001',unitName:'Pcs',factor:1,barcode:'',unitPriceTotal:5000},
-    {sku:'0000000000001',unitName:'Bal',factor:12,barcode:'',unitPriceTotal:42000}
+    {sku:'KP-0000000000001',unitName:'Pcs',factor:1,barcode:'',unitPriceTotal:5000},
+    {sku:'KP-0000000000001',unitName:'Bal',factor:12,barcode:'',unitPriceTotal:42000}
   ]);
 });
 
@@ -77,7 +93,7 @@ test('parser Kaspin hanya membawa harga grosir yang terintegrasi tipe pelanggan'
   const parsed=parseKaspinProductExtensionWorkbook(XLSX,XLSX.write(workbook,{bookType:'xlsx',type:'array'}),'PRODUCT_PRICES');
   assert.equal(parsed.report.mapped,1);
   assert.equal(parsed.report.ignored,1);
-  assert.deepEqual({...parsed.rows[0]},{sku:'0000000000001',customerGroup:'grosir',minQty:12,unitPrice:3500});
+  assert.deepEqual({...parsed.rows[0]},{sku:'KP-0000000000001',customerGroup:'grosir',minQty:12,unitPrice:3500});
 });
 
 test('parser FIFO menggabungkan transaksi pembelian dan laporan modal tanpa mengubah jumlah stok',async()=>{
