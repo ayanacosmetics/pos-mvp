@@ -44,7 +44,7 @@ test('manajemen stok menyediakan daftar dan semua tindakan per barang', async ()
     assert.ok(app.includes(`function ${functionName}`));
   }
   for(const detail of ['data-stock-log-id','Dilakukan oleh','Penyebab','data-open-stock-sale']) assert.ok(app.includes(detail));
-  for(const detail of ['Masuk','Keluar','Riwayat Kaspin','balanceEstimated']) assert.ok(app.includes(detail));
+  for(const detail of ['Masuk','Keluar','Riwayat Kaspin','balanceEstimated','hasKaspinPurchaseLayers','hasKaspinHistory']) assert.ok(app.includes(detail));
   assert.ok(api.includes("route.match(/^inventory-products\\/([^/]+)\\/adjustments$/)"));
   assert.ok(api.includes("route.match(/^inventory-products\\/([^/]+)$/)"));
   assert.ok(api.includes("route.match(/^inventory-sales\\/([^/]+)\\/receipt$/)"));

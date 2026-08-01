@@ -4127,7 +4127,9 @@ function renderStockProductOverview() {
     ...(detail.canViewCost ? [['Nilai batch tersisa', money.format(stockValue)]] : [])
   ].map(([label, value]) => `<article><small>${label}</small><strong>${value}</strong></article>`).join('');
   const balances = detail.balances.map((balance) => `<article class="stock-location-row"><span><strong>${escapeHtml(balance.locationName)}</strong><small>${Number(balance.quantity) > 0 ? 'Stok tersedia' : 'Belum ada stok'}</small></span><span><strong>${Number(balance.quantity).toLocaleString('id-ID')} pcs</strong>${detail.canViewCost ? `<small>Modal rata-rata saldo ${money.format(balance.averageCost)}</small>` : ''}</span></article>`).join('');
-  const batches = detail.batches.map((batch) => {
+  const hasKaspinPurchaseLayers=detail.batches.some((batch)=>String(batch.batchNo??'').startsWith('KASPIN-'));
+  const visibleBatches=detail.batches.filter((batch)=>!(hasKaspinPurchaseLayers&&String(batch.batchNo??'')==='SALDO-AWAL-KASPIN'&&Number(batch.availableQty)<=0));
+  const batches = visibleBatches.map((batch) => {
     const depleted = Number(batch.availableQty) <= 0;
     return `<article class="stock-batch-row ${depleted ? 'depleted' : ''}">
       <span><strong>Batch ${escapeHtml(batch.batchNo)}</strong><small>${escapeHtml(batch.locationName)} · diterima ${new Date(batch.receivedAt).toLocaleDateString('id-ID')}</small></span>
@@ -4143,7 +4145,9 @@ function renderStockProductLog() {
   const detail = state.stockProductDetail;
   if (!detail) return;
   const batches = new Map(detail.batches.map((batch) => [batch.id, batch]));
-  const rows = detail.ledger.map((entry) => {
+  const hasKaspinHistory=detail.ledger.some((entry)=>entry.legacy===true);
+  const visibleLedger=detail.ledger.filter((entry)=>!(hasKaspinHistory&&entry.eventType==='OPENING_IMPORT'));
+  const rows = visibleLedger.map((entry) => {
     const allocations = detail.allocations.filter((allocation) => allocation.saleId === entry.referenceId);
     const layerText = allocations.map((allocation) => {
       const batch = batches.get(allocation.batchId);
