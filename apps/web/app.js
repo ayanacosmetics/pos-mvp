@@ -86,6 +86,12 @@ let barcodeCameraTimer = null;
 let barcodeCameraTarget = null;
 let barcodeCameraControls = null;
 let barcodeCameraCompleting = false;
+let attendanceCameraStream=null;
+let attendanceCameraTimer=null;
+let attendanceFaceDetector=null;
+let attendanceFaceStableAt=0;
+let attendanceCapturedPhoto=null;
+let attendanceCameraBusy=false;
 let lastTelemetryAt = 0;
 let productManagementPromise = null;
 let deferredBootstrapRun = 0;
@@ -2161,6 +2167,100 @@ async function attendancePhotoFromFile(file){
   return result;
 }
 
+function stopAttendanceCamera(){
+  if(attendanceCameraTimer){clearInterval(attendanceCameraTimer);attendanceCameraTimer=null;}
+  attendanceCameraStream?.getTracks().forEach((track)=>track.stop());
+  attendanceCameraStream=null;attendanceCameraBusy=false;attendanceFaceStableAt=0;
+  const video=el('attendance-camera-video');if(video)video.srcObject=null;
+}
+
+function setAttendanceCameraMessage(status,help='Pastikan wajah terlihat jelas dan pencahayaan cukup.'){
+  el('attendance-camera-status').textContent=status;el('attendance-camera-help').textContent=help;
+}
+
+function showAttendanceCameraResult(photo){
+  attendanceCapturedPhoto=photo;stopAttendanceCamera();
+  el('attendance-camera-video').classList.add('hidden');el('attendance-face-guide').classList.add('hidden');
+  el('attendance-camera-countdown').classList.add('hidden');
+  el('attendance-camera-result').src=photo;el('attendance-camera-result').classList.remove('hidden');
+  el('attendance-camera-live-actions').classList.add('hidden');el('attendance-camera-result-actions').classList.remove('hidden');
+  setAttendanceCameraMessage('Periksa hasil foto','Pastikan wajah jelas. Pilih Ulangi bila foto buram atau terpotong.');
+}
+
+function captureAttendanceCamera(){
+  if(attendanceCameraBusy||!attendanceCameraStream)return;
+  attendanceCameraBusy=true;
+  const video=el('attendance-camera-video'),canvas=el('attendance-camera-canvas'),context=canvas.getContext('2d');
+  const sourceWidth=video.videoWidth,sourceHeight=video.videoHeight;
+  if(!sourceWidth||!sourceHeight){attendanceCameraBusy=false;return;}
+  const size=Math.min(sourceWidth,sourceHeight),sourceX=(sourceWidth-size)/2,sourceY=(sourceHeight-size)/2;
+  context.save();context.translate(480,0);context.scale(-1,1);context.drawImage(video,sourceX,sourceY,size,size,0,0,480,480);context.restore();
+  let quality=.78,photo=canvas.toDataURL('image/jpeg',quality);
+  while(photo.length>620000&&quality>.45){quality-=.08;photo=canvas.toDataURL('image/jpeg',quality);}
+  showAttendanceCameraResult(photo);
+}
+
+async function inspectAttendanceFace(){
+  if(attendanceCameraBusy||!attendanceCameraStream)return;
+  const video=el('attendance-camera-video');
+  if(video.readyState<2)return;
+  if(!attendanceFaceDetector){
+    if(!attendanceFaceStableAt)attendanceFaceStableAt=Date.now();
+    const remaining=Math.max(1,Math.ceil((3000-(Date.now()-attendanceFaceStableAt))/1000));
+    el('attendance-camera-countdown').textContent=remaining;el('attendance-camera-countdown').classList.remove('hidden');
+    setAttendanceCameraMessage('Tatap kamera dan tersenyum',`Foto otomatis dalam ${remaining} detik. Tetap diam.`);
+    if(Date.now()-attendanceFaceStableAt>=3000)captureAttendanceCamera();
+    return;
+  }
+  try{
+    const faces=await attendanceFaceDetector.detect(video);
+    if(faces.length!==1){attendanceFaceStableAt=0;el('attendance-camera-countdown').classList.add('hidden');setAttendanceCameraMessage(faces.length?'Pastikan hanya satu wajah':'Arahkan wajah ke dalam oval');return;}
+    const box=faces[0].boundingBox,width=video.videoWidth,height=video.videoHeight;
+    const centerX=(box.x+box.width/2)/width,centerY=(box.y+box.height/2)/height,size=box.width/width;
+    if(size<.25){attendanceFaceStableAt=0;setAttendanceCameraMessage('Dekatkan wajah ke kamera');return;}
+    if(Math.abs(centerX-.5)>.16||Math.abs(centerY-.48)>.18){attendanceFaceStableAt=0;setAttendanceCameraMessage('Posisikan wajah di tengah oval');return;}
+    if(!attendanceFaceStableAt)attendanceFaceStableAt=Date.now();
+    const remaining=Math.max(1,Math.ceil((1600-(Date.now()-attendanceFaceStableAt))/1000));
+    el('attendance-camera-countdown').textContent=remaining;el('attendance-camera-countdown').classList.remove('hidden');
+    setAttendanceCameraMessage('Bagus, sekarang tersenyum',`Tahan posisi. Foto otomatis dalam ${remaining} detik.`);
+    if(Date.now()-attendanceFaceStableAt>=1600)captureAttendanceCamera();
+  }catch{attendanceFaceDetector=null;attendanceFaceStableAt=0;}
+}
+
+async function startAttendanceCamera(){
+  stopAttendanceCamera();attendanceCapturedPhoto=null;
+  el('attendance-camera-result').classList.add('hidden');el('attendance-camera-video').classList.remove('hidden');
+  el('attendance-face-guide').classList.remove('hidden');el('attendance-camera-countdown').classList.add('hidden');
+  el('attendance-camera-live-actions').classList.remove('hidden');el('attendance-camera-result-actions').classList.add('hidden');
+  setAttendanceCameraMessage('Menyiapkan kamera...');
+  try{
+    attendanceCameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:720},height:{ideal:720}},audio:false});
+    const video=el('attendance-camera-video');video.srcObject=attendanceCameraStream;await video.play();
+    attendanceFaceDetector=null;
+    if('FaceDetector' in window){try{attendanceFaceDetector=new FaceDetector({fastMode:true,maxDetectedFaces:1});}catch{attendanceFaceDetector=null;}}
+    setAttendanceCameraMessage('Arahkan wajah ke dalam oval','Tatap kamera dan tersenyum. Foto akan diambil otomatis.');
+    attendanceCameraTimer=setInterval(inspectAttendanceFace,400);
+  }catch(error){
+    stopAttendanceCamera();setAttendanceCameraMessage('Kamera belum dapat dibuka','Izinkan akses kamera, atau gunakan kamera perangkat melalui tombol di bawah.');
+  }
+}
+
+function openAttendanceCamera(){
+  state.attendancePhotoDataUrl=null;attendanceCapturedPhoto=null;
+  const dialog=el('attendance-camera-dialog');if(!dialog.open)dialog.showModal();
+  startAttendanceCamera();
+}
+
+function closeAttendanceCamera(){stopAttendanceCamera();attendanceCapturedPhoto=null;el('attendance-camera-dialog').close();}
+
+async function acceptAttendanceCamera(){
+  if(!attendanceCapturedPhoto)return;
+  state.attendancePhotoDataUrl=attendanceCapturedPhoto;
+  el('attendance-selfie-preview').innerHTML=`<img src="${state.attendancePhotoDataUrl}" alt="Foto wajah siap digunakan"><span><strong>Foto siap</strong><small>Memeriksa GPS dan mencatat absensi...</small></span>`;
+  stopAttendanceCamera();attendanceCapturedPhoto=null;el('attendance-camera-dialog').close();
+  await clockAttendance();
+}
+
 async function openAttendancePhoto(attendanceId,event){
   const viewer=window.open('about:blank','_blank');
   try{const data=await request(`/api/workforce/attendance/${attendanceId}/photo?event=${event}`);if(viewer)viewer.location.href=data.url;else toast('Izinkan pop-up untuk membuka foto absensi.');}
@@ -2188,11 +2288,11 @@ function renderWorkforceOverview(){
   if(!el('target-start').value)el('target-start').value=`${today.slice(0,7)}-01`;
   if(!el('target-end').value)el('target-end').value=new Date(Date.UTC(Number(today.slice(0,4)),Number(today.slice(5,7)),0)).toISOString().slice(0,10);
   const dayNames=['Sen','Sel','Rab','Kam','Jum','Sab','Min'];
-  const ruleRows=(data.shiftRules??[]).map((rule)=>`<article class="workforce-row recurring-shift-row"><div><span class="status-badge approved">BERLAKU TERUS</span><strong>${escapeHtml(employeeName(rule.user_id))}</strong><small>${(rule.weekdays??[]).map((day)=>dayNames[Number(day)-1]).join(', ')} · ${escapeHtml(String(rule.starts_at).slice(0,5))}–${escapeHtml(String(rule.ends_at).slice(0,5))} · ${escapeHtml(outletName(rule.outlet_id))}</small></div><div><small>Mulai ${localDate(rule.effective_from)}</small><small>${escapeHtml(rule.note??'Sampai diubah manual')}</small></div></article>`);
+  const ruleRows=(data.shiftRules??[]).map((rule)=>`<article class="workforce-row recurring-shift-row"><div><span class="status-badge approved">BERLAKU TERUS</span><strong>${escapeHtml(employeeName(rule.user_id))}</strong><small>${(rule.weekdays??[]).map((day)=>dayNames[Number(day)-1]).join(', ')} · ${escapeHtml(String(rule.starts_at).slice(0,5))}–${escapeHtml(String(rule.ends_at).slice(0,5))} · ${escapeHtml(outletName(rule.outlet_id))}</small></div><div><small>Mulai ${localDate(rule.effective_from)}</small><small>${escapeHtml(rule.note??'Sampai diubah manual')}</small>${data.canManage?`<button class="button secondary edit-employee-schedule" type="button" data-kind="RECURRING" data-id="${rule.id}">Edit</button>`:''}</div></article>`);
   const scheduleRows=data.schedules.map((schedule)=>{
     const attendance=data.attendance.find((item)=>item.schedule_id===schedule.id)
       ??data.attendance.find((item)=>item.user_id===schedule.user_id&&item.work_date===schedule.work_date);
-    return `<article class="workforce-row"><div><strong>${escapeHtml(employeeName(schedule.user_id))}</strong><small>${localDate(schedule.work_date)} · ${escapeHtml(String(schedule.starts_at).slice(0,5))}–${escapeHtml(String(schedule.ends_at).slice(0,5))} · ${escapeHtml(outletName(schedule.outlet_id))}</small></div><div>${attendance?attendanceSummaryMarkup(attendance):'<span class="status-badge">BELUM HADIR</span>'}</div></article>`;
+    return `<article class="workforce-row"><div><strong>${escapeHtml(employeeName(schedule.user_id))}</strong><small>${localDate(schedule.work_date)} · ${escapeHtml(String(schedule.starts_at).slice(0,5))}–${escapeHtml(String(schedule.ends_at).slice(0,5))} · ${escapeHtml(outletName(schedule.outlet_id))}</small></div><div>${attendance?attendanceSummaryMarkup(attendance):'<span class="status-badge">BELUM HADIR</span>'}${data.canManage?`<button class="button secondary edit-employee-schedule" type="button" data-kind="ONCE" data-id="${schedule.id}">Edit</button>`:''}</div></article>`;
   });
   const scheduledAttendanceIds=new Set(data.schedules.map((schedule)=>schedule.id));
   const attendanceRows=data.attendance.filter((item)=>!item.schedule_id||!scheduledAttendanceIds.has(item.schedule_id)).map((attendance)=>`<article class="workforce-row attendance-history-row"><div><strong>${escapeHtml(employeeName(attendance.user_id))}</strong><small>${localDate(attendance.work_date)} · ${escapeHtml(outletName(attendance.outlet_id))}</small></div><div>${attendanceSummaryMarkup(attendance)}</div></article>`);
@@ -2224,8 +2324,8 @@ async function clockAttendance(){
     const result=await request('/api/workforce/attendance',{method:'POST',body:JSON.stringify({action:button.dataset.action,
       note:el('attendance-note').value,latitude:position.coords.latitude,longitude:position.coords.longitude,
       accuracy:position.coords.accuracy,photoDataUrl:state.attendancePhotoDataUrl})});
-    el('attendance-note').value='';el('attendance-selfie').value='';state.attendancePhotoDataUrl=null;
-    el('attendance-selfie-preview').textContent='Ambil foto wajah';
+    el('attendance-note').value='';state.attendancePhotoDataUrl=null;
+    el('attendance-selfie-preview').innerHTML='<strong>Ambil foto wajah</strong><small>Kamera depan dengan panduan otomatis</small>';
     el('attendance-location-status').textContent=`Absensi valid · ${Math.round(Number(result.distanceM??0))} meter dari titik usaha.`;
     toast(button.dataset.action==='CLOCK_IN'?'Absensi masuk tercatat':'Absensi keluar tercatat');await loadWorkforceOverview();
   }
@@ -2234,10 +2334,33 @@ async function clockAttendance(){
 
 async function saveEmployeeSchedule(event){
   event.preventDefault();
-  const mode=el('schedule-mode').value;
+  const mode=el('schedule-mode').value,id=el('schedule-id').value;
   const weekdays=[...el('schedule-weekdays').querySelectorAll('input:checked')].map((input)=>Number(input.value));
-  try{await request('/api/workforce/schedules',{method:'POST',body:JSON.stringify({mode,userId:el('schedule-user').value,outletId:el('schedule-outlet').value,workDate:el('schedule-date').value,weekdays,startsAt:el('schedule-start').value,endsAt:el('schedule-end').value,note:el('schedule-note').value})});toast(mode==='RECURRING'?'Jadwal tetap berlaku sampai diubah':'Jadwal tanggal khusus tersimpan');el('schedule-note').value='';await loadWorkforceOverview();}
+  try{await request(`/api/workforce/schedules${id?`/${id}`:''}`,{method:id?'PUT':'POST',body:JSON.stringify({mode,userId:el('schedule-user').value,outletId:el('schedule-outlet').value,workDate:el('schedule-date').value,weekdays,startsAt:el('schedule-start').value,endsAt:el('schedule-end').value,note:el('schedule-note').value})});toast(id?'Perubahan jadwal tersimpan':mode==='RECURRING'?'Jadwal berulang ditambahkan':'Jadwal tanggal khusus ditambahkan');resetEmployeeScheduleForm();await loadWorkforceOverview();}
   catch(error){toast(error.message);}
+}
+
+function editEmployeeSchedule(kind,id){
+  const data=state.workforce.overview;
+  const schedule=kind==='RECURRING'?(data.shiftRules??[]).find((item)=>item.id===id):data.schedules.find((item)=>item.id===id);
+  if(!schedule)return;
+  el('schedule-id').value=id;el('schedule-mode').value=kind;el('schedule-mode').disabled=true;
+  el('schedule-user').value=schedule.user_id;el('schedule-outlet').value=schedule.outlet_id;
+  el('schedule-date').value=kind==='RECURRING'?schedule.effective_from:schedule.work_date;
+  el('schedule-start').value=String(schedule.starts_at).slice(0,5);el('schedule-end').value=String(schedule.ends_at).slice(0,5);
+  el('schedule-note').value=schedule.note??'';
+  el('schedule-weekdays').querySelectorAll('input').forEach((input)=>input.checked=kind==='RECURRING'&&(schedule.weekdays??[]).map(Number).includes(Number(input.value)));
+  el('schedule-form-title').textContent=`Edit jadwal ${employeeName(schedule.user_id)}`;
+  el('save-schedule').textContent='Simpan perubahan';el('cancel-schedule-edit').classList.remove('hidden');syncScheduleMode();
+  el('schedule-form').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function resetEmployeeScheduleForm(){
+  el('schedule-id').value='';el('schedule-mode').disabled=false;el('schedule-mode').value='RECURRING';
+  el('schedule-form-title').textContent='Jadwal baru';el('save-schedule').textContent='Simpan jadwal';
+  el('cancel-schedule-edit').classList.add('hidden');el('schedule-note').value='';
+  el('schedule-date').value=new Date().toISOString().slice(0,10);el('schedule-start').value='08:00';el('schedule-end').value='17:00';
+  el('schedule-weekdays').querySelectorAll('input').forEach((input)=>input.checked=Number(input.value)<=5);syncScheduleMode();
 }
 
 function syncScheduleMode(){
@@ -2245,7 +2368,7 @@ function syncScheduleMode(){
   el('schedule-weekdays').classList.toggle('hidden',!recurring);
   el('schedule-date-label').textContent=recurring?'Berlaku mulai':'Tanggal kerja';
   el('schedule-mode-help').textContent=recurring
-    ?'Jadwal ini terus berulang. Jadwal baru untuk staff dan outlet yang sama akan menutup aturan sebelumnya.'
+    ?'Jadwal ini terus berulang dan dapat diedit kapan saja. Hari kerja tidak boleh bertabrakan dengan jadwal aktif lain.'
     :'Jadwal ini hanya berlaku pada satu tanggal dan dapat menggantikan jadwal berulang hari tersebut.';
 }
 
@@ -7499,16 +7622,26 @@ el('open-shift').addEventListener('click', openShift);
 el('cash-movement').addEventListener('click', addCashMovement);
 el('close-shift').addEventListener('click', closeShift);
 el('refresh-workforce').addEventListener('click',loadWorkforceOverview);
-el('attendance-action').addEventListener('click',clockAttendance);
-el('attendance-selfie').addEventListener('change',async(event)=>{
+el('attendance-action').addEventListener('click',()=>state.attendancePhotoDataUrl?clockAttendance():openAttendanceCamera());
+el('open-attendance-camera').addEventListener('click',openAttendanceCamera);
+el('close-attendance-camera').addEventListener('click',closeAttendanceCamera);
+el('cancel-attendance-camera').addEventListener('click',closeAttendanceCamera);
+el('attendance-camera-dialog').addEventListener('close',stopAttendanceCamera);
+el('retry-attendance-camera').addEventListener('click',startAttendanceCamera);
+el('use-attendance-camera').addEventListener('click',acceptAttendanceCamera);
+el('attendance-camera-upload').addEventListener('click',()=>el('attendance-camera-fallback').click());
+el('attendance-camera-fallback').addEventListener('change',async(event)=>{
   try{
-    state.attendancePhotoDataUrl=await attendancePhotoFromFile(event.target.files?.[0]);
-    el('attendance-selfie-preview').innerHTML=`<img src="${state.attendancePhotoDataUrl}" alt="Pratinjau foto wajah"><span>Foto siap digunakan</span>`;
-  }catch(error){state.attendancePhotoDataUrl=null;event.target.value='';toast(error.message);}
+    const photo=await attendancePhotoFromFile(event.target.files?.[0]);showAttendanceCameraResult(photo);
+  }catch(error){toast(error.message);}finally{event.target.value='';}
 });
 el('schedule-mode').addEventListener('change',syncScheduleMode);
 el('schedule-form').addEventListener('submit',saveEmployeeSchedule);
-el('workforce-schedule-list').addEventListener('click',(event)=>{const button=event.target.closest('.view-attendance-photo');if(button)openAttendancePhoto(button.dataset.attendanceId,button.dataset.event);});
+el('cancel-schedule-edit').addEventListener('click',resetEmployeeScheduleForm);
+el('workforce-schedule-list').addEventListener('click',(event)=>{
+  const photo=event.target.closest('.view-attendance-photo');if(photo)return openAttendancePhoto(photo.dataset.attendanceId,photo.dataset.event);
+  const edit=event.target.closest('.edit-employee-schedule');if(edit)editEmployeeSchedule(edit.dataset.kind,edit.dataset.id);
+});
 el('target-form').addEventListener('submit',saveEmployeeTarget);
 el('refresh-approvals').addEventListener('click',loadApprovals);
 el('approval-request-form').addEventListener('submit',submitApprovalRequest);

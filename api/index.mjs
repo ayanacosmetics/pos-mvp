@@ -1597,7 +1597,7 @@ function normalizeSalePayments(input,total) {
 async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'health') {
     const config = env();
-    return send(response, 200, { status: 'ok', version: '2.16.52-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
+    return send(response, 200, { status: 'ok', version: '2.16.53-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -3039,8 +3039,8 @@ async function routeRequest(request, response, route) {
     if(input.mode==='RECURRING'){
       const weekdays=[...new Set((input.weekdays??[]).map(Number))].filter((day)=>Number.isInteger(day)&&day>=1&&day<=7);
       if(!weekdays.length)throw Object.assign(new Error('Pilih minimal satu hari kerja'),{status:400});
-      const rule=await rpc('save_employee_shift_rule_v1',{
-        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_user_id:input.userId,
+      const rule=await rpc('save_employee_shift_rule_v2',{
+        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_rule_id:null,p_user_id:input.userId,
         p_outlet_id:input.outletId,p_effective_from:input.workDate,p_weekdays:weekdays,
         p_starts_at:input.startsAt,p_ends_at:input.endsAt,p_note:String(input.note??'').trim().slice(0,240)
       });
@@ -3055,6 +3055,39 @@ async function routeRequest(request, response, route) {
       action:'EMPLOYEE_SCHEDULE_CREATED',entity_type:'employee_schedule',entity_id:rows[0].id,
       details_json:{userId:input.userId,outletId:input.outletId,workDate:input.workDate,deviceId}}});
     return send(response,201,rows[0]);
+  }
+
+  const employeeScheduleMatch=route.match(/^workforce\/schedules\/([^/]+)$/);
+  if(request.method==='PUT'&&employeeScheduleMatch){
+    requirePermission(session,'workforce.manage');
+    const input=bodyOf(request),scheduleId=employeeScheduleMatch[1],deviceId=request.headers['x-device-id']||null;
+    const employee=await profileFor(input.userId);
+    if(!employee?.active||employee.tenant_id!==context.tenantId)throw Object.assign(new Error('Karyawan aktif tidak ditemukan'),{status:404});
+    if(!context.outlets.some((outlet)=>outlet.id===input.outletId))throw Object.assign(new Error('Outlet tidak dapat diakses'),{status:403});
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(input.workDate??''))||!/^\d{2}:\d{2}$/.test(String(input.startsAt??''))||!/^\d{2}:\d{2}$/.test(String(input.endsAt??''))){
+      throw Object.assign(new Error('Tanggal dan jam jadwal tidak valid'),{status:400});
+    }
+    if(input.mode==='RECURRING'){
+      const weekdays=[...new Set((input.weekdays??[]).map(Number))].filter((day)=>Number.isInteger(day)&&day>=1&&day<=7);
+      if(!weekdays.length)throw Object.assign(new Error('Pilih minimal satu hari kerja'),{status:400});
+      const rule=await rpc('save_employee_shift_rule_v2',{
+        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_rule_id:scheduleId,p_user_id:input.userId,
+        p_outlet_id:input.outletId,p_effective_from:input.workDate,p_weekdays:weekdays,
+        p_starts_at:input.startsAt,p_ends_at:input.endsAt,p_note:String(input.note??'').trim().slice(0,240)
+      });
+      return send(response,200,{...rule,mode:'RECURRING'});
+    }
+    const existing=(await rest('employee_schedules',`tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(scheduleId)}&select=id&limit=1`))[0];
+    if(!existing)throw Object.assign(new Error('Jadwal tanggal khusus tidak ditemukan'),{status:404});
+    const rows=await rest('employee_schedules',`tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(scheduleId)}`,{
+      method:'PATCH',prefer:'return=representation',body:{user_id:input.userId,outlet_id:input.outletId,
+        work_date:input.workDate,starts_at:input.startsAt,ends_at:input.endsAt,
+        note:String(input.note??'').trim().slice(0,240)||null,updated_at:new Date().toISOString()}
+    });
+    await rest('audit_logs','',{method:'POST',body:{tenant_id:context.tenantId,actor_id:session.authUser.id,
+      action:'EMPLOYEE_SCHEDULE_EDITED',entity_type:'employee_schedule',entity_id:scheduleId,
+      details_json:{userId:input.userId,outletId:input.outletId,workDate:input.workDate,deviceId}}});
+    return send(response,200,{...rows[0],mode:'ONCE'});
   }
 
   if(request.method==='POST'&&route==='workforce/attendance'){
