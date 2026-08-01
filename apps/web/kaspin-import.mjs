@@ -242,6 +242,11 @@ export function parseKaspinCustomerWorkbook(XLSX,arrayBuffer){
     'email_customer_edit','nama_lengkap_customer_edit','no_hp','kode','tipe_pelanggan','point'
   ]);
   if(!source)return null;
+  const groupSheetName=workbook.SheetNames.find((sheetName)=>normalizedHeader(sheetName)==='daftar_tipe_pelanggan');
+  const customerGroups=groupSheetName
+    ?[...new Map(XLSX.utils.sheet_to_json(workbook.Sheets[groupSheetName],{header:1,raw:true,defval:''})
+      .slice(1).map((cells)=>text(cells[0])).filter(Boolean).map((name)=>[name.toLocaleLowerCase('id'),{name}])).values()]
+    :[];
   const indexes=Object.fromEntries(source.headers.map((header,index)=>[header,index]));
   const get=(row,key)=>row[indexes[key]]??'';
   const rows=[],issues=[],types={};
@@ -266,9 +271,10 @@ export function parseKaspinCustomerWorkbook(XLSX,arrayBuffer){
     });
   });
   return {
-    rows,
+    rows,customerGroups,
     report:{
       source:'KASPIN',fileType:'Pelanggan',sheetName:source.sheetName,
+      groupSheetName:groupSheetName??null,customerGroups,
       total:rows.length+issues.length,mapped:rows.length,skipped:issues.length,issues,types
     }
   };

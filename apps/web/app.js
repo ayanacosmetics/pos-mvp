@@ -1629,7 +1629,7 @@ async function inspectImportFile() {
     if(kind==='PRODUCT_VARIANTS')rows=rows.filter((row)=>String(row.familyCode??'').trim()||String(row.variantGroup??'').trim()||String(row.variantName??'').trim());
     if(!rows.length)throw new Error(kaspin?.report?.issues?.[0]?.message??'Tidak ada baris yang dapat diimpor.');
     state.importSourceReport=kaspin?.report??null;
-    const input = { kind, mode:state.productImportMode, source:kaspin?.report?.source??source, locationId: ['PRODUCTS','KASPIN_FIFO'].includes(kind) ? el('import-location').value : null, rows,capitalRows:kaspin?.capitalRows??[] };
+    const input = { kind, mode:state.productImportMode, source:kaspin?.report?.source??source, locationId: ['PRODUCTS','KASPIN_FIFO'].includes(kind) ? el('import-location').value : null, rows,capitalRows:kaspin?.capitalRows??[],customerGroups:kaspin?.customerGroups??[] };
     const preview = await request('/api/imports/preview', { method:'POST', body:JSON.stringify(input) });
     state.importDraft = { ...input, rows: preview.rows,capitalRows:preview.capitalRows??[], fileName: `${file.name}${capitalFile?` + ${capitalFile.name}`:''}`, idempotencyKey: crypto.randomUUID(), valid: preview.valid };
     renderImportPreview(preview,state.importSourceReport);
@@ -1863,7 +1863,7 @@ async function inspectKaspinMigrationPackage(){
       if(!parsed)throw new Error(`${label}: format file tidak dikenali. Pastikan memilih export yang benar dari Kasir Pintar.`);
       if(!parsed.rows.length)throw new Error(`${label}: tidak ada baris yang dapat dimigrasikan.`);
       const skipped=Number(parsed.report?.skipped??0)+Number(parsed.report?.deferred??0);
-      steps.push({id,label,kind,mode,fileName:fileNames,rows:parsed.rows,capitalRows:parsed.capitalRows??[],source:'KASPIN',locationId:location?el('kaspin-migration-location').value:null,report:parsed.report,status:'ready',message:`${parsed.rows.length.toLocaleString('id-ID')} baris dikenali${skipped?` · ${skipped} dilewati`:''}`});
+      steps.push({id,label,kind,mode,fileName:fileNames,rows:parsed.rows,capitalRows:parsed.capitalRows??[],customerGroups:parsed.customerGroups??[],source:'KASPIN',locationId:location?el('kaspin-migration-location').value:null,report:parsed.report,status:'ready',message:`${parsed.rows.length.toLocaleString('id-ID')} baris dikenali${parsed.customerGroups?.length?` · ${parsed.customerGroups.length.toLocaleString('id-ID')} tipe pelanggan`:''}${skipped?` · ${skipped} dilewati`:''}`});
     };
     add('products','Barang utama & stok awal','PRODUCTS','CREATE_ONLY',files.products.name,parseKaspinProductWorkbook(window.XLSX,buffers.products,{useCodeAsBarcode:true,useInternalSku:true}),{location:true});
     if(files.customers)add('customers','Pelanggan, tipe & poin','CUSTOMERS','GENERAL',files.customers.name,parseKaspinCustomerWorkbook(window.XLSX,buffers.customers));
@@ -1887,7 +1887,7 @@ async function runKaspinMigration(){
   for(const step of kaspinMigrationPackage.steps){
     step.status='running';step.message='Memvalidasi di database…';renderKaspinMigrationSteps(kaspinMigrationPackage.steps);
     try{
-      const input={kind:step.kind,mode:step.mode,source:step.source,locationId:step.locationId,rows:step.rows,capitalRows:step.capitalRows};
+      const input={kind:step.kind,mode:step.mode,source:step.source,locationId:step.locationId,rows:step.rows,capitalRows:step.capitalRows,customerGroups:step.customerGroups??[]};
       const preview=await request('/api/imports/preview',{method:'POST',body:JSON.stringify(input)});
       if(!preview.valid){const first=preview.errors?.[0];throw new Error(`${preview.errors?.length??1} kesalahan${first?.message?`: ${first.message}`:''}`);}
       step.message='Menyimpan…';renderKaspinMigrationSteps(kaspinMigrationPackage.steps);

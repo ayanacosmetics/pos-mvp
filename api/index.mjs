@@ -1250,7 +1250,7 @@ function normalizeImportRows(kind, rawRows) {
     if (row.code) seenCodes.add(row.code);
     if (kind === 'CUSTOMERS') {
       const group = String(raw.groupId ?? 'retail').trim().toLowerCase();
-      row.groupId = ['retail','ecer','eceran'].includes(group) ? 'retail' : ['wholesale','grosir'].includes(group) ? 'wholesale' : group;
+      row.groupId = ['retail','ecer','eceran','umum'].includes(group) ? 'retail' : ['wholesale','grosir'].includes(group) ? 'wholesale' : group;
       if(!row.groupId)addError(rowNo,'groupId','Tipe pelanggan wajib diisi');
       row.email=String(raw.email??'').trim().toLowerCase();
       row.address=String(raw.address??'').trim();
@@ -1260,6 +1260,41 @@ function normalizeImportRows(kind, rawRows) {
     rows.push(row);
   });
   return { rows, errors };
+}
+
+function normalizeKaspinCustomerGroups(value){
+  const definitions=Array.isArray(value)?value:[];
+  const groups=new Map();
+  for(const definition of definitions){
+    const name=String(typeof definition==='string'?definition:definition?.name??'').trim().replace(/\s+/g,' ');
+    if(name.length<2||name.length>50)continue;
+    const lower=name.toLocaleLowerCase('id');
+    const id=['retail','ecer','eceran','umum'].includes(lower)?'retail':['wholesale','grosir'].includes(lower)?'wholesale':lower==='member'?'member':lower.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
+    if(!/^[a-z0-9][a-z0-9_-]{1,39}$/.test(id))continue;
+    const canonicalName=id==='retail'?'Eceran':id==='wholesale'?'Grosir':id==='member'?'Member':name;
+    if(!groups.has(id))groups.set(id,{id,name:canonicalName,inputName:name});
+  }
+  return [...groups.values()];
+}
+
+async function ensureKaspinCustomerGroups(context,definitions){
+  const requested=normalizeKaspinCustomerGroups(definitions);
+  if(!requested.length)return [];
+  const existing=await rest('customer_price_groups',`tenant_id=eq.${encodeURIComponent(context.tenantId)}&select=id,name,active,sort_order`);
+  const byId=new Map(existing.map((group)=>[String(group.id).toLowerCase(),group]));
+  const byName=new Map(existing.map((group)=>[String(group.name).toLocaleLowerCase('id'),group]));
+  let sortOrder=Math.max(0,...existing.map((group)=>Number(group.sort_order??0)));
+  for(const group of requested){
+    const found=byId.get(group.id)??byName.get(group.name.toLocaleLowerCase('id'))??byName.get(group.inputName.toLocaleLowerCase('id'));
+    if(found){
+      if(found.active===false)await rest('customer_price_groups',`tenant_id=eq.${encodeURIComponent(context.tenantId)}&id=eq.${encodeURIComponent(found.id)}`,{method:'PATCH',prefer:'return=minimal',body:{active:true}});
+      continue;
+    }
+    sortOrder+=10;
+    const created=await rest('customer_price_groups','',{method:'POST',prefer:'return=representation',body:{tenant_id:context.tenantId,id:group.id,name:group.name,is_default:group.id==='retail',active:true,sort_order:sortOrder}});
+    const row=created[0]??{...group,active:true,sort_order:sortOrder};byId.set(String(row.id).toLowerCase(),row);byName.set(String(row.name).toLocaleLowerCase('id'),row);
+  }
+  return requested;
 }
 
 function kaspinProductResolver(products,units){
@@ -1432,6 +1467,11 @@ async function previewImport(context, input) {
   if(kind==='CUSTOMERS'){
     const groups=await rest('customer_price_groups',`tenant_id=eq.${context.tenantId}&active=eq.true&select=id,name`);
     const groupByInput=new Map(groups.flatMap((group)=>[[String(group.id).toLowerCase(),group.id],[String(group.name).toLowerCase(),group.id]]));
+    if(String(input.source??'').toUpperCase()==='KASPIN')normalizeKaspinCustomerGroups(input.customerGroups).forEach((group)=>{
+      if(!groupByInput.has(group.id))groupByInput.set(group.id,group.id);
+      if(!groupByInput.has(group.name.toLocaleLowerCase('id')))groupByInput.set(group.name.toLocaleLowerCase('id'),group.id);
+      if(!groupByInput.has(group.inputName.toLocaleLowerCase('id')))groupByInput.set(group.inputName.toLocaleLowerCase('id'),group.id);
+    });
     normalized.rows.forEach((row,index)=>{
       const groupId=groupByInput.get(String(row.groupId).toLowerCase());
       if(!groupId)normalized.errors.push({row:index+2,field:'groupId',message:`Tipe pelanggan ${row.groupId||'-'} belum dibuat atau tidak aktif`});
@@ -2455,10 +2495,11 @@ async function routeRequest(request, response, route) {
     requirePermission(session, 'audit.view');
     if (!['OWNER','ADMIN'].includes(session.profile.role)) { const error = new Error('Hanya Owner atau Admin yang dapat mengimpor data'); error.status = 403; throw error; }
     const input = bodyOf(request);
-    const preview = await previewImport(context, input);
-    if (!preview.valid) { const error = new Error(`Masih ada ${preview.errors.length} kesalahan pada data impor`); error.status = 400; throw error; }
     const key = request.headers['idempotency-key'] || input.idempotencyKey;
     if (!key) { const error = new Error('Identitas proses impor tidak tersedia'); error.status = 400; throw error; }
+    if(String(input.kind??'').toUpperCase()==='CUSTOMERS'&&String(input.source??'').toUpperCase()==='KASPIN')await ensureKaspinCustomerGroups(context,input.customerGroups);
+    const preview = await previewImport(context, input);
+    if (!preview.valid) { const error = new Error(`Masih ada ${preview.errors.length} kesalahan pada data impor`); error.status = 400; throw error; }
     if(preview.kind==='KASPIN_FIFO'){
       const result=await rpc('import_kaspin_fifo_v1',{
         p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_idempotency_key:key,

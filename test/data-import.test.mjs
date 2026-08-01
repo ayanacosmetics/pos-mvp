@@ -90,6 +90,46 @@ test('impor tervalidasi diteruskan ke transaksi database dengan idempotensi', as
   }
 });
 
+test('paket Kaspin membuat tipe pelanggan dari sheet kedua sebelum menyimpan pelanggan',async()=>{
+  const originalFetch=globalThis.fetch;
+  const previous={url:process.env.SUPABASE_URL,anon:process.env.SUPABASE_ANON_KEY,service:process.env.SUPABASE_SERVICE_ROLE_KEY};
+  process.env.SUPABASE_URL='https://project.supabase.test';process.env.SUPABASE_ANON_KEY='anon';process.env.SUPABASE_SERVICE_ROLE_KEY='service';
+  const groups=[{id:'retail',name:'Eceran',active:true,sort_order:0}],createdGroups=[];let importedRows=null;
+  globalThis.fetch=async(url,options={})=>{
+    const target=String(url),method=options.method??'GET',body=options.body?JSON.parse(options.body):null;
+    if(target.endsWith('/auth/v1/user'))return responseOf({id:ids.user});
+    if(target.includes('/rest/v1/profiles?'))return responseOf([{user_id:ids.user,tenant_id:ids.tenant,display_name:'Owner',role:'OWNER',active:true}]);
+    if(target.includes('/rest/v1/outlets?'))return responseOf([{id:ids.outlet,name:'Toko Utama',active:true}]);
+    if(target.includes('/rest/v1/stock_locations?'))return responseOf([{id:ids.location,outlet_id:ids.outlet,name:'Toko Utama',kind:'STORE'}]);
+    if(target.includes('/rest/v1/customers?'))return responseOf([]);
+    if(target.includes('/rest/v1/customer_price_groups')){
+      if(method==='POST'){const row={...body};groups.push(row);createdGroups.push(row);return responseOf([row],201);}
+      return responseOf(groups);
+    }
+    if(target.endsWith('/rest/v1/rpc/import_kaspin_customers_v1')){importedRows=body.p_rows;return responseOf({created:2,updated:0,duplicate:false});}
+    if(target.endsWith('/rest/v1/rpc/reconcile_kaspin_customer_sales_v1'))return responseOf({linkedReceipts:0});
+    if(target.endsWith('/rest/v1/rpc/reconstruct_kaspin_points_v1'))return responseOf({entries:0});
+    return responseOf({message:`Mock belum menangani ${target}`},500);
+  };
+  const input={kind:'CUSTOMERS',source:'KASPIN',customerGroups:[{name:'grosir'},{name:'Member'}],rows:[
+    {code:'KSP-1',name:'Pelanggan Grosir',phone:'6281',groupId:'grosir',loyaltyPoints:4},
+    {code:'KSP-2',name:'Pelanggan Member',phone:'6282',groupId:'Member',loyaltyPoints:2}
+  ]};
+  try{
+    const preview=await callApi('POST','imports/preview',input);
+    assert.equal(preview.status,200);assert.equal(preview.body.valid,true);
+    assert.deepEqual(preview.body.rows.map((row)=>row.groupId),['wholesale','member']);
+    assert.equal(createdGroups.length,0);
+    const result=await callApi('POST','imports/commit',{...input,fileName:'DATA_PELANGGAN.xls'},{'idempotency-key':'kaspin-customers-1'});
+    assert.equal(result.status,201);assert.equal(result.body.created,2);
+    assert.deepEqual(createdGroups.map((group)=>group.id),['wholesale','member']);
+    assert.deepEqual(importedRows.map((row)=>row.groupId),['wholesale','member']);
+  }finally{
+    globalThis.fetch=originalFetch;
+    for(const [key,value] of Object.entries(previous)){const envKey={url:'SUPABASE_URL',anon:'SUPABASE_ANON_KEY',service:'SUPABASE_SERVICE_ROLE_KEY'}[key];if(value===undefined)delete process.env[envKey];else process.env[envKey]=value;}
+  }
+});
+
 test('commit produk mengalokasikan SKU kosong dan memisahkan barang baru dari edit aman',async()=>{
   const originalFetch=globalThis.fetch,previous={url:process.env.SUPABASE_URL,anon:process.env.SUPABASE_ANON_KEY,service:process.env.SUPABASE_SERVICE_ROLE_KEY};
   process.env.SUPABASE_URL='https://project.supabase.test';process.env.SUPABASE_ANON_KEY='anon';process.env.SUPABASE_SERVICE_ROLE_KEY='service';

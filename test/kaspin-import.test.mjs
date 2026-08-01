@@ -175,9 +175,14 @@ test('parser pelanggan Kaspin mempertahankan Member, Grosir, email, dan poin',as
     ['', 'member@example.com','Pelanggan Member',628111222333,'Sinjai','','Member',12,0],
     ['', 'grosir@example.com','Pelanggan Grosir',628444555666,'Bulukumba','GR-01','grosir',5,0]
   ]),'pelanggan');
+  XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([
+    ['Daftar Tipe Pelanggan'],['grosir'],['Member']
+  ]),'daftar_tipe_pelanggan');
   const parsed=parseKaspinCustomerWorkbook(XLSX,XLSX.write(workbook,{bookType:'xlsx',type:'array'}));
   assert.equal(parsed.report.mapped,2);
   assert.deepEqual(parsed.report.types,{Member:1,grosir:1});
+  assert.equal(parsed.report.groupSheetName,'daftar_tipe_pelanggan');
+  assert.deepEqual(parsed.customerGroups.map((group)=>({...group})),[{name:'grosir'},{name:'Member'}]);
   assert.deepEqual({...parsed.rows[0]},{
     code:'KSP-628111222333',name:'Pelanggan Member',phone:'628111222333',
     email:'member@example.com',address:'Sinjai',groupId:'Member',loyaltyPoints:12
@@ -212,6 +217,7 @@ test('satu dialog migrasi Kaspin menerima paket lengkap dan menjalankan urutan a
   assert.match(app,/function kaspinMigrationStepIssues/);
   assert.match(app,/data-migration-detail/);
   assert.match(app,/Baris yang tidak ikut dimigrasikan/);
+  assert.match(app,/customerGroups:parsed\.customerGroups/);
   const inspect=app.slice(app.indexOf('async function inspectKaspinMigrationPackage'),app.indexOf('async function runKaspinMigration'));
   for(const order of ["add('products'","add('customers'","add('suppliers'","add('units'","add('prices'","add('purchases'","add('sales'"])assert.ok(inspect.includes(order));
 });

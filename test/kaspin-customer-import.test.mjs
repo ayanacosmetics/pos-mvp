@@ -17,6 +17,8 @@ test('pelanggan Kaspin memakai tipe harga dinamis dan membawa poin',async()=>{
   assert.match(sql,/Saldo poin awal dari Kasir Pintar/);
   assert.match(api,/import_kaspin_customers_v1/);
   assert.match(api,/input\.source.*KASPIN/);
+  assert.match(api,/ensureKaspinCustomerGroups/);
+  assert.match(api,/normalizeKaspinCustomerGroups\(input\.customerGroups\)/);
   assert.match(app,/parseKaspinCustomerWorkbook/);
   assert.match(app,/loyaltyPoints/);
 });
