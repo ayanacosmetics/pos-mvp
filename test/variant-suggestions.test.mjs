@@ -44,6 +44,15 @@ test('kemasan berbeda yang terselip pada kelompok ukuran wajib ditinjau',()=>{
   assert.equal(suggestion.safe,false);
 });
 
+test('keluarga shade tetap aman ketika satu nama edisi ditulis panjang',()=>{
+  const suggestion=buildVariantSuggestions([
+    product('1','OMG MATTE LAST LIP CREAM 01'),product('2','OMG MATTE LAST LIP CREAM 04'),
+    product('3','OMG MATTE LAST LIP CREAM 10'),product('4','OMG MATTE LAST LIP CREAM DESSERT CAFE EDITION 30')
+  ])[0];
+  assert.equal(suggestion.familyName,'OMG MATTE LAST LIP CREAM');
+  assert.equal(suggestion.safe,true);
+});
+
 test('halaman produk menyediakan pratinjau dan commit etalase tanpa reset data',async()=>{
   const [html,app,worker]=await Promise.all([
     readFile(new URL('../apps/web/index.html',import.meta.url),'utf8'),

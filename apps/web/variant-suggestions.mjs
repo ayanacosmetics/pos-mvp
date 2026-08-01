@@ -41,7 +41,8 @@ export function buildVariantSuggestions(products,{minimumPrefixTokens=3,maximumV
     if(new Set(variants).size!==variants.length)return;
     members.forEach((product)=>assigned.add(product.id));
     const sizeConflict=containsSize(candidate.key)&&variants.some(containsSize);
-    const safe=!sizeConflict&&(variants.every(codedVariant)||(members.length>=3&&variants.every((value)=>value.split(' ').length<=3)));
+    const codedRatio=variants.filter(codedVariant).length/variants.length;
+    const safe=!sizeConflict&&(variants.every(codedVariant)||codedRatio>=.75||(members.length>=3&&variants.every((value)=>value.split(' ').length<=3)));
     suggestions.push({
       id:familyCode(candidate.key),familyCode:familyCode(candidate.key),familyName:candidate.key,
       safe,products:members.map((product,index)=>({id:product.id,sku:product.sku,name:product.name,variantName:variants[index]}))
