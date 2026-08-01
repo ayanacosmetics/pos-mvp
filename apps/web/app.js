@@ -9,10 +9,13 @@ import { appendMoneyKey, suggestedCashAmounts } from './payment-keypad.mjs';
 import { createProductExportWorkbook, createTemplateWorkbook, productExportRows, productExtensionExportRows, workbookMatrix, workbookTemplates } from './product-workbook.mjs';
 import { barcodeModuleCount, barcodeSvg, labelSize, normalizeCode128Text } from './product-labels.mjs';
 import { parseKaspinProductWorkbook, parseKaspinProductExtensionWorkbook, parseKaspinFifoWorkbooks, parseKaspinSalesWorkbooks, parseKaspinSalesWorkbookSets, parseKaspinCustomerWorkbook, parseKaspinSupplierWorkbook } from './kaspin-import.mjs';
+import { buildVariantSuggestions } from './variant-suggestions.mjs';
 
 const storedAuth = loadAuth();
 let kaspinMigrationPackage=null;
 const kaspinMigrationExpandedSteps=new Set();
+let variantSuggestions=[];
+const selectedVariantSuggestions=new Set();
 const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, dataResetScopesSignature:'', dataRestoreSnapshot:null,dataRestoreOtpReady:false, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productAdminPage:1, selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', importSourceReport:null, productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
@@ -1813,6 +1816,46 @@ async function loadPromotionManagement(){
     state.promotionVersions=data.promotions??[];state.loyalty=loyalty;renderPromotionList();renderLoyalty();
   }
   catch(error){toast(error.message);}
+}
+
+function variantSuggestionSelection(){return variantSuggestions.filter((item)=>selectedVariantSuggestions.has(item.id));}
+
+function renderVariantSuggestions(){
+  const query=el('variant-suggestion-search').value.trim().toLocaleLowerCase('id');
+  const visible=variantSuggestions.filter((item)=>!query||`${item.familyName} ${item.products.map((product)=>`${product.name} ${product.variantName} ${product.sku}`).join(' ')}`.toLocaleLowerCase('id').includes(query));
+  const selected=variantSuggestionSelection(),selectedSkus=selected.reduce((sum,item)=>sum+item.products.length,0);
+  el('variant-suggestion-metrics').innerHTML=`<div><small>Saran ditemukan</small><strong>${variantSuggestions.length.toLocaleString('id-ID')}</strong></div><div><small>Etalase dipilih</small><strong>${selected.length.toLocaleString('id-ID')}</strong></div><div><small>SKU yang dipetakan</small><strong>${selectedSkus.toLocaleString('id-ID')}</strong></div><div><small>SKU tetap mandiri</small><strong>${Math.max(0,state.products.filter((product)=>!product.familyId).length-selectedSkus).toLocaleString('id-ID')}</strong></div>`;
+  el('variant-suggestion-list').innerHTML=visible.length?visible.map((item)=>{
+    const checked=selectedVariantSuggestions.has(item.id),examples=item.products.slice(0,8);
+    return `<article class="variant-suggestion-card ${checked?'selected':''}"><label><input type="checkbox" data-variant-suggestion="${escapeHtml(item.id)}" ${checked?'checked':''}><span><strong>${escapeHtml(item.familyName)}</strong><small>${item.products.length.toLocaleString('id-ID')} SKU tetap terpisah</small></span><em class="status-badge ${item.safe?'approved':'submitted'}">${item.safe?'SARAN AMAN':'PERLU TINJAU'}</em></label><div class="variant-suggestion-products">${examples.map((product)=>`<span><b>${escapeHtml(product.variantName)}</b><small>${escapeHtml(product.sku)} · ${escapeHtml(product.name)}</small></span>`).join('')}${item.products.length>examples.length?`<span><b>+${item.products.length-examples.length} varian lain</b><small>Tampil setelah etalase diterapkan</small></span>`:''}</div></article>`;
+  }).join(''):'<div class="empty-state compact">Tidak ada saran yang cocok dengan pencarian.</div>';
+  const button=el('apply-variant-suggestions');button.disabled=!selected.length;button.textContent=selected.length?`Terapkan ${selected.length.toLocaleString('id-ID')} etalase`:'Terapkan etalase terpilih';
+}
+
+function openVariantSuggestions(){
+  variantSuggestions=buildVariantSuggestions(state.products);
+  selectedVariantSuggestions.clear();
+  el('variant-suggestion-search').value='';el('variant-suggestion-error').textContent='';renderVariantSuggestions();
+  if(!el('variant-suggestions-dialog').open)el('variant-suggestions-dialog').showModal();
+}
+
+async function applyVariantSuggestions(){
+  const selected=variantSuggestionSelection();
+  if(!selected.length)return;
+  const rows=selected.flatMap((family)=>family.products.map((product)=>({sku:product.sku,familyCode:family.familyCode,variantGroup:family.familyName,variantName:product.variantName})));
+  const button=el('apply-variant-suggestions');button.disabled=true;button.textContent='Memeriksa pemetaan…';el('variant-suggestion-error').textContent='';
+  try{
+    const input={kind:'PRODUCT_VARIANTS',mode:'UPDATE_ONLY',source:'NUSA',rows};
+    const preview=await request('/api/imports/preview',{method:'POST',body:JSON.stringify(input)});
+    if(!preview.valid){const first=preview.errors?.[0];throw new Error(first?.message??`${preview.errors?.length??1} pemetaan belum valid`);}
+    button.textContent='Menyimpan etalase…';
+    const result=await request('/api/imports/commit',{method:'POST',headers:{'idempotency-key':crypto.randomUUID()},body:JSON.stringify({...input,rows:preview.rows,fileName:'Pemetaan etalase otomatis setelah migrasi Kaspin',valid:true})});
+    await refreshCatalog();
+    variantSuggestions=buildVariantSuggestions(state.products);selectedVariantSuggestions.clear();renderVariantSuggestions();
+    el('variant-suggestion-error').textContent=`Selesai: ${Number(result.created??0).toLocaleString('id-ID')} etalase dibuat dan ${Number(result.updated??0).toLocaleString('id-ID')} SKU dipetakan. Stok dan riwayat tidak berubah.`;
+    toast('Etalase berhasil disusun tanpa menggabungkan SKU.');
+  }catch(error){el('variant-suggestion-error').textContent=error.message;}
+  finally{button.disabled=!variantSuggestionSelection().length;button.textContent='Terapkan etalase terpilih';}
 }
 
 const kaspinMigrationInputs=['products','customers','suppliers','units','prices','purchases','capital','sales','sales-summary'];
@@ -7574,6 +7617,14 @@ el('open-product-dialog').addEventListener('click', () => openProductEditor());
 el('open-price-policy').addEventListener('click',openPricePolicy);
 el('open-kaspin-migration').addEventListener('click',()=>{renderKaspinMigrationLocations();el('kaspin-migration-dialog').showModal();});
 el('close-kaspin-migration').addEventListener('click',()=>el('kaspin-migration-dialog').close());
+el('open-variant-suggestions').addEventListener('click',openVariantSuggestions);
+el('close-variant-suggestions').addEventListener('click',()=>el('variant-suggestions-dialog').close());
+el('cancel-variant-suggestions').addEventListener('click',()=>el('variant-suggestions-dialog').close());
+el('variant-suggestion-search').addEventListener('input',renderVariantSuggestions);
+el('variant-suggestion-list').addEventListener('change',(event)=>{const input=event.target.closest('[data-variant-suggestion]');if(!input)return;if(input.checked)selectedVariantSuggestions.add(input.dataset.variantSuggestion);else selectedVariantSuggestions.delete(input.dataset.variantSuggestion);renderVariantSuggestions();});
+el('select-safe-variant-suggestions').addEventListener('click',()=>{selectedVariantSuggestions.clear();variantSuggestions.filter((item)=>item.safe).forEach((item)=>selectedVariantSuggestions.add(item.id));renderVariantSuggestions();});
+el('clear-variant-suggestions').addEventListener('click',()=>{selectedVariantSuggestions.clear();renderVariantSuggestions();});
+el('apply-variant-suggestions').addEventListener('click',applyVariantSuggestions);
 kaspinMigrationInputs.forEach((id)=>el(`kaspin-migration-${id}`).addEventListener('change',(event)=>{
   const selected=[...event.target.files];
   el(`kaspin-migration-${id}-name`).textContent=selected.length>1?`${selected.length} file dipilih`:(selected[0]?.name??'Belum dipilih');
