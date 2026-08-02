@@ -29,6 +29,7 @@
   "vars": {
     "PUBLIC_APP_URL": "https://app.nusapos.my.id",
     "ALLOW_OWNER_BOOTSTRAP": "false",
-    "DEFAULT_BUSINESS_NAME": "Kasir Nusa"
+    "DEFAULT_BUSINESS_NAME": "Kasir Nusa",
+    "CLOUDFLARE_WORKERS_PLAN": "PAID"
   }
 }
