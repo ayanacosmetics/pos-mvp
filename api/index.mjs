@@ -4480,13 +4480,16 @@ async function routeRequest(request, response, route) {
     const paymentState=['ALL','PAID','CREDIT'].includes(String(queryValue(request,'paymentState')).toUpperCase())
       ? String(queryValue(request,'paymentState')).toUpperCase():'ALL';
     const outletIds=outletId?[outletId]:context.outlets.map((outlet)=>outlet.id);
-    const sales=await loadSalesReportSource(context,{outletIds,from,to,limit:10000});
-    const report=filteredSalesReport(sales,{
-      timezone,staffId:String(queryValue(request,'staffId')??''),paymentState,paymentMethods,
-      includeCreditProfit:queryValue(request,'includeCreditProfit')!=='false',
-      includeCreditRevenue:queryValue(request,'includeCreditRevenue')==='true'
+    const staffId=String(queryValue(request,'staffId')??'');
+    const includeCreditProfit=queryValue(request,'includeCreditProfit')!=='false';
+    const includeCreditRevenue=queryValue(request,'includeCreditRevenue')==='true';
+    const report=await rpc('report_sales_filtered_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_outlet_ids:outletIds,
+      p_from:from,p_to:to,p_timezone:timezone,p_staff_id:staffId||null,p_payment_state:paymentState,
+      p_payment_methods:paymentMethods,p_include_credit_profit:includeCreditProfit,
+      p_include_credit_revenue:includeCreditRevenue
     });
-    return send(response,200,{...report,period:{from,to},truncated:sales.length>=10000});
+    return send(response,200,{...report,period:{from,to},truncated:false});
   }
 
   if(request.method==='GET'&&route==='reports/sales-items'){
