@@ -3885,18 +3885,23 @@ async function routeRequest(request, response, route) {
   if(request.method==='GET'&&inventoryProductMatch){
     requirePermission(session,'inventory.manage');
     const productId=inventoryProductMatch[1],scope=`tenant_id=eq.${context.tenantId}&product_id=eq.${encodeURIComponent(productId)}`;
-    const [products,balances,batches,ledger,allocations,kaspinSales,kaspinSaleItems,kaspinPurchaseItems,openingEntries]=await Promise.all([
+    const includeHistory=queryValue(request,'includeHistory')==='true';
+    const [products,balances,batches,ledger,allocations,kaspinSaleItems,kaspinPurchaseItems,openingEntries]=await Promise.all([
       rest('products',`tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(productId)}&select=id,sku,name,category,brand,image_url,minimum_stock,track_expiry,active&limit=1`),
       rest('stock_balances',`${scope}&location_id=${inFilter(context.locationIds)}&select=*&order=location_id`),
       rest('inventory_batches',`${scope}&location_id=${inFilter(context.locationIds)}&select=*&order=received_at.desc&limit=200`),
-      rest('stock_ledger',`${scope}&location_id=${inFilter(context.locationIds)}&select=*&order=occurred_at.desc&limit=200`),
-      rest('sale_stock_allocations',`${scope}&select=*&order=occurred_at.desc&limit=200`).catch(()=>[]),
-      restAll('sales',`tenant_id=eq.${context.tenantId}&source_system=eq.KASPIN&select=id,receipt_no,occurred_at,source_cashier,status`),
-      restAll('sale_items',`${scope}&select=id,sale_id,base_qty,cost_total`),
-      restAll('purchase_receipt_items',`${scope}&document_no=like.KASPIN-*&select=id,receipt_id,base_qty,unit_cost,supplier_name,document_no,received_at`),
-      rest('stock_ledger',`${scope}&location_id=${inFilter(context.locationIds)}&event_type=in.(OPENING_IMPORT,OPENING_BALANCE)&select=balance_after,occurred_at&order=occurred_at.asc&limit=1`)
+      includeHistory?rest('stock_ledger',`${scope}&location_id=${inFilter(context.locationIds)}&select=*&order=occurred_at.desc&limit=200`):Promise.resolve([]),
+      includeHistory?rest('sale_stock_allocations',`${scope}&select=*&order=occurred_at.desc&limit=200`).catch(()=>[]):Promise.resolve([]),
+      includeHistory?restAll('sale_items',`${scope}&select=id,sale_id,base_qty,cost_total`):Promise.resolve([]),
+      includeHistory?restAll('purchase_receipt_items',`${scope}&document_no=like.KASPIN-*&select=id,receipt_id,base_qty,unit_cost,supplier_name,document_no,received_at`):Promise.resolve([]),
+      includeHistory?rest('stock_ledger',`${scope}&location_id=${inFilter(context.locationIds)}&event_type=in.(OPENING_IMPORT,OPENING_BALANCE)&select=balance_after,occurred_at&order=occurred_at.asc&limit=1`):Promise.resolve([])
     ]);
     if(!products[0])throw Object.assign(new Error('Produk tidak ditemukan'),{status:404});
+    const kaspinSaleIds=[...new Set(kaspinSaleItems.map((item)=>item.sale_id).filter(Boolean))];
+    const kaspinSales=kaspinSaleIds.length?(await Promise.all(
+      Array.from({length:Math.ceil(kaspinSaleIds.length/80)},(_,index)=>kaspinSaleIds.slice(index*80,index*80+80))
+        .map((ids)=>rest('sales',`tenant_id=eq.${context.tenantId}&id=${inFilter(ids)}&source_system=eq.KASPIN&select=id,receipt_no,occurred_at,source_cashier,status`))
+    )).flat():[];
     const canViewCost=session.permissions.includes('purchasing.view_cost');
     const locations=new Map(context.locations.map((location)=>[location.id,location]));
     const visibleLedgerIds=new Set(ledger.map((item)=>item.id));
@@ -3973,7 +3978,7 @@ async function routeRequest(request, response, route) {
       ...(canViewCost?{unitCost:Number(batch.unit_cost),stockValue:Number(batch.available_qty)*Number(batch.unit_cost)}:{})
     }));
     return send(response,200,{
-      product:products[0],canViewCost,
+      product:products[0],canViewCost,historyLoaded:includeHistory,
       balances:balances.map((balance)=>({
         locationId:balance.location_id,locationName:locations.get(balance.location_id)?.name??'Lokasi',
         quantity:Number(balance.quantity),...(canViewCost?{averageCost:Number(balance.avg_cost)}:{})

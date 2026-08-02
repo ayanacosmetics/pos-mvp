@@ -18,10 +18,11 @@ const ids = {
 
 async function call(method, route, body, headers = {}) {
   let payload = '';
+  const [routePath, search=''] = route.split('?');
   const request = {
     method,
     url:`/api/index?route=${route}`,
-    query:{ route },
+    query:{ route:routePath, ...Object.fromEntries(new URLSearchParams(search)) },
     headers:{ authorization:'Bearer stock-user', ...headers },
     body
   };
@@ -45,6 +46,7 @@ test('manajemen stok menyediakan daftar dan semua tindakan per barang', async ()
   }
   for(const detail of ['data-stock-log-id','Dilakukan oleh','Penyebab','data-open-stock-sale']) assert.ok(app.includes(detail));
   for(const detail of ['Masuk','Keluar','Riwayat Kaspin','balanceEstimated','hasKaspinPurchaseLayers','hasKaspinHistory']) assert.ok(app.includes(detail));
+  for(const optimization of ['inventoryBalanceByProduct','data-inventory-load-more','loadStockProductHistory','includeHistory=true']) assert.ok(app.includes(optimization));
   assert.ok(api.includes("route.match(/^inventory-products\\/([^/]+)\\/adjustments$/)"));
   assert.ok(api.includes("route.match(/^inventory-products\\/([^/]+)$/)"));
   assert.ok(api.includes("route.match(/^inventory-sales\\/([^/]+)\\/receipt$/)"));
@@ -74,8 +76,9 @@ test('log barang menggabungkan pembelian dan penjualan Kaspin tanpa mengubah sto
     return reply({message:`Mock belum menangani ${target}`},500);
   };
   try{
-    const result=await call('GET',`inventory-products/${ids.product}`);
+    const result=await call('GET',`inventory-products/${ids.product}?includeHistory=true`);
     assert.equal(result.status,200);
+    assert.equal(result.body.historyLoaded,true);
     assert.deepEqual(result.body.ledger.map((entry)=>[entry.eventType,entry.delta,entry.balanceAfter]),[
       ['OPENING_IMPORT',5,5],['KASPIN_SALE',-1,5],['KASPIN_PURCHASE',6,6]
     ]);
