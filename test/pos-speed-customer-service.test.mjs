@@ -26,6 +26,17 @@ test('void transaksi wajib persetujuan, alasan, audit, dan pengembalian stok ato
   assert.match(api,/requirePermission\(session, 'sale\.void'\)/);
   assert.match(api,/p_approved_by:session\.authUser\.id/);
   assert.match(api,/rpc\('void_sale_v2'/);
+  assert.match(api,/Stock snapshot failed after void/);
+  assert.match(api,/stockBalances/);
+});
+
+test('void memperbarui stok kasir tanpa memuat ulang seluruh katalog',async()=>{
+  const [,api,,script]=await files();
+  assert.match(api,/sale_id=eq\.\$\{encodeURIComponent\(saleId\)\}[\s\S]*select=product_id/);
+  assert.match(api,/select=product_id,quantity/);
+  assert.match(script,/function applyProductStockSnapshot\(rows\)/);
+  assert.match(script,/applyProductStockSnapshot\(result\.stockBalances\)/);
+  assert.doesNotMatch(script,/Promise\.all\(\[loadPosSales\([^\]]+refreshCatalog\(\)/);
 });
 
 test('SQLite demo mengembalikan stok sekali dan menyimpan catatan saat void',()=>{

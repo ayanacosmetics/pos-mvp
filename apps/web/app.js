@@ -345,6 +345,25 @@ function cacheCurrentShift() {
   localStorage.setItem('pos_bootstrap_cache', JSON.stringify(data));
 }
 
+function applyProductStockSnapshot(rows) {
+  if(!Array.isArray(rows))return false;
+  const balances=new Map(rows.map((row)=>[row.product_id,Number(row.quantity??0)]));
+  for(const product of state.products)if(balances.has(product.id))product.stockBase=balances.get(product.id);
+  for(const product of state.managedProducts)if(balances.has(product.id))product.stockBase=balances.get(product.id);
+  const cached=localStorage.getItem('pos_bootstrap_cache');
+  if(cached){
+    try{
+      const data=JSON.parse(cached);
+      for(const product of data.products??[])if(balances.has(product.id))product.stockBase=balances.get(product.id);
+      data.cachedAt=new Date().toISOString();
+      localStorage.setItem('pos_bootstrap_cache',JSON.stringify(data));
+    }catch{localStorage.removeItem('pos_bootstrap_cache');}
+  }
+  renderProducts(el('product-search').value);
+  renderProductTable();
+  return true;
+}
+
 async function applyBootstrap(data, { offline = false } = {}) {
   state.session = data.session;
   state.ownerContextId = data.session.ownerContextActive ? data.session.user.id : null;
@@ -6477,7 +6496,9 @@ async function submitVoidSale(event){
   event.preventDefault();const button=el('confirm-void-sale');button.disabled=true;el('void-sale-error').textContent='';
   try{
     const result=await request(`/api/pos-sales/${el('void-sale-id').value}/void`,{method:'POST',body:JSON.stringify({reason:el('void-sale-reason').value})});
-    toast(`${result.receiptNo} berhasil di-void`);el('void-sale-dialog').close();await Promise.all([loadPosSales(el('pos-history-search').value,{reportScope:true}),refreshCatalog(),refreshShift()]);
+    toast(`${result.receiptNo} berhasil di-void`);el('void-sale-dialog').close();
+    if(!applyProductStockSnapshot(result.stockBalances))await refreshCatalog();
+    await Promise.all([loadPosSales(el('pos-history-search').value,{reportScope:true}),refreshShift()]);
     if(state.session.permissions.includes('report.view'))await loadReport();
   }catch(error){el('void-sale-error').textContent=error.message;}
   finally{button.disabled=false;}

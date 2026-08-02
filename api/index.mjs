@@ -4616,7 +4616,17 @@ async function routeRequest(request, response, route) {
     }catch(error){
       console.error('Receipt voucher cancellation failed after void',error.message);
     }
-    return send(response, 200, result);
+    let stockBalances=null;
+    try{
+      const saleItems=await rest('sale_items',`tenant_id=eq.${context.tenantId}&sale_id=eq.${encodeURIComponent(saleId)}&select=product_id`);
+      const productIds=[...new Set(saleItems.map((item)=>item.product_id).filter(Boolean))];
+      stockBalances=context.storeLocation&&productIds.length
+        ?await rest('stock_balances',`tenant_id=eq.${context.tenantId}&location_id=eq.${encodeURIComponent(context.storeLocation.id)}&product_id=${inFilter(productIds)}&select=product_id,quantity`)
+        :[];
+    }catch(error){
+      console.error('Stock snapshot failed after void',error.message);
+    }
+    return send(response, 200, {...result,stockBalances});
   }
 
   if (request.method === 'GET' && route.startsWith('sales/')) {
