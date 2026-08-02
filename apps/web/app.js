@@ -402,7 +402,8 @@ async function bootstrap({ reportError = false } = {}) {
     }
   }
   try {
-    const data = await request('/api/bootstrap');
+    const [shell,catalog]=await Promise.all([request('/api/bootstrap?catalog=false'),request('/api/catalog')]);
+    const data={...shell,products:catalog.products??[]};
     saveBootstrapCache(data);
     await applyBootstrap(data);
     recordLastSync();
@@ -421,7 +422,8 @@ async function bootstrap({ reportError = false } = {}) {
 }
 
 async function refreshCatalog() {
-  const data = await request('/api/bootstrap');
+  const [shell,catalog]=await Promise.all([request('/api/bootstrap?catalog=false'),request('/api/catalog')]);
+  const data={...shell,products:catalog.products??[]};
   saveBootstrapCache(data);
   state.products = data.products;
   state.customerGroups = data.customerGroups?.length ? data.customerGroups : state.customerGroups;
@@ -450,7 +452,6 @@ function startDeferredBootstrapLoads() {
   const run = ++deferredBootstrapRun;
   const can = (permission) => state.session?.permissions?.includes(permission);
   const tasks = [
-    ...(can('catalog.manage') ? [loadProductManagement] : []),
     ...(can('pos.sell') ? [loadHeldSales, loadCustomerAging] : []),
     ...(can('purchasing.view_cost') ? [loadPurchaseOrders, loadRestockPlanning, loadRecentSupplierReturns] : []),
     ...(can('inventory.manage') ? [loadInventory] : []),

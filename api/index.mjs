@@ -246,6 +246,23 @@ async function restAll(table,query='',options={}){
 }
 const rpc = (name, body) => supabase(`/rest/v1/rpc/${name}`, { method: 'POST', body });
 
+async function rawRpc(response,name,body){
+  const config=env();
+  const upstream=await fetch(`${config.url}/rest/v1/rpc/${name}`,{
+    method:'POST',headers:{apikey:config.service,authorization:`Bearer ${config.service}`,'content-type':'application/json'},
+    body:JSON.stringify(body)
+  });
+  const text=await upstream.text();
+  if(!upstream.ok){
+    let details={};try{details=text?JSON.parse(text):{};}catch{}
+    const error=new Error(details.message??`Supabase ${upstream.status}`);error.status=upstream.status;error.details=details;throw error;
+  }
+  response.statusCode=200;
+  response.setHeader('content-type','application/json; charset=utf-8');
+  response.setHeader('cache-control','no-store');
+  response.end(text);
+}
+
 function isSaleReceiptCollision(error) {
   const detail = `${error?.message ?? ''} ${error?.details?.message ?? ''} ${error?.details?.details ?? ''} ${error?.details?.constraint ?? ''}`;
   return error?.details?.code === '23505'
@@ -2113,8 +2130,9 @@ async function routeRequest(request, response, route) {
 
   if (request.method === 'GET' && route === 'bootstrap') {
     const deviceId = request.headers['x-device-id'];
+    const includeCatalog=queryValue(request,'catalog')!=='false';
     const [products, promotions, customerGroups, customers, suppliers, shifts, tenants, devices] = await Promise.all([
-      loadCatalog(context.tenantId, context.storeLocation?.id, context.outlet.id), loadPromotions(context.tenantId, context.outlet.id),
+      includeCatalog?loadCatalog(context.tenantId, context.storeLocation?.id, context.outlet.id):Promise.resolve(null), loadPromotions(context.tenantId, context.outlet.id),
       loadCustomerPriceGroups(context.tenantId), loadCustomerAccounts(context.tenantId),
       session.permissions.includes('purchasing.receive') ? loadSupplierAccounts(context.tenantId) : [],
       rest('shifts', `tenant_id=eq.${context.tenantId}&outlet_id=eq.${context.outlet.id}&cashier_id=eq.${session.authUser.id}&status=eq.OPEN&select=*&limit=1`),
@@ -2132,8 +2150,15 @@ async function routeRequest(request, response, route) {
       },
       outlets: context.outlets, activeOutletId: context.outlet.id, locations: context.locations,
       business: businessPayload(tenants[0]), deviceSettings: devicePayload(devices[0], deviceId),
-      customerGroups, customers, suppliers, products, promotions,
+      customerGroups, customers, suppliers, ...(products?{products}:{}), promotions,
       currentShift: await shiftDetail(context.tenantId, shifts[0]), syncCursor: new Date().toISOString()
+    });
+  }
+
+  if(request.method==='GET'&&route==='catalog'){
+    return rawRpc(response,'load_pos_catalog_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,
+      p_location_id:context.storeLocation?.id??null,p_outlet_id:context.outlet.id
     });
   }
 

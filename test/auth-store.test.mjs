@@ -54,11 +54,12 @@ test('permintaan API menyegarkan token secara proaktif dan mengulang respons 401
 
 test('bootstrap menampilkan cache dan katalog dasar sebelum memuat modul berat', async () => {
   const script = await readFile(new URL('../apps/web/app.js', import.meta.url), 'utf8');
-  assert.match(script, /const cached = localStorage\.getItem\('pos_bootstrap_cache'\)[\s\S]*applyBootstrap\(JSON\.parse\(cached\), \{ offline: true \}\)[\s\S]*request\('\/api\/bootstrap'\)/);
+  assert.match(script, /const cached = localStorage\.getItem\('pos_bootstrap_cache'\)[\s\S]*applyBootstrap\(JSON\.parse\(cached\), \{ offline: true \}\)[\s\S]*Promise\.all\(\[request\('\/api\/bootstrap\?catalog=false'\),request\('\/api\/catalog'\)\]\)/);
   assert.match(script, /state\.managedProducts = state\.products\.map/);
   assert.match(script, /if \(!offline\) startDeferredBootstrapLoads\(\)/);
   assert.match(script, /Math\.min\(3,tasks\.length\)/);
   assert.match(script, /if\(target==='products'\)loadProductManagement\(\)/);
+  assert.doesNotMatch(script, /can\('catalog\.manage'\) \? \[loadProductManagement\]/);
   assert.doesNotMatch(script, /if \(!offline[\s\S]{0,120}await loadPurchaseOrders/);
 });
 
