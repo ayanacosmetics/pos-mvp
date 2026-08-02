@@ -33,6 +33,11 @@ test('penerapan Blueprint mengutamakan SKU sumber dan menolak fallback legacy ya
   assert.match(sql,/last_match_status='MATCHED'/);
 });
 
+test('snapshot Blueprint mengenali impor lama dari SKU internal KP walau legacy code kosong',async()=>{
+  const sql=await read('../supabase/migrations/202608020012_catalog_variant_blueprint.sql');
+  assert.match(sql,/nullif\(trim\(p\.legacy_code\),'\'\) is not null or upper\(p\.sku\) like 'KP-%'/);
+});
+
 test('impor Kaspin menerapkan ulang Blueprint dan UI menjelaskan bahwa reset tidak menghapusnya',async()=>{
   const [api,app,html]=await Promise.all([read('../api/index.mjs'),read('../apps/web/app.js'),read('../apps/web/index.html')]);
   assert.match(api,/apply_catalog_variant_blueprint_v1/);

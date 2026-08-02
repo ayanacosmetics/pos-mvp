@@ -64,7 +64,8 @@ begin
     coalesce((select jsonb_agg(b.barcode order by b.barcode) from public.product_family_barcodes b where b.family_id=f.id),'[]'::jsonb),true
   from public.product_families f
   join public.products p on p.tenant_id=f.tenant_id and p.family_id=f.id
-  where f.tenant_id=p_tenant_id and nullif(trim(p.legacy_code),'') is not null
+  where f.tenant_id=p_tenant_id
+    and (nullif(trim(p.legacy_code),'') is not null or upper(p.sku) like 'KP-%')
   order by f.id
   on conflict(tenant_id,source_system,family_code) do update set
     family_name=excluded.family_name,shared_barcodes=excluded.shared_barcodes,
@@ -81,7 +82,8 @@ begin
       from public.product_variant_options o where o.product_id=p.id),'[]'::jsonb),
     true,'MATCHED',p.id,now()
   from public.products p join public.product_families f on f.id=p.family_id and f.tenant_id=p.tenant_id
-  where p.tenant_id=p_tenant_id and nullif(trim(p.legacy_code),'') is not null
+  where p.tenant_id=p_tenant_id
+    and (nullif(trim(p.legacy_code),'') is not null or upper(p.sku) like 'KP-%')
   on conflict(tenant_id,source_system,source_key) do update set
     source_legacy_code=excluded.source_legacy_code,source_name_snapshot=excluded.source_name_snapshot,
     family_code=excluded.family_code,variant_name=excluded.variant_name,option_values=excluded.option_values,
@@ -199,7 +201,7 @@ insert into public.catalog_family_blueprints(tenant_id,source_system,family_code
 select distinct on(f.tenant_id,f.code) f.tenant_id,'KASPIN',f.code,f.name,
   coalesce((select jsonb_agg(b.barcode order by b.barcode) from public.product_family_barcodes b where b.family_id=f.id),'[]'::jsonb)
 from public.product_families f join public.products p on p.tenant_id=f.tenant_id and p.family_id=f.id
-where nullif(trim(p.legacy_code),'') is not null
+where nullif(trim(p.legacy_code),'') is not null or upper(p.sku) like 'KP-%'
 order by f.tenant_id,f.code,f.created_at
 on conflict(tenant_id,source_system,family_code) do update set
   family_name=excluded.family_name,shared_barcodes=excluded.shared_barcodes,active=true,updated_at=now();
@@ -213,7 +215,7 @@ select p.tenant_id,'KASPIN',upper(p.sku),nullif(trim(p.legacy_code),''),p.name,f
     from public.product_variant_options o where o.product_id=p.id),'[]'::jsonb),
   'MATCHED',p.id,now()
 from public.products p join public.product_families f on f.id=p.family_id and f.tenant_id=p.tenant_id
-where nullif(trim(p.legacy_code),'') is not null
+where nullif(trim(p.legacy_code),'') is not null or upper(p.sku) like 'KP-%'
 on conflict(tenant_id,source_system,source_key) do update set
   source_legacy_code=excluded.source_legacy_code,source_name_snapshot=excluded.source_name_snapshot,
   family_code=excluded.family_code,variant_name=excluded.variant_name,option_values=excluded.option_values,
