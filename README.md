@@ -240,21 +240,21 @@ Jalankan:
 npm test
 ```
 
-Source saat ini memiliki 321 pengujian otomatis. Pengujian toko nyata tetap
+Source saat ini memiliki 322 pengujian otomatis. Pengujian toko nyata tetap
 harus mengikuti `GO-LIVE-CHECKLIST.md`; keputusan lulus pilot tidak menggantikan
 verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 
 ## Aplikasi kasir Android
 
-Kandidat UAT dapat diunduh dari
-<https://app.nusapos.my.id/downloads/Kasir-Nusa-POS-1.3.0-uat.apk>.
+APK produksi dapat diunduh dari
+<https://app.nusapos.my.id/downloads/Kasir-Nusa-POS-1.3.0.apk>.
 Printer dihubungkan dari halaman Perangkat. Scanner dipasangkan sebagai
 keyboard/HID melalui Pengaturan Bluetooth Android, bukan dari aplikasi. Setelah
 tersambung, barcode diteruskan otomatis ke halaman Kasir dan scanner sebaiknya
-mengirim Enter setelah barcode. Kandidat UAT v1.3.0 memiliki SHA-256
-`C17962228E78943F4F1015EC0C0BA906549DE1A9B71B327918165B3222B2708E`.
-APK ini memakai debug key dan hanya untuk UAT, bukan operasional. APK produksi
-baru boleh dibagikan setelah ditandatangani keystore permanen yang dicadangkan.
+mengirim Enter setelah barcode. APK produksi v1.3.0 memiliki SHA-256
+`195EA34F080AD974088FE11C369926040D1B5DD5D937D7AE26DE694117AD7B27` dan
+ditandatangani kunci permanen Kasir Nusa. Seluruh pembaruan berikutnya wajib
+memakai kunci yang sama. APK `1.3.0-uat` tetap hanya untuk pengujian internal.
 
 ## Struktur
 
