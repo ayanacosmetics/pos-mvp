@@ -1851,7 +1851,7 @@ async function applyVariantSuggestions(){
     const result=await request('/api/imports/commit',{method:'POST',headers:{'idempotency-key':crypto.randomUUID()},body:JSON.stringify({...input,rows:preview.rows,fileName:'Pemetaan etalase otomatis setelah migrasi Kaspin',valid:true})});
     await refreshCatalog();
     variantSuggestions=buildVariantSuggestions(state.products);selectedVariantSuggestions.clear();renderVariantSuggestions();
-    el('variant-suggestion-error').textContent=`Selesai: ${Number(result.created??0).toLocaleString('id-ID')} etalase dibuat dan ${Number(result.updated??0).toLocaleString('id-ID')} SKU dipetakan. Stok dan riwayat tidak berubah.`;
+    el('variant-suggestion-error').textContent=`Selesai: ${Number(result.created??0).toLocaleString('id-ID')} etalase dibuat dan ${Number(result.updated??0).toLocaleString('id-ID')} SKU dipetakan. ${Number(result.blueprint?.variants??result.updated??0).toLocaleString('id-ID')} keputusan tersimpan pada Blueprint tahan-reset. Stok dan riwayat tidak berubah.`;
     toast('Etalase berhasil disusun tanpa menggabungkan SKU.');
   }catch(error){el('variant-suggestion-error').textContent=error.message;}
   finally{button.disabled=!variantSuggestionSelection().length;button.textContent='Terapkan etalase terpilih';}
@@ -1864,6 +1864,17 @@ function renderKaspinMigrationLocations(){
   select.innerHTML=state.locations.map((location)=>`<option value="${location.id}">${escapeHtml(location.name)} · ${location.kind==='WAREHOUSE'?'Gudang':'Toko'}</option>`).join('');
   const store=state.locations.find((location)=>location.kind==='STORE');
   if(store)select.value=store.id;
+}
+
+async function loadKaspinBlueprintStatus(){
+  const node=el('kaspin-blueprint-status');
+  node.textContent='Memeriksa Blueprint varian…';
+  try{
+    const result=await request('/api/imports/catalog-blueprint');
+    node.textContent=result.variants
+      ?`Blueprint aman: ${Number(result.families).toLocaleString('id-ID')} etalase dan ${Number(result.variants).toLocaleString('id-ID')} SKU akan dipetakan kembali setelah impor.`
+      :'Blueprint masih kosong. Pemetaan etalase berikutnya akan disimpan otomatis.';
+  }catch(error){node.textContent=`Status Blueprint belum dapat dibaca: ${error.message}`;}
 }
 
 function kaspinMigrationStepIssues(step){
@@ -1934,7 +1945,10 @@ async function runKaspinMigration(){
       if(!preview.valid){const first=preview.errors?.[0];throw new Error(`${preview.errors?.length??1} kesalahan${first?.message?`: ${first.message}`:''}`);}
       step.message='Menyimpan…';renderKaspinMigrationSteps(kaspinMigrationPackage.steps);
       const result=await request('/api/imports/commit',{method:'POST',headers:{'idempotency-key':crypto.randomUUID()},body:JSON.stringify({...input,rows:preview.rows,capitalRows:preview.capitalRows??[],fileName:step.fileName,valid:true})});
-      step.status='done';step.message=`Selesai · ${Number(result.created??0).toLocaleString('id-ID')} baru · ${Number(result.updated??0).toLocaleString('id-ID')} diperbarui`;
+      step.status='done';step.blueprint=result.blueprint??null;
+      const mapping=result.blueprint&&step.kind==='PRODUCTS'
+        ?` · Blueprint: ${Number(result.blueprint.matched??0).toLocaleString('id-ID')} cocok${Number(result.blueprint.unmatched??0)||Number(result.blueprint.ambiguous??0)?` · ${Number(result.blueprint.unmatched??0).toLocaleString('id-ID')} belum cocok · ${Number(result.blueprint.ambiguous??0).toLocaleString('id-ID')} ambigu`:''}`:'';
+      step.message=`Selesai · ${Number(result.created??0).toLocaleString('id-ID')} baru · ${Number(result.updated??0).toLocaleString('id-ID')} diperbarui${mapping}`;
       renderKaspinMigrationSteps(kaspinMigrationPackage.steps);
     }catch(error){
       step.status='error';step.message=error.message;renderKaspinMigrationSteps(kaspinMigrationPackage.steps);
@@ -1942,7 +1956,10 @@ async function runKaspinMigration(){
       el('inspect-kaspin-migration').disabled=false;return;
     }
   }
-  el('kaspin-migration-error').textContent='Migrasi lengkap selesai. Periksa jumlah produk, stok, modal, pelanggan, supplier, dan transaksi sebelum melanjutkan pemetaan etalase.';
+  const productBlueprint=kaspinMigrationPackage.steps.find((step)=>step.kind==='PRODUCTS')?.blueprint;
+  el('kaspin-migration-error').textContent=productBlueprint
+    ?`Migrasi lengkap selesai. Blueprint memetakan kembali ${Number(productBlueprint.matched??0).toLocaleString('id-ID')} SKU; ${Number(productBlueprint.unmatched??0).toLocaleString('id-ID')} belum cocok dan ${Number(productBlueprint.ambiguous??0).toLocaleString('id-ID')} ambigu. Periksa hasil sebelum mulai beroperasi.`
+    :'Migrasi lengkap selesai. Periksa jumlah produk, stok, modal, pelanggan, supplier, dan transaksi sebelum melanjutkan pemetaan etalase.';
   button.textContent='Migrasi selesai';
   try{await refreshCatalog();if(state.session.permissions.includes('inventory.manage'))await loadInventory();await loadImportHistory();}catch(error){toast('Migrasi tersimpan. Muat ulang halaman untuk memperbarui tampilan.');}
 }
@@ -2081,8 +2098,9 @@ function syncDataResetForm(event) {
   const dependencies=[];
   if(scopes.some((scope)=>['CATALOG','CUSTOMERS','SUPPLIERS'].includes(scope)))dependencies.push('transaksi, pembelian, stok, dan jurnal terkait ikut dikosongkan');
   if(scopes.includes('CUSTOMERS'))dependencies.push('loyalty, promo, dan voucher terkait ikut dikosongkan');
+  const preservesBlueprint=scopes.some((scope)=>['ALL','CATALOG'].includes(scope));
   el('data-reset-impact').textContent=scopes.length
-    ? `Akan direset: ${scopes.map((scope)=>labels[scope]).join(', ')}.${dependencies.length?` Demi konsistensi, ${dependencies.join('; ')}.`:''}`
+    ? `Akan direset: ${scopes.map((scope)=>labels[scope]).join(', ')}.${dependencies.length?` Demi konsistensi, ${dependencies.join('; ')}.`:''}${preservesBlueprint?' Blueprint etalase/varian tetap disimpan dan akan diterapkan kembali saat produk Kaspin diimpor.':''}`
     :'Belum ada kelompok data yang dipilih.';
   el('request-data-reset-otp').disabled=!scopes.length;
   if(event){
@@ -2125,7 +2143,10 @@ async function executeDataReset(event) {
       scopes,otp:el('data-reset-otp').value,confirmation:el('data-reset-phrase').value
     })});
     downloadJsonSnapshot(result.snapshot,result.fileName);
-    toast('Reset selesai. Backup sebelum reset telah diunduh.');
+    const protectedVariants=Number(result.variantBlueprint?.variants??0);
+    toast(protectedVariants
+      ?`Reset selesai. ${protectedVariants.toLocaleString('id-ID')} pemetaan SKU tetap aman di Blueprint.`
+      :'Reset selesai. Backup sebelum reset telah diunduh.');
     state.dataResetScopesSignature='';
     setTimeout(()=>location.reload(),1200);
   }catch(error){
@@ -7709,7 +7730,7 @@ el('close-user-editor').addEventListener('click', () => el('edit-user-dialog').c
 el('cancel-user-edit').addEventListener('click', () => el('edit-user-dialog').close());
 el('open-product-dialog').addEventListener('click', () => openProductEditor());
 el('open-price-policy').addEventListener('click',openPricePolicy);
-el('open-kaspin-migration').addEventListener('click',()=>{renderKaspinMigrationLocations();el('kaspin-migration-dialog').showModal();});
+el('open-kaspin-migration').addEventListener('click',()=>{renderKaspinMigrationLocations();el('kaspin-migration-dialog').showModal();loadKaspinBlueprintStatus();});
 el('close-kaspin-migration').addEventListener('click',()=>el('kaspin-migration-dialog').close());
 el('open-variant-suggestions').addEventListener('click',openVariantSuggestions);
 el('close-variant-suggestions').addEventListener('click',()=>el('variant-suggestions-dialog').close());

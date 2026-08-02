@@ -2759,7 +2759,10 @@ async function routeRequest(request, response, route) {
           p_kind:preview.kind,p_file_name:input.fileName??null,p_rows:tasks[index]
         }));
       }
-      return send(response,201,{kind:preview.kind,total:preview.rows.length,created:results.reduce((sum,item)=>sum+Number(item.created??0),0),updated:results.reduce((sum,item)=>sum+Number(item.updated??0),0),duplicate:results.length>0&&results.every((item)=>item.duplicate),chunks:results.length});
+      const blueprint=preview.kind==='PRODUCT_VARIANTS'
+        ?await rpc('sync_catalog_variant_blueprint_v1',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id})
+        :null;
+      return send(response,201,{kind:preview.kind,total:preview.rows.length,created:results.reduce((sum,item)=>sum+Number(item.created??0),0),updated:results.reduce((sum,item)=>sum+Number(item.updated??0),0),duplicate:results.length>0&&results.every((item)=>item.duplicate),chunks:results.length,...(blueprint?{blueprint}:{})});
     }
     let rows=preview.rows.map((row)=>({...row}));
     if(preview.kind==='PRODUCTS'){
@@ -2788,8 +2791,30 @@ async function routeRequest(request, response, route) {
       if(preview.kind==='PRODUCTS')await rpc('apply_import_product_settings_v1',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_rows:task.rows});
       results.push(result);
     }
-    if(preview.kind==='PRODUCTS')await rpc('refresh_safe_customer_prices_v1',{p_tenant_id:context.tenantId,p_product_id:null});
-    return send(response,201,{kind:preview.kind,total:rows.length,created:results.reduce((sum,item)=>sum+Number(item.created??0),0),updated:results.reduce((sum,item)=>sum+Number(item.updated??0),0),duplicate:results.length>0&&results.every((item)=>item.duplicate),chunks:results.length});
+    let blueprint=null;
+    if(preview.kind==='PRODUCTS'){
+      await rpc('refresh_safe_customer_prices_v1',{p_tenant_id:context.tenantId,p_product_id:null});
+      if(String(input.source??'').toUpperCase()==='KASPIN')blueprint=await rpc('apply_catalog_variant_blueprint_v1',{
+        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_source_system:'KASPIN'
+      });
+    }
+    return send(response,201,{kind:preview.kind,total:rows.length,created:results.reduce((sum,item)=>sum+Number(item.created??0),0),updated:results.reduce((sum,item)=>sum+Number(item.updated??0),0),duplicate:results.length>0&&results.every((item)=>item.duplicate),chunks:results.length,...(blueprint?{blueprint}:{})});
+  }
+
+  if(request.method==='GET'&&route==='imports/catalog-blueprint'){
+    requirePermission(session,'audit.view');
+    if(!['OWNER','ADMIN'].includes(session.profile.role))throw Object.assign(new Error('Hanya Owner atau Admin yang dapat melihat Blueprint varian'),{status:403});
+    const [families,variants]=await Promise.all([
+      restAll('catalog_family_blueprints',`tenant_id=eq.${context.tenantId}&source_system=eq.KASPIN&active=eq.true&select=family_code,updated_at`),
+      restAll('catalog_variant_blueprints',`tenant_id=eq.${context.tenantId}&source_system=eq.KASPIN&active=eq.true&select=source_key,last_match_status,updated_at`)
+    ]);
+    const latest=[...families,...variants].map((item)=>item.updated_at).filter(Boolean).sort().at(-1)??null;
+    return send(response,200,{
+      protected:true,families:families.length,variants:variants.length,latest,
+      matched:variants.filter((item)=>item.last_match_status==='MATCHED').length,
+      unmatched:variants.filter((item)=>item.last_match_status==='UNMATCHED').length,
+      ambiguous:variants.filter((item)=>item.last_match_status==='AMBIGUOUS').length
+    });
   }
 
   if (request.method === 'GET' && route === 'imports') {
