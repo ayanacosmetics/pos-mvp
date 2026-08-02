@@ -1729,17 +1729,18 @@ function backupChecksum(payload) {
 }
 
 async function buildBackup(context, session) {
-  const entries = await Promise.all(BACKUP_TABLES.map(async (table) => {
-    const query = table === 'tenants'
-      ? `id=eq.${context.tenantId}&select=*`
-      : `tenant_id=eq.${context.tenantId}&select=*`;
-    try{return [table,await rest(table,query)];}
-    catch(error){
-      if(OPTIONAL_CATALOG_TABLES.has(table))return [table,[]];
-      throw error;
+  let tables;
+  try {
+    tables = await rpc('export_tenant_backup_v1',{p_tenant_id:context.tenantId});
+  } catch (error) {
+    if(/export_tenant_backup_v1|schema cache|function|PGRST202/i.test(error.message)){
+      throw Object.assign(new Error('Backup terpusat belum aktif. Jalankan migrasi backup Cloudflare terbaru.'),{status:503});
     }
-  }));
-  const tables = Object.fromEntries(entries);
+    throw error;
+  }
+  if(!tables||Array.isArray(tables)||typeof tables!=='object'){
+    throw Object.assign(new Error('Database mengembalikan backup yang tidak valid'),{status:502});
+  }
   const payload = {
     format: 'KASIR_NUSA_BACKUP',
     schemaVersion: 1,

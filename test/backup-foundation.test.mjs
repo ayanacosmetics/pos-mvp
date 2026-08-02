@@ -17,12 +17,15 @@ test('owner dapat mengunduh snapshot lengkap dengan checksum tanpa data Auth',as
   const previous={url:process.env.SUPABASE_URL,anon:process.env.SUPABASE_ANON_KEY,service:process.env.SUPABASE_SERVICE_ROLE_KEY};
   process.env.SUPABASE_URL='https://project.supabase.test';process.env.SUPABASE_ANON_KEY='anon';process.env.SUPABASE_SERVICE_ROLE_KEY='service';
   const writes=[];
+  const calls=[];
   globalThis.fetch=async(url,options={})=>{
     const target=String(url);
+    calls.push(target);
     if(target.endsWith('/auth/v1/user'))return responseOf({id:ids.user,email:'owner@example.test'});
     if(target.includes('/rest/v1/profiles?'))return responseOf([{user_id:ids.user,tenant_id:ids.tenant,display_name:'Owner',role:'OWNER',active:true}]);
     if(target.includes('/rest/v1/outlets?'))return responseOf([{id:ids.outlet,tenant_id:ids.tenant,name:'Toko Utama',active:true}]);
     if(target.includes('/rest/v1/stock_locations?'))return responseOf([{id:ids.location,tenant_id:ids.tenant,outlet_id:ids.outlet,name:'Toko Utama',kind:'STORE'}]);
+    if(target.endsWith('/rest/v1/rpc/export_tenant_backup_v1'))return responseOf({products:[],sales:[]});
     if(options.method==='POST'){writes.push({target,body:JSON.parse(options.body)});return responseOf([]);}
     if(target.includes('/rest/v1/'))return responseOf([]);
     return responseOf({message:`Mock belum menangani ${target}`},500);
@@ -36,6 +39,8 @@ test('owner dapat mengunduh snapshot lengkap dengan checksum tanpa data Auth',as
     assert.equal(JSON.stringify(exported.body.snapshot).includes('SUPABASE_SERVICE_ROLE_KEY'),false);
     assert.ok(writes.some((write)=>write.target.endsWith('/rest/v1/backup_exports')));
     assert.ok(writes.some((write)=>write.body.action==='BACKUP_EXPORTED'));
+    assert.equal(calls.filter((target)=>target.endsWith('/rest/v1/rpc/export_tenant_backup_v1')).length,1);
+    assert.equal(calls.filter((target)=>/\/rest\/v1\/(products|sales)\?/.test(target)).length,0);
 
     const verified=await callApi('POST','backups/verify',{snapshot:exported.body.snapshot});
     assert.equal(verified.status,200);
@@ -52,6 +57,7 @@ test('owner dapat mengunduh snapshot lengkap dengan checksum tanpa data Auth',as
 
 test('fondasi backup memiliki registry, audit, checksum, dan antarmuka verifikasi',async()=>{
   const migration=await readFile(new URL('../supabase/migrations/202607230012_backup_foundation.sql',import.meta.url),'utf8');
+  const cloudflareMigration=await readFile(new URL('../supabase/migrations/202608030013_cloudflare_single_request_backup.sql',import.meta.url),'utf8');
   const api=await readFile(new URL('../api/index.mjs',import.meta.url),'utf8');
   const html=await readFile(new URL('../apps/web/index.html',import.meta.url),'utf8');
   assert.match(migration,/create table if not exists public\.backup_exports/i);
@@ -60,4 +66,8 @@ test('fondasi backup memiliki registry, audit, checksum, dan antarmuka verifikas
   assert.match(api,/createHash\('sha256'\)/);
   assert.match(html,/id="page-backups"/);
   assert.match(html,/PERIKSA FILE BACKUP/);
+  assert.match(cloudflareMigration,/create or replace function public\.export_tenant_backup_v1/i);
+  assert.match(cloudflareMigration,/jsonb_agg/i);
+  assert.match(cloudflareMigration,/grant execute.*service_role/is);
+  assert.match(api,/rpc\('export_tenant_backup_v1'/);
 });
