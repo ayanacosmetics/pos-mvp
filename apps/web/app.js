@@ -452,10 +452,9 @@ function startDeferredBootstrapLoads() {
   const run = ++deferredBootstrapRun;
   const can = (permission) => state.session?.permissions?.includes(permission);
   const tasks = [
-    ...(can('pos.sell') ? [loadHeldSales, loadCustomerAging] : []),
+    ...(can('pos.sell') ? [loadHeldSales] : []),
     ...(can('report.view') ? [loadReport, loadCrmDashboard] : []),
     ...(can('promotion.manage') ? [loadPromotionManagement] : []),
-    ...(can('finance.owner') ? [loadOwnerFinance] : []),
     ...(can('audit.view') ? [loadSyncReview, loadImportHistory] : []),
     ...(can('identity.manage') ? [loadBackupHistory, loadSettings, loadSystemHealth] : []),
     ...(can('workforce.self') ? [loadWorkforceOverview, loadApprovals] : []),
@@ -6830,6 +6829,12 @@ function showPage(name) {
   }
   localStorage.setItem('pos_active_page',name);
   if(target==='products')loadProductManagement().catch((error)=>toast(error.message));
+  if(target==='customers'&&state.session.permissions.includes('pos.sell')){
+    Promise.all([loadCrmDashboard(),loadCustomerAging()]).catch((error)=>toast(error.message));
+  }
+  if(name.startsWith('owner-')&&state.session.permissions.includes('finance.owner')){
+    loadOwnerFinance().catch((error)=>toast(error.message));
+  }
   if(target==='stock'){
     const view=item?.dataset.stockView??'list';
     (view==='expiry'?loadExpiryDashboard():loadInventory({includeExpiry:false})).catch((error)=>toast(error.message));
