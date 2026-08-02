@@ -7,3 +7,5 @@ apps/api/data/*.sqlite-wal
 
 .vercel
 .env*
+.wrangler/
+.wrangler-dist/

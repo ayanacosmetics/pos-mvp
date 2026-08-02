@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "node apps/api/src/server.mjs",
     "dev:cloud": "npx vercel dev",
+    "dev:cloudflare": "npx wrangler@4.118.0 dev",
+    "check:cloudflare": "npx wrangler@4.118.0 deploy --dry-run --outdir .wrangler-dist",
+    "deploy:cloudflare": "npx wrangler@4.118.0 deploy",
     "start": "node apps/api/src/server.mjs",
     "test": "node --test"
   },

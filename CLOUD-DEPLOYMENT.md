@@ -18,7 +18,8 @@ Browser tidak menerima `SUPABASE_SERVICE_ROLE_KEY`. Semua operasi sensitif berja
 
 ## Variabel produksi
 
-Variabel berikut harus tersimpan di Vercel:
+Variabel berikut harus tersimpan sebagai secret Cloudflare Worker. Nilainya tetap
+disimpan di Vercel selama masa migrasi dan fallback:
 
 ```text
 SUPABASE_URL
@@ -50,9 +51,32 @@ Jangan menjalankan ulang migrasi secara acak pada proyek lain. Untuk pemulihan a
 - Unduh backup operasional dan verifikasi checksum-nya.
 - Jangan memakai akun Owner untuk transaksi kasir harian.
 
-## Deployment
+## Deployment Cloudflare
 
-Jalankan `Deploy-Kasir-Nusa.cmd`. Setelah deployment:
+Deployment pertama memakai alamat staging `*.workers.dev`. Jangan hubungkan
+`nusapos.my.id` sebelum health check, login, transaksi uji, laporan, dan batas CPU
+selesai diperiksa.
+
+```powershell
+npm run check:cloudflare
+npm run deploy:cloudflare
+```
+
+Secret wajib diatur melalui dashboard Cloudflare atau `wrangler secret put` dan
+tidak boleh ditulis di `wrangler.jsonc`:
+
+```text
+SUPABASE_URL
+SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+```
+
+`PUBLIC_APP_URL`, `ALLOW_OWNER_BOOTSTRAP=false`, dan nama usaha non-rahasia berada
+di `wrangler.jsonc`.
+
+## Deployment Vercel cadangan
+
+Selama migrasi, `Deploy-Kasir-Nusa.cmd` tetap dapat dipakai. Setelah deployment:
 
 1. Pastikan `/api/health` menunjukkan versi yang baru.
 2. Muat ulang aplikasi satu kali agar service worker memperbarui cache.
