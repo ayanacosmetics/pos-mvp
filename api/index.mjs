@@ -231,7 +231,20 @@ async function supabase(path, { method = 'GET', body, token, prefer } = {}) {
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
   });
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      if (response.ok) {
+        const error = new Error('Respons database tidak dapat dibaca');
+        error.status = 502;
+        error.details = { response: text.slice(0, 300) };
+        throw error;
+      }
+      data = { message: text.trim().slice(0, 300) || `Supabase ${response.status}` };
+    }
+  }
   if (!response.ok) {
     const error = new Error(data?.message ?? data?.msg ?? data?.error_description ?? `Supabase ${response.status}`);
     error.status = response.status;
@@ -4557,17 +4570,21 @@ async function routeRequest(request, response, route) {
     const locations=context.locations.filter((location)=>allowedOutletIds.includes(location.outlet_id));
     if(!locations.length)return send(response,200,{receipts:[]});
     const tenant=encodeURIComponent(context.tenantId);
-    let receipts=await rest('purchase_receipts',`tenant_id=eq.${tenant}&location_id=${inFilter(locations.map((item)=>item.id))}&status=eq.RECEIVED&occurred_at=gte.${encodeURIComponent(`${shiftIsoDate(from,-1)}T00:00:00Z`)}&occurred_at=lt.${encodeURIComponent(`${shiftIsoDate(to,2)}T00:00:00Z`)}&select=*&order=occurred_at.desc&limit=500`);
+    let receipts=await restAll('purchase_receipts',`tenant_id=eq.${tenant}&location_id=${inFilter(locations.map((item)=>item.id))}&status=eq.RECEIVED&occurred_at=gte.${encodeURIComponent(`${shiftIsoDate(from,-1)}T00:00:00Z`)}&occurred_at=lt.${encodeURIComponent(`${shiftIsoDate(to,2)}T00:00:00Z`)}&select=*&order=occurred_at.desc`);
     const timezone=context.outlet.timezone??'Asia/Makassar';
     receipts=receipts.filter((receipt)=>{const date=todayInTimeZone(new Date(receipt.occurred_at),timezone);return date>=from&&date<=to;});
     if(!receipts.length)return send(response,200,{receipts:[]});
     const receiptIds=receipts.map((item)=>item.id);
-    const items=await rest('purchase_receipt_items',`tenant_id=eq.${tenant}&receipt_id=${inFilter(receiptIds)}&select=*&order=id`);
+    const byIds=async(table,column,ids,tail)=>(await Promise.all(
+      Array.from({length:Math.ceil(ids.length/100)},(_,index)=>ids.slice(index*100,index*100+100))
+        .map((chunk)=>rest(table,`tenant_id=eq.${tenant}&${column}=${inFilter(chunk)}&${tail}`))
+    )).flat();
+    const items=await byIds('purchase_receipt_items','receipt_id',receiptIds,'select=*&order=id');
     const productIds=[...new Set(items.map((item)=>item.product_id))];
     const actorIds=[...new Set(receipts.map((item)=>item.actor_id).filter(Boolean))];
     const [products,actors]=await Promise.all([
-      productIds.length?rest('products',`tenant_id=eq.${tenant}&id=${inFilter(productIds)}&select=id,sku,name`):[],
-      actorIds.length?rest('profiles',`tenant_id=eq.${tenant}&user_id=${inFilter(actorIds)}&select=user_id,display_name`):[]
+      productIds.length?byIds('products','id',productIds,'select=id,sku,name'):[],
+      actorIds.length?byIds('profiles','user_id',actorIds,'select=user_id,display_name'):[]
     ]);
     return send(response,200,{receipts:receipts.map((receipt)=>{
       const lines=items.filter((item)=>item.receipt_id===receipt.id).map((item)=>{

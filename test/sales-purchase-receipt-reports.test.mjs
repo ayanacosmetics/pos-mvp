@@ -151,8 +151,10 @@ test('semua filter laporan utama dimulai dari hari ini dan tren bersifat opsiona
 
 test('laporan pembelian memakai data penerimaan tersimpan dan membuka dokumen asli', () => {
   assert.match(api, /route==='purchase-receipts\/report'/);
-  assert.match(api, /rest\('purchase_receipts'/);
-  assert.match(api, /rest\('purchase_receipt_items'/);
+  assert.match(api, /restAll\('purchase_receipts'/);
+  assert.match(api, /byIds\('purchase_receipt_items','receipt_id',receiptIds/);
+  assert.match(api, /byIds\('products','id',productIds/);
+  assert.match(api, /ids\.slice\(index\*100,index\*100\+100\)/);
   assert.match(html, /data-report-view="purchases-history"[\s\S]*<span>Laporan pembelian<\/span>/);
   assert.doesNotMatch(html, /<span>Riwayat pembelian<\/span>/);
   for(const period of ['TODAY','MONTH','YEAR','ALL'])assert.match(html,new RegExp(`data-purchase-period="${period}"`));
