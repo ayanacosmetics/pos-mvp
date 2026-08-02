@@ -453,8 +453,6 @@ function startDeferredBootstrapLoads() {
   const can = (permission) => state.session?.permissions?.includes(permission);
   const tasks = [
     ...(can('pos.sell') ? [loadHeldSales, loadCustomerAging] : []),
-    ...(can('purchasing.view_cost') ? [loadPurchaseOrders, loadRestockPlanning, loadRecentSupplierReturns] : []),
-    ...(can('inventory.manage') ? [loadInventory] : []),
     ...(can('report.view') ? [loadReport, loadCrmDashboard] : []),
     ...(can('promotion.manage') ? [loadPromotionManagement] : []),
     ...(can('finance.owner') ? [loadOwnerFinance] : []),
@@ -4345,11 +4343,16 @@ async function submitStockAdjustment(event) {
   }
 }
 
-async function loadInventory() {
-  const [data, expiry] = await Promise.all([
-    request('/api/inventory'),
-    request('/api/expiry-dashboard').catch((error) => ({ batches: [], metrics: null, error: error.message }))
-  ]);
+async function loadExpiryDashboard(){
+  const expiry=await request('/api/expiry-dashboard').catch((error)=>({batches:[],metrics:null,error:error.message}));
+  state.expiryBatches=expiry.batches??[];
+  state.expiryMetrics=expiry.metrics??null;
+  state.expiryError=expiry.error??null;
+  renderExpiryDashboard();
+}
+
+async function loadInventory({includeExpiry=true}={}) {
+  const data = await request('/api/inventory');
   state.inventory = data.balances;
   state.ledger = data.ledger;
   state.inventoryProducts = (data.products ?? state.products).map((product) => ({
@@ -4359,9 +4362,7 @@ async function loadInventory() {
     imageUrl: product.image_url ?? product.imageUrl ?? '',
     active: product.active !== false
   }));
-  state.expiryBatches = expiry.batches ?? [];
-  state.expiryMetrics = expiry.metrics ?? null;
-  state.expiryError = expiry.error ?? null;
+  if(includeExpiry)await loadExpiryDashboard();
   const storeLocation = state.locations.find((location) => location.kind === 'STORE');
   renderStockManagement();
   el('count-fields').innerHTML = state.inventoryProducts.map((product) => {
@@ -4369,7 +4370,7 @@ async function loadInventory() {
     return `<label class="count-field"><span>${escapeHtml(product.name)}</span><input data-count-product="${product.id}" type="number" min="0" value="${balance?.quantity ?? 0}"></label>`;
   }).join('');
   el('ledger-table').innerHTML = `<table><thead><tr><th>Waktu</th><th>Lokasi</th><th>Produk</th><th>Jenis</th><th>Perubahan</th><th>Saldo</th></tr></thead><tbody>${state.ledger.map((item) => `<tr><td>${new Date(item.occurred_at).toLocaleString('id-ID')}</td><td>${locationName(item.location_id)}</td><td>${productName(item.product_id)}</td><td>${item.event_type.replaceAll('_', ' ')}</td><td>${item.delta > 0 ? '+' : ''}${item.delta}</td><td>${item.balance_after}</td></tr>`).join('') || '<tr><td colspan="6">Belum ada pergerakan stok.</td></tr>'}</tbody></table>`;
-  renderExpiryDashboard();
+  if(!includeExpiry)renderExpiryDashboard();
 }
 
 async function postStockCount() {
@@ -6829,6 +6830,16 @@ function showPage(name) {
   }
   localStorage.setItem('pos_active_page',name);
   if(target==='products')loadProductManagement().catch((error)=>toast(error.message));
+  if(target==='stock'){
+    const view=item?.dataset.stockView??'list';
+    (view==='expiry'?loadExpiryDashboard():loadInventory({includeExpiry:false})).catch((error)=>toast(error.message));
+  }
+  if(target==='restock'){
+    const view=item?.dataset.purchaseViewTarget;
+    if(view==='planning')loadRestockPlanning().catch((error)=>toast(error.message));
+    if(view==='documents')loadPurchaseOrders().catch((error)=>toast(error.message));
+    if(view==='supplier-return')loadRecentSupplierReturns().catch((error)=>toast(error.message));
+  }
   if(multioutletPages.has(name))loadMultiOutletWorkspace().catch((error)=>toast(error.message));
   if(accountingPages.has(name))loadAccounting({sync:!state.accounting}).catch((error)=>toast(error.message));
   if(pilotPages.has(name)&&name!=='pilot-sop')loadPilotDashboard().catch((error)=>toast(error.message));
