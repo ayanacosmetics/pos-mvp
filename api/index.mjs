@@ -79,8 +79,87 @@ const OPTIONAL_CATALOG_TABLES = new Set(['product_families','product_family_barc
 const env = () => ({
   url: process.env.SUPABASE_URL?.replace(/\/$/, ''),
   anon: process.env.SUPABASE_ANON_KEY,
-  service: process.env.SUPABASE_SERVICE_ROLE_KEY
+  service: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  platformAdminIds: process.env.PLATFORM_ADMIN_USER_IDS ?? '',
+  cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? '',
+  cloudflareApiToken: process.env.CLOUDFLARE_ANALYTICS_TOKEN ?? '',
+  cloudflareScriptName: process.env.CLOUDFLARE_SCRIPT_NAME ?? 'kasir-nusa-pos',
+  cloudflarePlan: String(process.env.CLOUDFLARE_WORKERS_PLAN ?? 'FREE').toUpperCase()
 });
+
+function isPlatformAdmin(session) {
+  const allowed = new Set(env().platformAdminIds.split(',').map((value) => value.trim()).filter(Boolean));
+  return allowed.has(String(session?.authenticatedUser?.id ?? ''));
+}
+
+function requirePlatformAdmin(session) {
+  if (isPlatformAdmin(session)) return;
+  const error = new Error('Halaman ini hanya dapat diakses Platform Admin Nusa');
+  error.status = 403;
+  throw error;
+}
+
+function summarizeWorkerRows(rows = []) {
+  const summary = rows.reduce((result, row) => {
+    const requests = Number(row.sum?.requests ?? 0);
+    result.requests += requests;
+    result.errors += Number(row.sum?.errors ?? 0);
+    result.subrequests += Number(row.sum?.subrequests ?? 0);
+    result.cpuP50Microseconds = Math.max(result.cpuP50Microseconds, Number(row.quantiles?.cpuTimeP50 ?? 0));
+    result.cpuP99Microseconds = Math.max(result.cpuP99Microseconds, Number(row.quantiles?.cpuTimeP99 ?? 0));
+    return result;
+  }, { requests:0, errors:0, subrequests:0, cpuP50Microseconds:0, cpuP99Microseconds:0 });
+  return {
+    requests:summary.requests,errors:summary.errors,subrequests:summary.subrequests,
+    errorRate:summary.requests ? summary.errors*100/summary.requests : 0,
+    cpuP50Ms:summary.cpuP50Microseconds/1000,cpuP99Ms:summary.cpuP99Microseconds/1000
+  };
+}
+
+async function loadCloudflareInfrastructure() {
+  const config = env();
+  const configured = Boolean(config.cloudflareAccountId && config.cloudflareApiToken);
+  if (!configured) return {
+    configured:false,plan:config.cloudflarePlan,scriptName:config.cloudflareScriptName,
+    message:'Token Analytics Cloudflare belum dipasang pada Worker.'
+  };
+  const end = new Date();
+  const dayStart = new Date(end.getTime()-24*60*60*1000);
+  const monthStart = new Date(Date.UTC(end.getUTCFullYear(),end.getUTCMonth(),1));
+  const query=`query PlatformWorkerMetrics($accountTag: string, $dayStart: string, $monthStart: string, $end: string, $scriptName: string) {
+    viewer { accounts(filter: {accountTag: $accountTag}) {
+      day: workersInvocationsAdaptive(limit: 10000, filter: {scriptName: $scriptName, datetime_geq: $dayStart, datetime_leq: $end}) {
+        sum { requests errors subrequests } quantiles { cpuTimeP50 cpuTimeP99 }
+      }
+      month: workersInvocationsAdaptive(limit: 10000, filter: {scriptName: $scriptName, datetime_geq: $monthStart, datetime_leq: $end}) {
+        sum { requests errors subrequests } quantiles { cpuTimeP50 cpuTimeP99 }
+      }
+    } }
+  }`;
+  const response = await fetch('https://api.cloudflare.com/client/v4/graphql',{
+    method:'POST',headers:{authorization:`Bearer ${config.cloudflareApiToken}`,'content-type':'application/json','accept':'application/json'},
+    body:JSON.stringify({query,variables:{
+      accountTag:config.cloudflareAccountId,dayStart:dayStart.toISOString(),monthStart:monthStart.toISOString(),
+      end:end.toISOString(),scriptName:config.cloudflareScriptName
+    }})
+  });
+  const payload = await response.json().catch(()=>({}));
+  if (!response.ok || payload.errors?.length) {
+    const error = new Error(payload.errors?.[0]?.message ?? `Cloudflare Analytics ${response.status}`);
+    error.status = response.status || 502;
+    throw error;
+  }
+  const account = payload.data?.viewer?.accounts?.[0];
+  if (!account) throw Object.assign(new Error('Akun Cloudflare tidak ditemukan oleh token Analytics'),{status:502});
+  const plan=config.cloudflarePlan==='PAID'?'PAID':'FREE';
+  return {
+    configured:true,plan,scriptName:config.cloudflareScriptName,generatedAt:end.toISOString(),
+    quota:plan==='PAID'
+      ?{period:'MONTH',requestLimit:10000000,cpuPoolMs:30000000,cpuPerRequestMs:30000}
+      :{period:'DAY',requestLimit:100000,cpuPoolMs:null,cpuPerRequestMs:10},
+    last24Hours:summarizeWorkerRows(account.day),month:summarizeWorkerRows(account.month)
+  };
+}
 
 function send(response, status, body) {
   response.statusCode = status;
@@ -2071,6 +2150,22 @@ async function routeRequest(request, response, route) {
   if (!session) { const error = new Error('Sesi tidak valid'); error.status = 401; throw error; }
   const context = await cloudContext(session, request);
 
+  if (request.method === 'GET' && route === 'platform/infrastructure') {
+    requirePlatformAdmin(session);
+    const [databaseResult,cloudflareResult]=await Promise.allSettled([
+      rpc('platform_infrastructure_snapshot_v1',{}),loadCloudflareInfrastructure()
+    ]);
+    return send(response,200,{
+      generatedAt:new Date().toISOString(),
+      database:databaseResult.status==='fulfilled'
+        ?{available:true,...databaseResult.value}
+        :{available:false,message:databaseResult.reason?.message??'Metrik database belum tersedia'},
+      cloudflare:cloudflareResult.status==='fulfilled'
+        ?cloudflareResult.value
+        :{configured:true,available:false,message:cloudflareResult.reason?.message??'Metrik Cloudflare belum tersedia'}
+    });
+  }
+
   if (request.method === 'GET' && route === 'system/health') {
     requirePermission(session, 'identity.manage');
     return send(response, 200, await rpc('operational_health_check', {
@@ -2146,6 +2241,7 @@ async function routeRequest(request, response, route) {
         authenticatedOwnerId: session.authenticatedProfile.role === 'OWNER' ? session.authenticatedUser.id : null,
         ownerContextActive: session.ownerContextActive,
         canSwitchOwners: session.authenticatedProfile.role === 'OWNER',
+        platformAdmin: isPlatformAdmin(session),
         permissions: session.permissions
       },
       outlets: context.outlets, activeOutletId: context.outlet.id, locations: context.locations,

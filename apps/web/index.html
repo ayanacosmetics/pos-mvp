@@ -186,6 +186,7 @@
         </div>
         <button data-nav-group="system" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg></span><span>Sistem<small>Data dan pengaturan</small></span><b>›</b></button>
         <div data-nav-panel="system" class="feature-nav-panel">
+          <button data-page="platform-infrastructure" data-platform-admin class="feature-nav-item hidden"><span>Status Infrastruktur</span><small>Cloudflare, Supabase, kapasitas global</small></button>
           <button data-page="imports" class="feature-nav-item" data-permission="audit.view"><span>Impor data</span><small>Masukkan data awal</small></button>
           <button data-page="backups" class="feature-nav-item" data-permission="identity.manage"><span>Backup</span><small>Snapshot dan verifikasi</small></button>
           <button data-page="users" class="feature-nav-item" data-permission="identity.manage_staff"><span>Kelola Staff</span><small>Akun, peran, outlet</small></button>
@@ -652,6 +653,17 @@
         <div class="page-title"><div><p class="eyebrow">STAFF & HAK AKSES</p><h1>Kelola staff</h1><p class="muted">Lihat anggota tim, peran, penempatan outlet, dan hak akses setiap akun.</p></div><div class="page-title-actions"><button id="refresh-users" class="button secondary">Muat ulang</button><button id="open-create-user" class="button primary">+ Tambah staff</button></div></div>
         <div id="user-metrics" class="user-metrics"></div>
         <div class="surface user-directory"><div class="directory-heading"><div><p class="eyebrow">DAFTAR STAFF</p><h2>Anggota tim</h2></div><div class="user-filters"><input id="user-search" type="search" placeholder="Cari nama atau email"><select id="user-status-filter"><option value="ACTIVE">Aktif</option><option value="ALL">Semua status</option><option value="INACTIVE">Nonaktif</option></select></div></div><div id="user-list"><div class="empty-state compact">Memuat staff...</div></div></div>
+      </div></section>
+
+      <section id="page-platform-infrastructure" class="page"><div class="content-width infrastructure-page">
+        <div class="page-title"><div><p class="eyebrow">KHUSUS PLATFORM ADMIN</p><h1>Status Infrastruktur Nusa</h1><p class="muted">Kapasitas global Cloudflare dan Supabase. Data ini tidak tersedia bagi Owner toko.</p></div><button id="refresh-platform-infrastructure" class="button secondary" type="button">Periksa sekarang</button></div>
+        <div id="platform-infrastructure-status" class="health-summary loading"><div><span class="health-indicator"></span><strong>Menunggu pemeriksaan</strong><small>Metrik hanya dimuat ketika halaman ini dibuka.</small></div></div>
+        <div id="platform-infrastructure-metrics" class="report-cards infrastructure-metrics"><article class="metric"><span>Database Supabase</span><strong>—</strong><small>Belum diperiksa</small></article><article class="metric"><span>Request Cloudflare</span><strong>—</strong><small>Belum diperiksa</small></article><article class="metric"><span>Error Cloudflare</span><strong>—</strong><small>Belum diperiksa</small></article><article class="metric"><span>CPU P99</span><strong>—</strong><small>Belum diperiksa</small></article></div>
+        <div class="infrastructure-grid">
+          <section class="surface settings-section"><div class="settings-section-head"><div><p class="eyebrow">SUPABASE GLOBAL</p><h2>Kapasitas database</h2></div><span id="platform-database-badge" class="pill">Belum tersedia</span></div><div id="platform-database-detail" class="infrastructure-detail"><div class="empty-state compact">Jalankan pemeriksaan untuk membaca kapasitas database.</div></div></section>
+          <section class="surface settings-section"><div class="settings-section-head"><div><p class="eyebrow">CLOUDFLARE WORKERS</p><h2>Permintaan dan CPU</h2></div><span id="platform-cloudflare-badge" class="pill">Belum tersedia</span></div><div id="platform-cloudflare-detail" class="infrastructure-detail"><div class="empty-state compact">Token Analytics disimpan hanya pada Worker.</div></div></section>
+        </div>
+        <section class="surface settings-section"><div class="settings-section-head"><div><p class="eyebrow">PENGGUNAAN TERBESAR</p><h2>Tabel database global</h2><p class="muted">Hanya ukuran dan jumlah baris; isi data toko tidak ditampilkan.</p></div></div><div id="platform-largest-tables" class="table-wrap"><div class="empty-state compact">Belum ada hasil pemeriksaan.</div></div></section>
       </div></section>
 
       <section id="page-settings" class="page"><div class="content-width settings-page">

@@ -16,7 +16,7 @@ let kaspinMigrationPackage=null;
 const kaspinMigrationExpandedSteps=new Set();
 let variantSuggestions=[];
 const selectedVariantSuggestions=new Set();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, dataResetScopesSignature:'', dataRestoreSnapshot:null,dataRestoreOtpReady:false, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productAdminPage:1, selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', importSourceReport:null, productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, platformInfrastructure:null, dataResetScopesSignature:'', dataRestoreSnapshot:null,dataRestoreOtpReady:false, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productAdminPage:1, selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', importSourceReport:null, productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
@@ -373,6 +373,7 @@ async function applyBootstrap(data, { offline = false } = {}) {
   el('switch-account').classList.toggle('hidden', !state.session.canSwitchOwners);
   renderLastSync();
   document.querySelectorAll('[data-permission]').forEach((node) => node.classList.toggle('hidden', !state.session.permissions.includes(node.dataset.permission)));
+  document.querySelectorAll('[data-platform-admin]').forEach((node)=>node.classList.toggle('hidden',state.session.platformAdmin!==true));
   syncNavigationPermissions();
   el('session-view').classList.add('hidden');
   el('login-view').classList.add('hidden');
@@ -5047,6 +5048,66 @@ async function loadSystemHealth() {
   }
 }
 
+function infrastructureBytes(value) {
+  const bytes=Number(value??0);
+  if(bytes>=1024**3)return `${(bytes/1024**3).toFixed(2)} GB`;
+  if(bytes>=1024**2)return `${(bytes/1024**2).toFixed(2)} MB`;
+  if(bytes>=1024)return `${(bytes/1024).toFixed(1)} KB`;
+  return `${bytes.toLocaleString('id-ID')} B`;
+}
+
+function renderPlatformInfrastructure() {
+  const snapshot=state.platformInfrastructure;
+  if(!snapshot)return;
+  const database=snapshot.database??{},db=database.database??{};
+  const cloudflare=snapshot.cloudflare??{};
+  const cfPeriod=cloudflare.plan==='PAID'?cloudflare.month:cloudflare.last24Hours;
+  const dbPercent=Number(db.usedPercent??0),errorRate=Number(cfPeriod?.errorRate??0);
+  const critical=database.available&&dbPercent>=80;
+  const warning=!database.available||!cloudflare.configured||cloudflare.available===false||dbPercent>=65||errorRate>0;
+  const status=critical?'critical':warning?'warning':'healthy';
+  const checked=new Date(snapshot.generatedAt).toLocaleString('id-ID');
+  el('platform-infrastructure-status').className=`health-summary ${status}`;
+  el('platform-infrastructure-status').innerHTML=`<div><span class="health-indicator"></span><strong>${critical?'Kapasitas perlu tindakan':warning?'Konfigurasi perlu dilengkapi':'Infrastruktur dalam batas aman'}</strong><small>${critical?'Database global telah melewati ambang 80%.':warning?'Periksa rincian penyedia di bawah.':'Cloudflare dan Supabase dapat dijangkau.'}</small></div><span>Terakhir diperiksa<br><strong>${escapeHtml(checked)}</strong></span>`;
+
+  const requestLimit=Number(cloudflare.quota?.requestLimit??0);
+  const requestPercent=requestLimit?Number(cfPeriod?.requests??0)*100/requestLimit:0;
+  const metrics=[
+    ['Database Supabase',database.available?`${dbPercent.toFixed(2)}%`:'—',database.available?`${infrastructureBytes(db.usedBytes)} dari ${infrastructureBytes(db.limitBytes)}`:database.message],
+    ['Request Cloudflare',cfPeriod?Number(cfPeriod.requests??0).toLocaleString('id-ID'):'—',requestLimit?`${requestPercent.toFixed(2)}% dari kuota ${cloudflare.quota.period==='MONTH'?'bulanan':'harian'}`:cloudflare.message],
+    ['Error Cloudflare',cfPeriod?Number(cfPeriod.errors??0).toLocaleString('id-ID'):'—',cfPeriod?`${errorRate.toFixed(3)}% error`:'Analytics belum terhubung'],
+    ['CPU P99',cfPeriod?`${Number(cfPeriod.cpuP99Ms??0).toFixed(2)} ms`:'—',cloudflare.quota?`Batas per request ${Number(cloudflare.quota.cpuPerRequestMs).toLocaleString('id-ID')} ms`:'Analytics belum terhubung']
+  ];
+  el('platform-infrastructure-metrics').innerHTML=metrics.map(([label,value,note])=>`<article class="metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(note??'')}</small></article>`).join('');
+
+  el('platform-database-badge').textContent=database.available?(dbPercent>=80?'KRITIS':dbPercent>=65?'WASPADA':'AMAN'):'BELUM TERHUBUNG';
+  el('platform-database-detail').innerHTML=database.available
+    ?`<div class="infrastructure-progress"><span style="width:${Math.min(100,dbPercent)}%"></span></div><div class="infrastructure-facts"><div><span>Terpakai</span><strong>${infrastructureBytes(db.usedBytes)}</strong></div><div><span>Tersisa</span><strong>${infrastructureBytes(db.remainingBytes)}</strong></div><div><span>Tenant</span><strong>${Number(database.platform?.tenantCount??0).toLocaleString('id-ID')}</strong></div><div><span>Transaksi</span><strong>${Number(database.platform?.saleCount??0).toLocaleString('id-ID')}</strong></div></div>`
+    :`<div class="empty-state compact">${escapeHtml(database.message??'Snapshot database belum tersedia.')}</div>`;
+
+  el('platform-cloudflare-badge').textContent=cloudflare.configured?(cloudflare.available===false?'GAGAL':cloudflare.plan):'PERLU TOKEN';
+  el('platform-cloudflare-detail').innerHTML=cfPeriod
+    ?`<div class="infrastructure-facts"><div><span>Request 24 jam</span><strong>${Number(cloudflare.last24Hours?.requests??0).toLocaleString('id-ID')}</strong></div><div><span>Request bulan ini</span><strong>${Number(cloudflare.month?.requests??0).toLocaleString('id-ID')}</strong></div><div><span>Subrequest</span><strong>${Number(cfPeriod.subrequests??0).toLocaleString('id-ID')}</strong></div><div><span>CPU P50</span><strong>${Number(cfPeriod.cpuP50Ms??0).toFixed(2)} ms</strong></div></div>`
+    :`<div class="empty-state compact">${escapeHtml(cloudflare.message??'Cloudflare Analytics belum tersedia.')}</div>`;
+
+  el('platform-largest-tables').innerHTML=database.available
+    ?`<table class="report-table"><thead><tr><th>Skema</th><th>Tabel</th><th>Perkiraan baris</th><th>Ukuran</th></tr></thead><tbody>${(database.tables??[]).map((row)=>`<tr><td>${escapeHtml(row.schema)}</td><td><strong>${escapeHtml(row.table)}</strong></td><td>${Number(row.estimatedRows??0).toLocaleString('id-ID')}</td><td>${infrastructureBytes(row.totalBytes)}</td></tr>`).join('')}</tbody></table>`
+    :'<div class="empty-state compact">Data tabel belum tersedia.</div>';
+}
+
+async function loadPlatformInfrastructure() {
+  if(state.session?.platformAdmin!==true)return;
+  const button=el('refresh-platform-infrastructure');
+  if(button)button.disabled=true;
+  try{
+    state.platformInfrastructure=await request('/api/platform/infrastructure');
+    renderPlatformInfrastructure();
+  }catch(error){
+    el('platform-infrastructure-status').className='health-summary critical';
+    el('platform-infrastructure-status').innerHTML=`<div><span class="health-indicator"></span><strong>Akses infrastruktur gagal</strong><small>${escapeHtml(error.message)}</small></div>`;
+  }finally{if(button)button.disabled=false;}
+}
+
 async function loadSettingsWorkspace() {
   await Promise.all([loadSettings(), loadSystemHealth()]);
 }
@@ -6829,6 +6890,7 @@ function showPage(name) {
   }
   localStorage.setItem('pos_active_page',name);
   if(target==='products')loadProductManagement().catch((error)=>toast(error.message));
+  if(name==='platform-infrastructure')loadPlatformInfrastructure().catch((error)=>toast(error.message));
   if(target==='customers'&&state.session.permissions.includes('pos.sell')){
     Promise.all([loadCrmDashboard(),loadCustomerAging()]).catch((error)=>toast(error.message));
   }
@@ -7816,6 +7878,7 @@ el('verify-backup-file').addEventListener('change', verifyBackupFile);
 el('refresh-backups').addEventListener('click', loadBackupHistory);
 el('refresh-settings').addEventListener('click', loadSettingsWorkspace);
 el('refresh-system-health').addEventListener('click', loadSystemHealth);
+el('refresh-platform-infrastructure').addEventListener('click',loadPlatformInfrastructure);
 document.querySelectorAll('[data-maintenance-mode]').forEach((button)=>button.addEventListener('click',()=>showDataMaintenanceMode(button.dataset.maintenanceMode)));
 el('data-reset-form').addEventListener('change',(event)=>{if(event.target.matches('input[name="data-reset-scope"]'))syncDataResetForm(event);});
 el('request-data-reset-otp').addEventListener('click',requestDataResetOtp);
