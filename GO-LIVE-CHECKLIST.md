@@ -2,6 +2,10 @@
 
 Checklist ini dilakukan setelah kandidat final dipasang. Gunakan produk contoh dan nominal kecil. Jangan langsung memindahkan seluruh operasional toko.
 
+- [ ] `https://app.nusapos.my.id/api/health` merespons sukses.
+- [ ] Keystore produksi permanen dibuat, dicadangkan di dua lokasi aman, dan kata sandinya disimpan di password manager.
+- [ ] APK produksi ditandatangani keystore permanen; APK `1.3.0-uat` yang memakai debug key tidak dipakai untuk operasional.
+
 ## 1. Persiapan
 
 - [ ] Nama usaha, alamat, telepon, dan pesan struk sudah benar.

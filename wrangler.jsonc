@@ -10,6 +10,10 @@
     {
       "pattern": "uji.nusapos.my.id",
       "custom_domain": true
+    },
+    {
+      "pattern": "app.nusapos.my.id",
+      "custom_domain": true
     }
   ],
   "assets": {
@@ -23,7 +27,7 @@
     "head_sampling_rate": 1
   },
   "vars": {
-    "PUBLIC_APP_URL": "https://nusapos.my.id",
+    "PUBLIC_APP_URL": "https://app.nusapos.my.id",
     "ALLOW_OWNER_BOOTSTRAP": "false",
     "DEFAULT_BUSINESS_NAME": "Kasir Nusa"
   }

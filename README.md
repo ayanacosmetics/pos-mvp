@@ -4,7 +4,7 @@ Kasir Nusa adalah sistem POS dan backoffice orisinal untuk toko kosmetik serta t
 
 Produksi menggunakan:
 
-- Vercel untuk aplikasi web/PWA dan API.
+- Cloudflare Workers untuk aplikasi web/PWA dan API; Vercel dipertahankan sementara sebagai jalur cadangan.
 - Supabase untuk login, database PostgreSQL, transaksi atomik, dan audit.
 - Aplikasi Android native untuk kasir; PWA untuk owner di iOS dan backoffice.
 - Pada ponsel, katalog dan keranjang Kasir berada di layar terpisah; tablet dan
@@ -230,7 +230,7 @@ batch, HPP penjualan sesuai FEFO/FIFO, dan pemulihan lapisan modal saat void.
 
 Klik dua kali `Deploy-Kasir-Nusa.cmd` dan tunggu sampai muncul tulisan **Deployment berhasil**.
 
-Rahasia Supabase hanya boleh tersimpan di pengaturan Environment Variables Vercel. Jangan menaruh `SUPABASE_SERVICE_ROLE_KEY` di browser, screenshot, chat, atau repository.
+Rahasia Supabase hanya boleh tersimpan sebagai secret Cloudflare Worker (dan Environment Variables Vercel selama masih menjadi cadangan). Jangan menaruh `SUPABASE_SERVICE_ROLE_KEY` di browser, screenshot, chat, atau repository.
 
 ## Pengujian
 
@@ -240,28 +240,26 @@ Jalankan:
 npm test
 ```
 
-Source saat ini memiliki 190 pengujian otomatis. Pengujian toko nyata tetap
+Source saat ini memiliki 321 pengujian otomatis. Pengujian toko nyata tetap
 harus mengikuti `GO-LIVE-CHECKLIST.md`; keputusan lulus pilot tidak menggantikan
 verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 
 ## Aplikasi kasir Android
 
-Unduh dan instal pembaruan APK dari
-<https://kasir-nusa-pos.vercel.app/downloads/Kasir-Nusa-POS-1.2.2.apk>.
+Kandidat UAT dapat diunduh dari
+<https://app.nusapos.my.id/downloads/Kasir-Nusa-POS-1.3.0-uat.apk>.
 Printer dihubungkan dari halaman Perangkat. Scanner dipasangkan sebagai
 keyboard/HID melalui Pengaturan Bluetooth Android, bukan dari aplikasi. Setelah
 tersambung, barcode diteruskan otomatis ke halaman Kasir dan scanner sebaiknya
-mengirim Enter setelah barcode. APK stabil v1.2.0 bernama **Kasir Nusa POS**
-dan memiliki SHA-256
-`E95CBCB88B2FCBF77031D848EDB803FA82F5151EADA2E9E39C3B3D898DD4372C`.
-APK ditandatangani sertifikat yang sama dengan versi sebelumnya, sehingga dapat
-dipasang langsung sebagai pembaruan tanpa menghapus aplikasi atau sesi. Jangan
-hapus versi lama sebelum memasang pembaruan.
+mengirim Enter setelah barcode. Kandidat UAT v1.3.0 memiliki SHA-256
+`C17962228E78943F4F1015EC0C0BA906549DE1A9B71B327918165B3222B2708E`.
+APK ini memakai debug key dan hanya untuk UAT, bukan operasional. APK produksi
+baru boleh dibagikan setelah ditandatangani keystore permanen yang dicadangkan.
 
 ## Struktur
 
 ```text
-api/                  API produksi Vercel
+api/                  API Cloudflare Worker dan fallback Vercel
 apps/web/             Antarmuka POS dan backoffice PWA
 apps/android-cashier/ Aplikasi kasir Android, printer SPP, scanner HID
 apps/api/             Server demo lokal

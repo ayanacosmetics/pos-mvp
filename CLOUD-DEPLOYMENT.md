@@ -1,4 +1,4 @@
-# Operasional Produksi — Supabase dan Vercel
+# Operasional Produksi — Supabase dan Cloudflare
 
 ## Arsitektur
 
@@ -7,14 +7,14 @@ Android PWA / Windows PWA / Browser
                   |
               HTTPS /api
                   |
-          Vercel Functions
+          Cloudflare Worker
     validasi sesi, akses, dan transaksi
                   |
          Supabase PostgreSQL
       Auth, data, jurnal, dan audit
 ```
 
-Browser tidak menerima `SUPABASE_SERVICE_ROLE_KEY`. Semua operasi sensitif berjalan melalui API Vercel dan fungsi database yang memeriksa tenant, pengguna, outlet, peran, serta idempotensi.
+Browser tidak menerima `SUPABASE_SERVICE_ROLE_KEY`. Semua operasi sensitif berjalan melalui API Cloudflare Worker dan fungsi database yang memeriksa tenant, pengguna, outlet, peran, serta idempotensi.
 
 ## Variabel produksi
 

@@ -46,7 +46,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
-    private static final String TRUSTED_HOST = "kasir-nusa-pos.vercel.app";
+    private static final String TRUSTED_HOST = "app.nusapos.my.id";
     private static final String START_URL = BuildConfig.POS_ORIGIN + "/";
     private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb");
     private static final int REQUEST_BLUETOOTH_CONNECT = 301;
@@ -99,7 +99,7 @@ public final class MainActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setSupportMultipleWindows(false);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " KasirNusaAndroid/1.2.2");
+        settings.setUserAgentString(settings.getUserAgentString() + " KasirNusaAndroid/1.3.0");
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);

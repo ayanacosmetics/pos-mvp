@@ -29,17 +29,17 @@ const androidIcon = await readFile(
   'utf8',
 );
 const pwaIcon = await readFile(new URL('../apps/web/icon-512.svg', import.meta.url), 'utf8');
-const releaseApk = await readFile(new URL('../releases/Kasir-Nusa-POS-1.2.2.apk', import.meta.url));
-const publicApk = await readFile(new URL('../apps/web/downloads/Kasir-Nusa-POS-1.2.2.apk', import.meta.url));
+const releaseApk = await readFile(new URL('../releases/Kasir-Nusa-POS-1.3.0-uat.apk', import.meta.url));
+const publicApk = await readFile(new URL('../apps/web/downloads/Kasir-Nusa-POS-1.3.0-uat.apk', import.meta.url));
 const vercelConfig = await readFile(new URL('../vercel.json', import.meta.url), 'utf8');
 
 test('Android cashier app locks its WebView to the production POS and blocks unsafe file access', () => {
   assert.match(androidBuild, /applicationId\s+"app\.kasirnusa\.cashier"/);
-  assert.match(androidBuild, /https:\/\/kasir-nusa-pos\.vercel\.app/);
+  assert.match(androidBuild, /https:\/\/app\.nusapos\.my\.id/);
   assert.match(manifest, /android:usesCleartextTraffic="false"/);
   assert.match(manifest, /android\.permission\.INTERNET/);
   assert.match(manifest, /android\.permission\.BLUETOOTH_CONNECT/);
-  assert.match(activity, /TRUSTED_HOST\s*=\s*"kasir-nusa-pos\.vercel\.app"/);
+  assert.match(activity, /TRUSTED_HOST\s*=\s*"app\.nusapos\.my\.id"/);
   assert.match(activity, /setAllowFileAccess\(false\)/);
   assert.match(activity, /setAllowContentAccess\(false\)/);
   assert.match(activity, /MIXED_CONTENT_NEVER_ALLOW/);
@@ -76,10 +76,14 @@ test('scanner dipasangkan dari Bluetooth Android dan aplikasi tidak mengambil al
 });
 
 test('APK pembaruan mempertahankan printer SPP tetapi scanner hanya memakai HID', () => {
-  assert.match(androidBuild, /versionCode 6/);
-  assert.match(androidBuild, /versionName "1\.2\.2"/);
-  assert.match(androidBuild, /release\s*\{[\s\S]*signingConfig signingConfigs\.debug/);
-  assert.match(activity, /KasirNusaAndroid\/1\.2\.2/);
+  assert.match(androidBuild, /versionCode 7/);
+  assert.match(androidBuild, /versionName "1\.3\.0"/);
+  assert.doesNotMatch(androidBuild, /release\s*\{[\s\S]*signingConfig signingConfigs\.debug/);
+  assert.match(androidBuild, /KASIR_NUSA_KEYSTORE_FILE/);
+  assert.match(androidBuild, /KASIR_NUSA_KEYSTORE_PASSWORD/);
+  assert.match(androidBuild, /releaseRequested && !releaseSigningConfigured/);
+  assert.match(androidBuild, /signingConfig signingConfigs\.release/);
+  assert.match(activity, /KasirNusaAndroid\/1\.3\.0/);
   assert.doesNotMatch(activity, /SCANNER_MODE|scannerSocket|scannerReader/);
 });
 
@@ -93,10 +97,10 @@ test('label Android dikirim langsung sebagai raster ESC POS tanpa halaman A4', (
   assert.match(webApp, /window\.print\(\)/);
 });
 
-test('APK v1.2.2 tersedia sebagai unduhan produksi yang identik dengan hasil rilis', () => {
+test('APK UAT v1.3.0 tersedia sebagai unduhan yang identik dengan hasil build', () => {
   assert.deepEqual(publicApk, releaseApk);
-  assert.match(vercelConfig, /\/downloads\/Kasir-Nusa-POS-1\.2\.2\.apk/);
-  assert.match(vercelConfig, /attachment; filename=Kasir-Nusa-POS-1\.2\.2\.apk/);
+  assert.match(vercelConfig, /\/downloads\/Kasir-Nusa-POS-1\.3\.0-uat\.apk/);
+  assert.match(vercelConfig, /attachment; filename=Kasir-Nusa-POS-1\.3\.0-uat\.apk/);
 });
 
 test('APK dan PWA memakai nama serta identitas visual Kasir Nusa POS yang konsisten', () => {

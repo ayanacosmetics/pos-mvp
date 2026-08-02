@@ -88,6 +88,23 @@
                                     ]
                     },
                     {
+                        "source":  "/downloads/Kasir-Nusa-POS-1.3.0-uat.apk",
+                        "headers":  [
+                                        {
+                                            "key":  "Content-Type",
+                                            "value":  "application/vnd.android.package-archive"
+                                        },
+                                        {
+                                            "key":  "Content-Disposition",
+                                            "value":  "attachment; filename=Kasir-Nusa-POS-1.3.0-uat.apk"
+                                        },
+                                        {
+                                            "key":  "Cache-Control",
+                                            "value":  "public, max-age=3600"
+                                        }
+                                    ]
+                    },
+                    {
                         "source":  "/api/:path*",
                         "headers":  [
                                         {

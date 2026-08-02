@@ -9,3 +9,8 @@ apps/api/data/*.sqlite-wal
 .env*
 .wrangler/
 .wrangler-dist/
+apps/android-cashier/local.properties
+apps/android-cashier/.gradle/
+apps/android-cashier/app/build/
+*.jks
+*.keystore
