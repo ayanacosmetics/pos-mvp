@@ -431,6 +431,32 @@ async function loadCatalog(tenantId, locationId, outletId = null) {
   }));
 }
 
+async function loadQuoteProducts(tenantId, productIds, locationId, outletId = null) {
+  const ids=[...new Set((productIds??[]).map((id)=>String(id).trim()).filter(Boolean))];
+  if(!ids.length)return[];
+  const tenant=encodeURIComponent(tenantId),productsFilter=`product_id=${inFilter(ids)}`;
+  const [products,units,rules,balances,overrides]=await Promise.all([
+    rest('products',`tenant_id=eq.${tenant}&id=${inFilter(ids)}&active=eq.true&select=id,name,category,brand`),
+    rest('product_units',`tenant_id=eq.${tenant}&${productsFilter}&select=id,product_id,name,factor_to_base,barcode`),
+    rest('price_rules',`tenant_id=eq.${tenant}&${productsFilter}&select=id,product_id,customer_group_id,min_base_qty,unit_price_base,priority`),
+    locationId?rest('stock_balances',`tenant_id=eq.${tenant}&location_id=eq.${encodeURIComponent(locationId)}&${productsFilter}&select=product_id,quantity`):Promise.resolve([]),
+    outletId?rest('outlet_price_overrides',`tenant_id=eq.${tenant}&outlet_id=eq.${encodeURIComponent(outletId)}&active=eq.true&${productsFilter}&select=id,product_id,customer_group_id,min_base_qty,unit_price_base`).catch(()=>[]):Promise.resolve([])
+  ]);
+  const unitsByProduct=groupRows(units,(item)=>item.product_id);
+  const rulesByProduct=groupRows(rules,(item)=>item.product_id);
+  const balancesByProduct=new Map(balances.map((item)=>[item.product_id,item]));
+  const overridesByProduct=groupRows(overrides,(item)=>item.product_id);
+  return products.map((product)=>({
+    id:product.id,name:product.name,category:product.category,brand:product.brand,
+    stockBase:Number(balancesByProduct.get(product.id)?.quantity??0),
+    units:(unitsByProduct.get(product.id)??[]).map((unit)=>({id:unit.id,name:unit.name,factor:Number(unit.factor_to_base),barcode:unit.barcode})),
+    priceRules:[
+      ...(rulesByProduct.get(product.id)??[]).map((rule)=>({id:rule.id,customerGroupId:rule.customer_group_id,minBaseQty:Number(rule.min_base_qty),unitPriceBase:Number(rule.unit_price_base),priority:rule.priority})),
+      ...(overridesByProduct.get(product.id)??[]).map((rule)=>({id:rule.id,customerGroupId:rule.customer_group_id,minBaseQty:Number(rule.min_base_qty),unitPriceBase:Number(rule.unit_price_base),priority:100000}))
+    ]
+  }));
+}
+
 async function loadCustomerAccounts(tenantId) {
   const tenant=encodeURIComponent(tenantId);
   const [customers,entries,sales]=await Promise.all([
@@ -1031,18 +1057,23 @@ async function loadSalesReportSource(context,{outletIds,from,to,limit=10000}){
     byChunks('profiles','user_id',[...new Set(sales.map((sale)=>sale.cashier_id).filter(Boolean))],'select=user_id,display_name')
   ]);
   const returnItems=returns.length?await byChunks('customer_return_items','return_id',returns.map((item)=>item.id),'select=return_id,base_qty,unit_cost'):[];
+  const paymentsBySale=groupRows(payments,(item)=>item.sale_id);
+  const returnsBySale=groupRows(returns,(item)=>item.sale_id);
+  const returnItemsByReturn=groupRows(returnItems,(item)=>item.return_id);
+  const cashierById=new Map(cashiers.map((item)=>[item.user_id,item]));
   return sales.map((sale)=>{
-    const ownReturns=returns.filter((item)=>item.sale_id===sale.id),returnIds=new Set(ownReturns.map((item)=>item.id));
+    const ownReturns=returnsBySale.get(sale.id)??[];
     const returnTotal=ownReturns.reduce((sum,item)=>sum+Number(item.total),0);
-    const returnCost=returnItems.filter((item)=>returnIds.has(item.return_id)).reduce((sum,item)=>sum+Number(item.base_qty)*Number(item.unit_cost??0),0);
+    const returnCost=ownReturns.reduce((sum,returned)=>sum+(returnItemsByReturn.get(returned.id)??[])
+      .reduce((subtotal,item)=>subtotal+Number(item.base_qty)*Number(item.unit_cost??0),0),0);
     const netTotal=sale.status==='VOIDED'?0:Math.max(0,Number(sale.grand_total)-returnTotal);
     const netCost=sale.status==='VOIDED'?0:Math.max(0,Number(sale.cost_total)-returnCost);
     return{id:sale.id,status:sale.status,occurredAt:sale.occurred_at,cashierId:sale.cashier_id,
-      cashier:cashiers.find((item)=>item.user_id===sale.cashier_id)?.display_name??'Kasir',
+      cashier:cashierById.get(sale.cashier_id)?.display_name??'Kasir',
       creditAmount:Number(sale.credit_amount??0),paidCreditAmount:Number(sale.paid_credit_amount??0),
       netTotal,netCost,grossProfit:netTotal-netCost,returnTotal,
       quote:{grandTotal:Number(sale.grand_total)},
-      payments:payments.filter((item)=>item.sale_id===sale.id).map((item)=>({method:item.method,amount:Number(item.amount)}))};
+      payments:(paymentsBySale.get(sale.id)??[]).map((item)=>({method:item.method,amount:Number(item.amount)}))};
   });
 }
 
@@ -1650,11 +1681,16 @@ function saleAdjustmentFingerprint(lines, customerGroupId, adjustment) {
 }
 
 async function baseSaleQuote(context, input) {
+  const productIds=(input.lines??[]).map((line)=>line.productId);
+  const [products,promotions]=await Promise.all([
+    loadQuoteProducts(context.tenantId,productIds,context.storeLocation?.id,context.outlet.id),
+    loadPromotions(context.tenantId,context.outlet.id)
+  ]);
   return quoteBasket({
     lines: input.lines,
     customerGroupId: input.customerGroupId,
-    products: await loadCatalog(context.tenantId, context.storeLocation?.id, context.outlet.id),
-    promotions: await loadPromotions(context.tenantId, context.outlet.id),
+    products,
+    promotions,
     at: input.at ? new Date(input.at) : new Date()
   });
 }
