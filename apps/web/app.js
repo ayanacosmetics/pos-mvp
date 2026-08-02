@@ -5063,12 +5063,27 @@ function renderPlatformInfrastructure() {
   const cloudflare=snapshot.cloudflare??{};
   const cfPeriod=cloudflare.plan==='PAID'?cloudflare.month:cloudflare.last24Hours;
   const dbPercent=Number(db.usedPercent??0),errorRate=Number(cfPeriod?.errorRate??0);
-  const critical=database.available&&dbPercent>=80;
-  const warning=!database.available||!cloudflare.configured||cloudflare.available===false||dbPercent>=65||errorRate>0;
+  const cpuLimit=Number(cloudflare.quota?.cpuPerRequestMs??0);
+  const cpuP50=Number(cfPeriod?.cpuP50Ms??0),cpuP99=Number(cfPeriod?.cpuP99Ms??0);
+  const cpuP50Over=Boolean(cfPeriod&&cpuLimit&&cpuP50>cpuLimit);
+  const cpuP99Over=Boolean(cfPeriod&&cpuLimit&&cpuP99>cpuLimit);
+  const databaseCritical=database.available&&dbPercent>=80;
+  const cloudflareCritical=Boolean(cfPeriod&&(errorRate>=1||cpuP50Over));
+  const critical=databaseCritical||cloudflareCritical;
+  const warning=!database.available||!cloudflare.configured||cloudflare.available===false||dbPercent>=65||errorRate>0||cpuP99Over;
   const status=critical?'critical':warning?'warning':'healthy';
+  const statusTitle=databaseCritical?'Kapasitas database perlu tindakan'
+    :cloudflareCritical?'Performa Cloudflare perlu tindakan'
+      :cpuP99Over?'Lonjakan CPU perlu dipantau'
+        :warning?'Konfigurasi perlu dilengkapi':'Infrastruktur dalam batas aman';
+  const statusDetail=databaseCritical?'Database global telah melewati ambang 80%.'
+    :cpuP50Over?`CPU P50 ${cpuP50.toFixed(2)} ms melewati patokan paket ${cloudflare.plan} ${cpuLimit.toLocaleString('id-ID')} ms. Paket Paid disarankan sebelum operasional.`
+      :errorRate>=1?`Error Cloudflare mencapai ${errorRate.toFixed(3)}%. Periksa log sebelum operasional.`
+        :cpuP99Over?`CPU P99 ${cpuP99.toFixed(2)} ms melewati patokan ${cpuLimit.toLocaleString('id-ID')} ms, tetapi ini mewakili request terberat dan perlu dibaca bersama P50 serta error.`
+          :warning?'Periksa rincian penyedia di bawah.':'Cloudflare dan Supabase dapat dijangkau.';
   const checked=new Date(snapshot.generatedAt).toLocaleString('id-ID');
   el('platform-infrastructure-status').className=`health-summary ${status}`;
-  el('platform-infrastructure-status').innerHTML=`<div><span class="health-indicator"></span><strong>${critical?'Kapasitas perlu tindakan':warning?'Konfigurasi perlu dilengkapi':'Infrastruktur dalam batas aman'}</strong><small>${critical?'Database global telah melewati ambang 80%.':warning?'Periksa rincian penyedia di bawah.':'Cloudflare dan Supabase dapat dijangkau.'}</small></div><span>Terakhir diperiksa<br><strong>${escapeHtml(checked)}</strong></span>`;
+  el('platform-infrastructure-status').innerHTML=`<div><span class="health-indicator"></span><strong>${escapeHtml(statusTitle)}</strong><small>${escapeHtml(statusDetail)}</small></div><span>Terakhir diperiksa<br><strong>${escapeHtml(checked)}</strong></span>`;
 
   const requestLimit=Number(cloudflare.quota?.requestLimit??0);
   const requestPercent=requestLimit?Number(cfPeriod?.requests??0)*100/requestLimit:0;
@@ -5076,7 +5091,7 @@ function renderPlatformInfrastructure() {
     ['Database Supabase',database.available?`${dbPercent.toFixed(2)}%`:'—',database.available?`${infrastructureBytes(db.usedBytes)} dari ${infrastructureBytes(db.limitBytes)}`:database.message],
     ['Request Cloudflare',cfPeriod?Number(cfPeriod.requests??0).toLocaleString('id-ID'):'—',requestLimit?`${requestPercent.toFixed(2)}% dari kuota ${cloudflare.quota.period==='MONTH'?'bulanan':'harian'}`:cloudflare.message],
     ['Error Cloudflare',cfPeriod?Number(cfPeriod.errors??0).toLocaleString('id-ID'):'—',cfPeriod?`${errorRate.toFixed(3)}% error`:'Analytics belum terhubung'],
-    ['CPU P99',cfPeriod?`${Number(cfPeriod.cpuP99Ms??0).toFixed(2)} ms`:'—',cloudflare.quota?`Batas per request ${Number(cloudflare.quota.cpuPerRequestMs).toLocaleString('id-ID')} ms`:'Analytics belum terhubung']
+    ['CPU P99',cfPeriod?`${cpuP99.toFixed(2)} ms`:'—',cloudflare.quota?`1% request terberat · patokan ${cpuLimit.toLocaleString('id-ID')} ms`:'Analytics belum terhubung']
   ];
   el('platform-infrastructure-metrics').innerHTML=metrics.map(([label,value,note])=>`<article class="metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(note??'')}</small></article>`).join('');
 
@@ -5085,7 +5100,7 @@ function renderPlatformInfrastructure() {
     ?`<div class="infrastructure-progress"><span style="width:${Math.min(100,dbPercent)}%"></span></div><div class="infrastructure-facts"><div><span>Terpakai</span><strong>${infrastructureBytes(db.usedBytes)}</strong></div><div><span>Tersisa</span><strong>${infrastructureBytes(db.remainingBytes)}</strong></div><div><span>Tenant</span><strong>${Number(database.platform?.tenantCount??0).toLocaleString('id-ID')}</strong></div><div><span>Transaksi</span><strong>${Number(database.platform?.saleCount??0).toLocaleString('id-ID')}</strong></div></div>`
     :`<div class="empty-state compact">${escapeHtml(database.message??'Snapshot database belum tersedia.')}</div>`;
 
-  el('platform-cloudflare-badge').textContent=cloudflare.configured?(cloudflare.available===false?'GAGAL':cloudflare.plan):'PERLU TOKEN';
+  el('platform-cloudflare-badge').textContent=cloudflare.configured?(cloudflare.available===false?'GAGAL':`${cloudflare.plan}${cpuP50Over?' · RISIKO':cpuP99Over?' · PANTAU':''}`):'PERLU TOKEN';
   el('platform-cloudflare-detail').innerHTML=cfPeriod
     ?`<div class="infrastructure-facts"><div><span>Request 24 jam</span><strong>${Number(cloudflare.last24Hours?.requests??0).toLocaleString('id-ID')}</strong></div><div><span>Request bulan ini</span><strong>${Number(cloudflare.month?.requests??0).toLocaleString('id-ID')}</strong></div><div><span>Subrequest</span><strong>${Number(cfPeriod.subrequests??0).toLocaleString('id-ID')}</strong></div><div><span>CPU P50</span><strong>${Number(cfPeriod.cpuP50Ms??0).toFixed(2)} ms</strong></div></div>`
     :`<div class="empty-state compact">${escapeHtml(cloudflare.message??'Cloudflare Analytics belum tersedia.')}</div>`;

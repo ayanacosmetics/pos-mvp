@@ -30,5 +30,8 @@ test('dashboard global tersembunyi dari Owner toko dan dimuat hanya saat dibuka'
   assert.match(html,/id="page-platform-infrastructure"/);
   assert.match(script,/state\.session\.platformAdmin!==true/);
   assert.match(script,/name==='platform-infrastructure'[^\n]*loadPlatformInfrastructure/);
+  assert.match(script,/cpuP50Over/);
+  assert.match(script,/cpuP99Over/);
+  assert.match(script,/1% request terberat/);
   assert.match(style,/\.infrastructure-grid/);
 });
