@@ -61,3 +61,12 @@ test('form restok padat dan bagian opsional dapat dilipat',()=>{
   assert.match(css,/Compact restock proposal and approval flow/);
   assert.match(css,/\.restock-card-grid\{grid-template-columns:repeat\(4/);
 });
+
+test('mobile restok memadatkan harga dan mengganti input readonly menjadi ringkasan',()=>{
+  assert.match(app,/function restockApprovalPriceMarkup/);
+  assert.match(app,/class="approval-price-readonly"/);
+  assert.match(css,/Dense mobile restock/);
+  assert.match(css,/@media\(max-width:650px\)[\s\S]*\.restock-approval-price-grid\{grid-template-columns:repeat\(2/);
+  assert.match(css,/\.restock-wizard-step small\{display:none\}/);
+  assert.match(css,/\.restock-card-grid>label:nth-child\(3\)/);
+});
