@@ -23,3 +23,11 @@ test('fondasi pengaturan menghubungkan identitas, outlet, lokasi, perangkat, dan
   assert.match(html,/data-page="settings-device"[^>]+data-permission="device\.configure"/);
   assert.match(api,/requireAnyPermission\(session, \['identity\.manage','device\.configure'\]\)/);
 });
+
+test('kasir hanya dapat menyimpan printer perangkat pada outlet penugasannya', async () => {
+  const migration=await readFile(new URL('../supabase/migrations/202608030014_cashier_device_printer_settings.sql',import.meta.url),'utf8');
+  assert.match(migration,/role not in \('OWNER','CASHIER'\)/);
+  assert.match(migration,/from public\.user_outlets/);
+  assert.match(migration,/paper_width=excluded\.paper_width/);
+  assert.match(migration,/actorRole/);
+});
