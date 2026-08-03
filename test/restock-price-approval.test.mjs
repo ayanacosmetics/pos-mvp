@@ -71,6 +71,18 @@ test('mobile restok memadatkan harga dan mengganti input readonly menjadi ringka
   assert.match(css,/\.restock-card-grid>label:nth-child\(3\)/);
 });
 
+test('persetujuan Owner memakai daftar dan halaman detail dengan patokan harga lengkap',()=>{
+  assert.match(app,/class="restock-approval-summary"/);
+  assert.match(app,/class="restock-approval-detail-toolbar"/);
+  assert.match(app,/Modal lama/);
+  assert.match(app,/Modal baru/);
+  assert.match(app,/Perubahan modal/);
+  assert.match(app,/Saran harga jual baru/);
+  assert.match(app,/price\.customerGroupId==='retail'\?'Harga jual'/);
+  assert.match(app,/class="button secondary back-restock-approvals"/);
+  assert.match(css,/\.restock-approval-status\{display:inline-flex!important/);
+});
+
 test('staff hanya melihat pemberitahuan approval tanpa modal lama dan saran harga',()=>{
   assert.match(app,/function canReviewRestockCostDetails/);
   assert.match(app,/function staffRestockApprovalNote/);
