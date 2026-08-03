@@ -18,6 +18,11 @@ let variantSuggestions=[];
 const selectedVariantSuggestions=new Set();
 const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, platformInfrastructure:null, dataResetScopesSignature:'', dataRestoreSnapshot:null,dataRestoreOtpReady:false, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productAdminPage:1, selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', importSourceReport:null, productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], inventoryBalanceByProduct:new Map(), inventoryListLimit:100, stockView:'list', ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
+state.restockDraftProducts=new Map();
+state.restockNewUnits=[];
+state.restockNewPrices={};
+state.restockApprovals=[];
+state.activeRestockApprovalId=null;
 state.loginPortal = sessionStorage.getItem('pos_login_portal') === 'STAFF' ? 'STAFF' : 'OWNER';
 state.ownerContextId = localStorage.getItem('pos_owner_context_id');
 state.restockPlanning = { recommendations: [], settings: { approvalThreshold: 5000000, lookbackDays: 30 }, locationId: null };
@@ -3027,7 +3032,7 @@ function sortedPurchaseProducts(query = '') {
 function renderPurchaseProductResults(kind, query = '') {
   const container = el(`${kind}-product-results`);
   const products = sortedPurchaseProducts(query);
-  const canCreate=kind==='restock'&&state.session.permissions.includes('catalog.manage')&&['OWNER','ADMIN'].includes(state.session.user.role);
+  const canCreate=kind==='restock'&&state.session.permissions.includes('purchasing.receive');
   container.innerHTML = products.map((product) => {
     const stock = Number(product.stockBase ?? 0);
     const baseUnit = product.units.find((unit) => Number(unit.factor) === 1) ?? product.units[0];
@@ -3062,14 +3067,14 @@ async function handlePurchaseProductEnter(kind, event) {
   if (exact) return choosePurchaseProduct(kind, exact.product.id, exact.unit.id);
   const first = sortedPurchaseProducts(value)[0];
   if (first) return choosePurchaseProduct(kind, first.id);
-  if(kind==='restock'&&state.session.permissions.includes('catalog.manage')&&['OWNER','ADMIN'].includes(state.session.user.role))return openRestockNewProduct(value);
+  if(kind==='restock'&&state.session.permissions.includes('purchasing.receive'))return openRestockNewProduct(value);
   toast('Barang tidak ditemukan.');
 }
 
 function setRestockExtraPicker(open){
   el('restock-extra-product-picker').classList.toggle('hidden',!open);
   el('toggle-restock-extra-product').setAttribute('aria-expanded',String(open));
-  el('toggle-restock-extra-product').textContent=open?'Tutup pencarian':'+ Tambah barang lain';
+  el('toggle-restock-extra-product').textContent=open?'Tutup pencarian':'Cari / scan barang';
   if(open){
     renderPurchaseProductResults('restock',el('restock-product-search').value);
     el('restock-product-search').focus();
@@ -3077,45 +3082,88 @@ function setRestockExtraPicker(open){
 }
 
 function openRestockNewProduct(seed=''){
-  if(!state.session.permissions.includes('catalog.manage')||!['OWNER','ADMIN'].includes(state.session.user.role))return toast('Produk baru hanya dapat dibuat oleh Owner/Admin yang memiliki hak kelola katalog.');
+  if(!state.session.permissions.includes('purchasing.receive'))return toast('Akun tidak memiliki hak menerima barang.');
   const value=String(seed??'').trim();
   const looksBarcode=/^\d{4,80}$/.test(value);
   el('restock-new-product-form').reset();
   el('restock-new-name').value=looksBarcode?'':value;
   el('restock-new-barcode').value=looksBarcode?value:'';
-  el('restock-new-sku').value=looksBarcode?value:'';
+  el('restock-new-sku').value='';
   el('restock-new-category').value='Lainnya';
   el('restock-new-unit').value='pcs';
   el('restock-new-min-stock').value=0;
+  el('restock-new-barcode-mode').value=looksBarcode?'FACTORY':'NONE';
+  state.restockNewUnits=[];
+  state.restockNewPrices=Object.fromEntries(state.customerGroups.filter((group)=>group.active!==false).map((group)=>[group.id,[{minBaseQty:1,unitPriceBase:''}]]));
+  renderRestockNewUnits();renderRestockNewPrices();syncRestockNewBarcodeMode();
   el('restock-new-product-error').textContent='';
   el('restock-new-product-dialog').showModal();
-  el(looksBarcode||!value?'restock-new-name':'restock-new-price').focus();
+  el(!value||looksBarcode?'restock-new-name':'restock-new-price').focus();
 }
 
-async function saveRestockNewProduct(event){
+function ean13CheckDigit(firstTwelve){
+  const sum=[...firstTwelve].reduce((total,digit,index)=>total+Number(digit)*(index%2?3:1),0);
+  return String((10-(sum%10))%10);
+}
+
+function generateInternalBarcode(){
+  const used=new Set(state.products.flatMap((product)=>product.units.map((unit)=>String(unit.barcode??''))));
+  for(const draft of state.restockDraftProducts.values())draft.units.forEach((unit)=>used.add(String(unit.barcode??'')));
+  [el('restock-new-barcode')?.value,...state.restockNewUnits.map((unit)=>unit.barcode)].filter(Boolean).forEach((barcode)=>used.add(String(barcode)));
+  for(let attempt=0;attempt<50;attempt+=1){
+    const bytes=new Uint32Array(1);crypto.getRandomValues(bytes);
+    const body=`29${String(bytes[0]).padStart(10,'0').slice(-10)}`;
+    const barcode=body+ean13CheckDigit(body);
+    if(!used.has(barcode))return barcode;
+  }
+  throw new Error('Barcode internal belum dapat dibuat. Coba lagi.');
+}
+
+function syncRestockNewBarcodeMode(){
+  const mode=el('restock-new-barcode-mode').value,input=el('restock-new-barcode');
+  input.disabled=mode==='NONE';
+  if(mode==='NONE')input.value='';
+  if(mode==='INTERNAL'&&!input.value)input.value=generateInternalBarcode();
+  el('restock-new-barcode-label').firstChild.textContent=mode==='INTERNAL'?'Barcode internal':mode==='NONE'?'Tanpa barcode':'Barcode kemasan';
+}
+
+function renderRestockNewUnits(){
+  el('restock-new-units').innerHTML=state.restockNewUnits.map((unit,index)=>`<div class="restock-new-unit-row" data-index="${index}"><label>Nama satuan<input class="restock-draft-unit-name" value="${escapeHtml(unit.name)}" placeholder="Dus"></label><label>Isi satuan dasar<input class="restock-draft-unit-factor" type="number" min="2" step="any" value="${unit.factor}"></label><label>Barcode satuan <span class="optional">Opsional</span><input class="restock-draft-unit-barcode" value="${escapeHtml(unit.barcode??'')}"></label><button class="button secondary generate-restock-unit-barcode" type="button">Internal</button><button class="icon-button remove-restock-new-unit" type="button" aria-label="Hapus">×</button></div>`).join('')||'<small class="muted">Belum ada satuan tambahan.</small>';
+  el('restock-new-units').querySelectorAll('input').forEach((input)=>input.addEventListener('input',()=>{
+    const row=input.closest('.restock-new-unit-row'),unit=state.restockNewUnits[Number(row.dataset.index)];
+    unit.name=row.querySelector('.restock-draft-unit-name').value;unit.factor=Number(row.querySelector('.restock-draft-unit-factor').value);unit.barcode=row.querySelector('.restock-draft-unit-barcode').value.trim();
+  }));
+  el('restock-new-units').querySelectorAll('.remove-restock-new-unit').forEach((button)=>button.addEventListener('click',()=>{state.restockNewUnits.splice(Number(button.closest('.restock-new-unit-row').dataset.index),1);renderRestockNewUnits();}));
+  el('restock-new-units').querySelectorAll('.generate-restock-unit-barcode').forEach((button)=>button.addEventListener('click',()=>{const row=button.closest('.restock-new-unit-row'),index=Number(row.dataset.index),barcode=generateInternalBarcode();state.restockNewUnits[index].barcode=barcode;row.querySelector('.restock-draft-unit-barcode').value=barcode;}));
+}
+
+function renderRestockNewPrices(){
+  el('restock-new-prices').innerHTML=state.customerGroups.filter((group)=>group.active!==false).map((group)=>{
+    const isRetail=group.id==='retail',tiers=state.restockNewPrices[group.id]??[{minBaseQty:1,unitPriceBase:''}];
+    return `<section class="restock-draft-price-group" data-group-id="${escapeHtml(group.id)}"><header><div><strong>${escapeHtml(isRetail?'Harga Umum':group.name)}</strong><small>${isRetail?'Wajib diisi':'Kosong berarti mengikuti Umum'}</small></div><button class="button secondary add-restock-price-tier" type="button">+ Tingkat</button></header>${tiers.map((tier,index)=>`<div class="restock-draft-price-row" data-index="${index}"><label>Min.<input class="restock-draft-price-min" type="number" min="${index?2:1}" value="${tier.minBaseQty}" ${index?'':'readonly'}></label><label>Harga / dasar<input class="restock-draft-price-value" type="number" min="1" value="${tier.unitPriceBase??''}" placeholder="${isRetail?'Wajib':'Ikuti Umum'}"></label>${index?'<button class="icon-button remove-restock-price-tier" type="button">×</button>':''}</div>`).join('')}</section>`;
+  }).join('');
+  el('restock-new-prices').querySelectorAll('.restock-draft-price-group').forEach((card)=>{
+    const sync=()=>{state.restockNewPrices[card.dataset.groupId]=[...card.querySelectorAll('.restock-draft-price-row')].map((row)=>({minBaseQty:Number(row.querySelector('.restock-draft-price-min').value),unitPriceBase:row.querySelector('.restock-draft-price-value').value}));};
+    card.querySelectorAll('input').forEach((input)=>input.addEventListener('input',()=>{sync();const row=input.closest('.restock-draft-price-row');if(input.classList.contains('restock-draft-price-value')&&card.dataset.groupId==='retail'&&Number(row.dataset.index)===0)el('restock-new-price').value=input.value;}));
+    card.querySelector('.add-restock-price-tier').addEventListener('click',()=>{sync();state.restockNewPrices[card.dataset.groupId].push({minBaseQty:2,unitPriceBase:''});renderRestockNewPrices();});
+    card.querySelectorAll('.remove-restock-price-tier').forEach((button)=>button.addEventListener('click',()=>{sync();state.restockNewPrices[card.dataset.groupId].splice(Number(button.closest('.restock-draft-price-row').dataset.index),1);renderRestockNewPrices();}));
+  });
+}
+
+function saveRestockNewProduct(event){
   event.preventDefault();
-  const button=el('save-restock-new-product'),barcode=el('restock-new-barcode').value.trim();
-  const sku=(el('restock-new-sku').value.trim()||barcode||`BRG-${crypto.randomUUID().slice(0,8)}`).toUpperCase();
-  const duplicate=state.products.find((product)=>product.sku?.toUpperCase()===sku||barcode&&product.units.some((unit)=>String(unit.barcode??'')===barcode));
-  if(duplicate)return el('restock-new-product-error').textContent=`Barcode atau SKU sudah dipakai oleh ${duplicate.name}. Gunakan produk tersebut dari pencarian.`;
-  const payload={
-    sku,name:el('restock-new-name').value.trim(),category:el('restock-new-category').value.trim()||'Lainnya',
-    brand:el('restock-new-brand').value.trim(),minimumStock:Number(el('restock-new-min-stock').value||0),
-    trackExpiry:el('restock-new-track-expiry').checked,retailPrice:Number(el('restock-new-price').value),
-    prices:[{customerGroupId:'retail',minBaseQty:1,unitPriceBase:Number(el('restock-new-price').value)}],
-    units:[{name:el('restock-new-unit').value.trim()||'pcs',factor:1,barcode}]
-  };
-  button.disabled=true;button.textContent='Membuat produk…';el('restock-new-product-error').textContent='';
-  try{
-    const created=await request('/api/products',{method:'POST',body:JSON.stringify(payload)});
-    await refreshCatalog();
-    const product=state.products.find((item)=>item.id===created.id);
-    if(!product)throw new Error('Produk berhasil dibuat tetapi katalog belum diperbarui. Muat ulang lalu cari produk tersebut.');
-    await appendRestockLine(product.id,1,0,product.units.find((unit)=>Number(unit.factor)===1)?.name??'pcs');
-    el('restock-new-product-dialog').close();setRestockExtraPicker(false);
-    toast(`${product.name} dibuat dan dimasukkan ke penerimaan.`);
-  }catch(error){el('restock-new-product-error').textContent=error.message;}
-  finally{button.disabled=false;button.textContent='Buat dan tambahkan';}
+  const barcode=el('restock-new-barcode').value.trim(),name=el('restock-new-name').value.trim();
+  const retailPrice=Number(el('restock-new-price').value),sku=(el('restock-new-sku').value.trim()||`KP-${barcode||crypto.randomUUID().slice(0,12)}`).toUpperCase();
+  state.restockNewPrices.retail=[{minBaseQty:1,unitPriceBase:retailPrice},...(state.restockNewPrices.retail??[]).slice(1)];
+  const prices=Object.entries(state.restockNewPrices).flatMap(([customerGroupId,tiers])=>tiers.filter((tier)=>Number(tier.unitPriceBase)>0).map((tier)=>({customerGroupId,minBaseQty:Number(tier.minBaseQty),unitPriceBase:Number(tier.unitPriceBase)})));
+  const units=[{name:el('restock-new-unit').value.trim()||'pcs',factor:1,barcode},...state.restockNewUnits.map((unit)=>({name:unit.name.trim(),factor:Number(unit.factor),barcode:unit.barcode||''}))];
+  const duplicate=state.products.find((product)=>product.sku?.toUpperCase()===sku||units.some((unit)=>unit.barcode&&product.units.some((existing)=>String(existing.barcode??'')===unit.barcode)));
+  if(duplicate)return el('restock-new-product-error').textContent=`SKU atau barcode sudah dipakai oleh ${duplicate.name}.`;
+  if(!name||!(retailPrice>0)||units.some((unit)=>!unit.name||!(unit.factor>0)))return el('restock-new-product-error').textContent='Periksa nama, harga Umum, dan satuan produk.';
+  if(new Set(units.map((unit)=>unit.name.toLowerCase())).size!==units.length)return el('restock-new-product-error').textContent='Nama satuan tidak boleh sama.';
+  const productKey=`new:${crypto.randomUUID()}`,payload={sku,name,category:el('restock-new-category').value.trim()||'Lainnya',brand:el('restock-new-brand').value.trim(),minimumStock:Number(el('restock-new-min-stock').value||0),trackExpiry:el('restock-new-track-expiry').checked,trackStock:true,retailPrice,prices,units};
+  state.restockDraftProducts.set(productKey,payload);appendRestockNewLine(productKey,payload);
+  el('restock-new-product-dialog').close();setRestockExtraPicker(false);toast(`${name} ditambahkan sebagai draft dan menunggu persetujuan Owner.`);
 }
 
 function activatePurchaseScanner(kind) {
@@ -3305,7 +3353,7 @@ async function renderRestock() {
   renderPurchaseProductResults('po');
   el('restock-document').value = '';
   el('restock-history').innerHTML = '<p class="eyebrow">HISTORI MODAL</p><p class="muted">Klik “Riwayat” pada barang untuk melihat modal per supplier dan batch.</p>';
-  el('receive-button').disabled = !state.suppliers.length || !receivingLocations.length || !state.products.length;
+  el('receive-button').disabled = !state.suppliers.length || !receivingLocations.length;
   setRestockExtraPicker(false);
   syncRestockVisibility();
   setRestockWizardStep('document', { focus: false });
@@ -3321,6 +3369,7 @@ function showPurchaseView(name) {
   document.querySelectorAll('.purchase-tab').forEach((button) => button.classList.toggle('active', button.dataset.purchaseView === name));
   document.querySelectorAll('[data-purchase-view-target]').forEach((button)=>button.classList.toggle('active',button.dataset.purchaseViewTarget===name));
   if (name === 'receipt') setRestockWizardStep('document', { focus: false });
+  if (name === 'approvals') loadRestockApprovals();
 }
 
 const restockWizardSteps = ['document','items','review','history'];
@@ -3356,14 +3405,15 @@ function renderRestockReview() {
   const rows = [...document.querySelectorAll('.restock-line')];
   const heading = `<div class="restock-review-document"><div><span>Supplier</span><strong>${escapeHtml(supplier?.name ?? '-')}</strong></div><div><span>Faktur</span><strong>${escapeHtml(el('restock-document').value.trim() || '-')}</strong></div><div><span>Lokasi</span><strong>${escapeHtml(location?.name ?? '-')}</strong></div></div>`;
   const items = rows.map((row) => {
-    const product = state.products.find((item) => item.id === row.dataset.product);
+    const product = row.dataset.product?state.products.find((item) => item.id === row.dataset.product):state.restockDraftProducts.get(row.dataset.productKey);
     const qty = Number(row.querySelector('.restock-qty').value);
     const unit = row.querySelector('.restock-unit').selectedOptions[0]?.textContent ?? 'pcs';
     const factor = Number(row.dataset.factor ?? 1);
     const cost = Number(row.querySelector('.restock-cost').value);
     const batch = row.querySelector('.restock-batch').value.trim();
     const expiry = row.querySelector('.restock-expiry').value.trim();
-    return `<article class="restock-review-row"><div><strong>${escapeHtml(product?.name ?? row.dataset.product)}</strong><small>${qty.toLocaleString('id-ID')} ${escapeHtml(unit)} · ${Number(qty*factor).toLocaleString('id-ID')} pcs${batch?` · batch ${escapeHtml(batch)}`:''}${expiry?` · EXP ${escapeHtml(expiry)}`:''}</small></div><div><span>${money.format(cost)} / pcs</span><strong>${money.format(qty*factor*cost)}</strong></div></article>`;
+    const approval=row.dataset.needsApproval==='true'?'<span class="badge warning">PERLU OWNER</span>':'';
+    return `<article class="restock-review-row"><div><strong>${escapeHtml(product?.name ?? row.dataset.product)}</strong>${approval}<small>${qty.toLocaleString('id-ID')} ${escapeHtml(unit)} · ${Number(qty*factor).toLocaleString('id-ID')} satuan dasar${batch?` · batch ${escapeHtml(batch)}`:''}${expiry?` · EXP ${escapeHtml(expiry)}`:''}</small></div><div><span>${money.format(cost)} / dasar</span><strong>${money.format(qty*factor*cost)}</strong></div></article>`;
   }).join('');
   el('restock-review-list').innerHTML = heading + items;
   updateRestockTotal();
@@ -3389,7 +3439,7 @@ function setRestockWizardStep(step, { focus = true, validate = false } = {}) {
   el('restock-wizard-back').disabled = targetIndex === 0;
   const next = el('restock-wizard-next');
   next.classList.toggle('hidden', targetIndex === restockWizardSteps.length - 1);
-  next.textContent = targetIndex === 2 ? 'Terima dan tambah stok' : `Lanjut ke ${restockWizardLabels[restockWizardSteps[targetIndex + 1]] ?? ''}`;
+  next.textContent = targetIndex === 2 ? ([...document.querySelectorAll('.restock-line')].some((row)=>row.dataset.needsApproval==='true')?'Ajukan ke Owner':'Terima dan tambah stok') : `Lanjut ke ${restockWizardLabels[restockWizardSteps[targetIndex + 1]] ?? ''}`;
   el('restock-wizard-progress').textContent = `Langkah ${targetIndex + 1} dari ${restockWizardSteps.length}`;
   if (focus) {
     const panel = document.querySelector(`[data-restock-step="${step}"]`);
@@ -3969,6 +4019,30 @@ async function showSupplierComparison(productId) {
   } catch(error) { el('supplier-comparison-content').innerHTML=`<p class="error">${error.message}</p>`; }
 }
 
+function restockPriceProposalMarkup(productKey,prices){
+  const grouped=Object.groupBy?Object.groupBy(prices,(price)=>price.customerGroupId):prices.reduce((result,price)=>{(result[price.customerGroupId]??=[]).push(price);return result;},{});
+  return `<details class="restock-price-proposal" data-product-key="${escapeHtml(productKey)}"><summary><span><strong>Usulan harga jual</strong><small>Periksa semua tipe harga sebelum diajukan</small></span><span class="badge warning">PERLU OWNER</span></summary><div class="restock-price-proposal-grid">${state.customerGroups.filter((group)=>group.active!==false).map((group)=>{
+    const tiers=(grouped[group.id]??[]).sort((a,b)=>a.minBaseQty-b.minBaseQty);
+    const effective=tiers.length?tiers:[{customerGroupId:group.id,minBaseQty:1,unitPriceBase:''}];
+    return `<section><header><strong>${escapeHtml(group.id==='retail'?'Umum':group.name)}</strong><small>${group.id==='retail'?'Wajib':'Kosong mengikuti Umum'}</small></header>${effective.map((tier)=>`<div class="restock-proposed-price-row"><label>Min.<input class="restock-proposed-min" type="number" min="1" value="${Number(tier.minBaseQty)||1}" readonly></label><label>Harga / dasar<input class="restock-proposed-value" type="number" min="1" value="${Number(tier.unitPriceBase)>0?Number(tier.unitPriceBase):''}" placeholder="Ikuti Umum" data-group-id="${escapeHtml(group.id)}"></label></div>`).join('')}</section>`;
+  }).join('')}</div><p class="muted restock-price-help">Owner dapat mengubah lagi nominal ini sebelum menyetujui. Harga boleh tetap seperti sekarang.</p></details>`;
+}
+
+function proposalPricesForProduct(product){
+  return (product?.priceRules??[]).map((price)=>({customerGroupId:price.customerGroupId,minBaseQty:Number(price.minBaseQty),unitPriceBase:Number(price.unitPriceBase)}));
+}
+
+function appendRestockNewLine(productKey,product){
+  if(document.querySelector(`.restock-line[data-product-key="${CSS.escape(productKey)}"]`))return;
+  const row=document.createElement('article');row.className='restock-line restock-line-new';row.dataset.productKey=productKey;row.dataset.factor=1;row.dataset.needsApproval='true';
+  row.innerHTML=`<div class="restock-card-header"><div><p class="eyebrow">BARANG BARU · DRAFT</p><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)} · belum aktif</small></div><div class="restock-card-tools"><span class="badge warning">PERLU OWNER</span><button type="button" class="icon-button remove-restock" aria-label="Hapus barang">×</button></div></div><div class="restock-card-grid"><label>Jumlah<input class="restock-qty" type="number" min="0.000001" step="any" value="1"></label><label>Satuan<select class="restock-unit">${product.units.map((unit)=>`<option data-factor="${unit.factor}">${escapeHtml(unit.name)}${unit.factor>1?` (${unit.factor} ${escapeHtml(product.units[0].name)})`:''}</option>`).join('')}</select></label><label>Modal / ${escapeHtml(product.units[0].name)}<input class="restock-cost" type="number" min="0" step="any" value="0"></label><details class="restock-line-options"><summary>Batch dan EXP <span>Opsional</span></summary><label>Nomor batch<input class="restock-batch"></label><label>Tanggal EXP<input class="restock-expiry" type="text" inputmode="numeric" maxlength="10" placeholder="DD/MM/YYYY"></label></details><div class="cost-insight"><span>Modal sebelumnya</span><strong>Barang baru</strong><small>Wajib diperiksa Owner</small></div></div>${restockPriceProposalMarkup(productKey,product.prices)}`;
+  row.querySelectorAll('.restock-qty,.restock-cost').forEach((input)=>input.addEventListener('input',updateRestockTotal));
+  row.querySelector('.restock-unit').addEventListener('change',(event)=>{row.dataset.factor=event.target.selectedOptions[0]?.dataset.factor??1;updateRestockTotal();});
+  row.querySelector('.restock-expiry').addEventListener('input',formatExpiryInput);
+  row.querySelector('.remove-restock').addEventListener('click',()=>{state.restockDraftProducts.delete(productKey);row.remove();syncRestockVisibility();});
+  el('restock-body').append(row);syncRestockVisibility();updateRestockTotal();
+}
+
 async function appendRestockLine(productId, qty = 1, newCost = 0, unit = 'pcs') {
   if (document.querySelector(`.restock-line[data-product="${productId}"]`)) return toast('Produk sudah ada pada daftar restok.');
   const product = state.products.find((item) => item.id === productId);
@@ -3986,10 +4060,9 @@ async function appendRestockLine(productId, qty = 1, newCost = 0, unit = 'pcs') 
       <label>Jumlah<input class="restock-qty" type="number" min="0.000001" step="any" value="${qty}"></label>
       <label>Satuan<select class="restock-unit">${unitOptions}</select></label>
       <label>Modal per pcs<input class="restock-cost" type="number" min="0" step="any" value="${newCost}"></label>
-      <label>Nomor batch <span class="optional">Opsional</span><input class="restock-batch" placeholder="Contoh: BATCH-001"></label>
-      <label>Tanggal kedaluwarsa <span class="optional">Opsional</span><input class="restock-expiry" type="text" inputmode="numeric" maxlength="10" placeholder="DD/MM/YYYY" aria-label="Tanggal kedaluwarsa format DD/MM/YYYY"></label>
+      <details class="restock-line-options"><summary>Batch dan EXP <span>Opsional</span></summary><label>Nomor batch<input class="restock-batch" placeholder="Contoh: BATCH-001"></label><label>Tanggal EXP<input class="restock-expiry" type="text" inputmode="numeric" maxlength="10" placeholder="DD/MM/YYYY" aria-label="Tanggal kedaluwarsa format DD/MM/YYYY"></label></details>
       <div class="cost-insight"><span>Modal sebelumnya</span><strong class="last-cost">Memuat...</strong><small class="last-meta">Mengecek histori supplier</small><div class="cost-delta"><span class="badge neutral">CEK</span></div><div class="retail-suggestion hidden"><span>Saran harga ecer</span><strong class="suggested-retail">-</strong><small class="suggested-retail-note"></small><button type="button" class="button secondary apply-suggested-retail">Gunakan saran</button></div></div>
-    </div>`;
+    </div><div class="restock-price-proposal-slot"></div>`;
   row.querySelector('.restock-cost').addEventListener('change', () => updateRestockComparison(row));
   row.querySelector('.restock-cost').addEventListener('input', updateRestockTotal);
   row.querySelector('.restock-qty').addEventListener('input', updateRestockTotal);
@@ -4004,7 +4077,10 @@ async function appendRestockLine(productId, qty = 1, newCost = 0, unit = 'pcs') 
     catch (error) { event.target.setCustomValidity(error.message); toast(error.message); }
   });
   row.querySelector('.history-button').addEventListener('click', () => showCostHistory(productId));
-  row.querySelector('.apply-suggested-retail').addEventListener('click', () => applySuggestedRetailPrice(productId,Number(row.querySelector('.apply-suggested-retail').dataset.price)));
+  row.querySelector('.apply-suggested-retail').addEventListener('click', () => {
+    const input=row.querySelector('.restock-price-proposal [data-group-id="retail"]');
+    if(input){input.value=Number(row.querySelector('.apply-suggested-retail').dataset.price);toast('Saran dimasukkan ke usulan. Owner masih perlu menyetujui.');}
+  });
   row.querySelector('.remove-restock').addEventListener('click', () => { row.remove(); syncRestockVisibility(); });
   el('restock-body').append(row);
   syncRestockVisibility();
@@ -4012,7 +4088,7 @@ async function appendRestockLine(productId, qty = 1, newCost = 0, unit = 'pcs') 
 }
 
 function costMeta(comparison) {
-  if (comparison.lastCost === null) return 'Belum ada histori supplier ini';
+  if (comparison.lastCost === null) return 'Belum ada histori pembelian';
   return [comparison.lastSupplier, comparison.lastBatch ? `batch ${comparison.lastBatch}` : null, comparison.lastDocument].filter(Boolean).join(' · ');
 }
 
@@ -4033,6 +4109,12 @@ async function updateRestockComparison(row) {
     row.querySelector('.last-meta').textContent = costMeta(comparison);
     row.querySelector('.cost-delta').innerHTML = costBadge(comparison);
     const product=state.products.find((item)=>item.id===row.dataset.product);
+    row.dataset.lastCost=comparison.lastCost??'';
+    const needsApproval=comparison.lastCost===null||Number(comparison.lastCost)!==Number(row.querySelector('.restock-cost').value);
+    row.dataset.needsApproval=String(needsApproval);
+    const proposalSlot=row.querySelector('.restock-price-proposal-slot');
+    if(needsApproval&&!proposalSlot.querySelector('.restock-price-proposal'))proposalSlot.innerHTML=restockPriceProposalMarkup(row.dataset.product,proposalPricesForProduct(product));
+    if(!needsApproval)proposalSlot.innerHTML='';
     const retail=product?retailPriceOf(product):null;
     const suggestion=markupPreservingRecommendation(Number(row.querySelector('.restock-cost').value),comparison.lastCost,retail);
     const suggestionBox=row.querySelector('.retail-suggestion');
@@ -4042,7 +4124,7 @@ async function updateRestockComparison(row) {
       row.querySelector('.suggested-retail-note').textContent=`Laba lama ${money.format(suggestion.previousProfit)} / pcs tetap dipertahankan`;
       row.querySelector('.apply-suggested-retail').dataset.price=suggestion.recommended;
     }
-  } catch (error) { toast(error.message); }
+  } catch (error) { row.dataset.needsApproval='true';toast(error.message); }
 }
 
 function updateRestockTotal() {
@@ -4458,24 +4540,73 @@ function showRestockReceiveError(message = '') {
   if (message) toast(message);
 }
 
+function restockRowPayload(row){
+  const expiry=row.querySelector('.restock-expiry').value.trim(),productKey=row.dataset.productKey??row.dataset.product;
+  return {productId:row.dataset.product??null,productKey,newProduct:row.dataset.productKey?state.restockDraftProducts.get(row.dataset.productKey):null,
+    baseQty:Number(row.querySelector('.restock-qty').value)*Number(row.dataset.factor??1),unitCost:Number(row.querySelector('.restock-cost').value),
+    previousCost:row.dataset.lastCost===''||row.dataset.lastCost===undefined?null:Number(row.dataset.lastCost),batchNo:row.querySelector('.restock-batch').value.trim()||null,
+    expiresOn:expiry?parseExpiryDate(expiry):null};
+}
+
+function restockRowProposedPrices(row){
+  const productKey=row.dataset.productKey??row.dataset.product;
+  return [...row.querySelectorAll('.restock-price-proposal .restock-proposed-value')].filter((input)=>Number(input.value)>0).map((input)=>({
+    productKey,customerGroupId:input.dataset.groupId,minBaseQty:Number(input.closest('.restock-proposed-price-row').querySelector('.restock-proposed-min').value),unitPriceBase:Number(input.value)
+  }));
+}
+
+async function submitRestockForApproval(payload,rows){
+  const proposedPrices=rows.flatMap(restockRowProposedPrices);
+  if(rows.some((row)=>row.dataset.productKey)&&!proposedPrices.some((price)=>price.customerGroupId==='retail'))throw new Error('Harga Umum barang baru wajib diisi.');
+  const result=await request('/api/restock-approvals',{method:'POST',body:JSON.stringify({...payload,items:rows.map(restockRowPayload),proposedPrices})});
+  toast('Pengajuan dikirim. Owner dapat memeriksa dan mengubah harga sebelum menyetujui.');
+  state.restockDraftProducts.clear();await loadRestockApprovals();showPurchaseView('approvals');
+  state.activeRestockApprovalId=result.id;
+  await renderRestock();
+  return result;
+}
+
+async function loadRestockApprovals(){
+  if(!state.session?.permissions.includes('purchasing.receive'))return;
+  try{state.restockApprovals=(await request('/api/restock-approvals')).requests??[];renderRestockApprovals();}catch(error){el('restock-approval-list').innerHTML=`<p class="error">${escapeHtml(error.message)}</p>`;}
+}
+
+function restockApprovalItemName(item){
+  return item.newProduct?.name??state.products.find((product)=>product.id===item.productId)?.name??'Produk';
+}
+
+function renderRestockApprovals(){
+  const container=el('restock-approval-list'),canApprove=['OWNER','ADMIN'].includes(state.session.user.role);
+  if(!state.restockApprovals.length){container.innerHTML='<div class="empty-state compact">Belum ada pengajuan restok.</div>';return;}
+  container.innerHTML=state.restockApprovals.map((requestItem)=>{
+    const supplier=state.suppliers.find((item)=>item.id===requestItem.supplierId)?.name??'Supplier';
+    const prices=requestItem.approvedPrices??requestItem.proposedPrices??[];
+    const statusLabel={PENDING:'Menunggu Owner',APPROVED:'Disetujui',REJECTED:'Ditolak',RECEIVED:'Sudah diterima',CANCELLED:'Dibatalkan'}[requestItem.status]??requestItem.status;
+    return `<article class="restock-approval-card" data-approval-id="${requestItem.id}"><header><div><p class="eyebrow">${escapeHtml(requestItem.documentNo)}</p><h3>${escapeHtml(supplier)}</h3><small>${new Date(requestItem.requestedAt).toLocaleString('id-ID')} · ${requestItem.items.length} barang</small></div><span class="badge ${requestItem.status==='APPROVED'||requestItem.status==='RECEIVED'?'ok':requestItem.status==='REJECTED'?'danger':'warning'}">${statusLabel}</span></header><div class="restock-approval-items">${requestItem.items.map((item)=>{const key=item.productKey??item.productId,itemPrices=prices.filter((price)=>price.productKey===key);return `<section><div class="restock-approval-item-head"><div><strong>${escapeHtml(restockApprovalItemName(item))}</strong><small>${item.newProduct?'Barang baru':`Modal terakhir ${item.previousCost===null?'-':money.format(item.previousCost)}`} → <b>${money.format(item.unitCost)}</b></small></div><span>${Number(item.baseQty).toLocaleString('id-ID')} dasar</span></div><div class="restock-approval-price-grid">${itemPrices.map((price)=>`<label>${escapeHtml((state.customerGroups.find((group)=>group.id===price.customerGroupId)?.name)??price.customerGroupId)} · min ${price.minBaseQty}<input class="approval-price-value" type="number" min="1" value="${price.unitPriceBase}" data-product-key="${escapeHtml(key)}" data-group-id="${escapeHtml(price.customerGroupId)}" data-min="${price.minBaseQty}" ${requestItem.status!=='PENDING'||!canApprove?'readonly':''}></label>`).join('')||'<small>Harga jual tetap seperti sekarang.</small>'}</div></section>`;}).join('')}</div>${requestItem.decisionNote?`<p class="restock-decision-note">Catatan: ${escapeHtml(requestItem.decisionNote)}</p>`:''}<footer>${requestItem.status==='PENDING'&&canApprove?'<input class="approval-note" placeholder="Catatan keputusan (opsional)"><button class="button danger-button reject-restock-approval" type="button">Tolak</button><button class="button primary approve-restock-approval" type="button">Setujui harga</button>':''}${requestItem.status==='APPROVED'?'<button class="button primary receive-approved-restock" type="button">Lanjut terima barang</button>':''}</footer></article>`;
+  }).join('');
+  container.querySelectorAll('.approve-restock-approval').forEach((button)=>button.addEventListener('click',()=>decideRestockApproval(button.closest('.restock-approval-card'),'approve')));
+  container.querySelectorAll('.reject-restock-approval').forEach((button)=>button.addEventListener('click',()=>decideRestockApproval(button.closest('.restock-approval-card'),'reject')));
+  container.querySelectorAll('.receive-approved-restock').forEach((button)=>button.addEventListener('click',()=>receiveApprovedRestock(button.closest('.restock-approval-card').dataset.approvalId,button)));
+}
+
+async function decideRestockApproval(card,decision){
+  const prices=[...card.querySelectorAll('.approval-price-value')].filter((input)=>Number(input.value)>0).map((input)=>({productKey:input.dataset.productKey,customerGroupId:input.dataset.groupId,minBaseQty:Number(input.dataset.min),unitPriceBase:Number(input.value)}));
+  const button=card.querySelector(`.${decision}-restock-approval`);button.disabled=true;
+  try{await request(`/api/restock-approvals/${card.dataset.approvalId}/${decision}`,{method:'POST',body:JSON.stringify({prices,note:card.querySelector('.approval-note')?.value??''})});toast(decision==='approve'?'Harga disetujui. Staf dapat melanjutkan penerimaan.':'Pengajuan ditolak.');await loadRestockApprovals();}catch(error){toast(error.message);button.disabled=false;}
+}
+
+async function receiveApprovedRestock(requestId,button){
+  button.disabled=true;button.textContent='Menerima barang…';
+  try{const receipt=await request(`/api/restock-approvals/${requestId}/receive`,{method:'POST',headers:{'idempotency-key':crypto.randomUUID()},body:'{}'});toast(`Penerimaan ${receipt.document_no} berhasil · produk, harga, dan stok sudah aktif`);await refreshCatalog();if(state.session.permissions.includes('inventory.manage'))await loadInventory();await loadRestockApprovals();}catch(error){toast(error.message);button.disabled=false;button.textContent='Lanjut terima barang';}
+}
+
 async function receivePurchase() {
   if (state.restockReceiving) return;
   showRestockReceiveError();
   const selectedSupplier = state.suppliers.find((supplier) => supplier.id === el('restock-supplier').value);
-  let lines;
+  let lines,rows;
   try {
-    lines = [...document.querySelectorAll('.restock-line')].map((row) => {
-      const productId = row.dataset.product;
-      const qty = Number(row.querySelector('.restock-qty').value);
-      const expiry = row.querySelector('.restock-expiry').value.trim();
-      return {
-        productId,
-        baseQty: qty * Number(row.dataset.factor ?? 1),
-        unitCost: Number(row.querySelector('.restock-cost').value),
-        batchNo: row.querySelector('.restock-batch').value.trim() || null,
-        expiresOn: expiry ? parseExpiryDate(expiry) : null
-      };
-    });
+    rows=[...document.querySelectorAll('.restock-line')];lines=rows.map(restockRowPayload);
   } catch (error) {
     return showRestockReceiveError(error.message);
   }
@@ -4495,10 +4626,16 @@ async function receivePurchase() {
   const wizardButton = el('restock-wizard-next');
   state.restockReceiving = true;
   button.disabled = true;
-  button.textContent = 'Menyimpan restok...';
+  const requiresApproval=rows.some((row)=>row.dataset.needsApproval==='true');
+  button.textContent = requiresApproval?'Mengirim pengajuan...':'Menyimpan restok...';
   wizardButton.disabled = true;
   wizardButton.textContent = 'Menyimpan restok...';
   try {
+    if(requiresApproval){
+      if(state.activePurchaseOrder)throw new Error('Lepaskan PO terlebih dahulu untuk mengajukan perubahan harga. Persetujuan PO akan ditambahkan pada tahap berikutnya.');
+      await submitRestockForApproval(payload,rows);
+      return;
+    }
     const endpoint = state.activePurchaseOrder ? `/api/purchase-orders/${state.activePurchaseOrder.id}/receipts` : '/api/purchase-receipts';
     const receipt = await request(endpoint, { method: 'POST', headers: { 'idempotency-key': crypto.randomUUID() }, body: JSON.stringify(payload) });
     toast(`Penerimaan ${receipt.document_no ?? receipt.documentNo} berhasil · stok sudah bertambah`);
@@ -4519,7 +4656,7 @@ async function receivePurchase() {
     button.disabled = false;
     button.textContent = 'Terima dan tambah stok';
     wizardButton.disabled = false;
-    if (state.restockWizardStep === 'review') wizardButton.textContent = 'Terima dan tambah stok';
+    if (state.restockWizardStep === 'review') wizardButton.textContent = [...document.querySelectorAll('.restock-line')].some((row)=>row.dataset.needsApproval==='true')?'Ajukan ke Owner':'Terima dan tambah stok';
   }
 }
 
@@ -7454,14 +7591,19 @@ el('sync-review-list').addEventListener('click', (event) => {
 });
 el('receive-button').addEventListener('click', receivePurchase);
 el('toggle-restock-extra-product').addEventListener('click',()=>setRestockExtraPicker(el('restock-extra-product-picker').classList.contains('hidden')));
+el('open-restock-new-product').addEventListener('click',()=>openRestockNewProduct(''));
 el('restock-product-search').addEventListener('input', (event) => renderPurchaseProductResults('restock', event.currentTarget.value));
 el('restock-product-search').addEventListener('keydown', (event) => handlePurchaseProductEnter('restock', event));
 el('search-restock-product').addEventListener('click', () => renderPurchaseProductResults('restock', el('restock-product-search').value));
 el('scan-restock-product').addEventListener('click', () => activatePurchaseScanner('restock'));
 el('camera-restock-product').addEventListener('click', () => openBarcodeCamera('restock'));
 el('restock-new-product-form').addEventListener('submit',saveRestockNewProduct);
+el('restock-new-barcode-mode').addEventListener('change',syncRestockNewBarcodeMode);
+el('add-restock-new-unit').addEventListener('click',()=>{state.restockNewUnits.push({name:'',factor:2,barcode:''});renderRestockNewUnits();});
+el('restock-new-price').addEventListener('input',(event)=>{if(state.restockNewPrices.retail)state.restockNewPrices.retail[0].unitPriceBase=event.currentTarget.value;const input=el('restock-new-prices').querySelector('.restock-draft-price-group[data-group-id="retail"] [data-index="0"] .restock-draft-price-value');if(input)input.value=event.currentTarget.value;});
 el('close-restock-new-product').addEventListener('click',()=>el('restock-new-product-dialog').close());
 el('cancel-restock-new-product').addEventListener('click',()=>el('restock-new-product-dialog').close());
+el('refresh-restock-approvals').addEventListener('click',loadRestockApprovals);
 document.querySelectorAll('[data-restock-step-target]').forEach((button)=>button.addEventListener('click',()=>{
   setRestockWizardStep(button.dataset.restockStepTarget,{validate:true});
 }));

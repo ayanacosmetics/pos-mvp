@@ -50,7 +50,7 @@ const BACKUP_TABLES = [
   'tenants','profiles','outlets','stock_locations','user_outlets',
   'customer_price_groups','customers','loyalty_settings','customer_tiers','customer_point_entries','vouchers','voucher_redemptions','receipt_voucher_campaigns','customer_account_entries','customer_payment_receipts','customer_payment_allocations','suppliers','supplier_bills','supplier_payable_entries','supplier_payment_receipts','supplier_payment_allocations','product_families','product_family_barcodes','products','product_variant_options','product_units','price_rules','promotions','promotion_versions','promotion_redemptions',
   'shifts','cash_movements','shift_reconciliations','sales','sale_items','payments','parked_sales','sale_adjustment_authorizations',
-  'employee_schedules','attendance_records','employee_targets','approval_policies','approval_requests',
+  'employee_schedules','attendance_records','employee_targets','approval_policies','approval_requests','restock_approval_requests',
   'backup_exports','pilot_runs','pilot_check_results','production_incidents','recovery_drills',
   'expense_categories','outlet_expenses','chart_of_accounts','accounting_periods','journal_entries','journal_lines',
   'purchase_planning_settings','restock_policies','purchase_orders','purchase_order_items','purchase_receipts','purchase_receipt_items','supplier_returns','supplier_return_items',
@@ -62,7 +62,7 @@ const BACKUP_TABLES = [
 const RESTORE_TABLES = [
   'suppliers','product_families','product_family_barcodes','products','product_variant_options','product_units','price_rules','customer_tiers','customers','loyalty_settings',
   'promotions','promotion_versions','promotion_outlets','receipt_voucher_campaigns',
-  'employee_schedules','attendance_records','employee_targets','approval_policies','approval_requests',
+  'employee_schedules','attendance_records','employee_targets','approval_policies','approval_requests','restock_approval_requests',
   'shifts','cash_movements','shift_reconciliations','sales','vouchers','parked_sales',
   'sale_adjustment_authorizations','sale_items','payments','promotion_redemptions','voucher_redemptions',
   'customer_point_entries','customer_returns','customer_return_items','customer_refunds',
@@ -882,6 +882,15 @@ async function loadPurchaseOrders(tenantId, orderId = null, locationIds = []) {
     overdue: Boolean(order.expected_on && order.expected_on < today && ['APPROVED','PARTIALLY_RECEIVED'].includes(order.status)),
     items: mappedItems
   }});
+}
+
+async function restockNeedsPriceApproval(tenantId,items=[]){
+  const productIds=[...new Set(items.map((item)=>String(item.productId??'').trim()).filter((id)=>/^[0-9a-f-]{36}$/i.test(id)))];
+  if(productIds.length!==items.length)return true;
+  if(!productIds.length)return false;
+  const rows=await restAll('purchase_receipt_items',`tenant_id=eq.${encodeURIComponent(tenantId)}&product_id=in.(${productIds.join(',')})&select=product_id,unit_cost,received_at,id&order=received_at.desc,id.desc`);
+  const latest=new Map();for(const row of rows)if(!latest.has(row.product_id))latest.set(row.product_id,Number(row.unit_cost));
+  return items.some((item)=>!latest.has(item.productId)||latest.get(item.productId)!==Number(item.unitCost));
 }
 
 async function shiftDetail(tenantId, shift) {
@@ -4430,11 +4439,56 @@ async function routeRequest(request, response, route) {
     if (!key) { const error = new Error('Idempotency-Key wajib diisi'); error.status = 400; throw error; }
     const accessibleOrder = (await loadPurchaseOrders(context.tenantId, orderId, context.locationIds))[0];
     if (!accessibleOrder) { const error = new Error('Purchase Order tidak ditemukan pada lokasi user'); error.status = 404; throw error; }
+    if(await restockNeedsPriceApproval(context.tenantId,input.items))throw Object.assign(new Error('Modal berubah. Ajukan harga kepada Owner sebelum menerima barang.'),{status:409});
     const result = await rpc('receive_purchase_order', {
       p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_order_id: orderId,
       p_idempotency_key: key, p_document_no: input.documentNo, p_items: input.items
     });
     return send(response, result.duplicate ? 200 : 201, result);
+  }
+
+  if (request.method === 'GET' && route === 'restock-approvals') {
+    requirePermission(session, 'purchasing.receive');
+    const canApprove=['OWNER','ADMIN'].includes(session.profile.role);
+    const requesterFilter=canApprove?'':`&requester_id=eq.${encodeURIComponent(session.authUser.id)}`;
+    const rows=await rest('restock_approval_requests',`tenant_id=eq.${context.tenantId}${requesterFilter}&select=*&order=requested_at.desc&limit=100`);
+    return send(response,200,{requests:rows.map((row)=>({
+      id:row.id,requesterId:row.requester_id,approverId:row.approver_id,supplierId:row.supplier_id,
+      locationId:row.location_id,documentNo:row.document_no,items:row.items_json,proposedPrices:row.proposed_prices_json,
+      approvedPrices:row.approved_prices_json,status:row.status,requesterNote:row.requester_note,decisionNote:row.decision_note,
+      requestedAt:row.requested_at,decidedAt:row.decided_at,receivedAt:row.received_at,receiptId:row.receipt_id
+    }))});
+  }
+
+  if (request.method === 'POST' && route === 'restock-approvals') {
+    requirePermission(session, 'purchasing.receive');
+    const input=bodyOf(request);requireLocationAccess(context,input.locationId);
+    const result=await rpc('submit_restock_approval_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_supplier_id:input.supplierId,
+      p_location_id:input.locationId,p_document_no:input.documentNo,p_items:input.items,
+      p_proposed_prices:input.proposedPrices??[],p_note:input.note??''
+    });
+    return send(response,201,result);
+  }
+
+  if (request.method === 'POST' && /^restock-approvals\/[^/]+\/(approve|reject)$/.test(route)) {
+    if(!['OWNER','ADMIN'].includes(session.profile.role))throw Object.assign(new Error('Hanya Owner/Admin yang dapat memutuskan'),{status:403});
+    const [,requestId,action]=route.split('/'),input=bodyOf(request);
+    const result=await rpc('decide_restock_approval_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_request_id:requestId,
+      p_decision:action.toUpperCase(),p_approved_prices:input.prices??[],p_note:input.note??''
+    });
+    return send(response,200,result);
+  }
+
+  if (request.method === 'POST' && /^restock-approvals\/[^/]+\/receive$/.test(route)) {
+    requirePermission(session,'purchasing.receive');
+    const requestId=route.split('/')[1],key=request.headers['idempotency-key'];
+    if(!key)throw Object.assign(new Error('Idempotency-Key wajib diisi'),{status:400});
+    const result=await rpc('receive_approved_restock_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_request_id:requestId,p_idempotency_key:key
+    });
+    return send(response,result.duplicate?200:201,result);
   }
 
   if (request.method === 'POST' && route === 'purchase-receipts') {
@@ -4443,6 +4497,7 @@ async function routeRequest(request, response, route) {
     const key = request.headers['idempotency-key'];
     if (!key) { const error = new Error('Idempotency-Key wajib diisi'); error.status = 400; throw error; }
     requireLocationAccess(context, input.locationId);
+    if(await restockNeedsPriceApproval(context.tenantId,input.items))throw Object.assign(new Error('Modal berubah. Ajukan harga kepada Owner sebelum menerima barang.'),{status:409});
     const result = await rpc('receive_purchase', {
       p_tenant_id: context.tenantId,
       p_actor_id: session.authUser.id,
@@ -4458,8 +4513,7 @@ async function routeRequest(request, response, route) {
   if (request.method === 'POST' && route === 'cost-comparison') {
     requirePermission(session, 'purchasing.view_cost');
     const input = bodyOf(request);
-    const supplierFilter = input.supplierId ? `&supplier_id=eq.${encodeURIComponent(input.supplierId)}` : '';
-    const items = await rest('purchase_receipt_items', `tenant_id=eq.${context.tenantId}&product_id=eq.${encodeURIComponent(input.productId)}${supplierFilter}&select=*&order=received_at.desc&limit=50`);
+    const items = await rest('purchase_receipt_items', `tenant_id=eq.${context.tenantId}&product_id=eq.${encodeURIComponent(input.productId)}&select=*&order=received_at.desc&limit=50`);
     const history = items.map((item) => ({
       occurredAt: item.received_at,
       costPerBase: Number(item.unit_cost),
@@ -4467,7 +4521,7 @@ async function routeRequest(request, response, route) {
       batch: item.batch_no
     }));
     const comparison = compareCost(Number(input.newCost), history);
-    return send(response, 200, { ...comparison, lastDocument: items[0]?.document_no ?? null, supplierScoped: Boolean(input.supplierId) });
+    return send(response, 200, { ...comparison, lastDocument: items[0]?.document_no ?? null, supplierScoped: false });
   }
 
   if (request.method === 'GET' && route.startsWith('supplier-comparison/')) {

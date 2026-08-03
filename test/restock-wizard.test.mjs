@@ -33,16 +33,18 @@ test('tahap periksa membangun ringkasan tanpa memindahkan input transaksi', () =
   assert.match(app, /setRestockWizardStep\('history'\)/);
 });
 
-test('pemilih barang tambahan ringkas dan dapat membuat produk baru saat barcode belum terdaftar', () => {
+test('pemilih barang tambahan ringkas dan dapat membuat draft produk tanpa scan', () => {
   assert.match(html, /id="toggle-restock-extra-product"/);
   assert.match(html, /id="restock-extra-product-picker" class="purchase-product-picker hidden"/);
   assert.match(html, /id="restock-new-product-dialog"/);
-  assert.match(html, /Buat dan tambahkan/);
+  assert.match(html, /id="open-restock-new-product"/);
+  assert.match(html, /Tambahkan ke draft/);
   assert.match(app, /function setRestockExtraPicker/);
   assert.match(app, /function openRestockNewProduct/);
-  assert.match(app, /async function saveRestockNewProduct/);
-  assert.match(app, /Barcode atau SKU sudah dipakai/);
-  assert.match(app, /await appendRestockLine\(product\.id/);
+  assert.match(app, /function saveRestockNewProduct/);
+  assert.match(app, /SKU atau barcode sudah dipakai/);
+  assert.match(app, /appendRestockNewLine\(productKey,payload\)/);
+  assert.match(app, /function generateInternalBarcode/);
   assert.match(app, /barcodeCameraTarget==='restock'[\s\S]*openRestockNewProduct\(value\)/);
 });
 
@@ -57,7 +59,7 @@ test('desktop membatasi daftar di panel dan mobile mempertahankan navigasi lanju
 
 test('pesan gagal penerimaan tidak tertutup aksi wizard pada mobile', () => {
   assert.match(html, /id="restock-receive-error"[\s\S]*role="alert"/);
-  assert.match(app, /targetIndex === 2 \? 'Terima dan tambah stok'/);
+  assert.match(app, /targetIndex === 2 \? \(\[\.\.\.document\.querySelectorAll\('\.restock-line'\)\]/);
   assert.match(app, /state\.restockWizardStep === 'review'\) return receivePurchase\(\)/);
   assert.match(app, /function showRestockReceiveError/);
   assert.match(css, /\.toast\{z-index:100\}/);

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=173">
+  <link rel="stylesheet" href="/styles.css?v=176">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -114,6 +114,7 @@
           <button data-page="restock-planning" data-target-page="restock" data-purchase-view-target="planning" class="feature-nav-item" data-permission="purchasing.view_cost"><span>Pilih barang</span><small>Stok paling sedikit dahulu</small></button>
           <button data-page="purchase-documents" data-target-page="restock" data-purchase-view-target="documents" class="feature-nav-item" data-permission="purchasing.view_cost"><span>Pesanan supplier</span><small>Cetak, bagikan, dan pantau</small></button>
           <button data-page="purchase-receipt" data-target-page="restock" data-purchase-view-target="receipt" class="feature-nav-item" data-permission="purchasing.receive"><span>Terima barang</span><small>Catat barang yang sudah tiba</small></button>
+          <button data-page="restock-approvals" data-target-page="restock" data-purchase-view-target="approvals" class="feature-nav-item" data-permission="purchasing.receive"><span>Persetujuan harga</span><small>Harga baru sebelum diterima</small></button>
           <button data-page="supplier-return" data-target-page="restock" data-purchase-view-target="supplier-return" class="feature-nav-item" data-permission="purchasing.receive"><span>Retur supplier</span><small>Kembalikan barang bermasalah</small></button>
         </div>
         <button data-nav-group="multioutlet" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V8l4-4 4 4v12M12 11l4-4 4 4v9M7 13h2M15 14h2"/></svg></span><span>Multi-outlet<small>Transfer dan kontrol cabang</small></span><b>›</b></button>
@@ -267,7 +268,7 @@
       <section id="page-restock" class="page">
         <div class="content-width">
           <div class="page-title restock-page-title"><div><p class="eyebrow">ALUR RESTOK</p><h1>Pesan lalu terima barang</h1><p class="muted">Pilih stok yang menipis, kirim surat pesanan ke supplier, lalu catat barang ketika tiba.</p></div><span class="pill success">3 langkah utama</span></div>
-          <div class="purchase-tabs hidden" role="tablist" aria-hidden="true"><button class="purchase-tab active" data-purchase-view="planning">Pilih barang</button><button class="purchase-tab" data-purchase-view="documents">Pesanan supplier</button><button class="purchase-tab" data-purchase-view="order">Ubah pesanan</button><button class="purchase-tab" data-purchase-view="receipt">Terima barang</button><button class="purchase-tab" data-purchase-view="supplier-return">Retur supplier</button></div>
+          <div class="purchase-tabs hidden" role="tablist" aria-hidden="true"><button class="purchase-tab active" data-purchase-view="planning">Pilih barang</button><button class="purchase-tab" data-purchase-view="documents">Pesanan supplier</button><button class="purchase-tab" data-purchase-view="order">Ubah pesanan</button><button class="purchase-tab" data-purchase-view="receipt">Terima barang</button><button class="purchase-tab" data-purchase-view="approvals">Persetujuan harga</button><button class="purchase-tab" data-purchase-view="supplier-return">Retur supplier</button></div>
 
           <div id="purchase-view-planning" class="purchase-view">
             <div id="restock-planning-metrics" class="purchase-metrics"></div>
@@ -332,12 +333,12 @@
 
             <section class="restock-wizard-panel hidden" data-restock-step="items">
               <div class="surface restock-surface">
-                <div class="restock-step-heading"><div><p class="eyebrow">LANGKAH 2 DARI 4</p><h2>Barang yang datang</h2><p class="muted">Periksa barang yang sudah dipilih, lalu isi jumlah, satuan, modal, batch, dan EXP.</p></div><button id="toggle-restock-extra-product" class="button secondary" type="button" aria-expanded="false">+ Tambah barang lain</button></div>
+                <div class="restock-step-heading"><div><p class="eyebrow">LANGKAH 2 DARI 4</p><h2>Barang yang datang</h2><p class="muted">Pilih barang lama atau daftarkan barang baru tanpa harus memindai barcode.</p></div><div class="restock-item-actions"><button id="toggle-restock-extra-product" class="button secondary" type="button" aria-expanded="false">Cari / scan barang</button><button id="open-restock-new-product" class="button primary" type="button">+ Tambah barang baru</button></div></div>
                 <div id="restock-extra-product-picker" class="purchase-product-picker hidden">
                   <div class="purchase-product-search"><input id="restock-product-search" autocomplete="off" placeholder="Cari nama, SKU, atau scan barcode"><button id="search-restock-product" class="button secondary" type="button">Cari</button><button id="scan-restock-product" class="button secondary scan-icon-button hardware-scan-button" type="button" aria-label="Aktifkan scanner barcode" title="Scanner barcode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a2 2 0 0 1 2 2v8H4V5a2 2 0 0 1 2-2Z"/><path d="M7 6v4M10 6v4M13 6v4M17 6v4M8 13l-2 8h6l2-8"/></svg></button><button id="camera-restock-product" class="button secondary scan-icon-button camera-scan-button" type="button" aria-label="Scan barcode dengan kamera" title="Scan dengan kamera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5 10 3.5h4l1.5 2H19A2.5 2.5 0 0 1 21.5 8v9A2.5 2.5 0 0 1 19 19.5H5A2.5 2.5 0 0 1 2.5 17V8A2.5 2.5 0 0 1 5 5.5h3.5Z"/><circle cx="12" cy="12.5" r="4"/></svg></button></div>
                   <div id="restock-product-results" class="purchase-product-results"></div>
                 </div>
-                <div id="restock-empty" class="empty-state compact">Belum ada barang. Tekan “+ Tambah barang lain” untuk mencari, scan, atau membuat produk baru.</div>
+                <div id="restock-empty" class="empty-state compact">Belum ada barang. Cari barang yang sudah ada atau tambahkan barang baru.</div>
                 <div id="restock-table" class="hidden"><div id="restock-body" class="restock-list"></div></div>
               </div>
             </section>
@@ -360,6 +361,13 @@
               <button id="restock-wizard-back" class="button secondary" type="button">Kembali</button>
               <div><small id="restock-wizard-progress">Langkah 1 dari 4</small><button id="restock-wizard-next" class="button primary" type="button">Lanjut ke Barang</button></div>
             </footer>
+          </div>
+
+          <div id="purchase-view-approvals" class="purchase-view hidden">
+            <div class="surface restock-approval-page">
+              <div class="restock-step-heading"><div><p class="eyebrow">PERSETUJUAN RESTOK</p><h2>Perubahan modal dan harga jual</h2><p class="muted">Owner memeriksa harga; staf melanjutkan penerimaan setelah disetujui.</p></div><button id="refresh-restock-approvals" class="button secondary" type="button">Muat ulang</button></div>
+              <div id="restock-approval-list"><div class="empty-state compact">Belum ada pengajuan.</div></div>
+            </div>
           </div>
 
           <div id="purchase-view-supplier-return" class="purchase-view hidden">
@@ -1045,10 +1053,13 @@
     <p id="product-error" class="error"></p><div class="button-row"><button id="cancel-product" type="button" class="button secondary">Batal</button><button id="save-product-button" type="submit" class="button primary">Simpan produk</button></div>
   </form></dialog>
   <dialog id="restock-new-product-dialog"><form id="restock-new-product-form" class="dialog-card restock-new-product-dialog">
-    <div class="comparison-heading"><div><p class="eyebrow">PRODUK BARU DARI RESTOK</p><h2>Daftarkan barang baru</h2><p class="muted">Produk dibuat dahulu, lalu otomatis dimasukkan ke penerimaan ini.</p></div><button id="close-restock-new-product" class="icon-button" type="button" aria-label="Tutup">×</button></div>
-    <div class="form-grid compact"><label>Nama produk<input id="restock-new-name" required maxlength="160"></label><label>Barcode<input id="restock-new-barcode" maxlength="80" inputmode="numeric" placeholder="Opsional"></label><label>SKU / kode barang<input id="restock-new-sku" maxlength="80" placeholder="Kosongkan agar dibuat otomatis"><small>Barcode dipakai sebagai SKU bila tersedia.</small></label><label>Kategori<input id="restock-new-category" list="product-category-options" value="Lainnya" required></label><label>Merek<input id="restock-new-brand" list="product-brand-options"></label><label>Satuan dasar<input id="restock-new-unit" value="pcs" required maxlength="40"></label><label>Harga jual umum<input id="restock-new-price" type="number" min="1" step="any" required></label><label>Batas stok minimum<input id="restock-new-min-stock" type="number" min="0" step="any" value="0"></label></div>
-    <label class="switch-row"><input id="restock-new-track-expiry" type="checkbox"><span><strong>Pantau batch & EXP</strong><small>Aktifkan untuk kosmetik, makanan, obat, atau barang kedaluwarsa.</small></span></label>
-    <p id="restock-new-product-error" class="error"></p><div class="button-row"><button id="cancel-restock-new-product" class="button secondary" type="button">Batal</button><button id="save-restock-new-product" class="button primary" type="submit">Buat dan tambahkan</button></div>
+    <div class="comparison-heading"><div><p class="eyebrow">BARANG BARU DARI RESTOK</p><h2>Usulkan barang baru</h2><p class="muted">Belum masuk katalog atau stok sampai Owner menyetujui dan barang diterima.</p></div><button id="close-restock-new-product" class="icon-button" type="button" aria-label="Tutup">×</button></div>
+    <section class="restock-new-main"><div class="form-grid compact"><label>Nama produk<input id="restock-new-name" required maxlength="160"></label><label>Kategori<input id="restock-new-category" list="product-category-options" value="Lainnya" required></label><label>Satuan dasar<input id="restock-new-unit" value="pcs" required maxlength="40"></label><label>Harga jual umum / satuan dasar<input id="restock-new-price" type="number" min="1" step="any" required></label></div></section>
+    <details class="restock-optional-section"><summary>Barcode dan identitas <span>Opsional</span></summary><div class="form-grid compact"><label>Jenis barcode<select id="restock-new-barcode-mode"><option value="FACTORY">Barcode kemasan</option><option value="INTERNAL">Buat barcode internal</option><option value="NONE">Tanpa barcode</option></select></label><label id="restock-new-barcode-label">Barcode kemasan<input id="restock-new-barcode" maxlength="80" inputmode="numeric" placeholder="Scan atau ketik"></label><label>SKU / kode barang<input id="restock-new-sku" maxlength="80" placeholder="Otomatis KP-..."><small>SKU tetap berbeda dari barcode.</small></label><label>Merek<input id="restock-new-brand" list="product-brand-options"></label></div></details>
+    <details class="restock-optional-section"><summary>Multi satuan <span>Opsional</span></summary><div class="restock-new-section-head"><small>Tambahkan pak, lusin, dus, atau satuan lain beserta isi dan barcode.</small><button id="add-restock-new-unit" class="button secondary" type="button">+ Satuan</button></div><div id="restock-new-units"></div></details>
+    <details class="restock-optional-section"><summary>Tipe dan tingkat harga <span>Opsional</span></summary><p class="muted compact-copy">Harga kosong mengikuti Harga Umum. Semua harga dihitung per satuan dasar.</p><div id="restock-new-prices"></div></details>
+    <details class="restock-optional-section"><summary>Pengaturan stok <span>Opsional</span></summary><div class="form-grid compact"><label>Batas stok minimum<input id="restock-new-min-stock" type="number" min="0" step="any" value="0"></label><label class="switch-row"><input id="restock-new-track-expiry" type="checkbox"><span><strong>Pantau batch & EXP</strong><small>Untuk kosmetik, makanan, atau obat.</small></span></label></div></details>
+    <p id="restock-new-product-error" class="error"></p><div class="button-row sticky-dialog-actions"><button id="cancel-restock-new-product" class="button secondary" type="button">Batal</button><button id="save-restock-new-product" class="button primary" type="submit">Tambahkan ke draft</button></div>
   </form></dialog>
   <dialog id="price-policy-dialog"><form id="price-policy-form" class="dialog-card price-policy-dialog">
     <div class="comparison-heading"><div><p class="eyebrow">HARGA OTOMATIS YANG AMAN</p><h2>Aturan harga massal</h2><p class="muted">Harga tipe hanya dibuat jika masih menyisakan keuntungan minimum berdasarkan modal tertinggi.</p></div><button id="close-price-policy" class="icon-button" type="button">Ã—</button></div>
@@ -1093,6 +1104,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=175"></script>
+  <script type="module" src="/app.js?v=176"></script>
 </body>
 </html>
