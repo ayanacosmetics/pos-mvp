@@ -8,11 +8,11 @@ const worker = await readFile(new URL('../apps/web/service-worker.js', import.me
 
 test('Nusa Commerce memakai identitas rilis dan aset shell terbaru', () => {
   assert.match(html, /Migrasi lengkap Kaspin .* v2\.17\.1/);
-  assert.match(html, /styles\.css\?v=179/);
-  assert.match(html, /app\.js\?v=179/);
-  assert.match(worker, /nusa-pos-shell-v181/);
-  assert.match(worker, /styles\.css\?v=179/);
-  assert.match(worker, /app\.js\?v=179/);
+  assert.match(html, /styles\.css\?v=180/);
+  assert.match(html, /app\.js\?v=180/);
+  assert.match(worker, /nusa-pos-shell-v182/);
+  assert.match(worker, /styles\.css\?v=180/);
+  assert.match(worker, /app\.js\?v=180/);
   assert.match(worker, /variant-suggestions\.mjs/);
 });
 

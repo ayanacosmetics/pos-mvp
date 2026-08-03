@@ -70,3 +70,13 @@ test('mobile restok memadatkan harga dan mengganti input readonly menjadi ringka
   assert.match(css,/\.restock-wizard-step small\{display:none\}/);
   assert.match(css,/\.restock-card-grid>label:nth-child\(3\)/);
 });
+
+test('staff hanya melihat pemberitahuan approval tanpa modal lama dan saran harga',()=>{
+  assert.match(app,/function canReviewRestockCostDetails/);
+  assert.match(app,/function staffRestockApprovalNote/);
+  assert.match(app,/querySelector\('\.cost-insight'\)\?\.replaceWith/);
+  assert.match(app,/querySelector\('\.history-button'\)\?\.remove/);
+  assert.match(app,/restock-staff-proposal-data/);
+  assert.match(app,/canReviewRestockCostDetails\(\)\?`\$\{money\.format\(cost\)\} \/ dasar`:'Modal dicatat dari nota'/);
+  assert.match(css,/\.restock-owner-approval-note\{display:flex/);
+});
