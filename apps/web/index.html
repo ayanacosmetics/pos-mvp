@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=180">
+  <link rel="stylesheet" href="/styles.css?v=181">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -286,8 +286,8 @@
                   </form>
                 </details>
                 <div class="planning-list-tools"><label class="planning-search"><span class="sr-only">Cari barang</span><input id="planning-product-search" type="search" autocomplete="off" placeholder="Cari nama atau SKU"></label><label class="planning-needed-filter"><input id="planning-needed-only" type="checkbox"> Hanya barang yang disarankan sistem</label></div>
-                <div id="restock-planning-list"><div class="empty-state compact">Memuat rekomendasi restok...</div></div>
                 <div class="planning-draft-actions"><span><strong id="planning-selected-count">0 barang dipilih</strong><small>Tekan barang untuk mengisi jumlah, lalu pilih supplier tujuan.</small></span><label>Supplier tujuan<select id="planning-order-supplier" aria-label="Supplier tujuan pesanan"><option value="">Pilih supplier</option></select></label><button id="create-planning-draft" class="button primary" type="button" disabled>Buat pesanan supplier</button></div>
+                <div id="restock-planning-list"><div class="empty-state compact">Memuat rekomendasi restok...</div></div>
               </div>
             </div>
           </div>
@@ -1111,6 +1111,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=180"></script>
+  <script type="module" src="/app.js?v=181"></script>
 </body>
 </html>

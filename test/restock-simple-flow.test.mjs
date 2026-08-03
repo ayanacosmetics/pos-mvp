@@ -61,6 +61,13 @@ test('satu tombol membuat pesanan supplier dan mengajukannya untuk diproses', ()
   assert.match(app, /supplierId,locationId/);
 });
 
+test('kontrol pesanan berada di atas daftar dan hanya daftar barang yang menggulir', () => {
+  assert.ok(html.indexOf('class="planning-draft-actions"') < html.indexOf('id="restock-planning-list"'));
+  assert.match(css, /#page-restock #restock-planning-list\{[^}]*max-height:calc\(100dvh - 405px\)[^}]*overflow-y:auto/);
+  assert.match(css, /#page-restock \.planning-draft-actions\{[^}]*z-index:3/);
+  assert.match(css, /@media\(max-width:700px\)[\s\S]*#page-restock \.planning-draft-actions\{grid-template-columns:minmax\(0,1fr\) auto/);
+});
+
 test('surat pesanan dapat dicetak atau dibagikan sebagai PDF ke supplier', () => {
   for (const id of ['purchase-order-dialog','purchase-order-print-content','purchase-order-print-root','share-purchase-order','print-purchase-order']) {
     assert.match(html, new RegExp(`id="${id}"`));
