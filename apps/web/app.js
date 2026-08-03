@@ -3461,6 +3461,7 @@ function setRestockWizardStep(step, { focus = true, validate = false } = {}) {
   }
   if (step === 'review') renderRestockReview();
   state.restockWizardStep = step;
+  el('purchase-view-receipt').classList.toggle('restock-items-active',step==='items');
   document.querySelectorAll('[data-restock-step]').forEach((panel) => panel.classList.toggle('hidden', panel.dataset.restockStep !== step));
   document.querySelectorAll('[data-restock-step-target]').forEach((button) => {
     const index = restockWizardSteps.indexOf(button.dataset.restockStepTarget);
@@ -4059,14 +4060,70 @@ function proposalPricesForProduct(product){
   return (product?.priceRules??[]).map((price)=>({customerGroupId:price.customerGroupId,minBaseQty:Number(price.minBaseQty),unitPriceBase:Number(price.unitPriceBase)}));
 }
 
+function updateRestockLineSummary(row){
+  const qty=Number(row.querySelector('.restock-qty')?.value??0);
+  const unit=row.querySelector('.restock-unit')?.selectedOptions[0]?.textContent?.trim()??'pcs';
+  const cost=Number(row.querySelector('.restock-cost')?.value??0);
+  const batch=row.querySelector('.restock-batch')?.value.trim();
+  const expiry=row.querySelector('.restock-expiry')?.value.trim();
+  const summary=row.querySelector('.restock-line-summary');
+  if(!summary)return;
+  summary.querySelector('.restock-line-summary-qty').textContent=`${qty.toLocaleString('id-ID')} ${unit}`;
+  summary.querySelector('.restock-line-summary-cost').textContent=`${money.format(cost)} / dasar`;
+  summary.querySelector('.restock-line-summary-extra').textContent=[batch?`Batch ${batch}`:null,expiry?`EXP ${expiry}`:null].filter(Boolean).join(' · ')||'Batch & EXP belum diisi';
+}
+
+function prepareRestockLineEditor(row,product,{newProduct=false}={}){
+  const editor=document.createElement('div');editor.className='restock-line-editor';
+  while(row.firstChild)editor.append(row.firstChild);
+  const summary=document.createElement('button');summary.type='button';summary.className='restock-line-summary';
+  summary.innerHTML=`<span class="restock-line-summary-main"><span class="eyebrow">${newProduct?'BARANG BARU · PERLU OWNER':'BARANG DATANG'}</span><strong>${escapeHtml(product?.name??'Barang')}</strong><small>${escapeHtml(product?.sku??'')}</small></span><span class="restock-line-summary-values"><strong class="restock-line-summary-qty">-</strong><small class="restock-line-summary-cost">-</small><small class="restock-line-summary-extra">-</small></span><span class="restock-line-summary-arrow" aria-hidden="true">›</span>`;
+  row.append(summary,editor);
+  summary.addEventListener('click',()=>openRestockLineDialog(row));
+  editor.addEventListener('input',()=>updateRestockLineSummary(row));
+  editor.addEventListener('change',()=>updateRestockLineSummary(row));
+  updateRestockLineSummary(row);
+}
+
+function openRestockLineDialog(row){
+  const dialog=el('restock-line-dialog'),body=el('restock-line-dialog-body');
+  if(!row.querySelector('.restock-line-editor'))return;
+  closeRestockLineDialog();
+  state.activeRestockLine=row;
+  const placeholder=document.createElement('div');placeholder.className='restock-line-placeholder';placeholder.style.height=`${row.offsetHeight}px`;
+  row.before(placeholder);state.activeRestockLinePlaceholder=placeholder;
+  row.classList.add('restock-line-editing');
+  const title=row.querySelector('.restock-line-summary strong')?.textContent??'Detail barang';
+  el('restock-line-dialog-title').textContent=title;
+  el('restock-line-dialog-subtitle').textContent='Isi jumlah, satuan, modal, batch, EXP, dan usulan harga bila diperlukan.';
+  body.append(row);
+  dialog.showModal();
+  requestAnimationFrame(()=>row.querySelector('.restock-qty')?.focus({preventScroll:true}));
+}
+
+function closeRestockLineDialog(){
+  const dialog=el('restock-line-dialog'),row=state.activeRestockLine,placeholder=state.activeRestockLinePlaceholder;
+  if(row&&placeholder?.isConnected){placeholder.replaceWith(row);row.classList.remove('restock-line-editing');updateRestockLineSummary(row);}
+  state.activeRestockLine=null;
+  state.activeRestockLinePlaceholder=null;
+  if(dialog?.open)dialog.close();
+}
+
+function removeRestockLine(row){
+  if(state.activeRestockLine===row)closeRestockLineDialog();
+  if(row.dataset.productKey)state.restockDraftProducts.delete(row.dataset.productKey);
+  row.remove();syncRestockVisibility();updateRestockTotal();
+}
+
 function appendRestockNewLine(productKey,product){
   if(document.querySelector(`.restock-line[data-product-key="${CSS.escape(productKey)}"]`))return;
   const row=document.createElement('article');row.className='restock-line restock-line-new';row.dataset.productKey=productKey;row.dataset.factor=1;row.dataset.needsApproval='true';
   row.innerHTML=`<div class="restock-card-header"><div><p class="eyebrow">BARANG BARU · DRAFT</p><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)} · belum aktif</small></div><div class="restock-card-tools"><span class="badge warning">PERLU OWNER</span><button type="button" class="icon-button remove-restock" aria-label="Hapus barang">×</button></div></div><div class="restock-card-grid"><label>Jumlah<input class="restock-qty" type="number" min="0.000001" step="any" value="1"></label><label>Satuan<select class="restock-unit">${product.units.map((unit)=>`<option data-factor="${unit.factor}">${escapeHtml(unit.name)}${unit.factor>1?` (${unit.factor} ${escapeHtml(product.units[0].name)})`:''}</option>`).join('')}</select></label><label>Modal / ${escapeHtml(product.units[0].name)}<input class="restock-cost" type="number" min="0" step="any" value="0"></label><details class="restock-line-options"><summary>Batch dan EXP <span>Opsional</span></summary><label>Nomor batch<input class="restock-batch"></label><label>Tanggal EXP<input class="restock-expiry" type="text" inputmode="numeric" maxlength="10" placeholder="DD/MM/YYYY"></label></details><div class="cost-insight"><span>Modal sebelumnya</span><strong>Barang baru</strong><small>Wajib diperiksa Owner</small></div></div>${restockPriceProposalMarkup(productKey,product.prices)}`;
+  prepareRestockLineEditor(row,product,{newProduct:true});
   row.querySelectorAll('.restock-qty,.restock-cost').forEach((input)=>input.addEventListener('input',updateRestockTotal));
   row.querySelector('.restock-unit').addEventListener('change',(event)=>{row.dataset.factor=event.target.selectedOptions[0]?.dataset.factor??1;updateRestockTotal();});
   row.querySelector('.restock-expiry').addEventListener('input',formatExpiryInput);
-  row.querySelector('.remove-restock').addEventListener('click',()=>{state.restockDraftProducts.delete(productKey);row.remove();syncRestockVisibility();});
+  row.querySelector('.remove-restock').addEventListener('click',()=>removeRestockLine(row));
   el('restock-body').append(row);syncRestockVisibility();updateRestockTotal();
 }
 
@@ -4090,6 +4147,7 @@ async function appendRestockLine(productId, qty = 1, newCost = 0, unit = 'pcs') 
       <details class="restock-line-options"><summary>Batch dan EXP <span>Opsional</span></summary><label>Nomor batch<input class="restock-batch" placeholder="Contoh: BATCH-001"></label><label>Tanggal EXP<input class="restock-expiry" type="text" inputmode="numeric" maxlength="10" placeholder="DD/MM/YYYY" aria-label="Tanggal kedaluwarsa format DD/MM/YYYY"></label></details>
       <div class="cost-insight"><span>Modal sebelumnya</span><strong class="last-cost">Memuat...</strong><small class="last-meta">Mengecek histori supplier</small><div class="cost-delta"><span class="badge neutral">CEK</span></div><div class="retail-suggestion hidden"><span>Saran harga ecer</span><strong class="suggested-retail">-</strong><small class="suggested-retail-note"></small><button type="button" class="button secondary apply-suggested-retail">Gunakan saran</button></div></div>
     </div><div class="restock-price-proposal-slot"></div>`;
+  prepareRestockLineEditor(row,product);
   row.querySelector('.restock-cost').addEventListener('change', () => updateRestockComparison(row));
   row.querySelector('.restock-cost').addEventListener('input', updateRestockTotal);
   row.querySelector('.restock-qty').addEventListener('input', updateRestockTotal);
@@ -4103,12 +4161,12 @@ async function appendRestockLine(productId, qty = 1, newCost = 0, unit = 'pcs') 
     try { parseExpiryDate(event.target.value); event.target.setCustomValidity(''); }
     catch (error) { event.target.setCustomValidity(error.message); toast(error.message); }
   });
-  row.querySelector('.history-button').addEventListener('click', () => showCostHistory(productId));
+  row.querySelector('.history-button').addEventListener('click', () => { closeRestockLineDialog(); showCostHistory(productId); });
   row.querySelector('.apply-suggested-retail').addEventListener('click', () => {
     const input=row.querySelector('.restock-price-proposal [data-group-id="retail"]');
     if(input){input.value=Number(row.querySelector('.apply-suggested-retail').dataset.price);toast('Saran dimasukkan ke usulan. Owner masih perlu menyetujui.');}
   });
-  row.querySelector('.remove-restock').addEventListener('click', () => { row.remove(); syncRestockVisibility(); });
+  row.querySelector('.remove-restock').addEventListener('click', () => removeRestockLine(row));
   el('restock-body').append(row);
   syncRestockVisibility();
   updateRestockComparison(row);
@@ -7639,6 +7697,9 @@ el('search-restock-product').addEventListener('click', () => renderPurchaseProdu
 el('scan-restock-product').addEventListener('click', () => activatePurchaseScanner('restock'));
 el('camera-restock-product').addEventListener('click', () => openBarcodeCamera('restock'));
 el('restock-new-product-form').addEventListener('submit',saveRestockNewProduct);
+el('close-restock-line-dialog').addEventListener('click',closeRestockLineDialog);
+el('done-restock-line-dialog').addEventListener('click',closeRestockLineDialog);
+el('restock-line-dialog').addEventListener('cancel',(event)=>{event.preventDefault();closeRestockLineDialog();});
 el('restock-new-barcode-mode').addEventListener('change',syncRestockNewBarcodeMode);
 el('add-restock-new-unit').addEventListener('click',()=>{state.restockNewUnits.push({name:'',factor:2,barcode:''});renderRestockNewUnits();});
 el('restock-new-price').addEventListener('input',(event)=>{if(state.restockNewPrices.retail)state.restockNewPrices.retail[0].unitPriceBase=event.currentTarget.value;const input=el('restock-new-prices').querySelector('.restock-draft-price-group[data-group-id="retail"] [data-index="0"] .restock-draft-price-value');if(input)input.value=event.currentTarget.value;});

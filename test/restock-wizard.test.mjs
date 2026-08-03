@@ -68,6 +68,18 @@ test('desktop membatasi daftar di panel dan mobile mempertahankan navigasi lanju
   assert.match(css, /scroll-margin-top:76px/);
 });
 
+test('langkah barang memakai daftar ringkas dengan editor popup dan scroll lokal', () => {
+  assert.match(html, /id="restock-line-dialog"/);
+  assert.match(html, /id="restock-line-dialog-body"/);
+  assert.match(app, /function prepareRestockLineEditor/);
+  assert.match(app, /function openRestockLineDialog/);
+  assert.match(app, /function updateRestockLineSummary/);
+  assert.match(app, /classList\.toggle\('restock-items-active',step==='items'\)/);
+  assert.match(css, /\.restock-line>\.restock-line-editor\{display:none\}/);
+  assert.match(css, /\.restock-line-dialog-body>\.restock-line>\.restock-line-editor\{display:block\}/);
+  assert.match(css, /\.restock-items-active \[data-restock-step="items"\] \.restock-list\{[^}]*overflow-y:auto/);
+});
+
 test('pesan gagal penerimaan tidak tertutup aksi wizard pada mobile', () => {
   assert.match(html, /id="restock-receive-error"[\s\S]*role="alert"/);
   assert.match(app, /targetIndex === 2 \? \(\[\.\.\.document\.querySelectorAll\('\.restock-line'\)\]/);

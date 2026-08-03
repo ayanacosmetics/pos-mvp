@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=178">
+  <link rel="stylesheet" href="/styles.css?v=179">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -1054,6 +1054,11 @@
     <section class="product-editor-section"><p class="eyebrow">HARGA JUAL</p><div id="product-price-tiers" class="product-price-tiers"></div><small>Setiap tipe dimulai dari minimal 1 pcs. Tambahkan tingkat 3, 6, 12, atau jumlah lain bila harganya berubah. Harga tipe pelanggan yang kosong akan memakai harga Umum.</small></section>
     <p id="product-error" class="error"></p><div class="button-row"><button id="cancel-product" type="button" class="button secondary">Batal</button><button id="save-product-button" type="submit" class="button primary">Simpan produk</button></div>
   </form></dialog>
+  <dialog id="restock-line-dialog"><div class="dialog-card restock-line-dialog">
+    <div class="comparison-heading"><div><p class="eyebrow">DETAIL BARANG DATANG</p><h2 id="restock-line-dialog-title">Isi detail barang</h2><p id="restock-line-dialog-subtitle" class="muted"></p></div><button id="close-restock-line-dialog" class="icon-button" type="button" aria-label="Tutup detail barang">×</button></div>
+    <div id="restock-line-dialog-body" class="restock-line-dialog-body"></div>
+    <div class="button-row sticky-dialog-actions"><button id="done-restock-line-dialog" class="button primary" type="button">Simpan detail</button></div>
+  </div></dialog>
   <dialog id="restock-new-product-dialog"><form id="restock-new-product-form" class="dialog-card restock-new-product-dialog">
     <div class="comparison-heading"><div><p class="eyebrow">BARANG BARU DARI RESTOK</p><h2>Usulkan barang baru</h2><p class="muted">Belum masuk katalog atau stok sampai Owner menyetujui dan barang diterima.</p></div><button id="close-restock-new-product" class="icon-button" type="button" aria-label="Tutup">×</button></div>
     <section class="restock-new-main"><div class="form-grid compact"><label>Nama produk<input id="restock-new-name" required maxlength="160"></label><label>Kategori<input id="restock-new-category" list="product-category-options" value="Lainnya" required></label><label>Satuan dasar<input id="restock-new-unit" value="pcs" required maxlength="40"></label><label>Harga jual umum / satuan dasar<input id="restock-new-price" type="number" min="1" step="any" required></label></div></section>
@@ -1106,6 +1111,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=178"></script>
+  <script type="module" src="/app.js?v=179"></script>
 </body>
 </html>
