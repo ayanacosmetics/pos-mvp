@@ -8,10 +8,10 @@ import { validateJournalLines } from '../packages/domain/src/ledger.mjs';
 import { evaluateSafePricePolicy, normalizeSafePricePolicy } from '../packages/domain/src/safe-price-policy.mjs';
 
 const PERMISSIONS = {
-  OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.transactions','report.view','audit.view','identity.manage_staff','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner','multioutlet.view','multioutlet.manage','pilot.manage','sale.adjust','sale.void'],
+  OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.transactions','report.view','audit.view','identity.manage_staff','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner','multioutlet.view','multioutlet.manage','pilot.manage','sale.adjust','sale.void','device.configure'],
   ADMIN: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.transactions','report.view','audit.view','identity.manage_staff','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage','sale.adjust','sale.void'],
   MANAGER: ['pos.sell','inventory.manage','sales.return','catalog.manage','promotion.manage','report.transactions','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage'],
-  CASHIER: ['pos.sell','workforce.self'],
+  CASHIER: ['pos.sell','workforce.self','device.configure'],
   PURCHASING: ['purchasing.view_cost','purchasing.receive','workforce.self'],
   WAREHOUSE: ['inventory.manage','workforce.self']
 };
@@ -30,6 +30,7 @@ function effectivePermissions(profile) {
     // diteruskan kepada peran operasional melalui daftar izin kustom.
     if(permissions.includes('report.view'))permissions.push('report.transactions');
     if(profile?.role==='ADMIN')permissions.push('identity.manage_staff');
+    if(profile?.role==='CASHIER')permissions.push('device.configure');
     return [...new Set(permissions)];
   }
   return [...(PERMISSIONS[profile?.role]??[])];
@@ -2366,11 +2367,21 @@ async function routeRequest(request, response, route) {
   }
 
   if (request.method === 'PUT' && route === 'settings/device') {
-    requirePermission(session, 'identity.manage');
+    requireAnyPermission(session, ['identity.manage','device.configure']);
     const input = bodyOf(request);
+    const requestedDeviceId=String(input.id??'').trim();
+    const currentDeviceId=String(request.headers['x-device-id']??'').trim();
+    if(!/^[0-9a-f-]{36}$/i.test(requestedDeviceId)||requestedDeviceId!==currentDeviceId){
+      throw Object.assign(new Error('Perangkat aktif tidak valid'),{status:400});
+    }
+    const managesIdentity=session.permissions.includes('identity.manage');
+    const outletId=managesIdentity?input.outletId:context.outlet.id;
+    if(!context.outlets.some((outlet)=>outlet.id===outletId)){
+      throw Object.assign(new Error('Perangkat hanya dapat dipasang pada outlet yang dapat diakses'),{status:403});
+    }
     const device = await rpc('save_pos_device_settings', {
-      p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_device_id: input.id,
-      p_outlet_id: input.outletId, p_name: input.name, p_platform: input.platform ?? '',
+      p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_device_id: requestedDeviceId,
+      p_outlet_id: outletId, p_name: input.name, p_platform: input.platform ?? '',
       p_paper_width: Number(input.paperWidth ?? 80), p_auto_print: Boolean(input.autoPrint),
       p_receipt_copies: Number(input.receiptCopies ?? 1)
     });

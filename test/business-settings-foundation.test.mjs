@@ -20,4 +20,6 @@ test('fondasi pengaturan menghubungkan identitas, outlet, lokasi, perangkat, dan
   assert.match(html,/id="current-outlet-select"/);
   assert.match(script,/switchActiveOutlet/);
   assert.match(script,/business\.receiptFooter/);
+  assert.match(html,/data-page="settings-device"[^>]+data-permission="device\.configure"/);
+  assert.match(api,/requireAnyPermission\(session, \['identity\.manage','device\.configure'\]\)/);
 });

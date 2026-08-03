@@ -5,6 +5,7 @@ import { PERMISSIONS, can, permissionsFor } from '../packages/domain/src/index.m
 test('kasir dapat menjual tetapi tidak melihat modal', () => {
   const session = { permissions: permissionsFor('CASHIER') };
   assert.equal(can(session, PERMISSIONS.POS_SELL), true);
+  assert.equal(can(session, PERMISSIONS.CONFIGURE_DEVICE), true);
   assert.equal(can(session, PERMISSIONS.VIEW_COST), false);
 });
 

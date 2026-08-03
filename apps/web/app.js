@@ -68,7 +68,7 @@ const permissionGroups=[
   ['outlets','Multi-outlet','Akses dan pengelolaan lintas cabang']
 ];
 const permissionDefaults={
-  CASHIER:['pos.sell','workforce.self'],
+  CASHIER:['pos.sell','workforce.self','device.configure'],
   PURCHASING:['purchasing.view_cost','purchasing.receive','workforce.self'],
   WAREHOUSE:['inventory.manage','workforce.self'],
   MANAGER:['pos.sell','inventory.manage','sales.return','catalog.manage','promotion.manage','report.transactions','report.view','audit.view','workforce.self','workforce.manage','approval.manage','multioutlet.view','multioutlet.manage'],
@@ -5036,17 +5036,26 @@ function renderSettings() {
       <span><strong>${escapeHtml(location.name)}</strong><small>${escapeHtml(settingOutletLabel(location.outlet_id))} · ${escapeHtml(kindLabels[location.kind] ?? location.kind)} · ${escapeHtml(location.code)}</small></span>
       <span class="status-badge ${location.active ? 'approved' : 'inactive'}">${location.active ? 'AKTIF' : 'NONAKTIF'}</span>
     </button>`).join('') || '<div class="empty-state compact">Belum ada lokasi stok.</div>';
-  const registered = state.settings.devices.find((device) => device.id === posDevice.id);
+  renderDeviceSettings();
+  renderReceiptDesignPreview();
+}
+
+function renderDeviceSettings() {
+  const canManageIdentity=state.session?.permissions?.includes('identity.manage');
+  const availableOutlets=(canManageIdentity?state.settings.outlets:state.outlets).filter((outlet)=>outlet.active!==false);
+  const registered = state.settings.devices.find((device) => device.id === posDevice.id)
+    ?? (state.deviceSettings.id===posDevice.id?state.deviceSettings:null);
   state.deviceSettings = { ...state.deviceSettings, ...(registered ?? {}) };
+  el('setting-device-outlet').innerHTML=availableOutlets.map((outlet)=>`<option value="${escapeHtml(outlet.id)}">${escapeHtml(outlet.name)}</option>`).join('');
   el('setting-device-id').textContent = `ID ${posDevice.id.slice(0, 8).toUpperCase()}`;
   el('setting-device-name').value = registered?.name || posDevice.name;
   el('setting-device-outlet').value = registered?.outletId ?? state.activeOutletId;
+  el('setting-device-outlet').disabled=!canManageIdentity;
   el('setting-device-paper').value = String(state.deviceSettings.paperWidth ?? 80);
   el('setting-receipt-paper').value = String(state.deviceSettings.paperWidth ?? 80);
   el('setting-device-copies').value = String(state.deviceSettings.receiptCopies ?? 1);
   el('setting-device-auto-print').checked = Boolean(state.deviceSettings.autoPrint);
   renderPrinterStatus();
-  renderReceiptDesignPreview();
 }
 
 async function loadSettings() {
@@ -5191,7 +5200,11 @@ async function loadPlatformInfrastructure() {
 }
 
 async function loadSettingsWorkspace() {
-  await Promise.all([loadSettings(), loadSystemHealth()]);
+  if(state.session?.permissions?.includes('identity.manage')){
+    await Promise.all([loadSettings(), loadSystemHealth()]);
+    return;
+  }
+  if(state.session?.permissions?.includes('device.configure'))renderDeviceSettings();
 }
 
 function isInstalledPwa() {
@@ -5378,7 +5391,7 @@ async function saveDeviceSettings(event) {
     state.deviceSettings = data.device;
     posDevice.name = data.device.name;
     localStorage.setItem('pos_device_name', data.device.name);
-    await loadSettings();
+    await loadSettingsWorkspace();
     toast('Pengaturan perangkat ini berhasil disimpan');
   } catch (error) { el('device-settings-error').textContent = error.message; }
   finally { button.disabled = false; }
