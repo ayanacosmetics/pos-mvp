@@ -4471,12 +4471,22 @@ async function routeRequest(request, response, route) {
     return send(response,201,result);
   }
 
-  if (request.method === 'POST' && /^restock-approvals\/[^/]+\/(approve|reject)$/.test(route)) {
+  if (request.method === 'POST' && /^restock-approvals\/[^/]+\/(approve|reject|revise)$/.test(route)) {
     if(!['OWNER','ADMIN'].includes(session.profile.role))throw Object.assign(new Error('Hanya Owner/Admin yang dapat memutuskan'),{status:403});
     const [,requestId,action]=route.split('/'),input=bodyOf(request);
     const result=await rpc('decide_restock_approval_v1',{
       p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_request_id:requestId,
       p_decision:action.toUpperCase(),p_approved_prices:input.prices??[],p_note:input.note??''
+    });
+    return send(response,200,result);
+  }
+
+  if (request.method === 'POST' && /^restock-approvals\/[^/]+\/resubmit$/.test(route)) {
+    requirePermission(session,'purchasing.receive');
+    const [,requestId]=route.split('/'),input=bodyOf(request);
+    const result=await rpc('resubmit_restock_approval_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_request_id:requestId,
+      p_items:input.items,p_note:input.note??''
     });
     return send(response,200,result);
   }

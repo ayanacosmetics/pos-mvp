@@ -2,13 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html,app,api,sql,sqlPo,sqlPoNewProduct,css]=await Promise.all([
+const [html,app,api,sql,sqlPo,sqlPoNewProduct,sqlRevision,css]=await Promise.all([
   readFile(new URL('../apps/web/index.html',import.meta.url),'utf8'),
   readFile(new URL('../apps/web/app.js',import.meta.url),'utf8'),
   readFile(new URL('../api/index.mjs',import.meta.url),'utf8'),
   readFile(new URL('../supabase/migrations/202608030015_restock_price_approval.sql',import.meta.url),'utf8'),
   readFile(new URL('../supabase/migrations/202608030016_restock_approval_purchase_order.sql',import.meta.url),'utf8'),
   readFile(new URL('../supabase/migrations/202608040017_restock_po_approved_new_product.sql',import.meta.url),'utf8'),
+  readFile(new URL('../supabase/migrations/202608040018_restock_revision_workflow.sql',import.meta.url),'utf8'),
   readFile(new URL('../apps/web/styles.css',import.meta.url),'utf8')
 ]);
 
@@ -81,6 +82,19 @@ test('persetujuan Owner memakai daftar dan halaman detail dengan patokan harga l
   assert.match(app,/price\.customerGroupId==='retail'\?'Harga jual'/);
   assert.match(app,/class="button secondary back-restock-approvals"/);
   assert.match(css,/\.restock-approval-status\{display:inline-flex!important/);
+});
+
+test('Owner dapat meminta revisi dan Staff mengirim ulang pengajuan yang sama',()=>{
+  assert.match(sqlRevision,/REVISION_REQUIRED/);
+  assert.match(sqlRevision,/revision_history_json/);
+  assert.match(sqlRevision,/resubmit_restock_approval_v1/);
+  assert.match(api,/approve\|reject\|revise/);
+  assert.match(api,/resubmit_restock_approval_v1/);
+  assert.match(app,/Minta revisi/);
+  assert.match(app,/Kirim ulang ke Owner/);
+  assert.match(app,/function resubmitRestockApproval/);
+  assert.match(app,/Modal lama, perhitungan laba, dan saran harga hanya tampil pada akun Owner/);
+  assert.match(css,/\.restock-revision-banner\{display:grid/);
 });
 
 test('staff hanya melihat pemberitahuan approval tanpa modal lama dan saran harga',()=>{
