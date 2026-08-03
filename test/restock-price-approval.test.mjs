@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html,app,api,sql,css]=await Promise.all([
+const [html,app,api,sql,sqlPo,css]=await Promise.all([
   readFile(new URL('../apps/web/index.html',import.meta.url),'utf8'),
   readFile(new URL('../apps/web/app.js',import.meta.url),'utf8'),
   readFile(new URL('../api/index.mjs',import.meta.url),'utf8'),
   readFile(new URL('../supabase/migrations/202608030015_restock_price_approval.sql',import.meta.url),'utf8'),
+  readFile(new URL('../supabase/migrations/202608030016_restock_approval_purchase_order.sql',import.meta.url),'utf8'),
   readFile(new URL('../apps/web/styles.css',import.meta.url),'utf8')
 ]);
 
@@ -43,6 +44,10 @@ test('persetujuan dan penerimaan diposting atomik',()=>{
   assert.match(sql,/v_result:=public\.receive_purchase/);
   assert.match(api,/route === 'restock-approvals'/);
   assert.match(app,/function renderRestockApprovals/);
+  assert.match(app,/purchaseOrderId=state\.activePurchaseOrder\?\.id/);
+  assert.match(sqlPo,/v_result:=public\.receive_purchase_order/);
+  assert.match(sqlPo,/profile_can_receive_purchase_v1/);
+  assert.match(sqlPo,/'purchasing\.receive'=any\(coalesce\(custom_permissions/);
 });
 
 test('form restok padat dan bagian opsional dapat dilipat',()=>{

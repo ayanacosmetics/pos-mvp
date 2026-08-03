@@ -3323,6 +3323,36 @@ async function openBarcodeCamera(target) {
   }
 }
 
+function receivablePurchaseOrders(){
+  return (state.purchaseOrders??[]).filter((order)=>['APPROVED','PARTIALLY_RECEIVED'].includes(order.status));
+}
+
+function renderRestockSourceSelector(){
+  const type=el('restock-source-type'),selector=el('restock-source-po'),orders=receivablePurchaseOrders();
+  const active=state.activePurchaseOrder;
+  selector.innerHTML='<option value="">Pilih PO siap diterima</option>'+orders.map((order)=>`<option value="${escapeHtml(order.id)}">${escapeHtml(order.po_no)} · ${escapeHtml(order.supplier_name)} · sisa ${order.items.reduce((sum,item)=>sum+Number(item.remaining_qty??0),0).toLocaleString('id-ID')} pcs</option>`).join('');
+  if(active)selector.value=active.id;
+  type.value=active?'PO':(type.value||'PO');
+  const poMode=type.value==='PO';
+  el('restock-source-po-wrap').classList.toggle('hidden',!poMode);
+  el('restock-supplier').disabled=poMode;
+  el('restock-location').disabled=poMode;
+  el('restock-source-guidance').innerHTML=poMode
+    ? active
+      ? `<strong>PO ${escapeHtml(active.po_no)} sudah terhubung.</strong><span>Masukkan nomor faktur yang tercetak pada nota supplier, lalu periksa jumlah barang yang benar-benar datang.</span>`
+      : orders.length
+        ? '<strong>Pilih PO terlebih dahulu.</strong><span>Sistem akan mengisi supplier, lokasi, barang, jumlah pesanan, dan modal dari PO tersebut.</span>'
+        : '<strong>Belum ada PO siap diterima.</strong><span>PO harus berstatus Disetujui. Minta Owner menyetujui pesanan, atau pilih “Tanpa PO” untuk pembelian langsung.</span>'
+    : '<strong>Penerimaan tanpa PO.</strong><span>Pilih supplier dan lokasi, lalu tambahkan setiap barang secara manual pada langkah berikutnya.</span>';
+  el('active-po-banner').classList.toggle('hidden',!active);
+  if(active){
+    el('restock-supplier').value=active.supplier_id;
+    el('restock-location').value=active.location_id;
+    el('active-po-banner').innerHTML=`<div><span>PENERIMAAN BERDASARKAN PO</span><strong>${escapeHtml(active.po_no)} · ${escapeHtml(active.supplier_name)}</strong><small>Invoice supplier dicatat terpisah. Sisa barang yang belum datang tetap terbuka.</small></div><button id="clear-active-po" class="button secondary" type="button">Ganti PO</button>`;
+    el('clear-active-po').addEventListener('click',clearActivePurchaseOrder);
+  }
+}
+
 async function renderRestock() {
   el('restock-body').innerHTML = '';
   el('restock-supplier').innerHTML = state.suppliers.length
@@ -3356,6 +3386,7 @@ async function renderRestock() {
   el('receive-button').disabled = !state.suppliers.length || !receivingLocations.length;
   setRestockExtraPicker(false);
   syncRestockVisibility();
+  renderRestockSourceSelector();
   setRestockWizardStep('document', { focus: false });
 }
 
@@ -3368,7 +3399,7 @@ function showPurchaseView(name) {
   document.querySelectorAll('.purchase-view').forEach((view) => view.classList.toggle('hidden', view.id !== `purchase-view-${name}`));
   document.querySelectorAll('.purchase-tab').forEach((button) => button.classList.toggle('active', button.dataset.purchaseView === name));
   document.querySelectorAll('[data-purchase-view-target]').forEach((button)=>button.classList.toggle('active',button.dataset.purchaseViewTarget===name));
-  if (name === 'receipt') setRestockWizardStep('document', { focus: false });
+  if (name === 'receipt') { setRestockWizardStep('document', { focus: false }); loadPurchaseOrders().then(renderRestockSourceSelector); }
   if (name === 'approvals') loadRestockApprovals();
 }
 
@@ -3379,6 +3410,7 @@ const restockWizardLabels = {
 
 function restockStepIsValid(step, { notify = true } = {}) {
   if (step === 'document') {
+    if (el('restock-source-type').value==='PO'&&!state.activePurchaseOrder) { if (notify) toast('Pilih PO yang barangnya datang, atau ubah cara penerimaan menjadi Tanpa PO.'); return false; }
     if (!el('restock-supplier').value) { if (notify) toast('Pilih supplier terlebih dahulu.'); return false; }
     if (!el('restock-document').value.trim()) { if (notify) toast('Isi nomor faktur sebelum melanjutkan.'); return false; }
     if (!el('restock-location').value) { if (notify) toast('Pilih lokasi penerimaan.'); return false; }
@@ -3643,6 +3675,7 @@ async function loadPurchaseOrders() {
     const data = await request('/api/purchase-orders');
     state.purchaseOrders = data.orders;
     renderPurchaseOrders();
+    renderRestockSourceSelector();
   } catch (error) {
     el('purchase-order-list').innerHTML = `<div class="empty-state compact"><strong>Dokumen pembelian belum dapat dimuat.</strong><br><small>${error.message}</small></div>`;
   }
@@ -3984,19 +4017,13 @@ async function prepareOrderReceipt(orderId) {
   if (!order) return;
   state.activePurchaseOrder=order;
   await renderRestock();
-  el('restock-supplier').value=order.supplier_id; el('restock-supplier').disabled=true;
-  el('restock-location').value=order.location_id; el('restock-location').disabled=true;
-  el('active-po-banner').classList.remove('hidden');
-  el('active-po-banner').innerHTML=`<div><span>PENERIMAAN BERDASARKAN PO</span><strong>${order.po_no} · ${order.supplier_name}</strong><small>Isi jumlah yang benar-benar datang. Sisa pesanan tetap terbuka.</small></div><button id="clear-active-po" class="button secondary">Lepas PO</button>`;
-  el('clear-active-po').addEventListener('click', clearActivePurchaseOrder);
   for (const item of order.items.filter((line)=>line.remaining_qty>0)) await appendRestockLine(item.product_id,item.remaining_qty,item.unit_cost,'pcs');
+  renderRestockSourceSelector();
   showPurchaseView('receipt');
 }
 
 async function clearActivePurchaseOrder() {
   state.activePurchaseOrder=null;
-  el('active-po-banner').classList.add('hidden');
-  el('restock-supplier').disabled=false; el('restock-location').disabled=false;
   await renderRestock();
 }
 
@@ -4558,7 +4585,8 @@ function restockRowProposedPrices(row){
 async function submitRestockForApproval(payload,rows){
   const proposedPrices=rows.flatMap(restockRowProposedPrices);
   if(rows.some((row)=>row.dataset.productKey)&&!proposedPrices.some((price)=>price.customerGroupId==='retail'))throw new Error('Harga Umum barang baru wajib diisi.');
-  const result=await request('/api/restock-approvals',{method:'POST',body:JSON.stringify({...payload,items:rows.map(restockRowPayload),proposedPrices})});
+  const purchaseOrderId=state.activePurchaseOrder?.id??null;
+  const result=await request('/api/restock-approvals',{method:'POST',body:JSON.stringify({...payload,items:rows.map((row)=>({...restockRowPayload(row),purchaseOrderId})),proposedPrices})});
   toast('Pengajuan dikirim. Owner dapat memeriksa dan mengubah harga sebelum menyetujui.');
   state.restockDraftProducts.clear();await loadRestockApprovals();showPurchaseView('approvals');
   state.activeRestockApprovalId=result.id;
@@ -4597,7 +4625,7 @@ async function decideRestockApproval(card,decision){
 
 async function receiveApprovedRestock(requestId,button){
   button.disabled=true;button.textContent='Menerima barang…';
-  try{const receipt=await request(`/api/restock-approvals/${requestId}/receive`,{method:'POST',headers:{'idempotency-key':crypto.randomUUID()},body:'{}'});toast(`Penerimaan ${receipt.document_no} berhasil · produk, harga, dan stok sudah aktif`);await refreshCatalog();if(state.session.permissions.includes('inventory.manage'))await loadInventory();await loadRestockApprovals();}catch(error){toast(error.message);button.disabled=false;button.textContent='Lanjut terima barang';}
+  try{const receipt=await request(`/api/restock-approvals/${requestId}/receive`,{method:'POST',headers:{'idempotency-key':crypto.randomUUID()},body:'{}'});toast(`Penerimaan ${receipt.document_no} berhasil · produk, harga, dan stok sudah aktif`);await refreshCatalog();if(state.session.permissions.includes('inventory.manage'))await loadInventory();await Promise.all([loadRestockApprovals(),loadPurchaseOrders()]);}catch(error){toast(error.message);button.disabled=false;button.textContent='Lanjut terima barang';}
 }
 
 async function receivePurchase() {
@@ -4632,7 +4660,6 @@ async function receivePurchase() {
   wizardButton.textContent = 'Menyimpan restok...';
   try {
     if(requiresApproval){
-      if(state.activePurchaseOrder)throw new Error('Lepaskan PO terlebih dahulu untuk mengajukan perubahan harga. Persetujuan PO akan ditambahkan pada tahap berikutnya.');
       await submitRestockForApproval(payload,rows);
       return;
     }
@@ -7612,6 +7639,8 @@ el('restock-wizard-next').addEventListener('click',()=>moveRestockWizard(1));
 el('restock-document').addEventListener('keydown',(event)=>{
   if(event.key==='Enter'){event.preventDefault();setRestockWizardStep('items',{validate:true});}
 });
+el('restock-source-type').addEventListener('change',async()=>{state.activePurchaseOrder=null;await renderRestock();});
+el('restock-source-po').addEventListener('change',(event)=>{if(event.currentTarget.value)prepareOrderReceipt(event.currentTarget.value);});
 document.querySelectorAll('.purchase-tab').forEach((button) => button.addEventListener('click', () => {
   showPurchaseView(button.dataset.purchaseView);
   if(button.dataset.purchaseView==='supplier-return')loadRecentSupplierReturns();

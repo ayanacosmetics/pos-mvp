@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=176">
+  <link rel="stylesheet" href="/styles.css?v=177">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -112,7 +112,7 @@
         <button data-nav-group="restock" class="nav-item" aria-expanded="false"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4zM8 7V4h8v3M8 12h8M12 9v6"/></svg></span><span>Restok<small>Pesan dan terima barang</small></span><b>›</b></button>
         <div data-nav-panel="restock" class="feature-nav-panel">
           <button data-page="restock-planning" data-target-page="restock" data-purchase-view-target="planning" class="feature-nav-item" data-permission="purchasing.view_cost"><span>Pilih barang</span><small>Stok paling sedikit dahulu</small></button>
-          <button data-page="purchase-documents" data-target-page="restock" data-purchase-view-target="documents" class="feature-nav-item" data-permission="purchasing.view_cost"><span>Pesanan supplier</span><small>Cetak, bagikan, dan pantau</small></button>
+          <button data-page="purchase-documents" data-target-page="restock" data-purchase-view-target="documents" class="feature-nav-item" data-permission="purchasing.receive"><span>Pesanan supplier</span><small>Cetak, bagikan, dan pantau</small></button>
           <button data-page="purchase-receipt" data-target-page="restock" data-purchase-view-target="receipt" class="feature-nav-item" data-permission="purchasing.receive"><span>Terima barang</span><small>Catat barang yang sudah tiba</small></button>
           <button data-page="restock-approvals" data-target-page="restock" data-purchase-view-target="approvals" class="feature-nav-item" data-permission="purchasing.receive"><span>Persetujuan harga</span><small>Harga baru sebelum diterima</small></button>
           <button data-page="supplier-return" data-target-page="restock" data-purchase-view-target="supplier-return" class="feature-nav-item" data-permission="purchasing.receive"><span>Retur supplier</span><small>Kembalikan barang bermasalah</small></button>
@@ -325,9 +325,11 @@
 
             <section class="restock-wizard-panel" data-restock-step="document">
               <div class="surface restock-step-card">
-                <div class="restock-step-heading"><div><p class="eyebrow">LANGKAH 1 DARI 4</p><h2>Identitas penerimaan</h2><p class="muted">Pilih sumber barang dan nomor faktur sebelum memasukkan produk.</p></div></div>
+                <div class="restock-step-heading"><div><p class="eyebrow">LANGKAH 1 DARI 4</p><h2>Pilih sumber penerimaan</h2><p class="muted">Pilih PO yang barangnya datang. Nomor faktur diisi dari nota supplier, bukan untuk mencari PO.</p></div></div>
+                <div class="restock-source-grid"><label>Cara penerimaan<select id="restock-source-type"><option value="PO">Berdasarkan pesanan supplier (PO)</option><option value="DIRECT">Tanpa PO / pembelian langsung</option></select></label><label id="restock-source-po-wrap">Pesanan yang barangnya datang<select id="restock-source-po"><option value="">Pilih PO siap diterima</option></select><small>Supplier, lokasi, dan daftar barang akan terisi otomatis.</small></label></div>
+                <div id="restock-source-guidance" class="restock-source-guidance"></div>
                 <div id="active-po-banner" class="active-po-banner hidden"></div>
-                <div class="form-grid"><label>Supplier<select id="restock-supplier"></select></label><label>Nomor faktur supplier<input id="restock-document" placeholder="Contoh: INV-2026-001"></label><label>Lokasi penerimaan<select id="restock-location"></select></label></div>
+                <div class="form-grid"><label>Supplier<select id="restock-supplier"></select></label><label>Nomor faktur dari nota supplier<input id="restock-document" placeholder="Contoh pada nota: INV-2026-001"><small>Berbeda dari nomor PO Nusa.</small></label><label>Lokasi penerimaan<select id="restock-location"></select></label></div>
               </div>
             </section>
 
@@ -1104,6 +1106,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=176"></script>
+  <script type="module" src="/app.js?v=177"></script>
 </body>
 </html>

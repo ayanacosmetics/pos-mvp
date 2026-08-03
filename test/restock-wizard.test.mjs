@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html, app, css] = await Promise.all([
+const [html, app, css, api] = await Promise.all([
   readFile(new URL('../apps/web/index.html', import.meta.url), 'utf8'),
   readFile(new URL('../apps/web/app.js', import.meta.url), 'utf8'),
-  readFile(new URL('../apps/web/styles.css', import.meta.url), 'utf8')
+  readFile(new URL('../apps/web/styles.css', import.meta.url), 'utf8'),
+  readFile(new URL('../api/index.mjs', import.meta.url), 'utf8')
 ]);
 
 test('penerimaan restok dibagi menjadi empat layar bertahap', () => {
@@ -16,6 +17,16 @@ test('penerimaan restok dibagi menjadi empat layar bertahap', () => {
   assert.match(html, /id="restock-wizard-back"/);
   assert.match(html, /id="restock-wizard-next"/);
   assert.match(html, /Langkah 1 dari 4/);
+});
+
+test('penerimaan berdasarkan PO dipilih sebelum invoice dan barang terisi otomatis', () => {
+  assert.match(html, /id="restock-source-type"/);
+  assert.match(html, /id="restock-source-po"/);
+  assert.match(html, /Nomor faktur dari nota supplier/);
+  assert.match(app, /function receivablePurchaseOrders/);
+  assert.match(app, /prepareOrderReceipt\(event\.currentTarget\.value\)/);
+  assert.match(app, /Pilih PO yang barangnya datang/);
+  assert.match(api, /requireAnyPermission\(session, \['purchasing\.view_cost','purchasing\.receive'\]\)/);
 });
 
 test('wizard memvalidasi dokumen dan barang sebelum maju', () => {

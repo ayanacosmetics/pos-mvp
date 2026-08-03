@@ -4325,7 +4325,7 @@ async function routeRequest(request, response, route) {
   }
 
   if (request.method === 'GET' && route === 'purchase-orders') {
-    requirePermission(session, 'purchasing.view_cost');
+    requireAnyPermission(session, ['purchasing.view_cost','purchasing.receive']);
     return send(response, 200, { orders: await loadPurchaseOrders(context.tenantId, null, context.locationIds) });
   }
 
@@ -4400,7 +4400,7 @@ async function routeRequest(request, response, route) {
   }
 
   if (request.method === 'GET' && /^purchase-orders\/[^/]+$/.test(route)) {
-    requirePermission(session, 'purchasing.view_cost');
+    requireAnyPermission(session, ['purchasing.view_cost','purchasing.receive']);
     const orderId = route.split('/')[1];
     const order = (await loadPurchaseOrders(context.tenantId, orderId, context.locationIds))[0];
     if (!order) { const error = new Error('Purchase Order tidak ditemukan'); error.status = 404; throw error; }
@@ -4511,7 +4511,7 @@ async function routeRequest(request, response, route) {
   }
 
   if (request.method === 'POST' && route === 'cost-comparison') {
-    requirePermission(session, 'purchasing.view_cost');
+    requireAnyPermission(session, ['purchasing.view_cost','purchasing.receive']);
     const input = bodyOf(request);
     const items = await rest('purchase_receipt_items', `tenant_id=eq.${context.tenantId}&product_id=eq.${encodeURIComponent(input.productId)}&select=*&order=received_at.desc&limit=50`);
     const history = items.map((item) => ({
@@ -4525,7 +4525,7 @@ async function routeRequest(request, response, route) {
   }
 
   if (request.method === 'GET' && route.startsWith('supplier-comparison/')) {
-    requirePermission(session, 'purchasing.view_cost');
+    requireAnyPermission(session, ['purchasing.view_cost','purchasing.receive']);
     const productId = route.split('/').pop();
     const [items, rules] = await Promise.all([
       rest('purchase_receipt_items', `tenant_id=eq.${context.tenantId}&product_id=eq.${encodeURIComponent(productId)}&select=*&order=received_at.desc&limit=500`),
@@ -4565,7 +4565,7 @@ async function routeRequest(request, response, route) {
   }
 
   if (request.method === 'GET' && route.startsWith('cost-history/')) {
-    requirePermission(session, 'purchasing.view_cost');
+    requireAnyPermission(session, ['purchasing.view_cost','purchasing.receive']);
     const productId = route.split('/').pop();
     const supplierId = request.query?.supplierId;
     const supplierFilter = supplierId ? `&supplier_id=eq.${encodeURIComponent(supplierId)}` : '';
