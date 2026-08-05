@@ -40,7 +40,13 @@ test('jadwal sekali dan berulang dapat diedit tanpa menimpa jadwal lain',async()
     read('supabase/migrations/202608010003_secure_attendance_and_recurring_shifts.sql'),
     read('supabase/migrations/202608010004_editable_employee_schedules.sql')
   ]);
-  assert.match(html,/value="RECURRING">Berlaku terus sampai diubah/);
+  assert.match(html,/value="RECURRING">Jadwal berulang/);
+  assert.match(html,/id="workforce-attendance-metrics"/);
+  assert.match(html,/id="workforce-today-team"/);
+  assert.match(html,/id="workforce-attendance-list"/);
+  assert.match(html,/id="schedule-duration-preview"/);
+  assert.match(app,/workforceDurationLabel/);
+  assert.match(app,/renderWorkforceAttendanceHistory/);
   assert.match(html,/id="schedule-weekdays"/);
   assert.match(app,/mode==='RECURRING'/);
   assert.match(html,/id="schedule-id"/);

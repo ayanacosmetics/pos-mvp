@@ -2509,36 +2509,99 @@ function closeAttendancePhoto(){
   if(dialog.open)dialog.close();
 }
 
+function workforceTimeMinutes(value){
+  const [hours,minutes]=String(value??'00:00').slice(0,5).split(':').map(Number);
+  return (hours||0)*60+(minutes||0);
+}
+
+function workforceDurationMinutes(startsAt,endsAt){
+  const start=workforceTimeMinutes(startsAt),end=workforceTimeMinutes(endsAt);
+  return end>=start?end-start:1440-start+end;
+}
+
+function workforceDurationLabel(minutes){
+  const safe=Math.max(0,Math.round(Number(minutes)||0)),hours=Math.floor(safe/60),remainder=safe%60;
+  return `${hours?`${hours} jam`:''}${hours&&remainder?' ':''}${remainder?`${remainder} menit`:hours?'':'0 menit'}`;
+}
+
+function workforceDayNumber(dateValue){
+  const day=new Date(`${dateValue}T00:00:00`).getDay();return day===0?7:day;
+}
+
+function workforcePlannedShifts(data,dateValue){
+  const specific=(data.schedules??[]).filter((item)=>item.work_date===dateValue);
+  const specificUsers=new Set(specific.map((item)=>item.user_id));
+  const recurring=(data.shiftRules??[]).filter((rule)=>rule.effective_from<=dateValue&&!specificUsers.has(rule.user_id)&&(rule.weekdays??[]).map(Number).includes(workforceDayNumber(dateValue)))
+    .map((rule)=>({...rule,work_date:dateValue,kind:'RECURRING'}));
+  return [...specific.map((item)=>({...item,kind:'ONCE'})),...recurring].sort((a,b)=>String(a.starts_at).localeCompare(String(b.starts_at)));
+}
+
+function workforceScheduleForAttendance(data,attendance){
+  return (data.schedules??[]).find((item)=>item.id===attendance.schedule_id)
+    ??workforcePlannedShifts(data,attendance.work_date).find((item)=>item.user_id===attendance.user_id&&item.outlet_id===attendance.outlet_id)
+    ??workforcePlannedShifts(data,attendance.work_date).find((item)=>item.user_id===attendance.user_id);
+}
+
+function workforceAttendanceFacts(data,attendance){
+  const planned=workforceScheduleForAttendance(data,attendance);
+  const clockIn=new Date(attendance.clock_in_at),clockOut=attendance.clock_out_at?new Date(attendance.clock_out_at):null;
+  const duration=Math.max(0,Math.round(((clockOut??new Date())-clockIn)/60000));
+  const actualStart=clockIn.getHours()*60+clockIn.getMinutes();
+  const lateMinutes=planned?Math.max(0,actualStart-workforceTimeMinutes(planned.starts_at)):0;
+  return {planned,duration,lateMinutes,working:!clockOut};
+}
+
+function attendanceStatusMarkup(facts){
+  if(facts.working)return '<span class="attendance-state working">SEDANG BEKERJA</span>';
+  if(facts.lateMinutes>0)return `<span class="attendance-state late">TERLAMBAT ${facts.lateMinutes} MENIT</span>`;
+  return '<span class="attendance-state complete">SELESAI</span>';
+}
+
 function renderWorkforceOverview(){
   const data=state.workforce.overview;
   if(!data)return;
-  const active=data.activeAttendance;
+  const active=data.activeAttendance,today=data.today??new Date().toISOString().slice(0,10),actorId=state.session?.user?.id;
+  const todayShifts=workforcePlannedShifts(data,today),todayAttendance=(data.attendance??[]).filter((item)=>item.work_date===today);
+  const myShift=todayShifts.find((item)=>item.user_id===actorId),myToday=todayAttendance.find((item)=>item.user_id===actorId);
+  const activeFacts=active?workforceAttendanceFacts(data,active):null;
+  el('attendance-live-date').textContent=new Date(`${today}T00:00:00`).toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long'});
   el('attendance-current').innerHTML=active
-    ? `<span class="status-badge submitted">SEDANG BEKERJA</span><h2>${new Date(active.clock_in_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</h2><p class="muted">${localDate(active.work_date)} · ${outletName(active.outlet_id)} · ${Math.round(Number(active.clock_in_distance_m??0))} m dari titik usaha</p>`
-    : '<span class="status-badge approved">BELUM ABSEN MASUK</span><p class="muted">GPS dan foto wajah wajib untuk absen masuk maupun keluar.</p>';
-  el('attendance-action').textContent=active?'Absen keluar':'Absen masuk';
-  el('attendance-action').dataset.action=active?'CLOCK_OUT':'CLOCK_IN';
+    ? `<div class="attendance-live-status"><span class="attendance-pulse"></span><div><span>Sedang bekerja sejak</span><strong>${new Date(active.clock_in_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</strong><small>Durasi berjalan ${workforceDurationLabel(activeFacts.duration)}</small></div></div>`
+    : myToday?.clock_out_at
+      ? `<div class="attendance-live-status complete"><div><span>Shift hari ini selesai</span><strong>${new Date(myToday.clock_out_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</strong><small>Total kerja ${workforceDurationLabel(workforceAttendanceFacts(data,myToday).duration)}</small></div></div>`
+      : '<div class="attendance-live-status idle"><div><span>Status kehadiran</span><strong>Belum absen masuk</strong><small>Siapkan foto dan aktifkan GPS untuk memulai.</small></div></div>';
+  el('attendance-today-context').innerHTML=myShift
+    ? `<div><span>Jadwal hari ini</span><strong>${escapeHtml(String(myShift.starts_at).slice(0,5))} &ndash; ${escapeHtml(String(myShift.ends_at).slice(0,5))}</strong></div><div><span>Durasi rencana</span><strong>${workforceDurationLabel(workforceDurationMinutes(myShift.starts_at,myShift.ends_at))}</strong></div><div><span>Lokasi</span><strong>${escapeHtml(outletName(myShift.outlet_id))}</strong></div>`
+    : '<div class="attendance-no-schedule"><span>Jadwal hari ini</span><strong>Belum dijadwalkan</strong><small>Absensi tetap dapat dilakukan jika diperlukan.</small></div>';
+  el('attendance-action').textContent=active?'Absen keluar':myToday?.clock_out_at?'Shift hari ini selesai':'Absen masuk';
+  el('attendance-action').dataset.action=active?'CLOCK_OUT':'CLOCK_IN';el('attendance-action').disabled=Boolean(myToday?.clock_out_at&&!active);
   const profileOptions=data.profiles.map((item)=>`<option value="${escapeHtml(item.user_id)}">${escapeHtml(item.display_name)} · ${escapeHtml(roleLabels[item.role]??item.role)}</option>`).join('');
-  el('schedule-user').innerHTML=profileOptions;
-  el('target-user').innerHTML=profileOptions;
+  el('schedule-user').innerHTML=profileOptions;el('target-user').innerHTML=profileOptions;
   const outletOptions=data.outlets.map((item)=>`<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('');
-  el('schedule-outlet').innerHTML=outletOptions;
-  el('target-outlet').innerHTML=`<option value="">Semua outlet</option>${outletOptions}`;
-  const today=new Date().toISOString().slice(0,10);
-  if(!el('schedule-date').value)el('schedule-date').value=today;
-  syncScheduleMode();
+  el('schedule-outlet').innerHTML=outletOptions;el('target-outlet').innerHTML=`<option value="">Semua outlet</option>${outletOptions}`;
+  const scheduleFilter=el('workforce-schedule-filter'),attendanceUserFilter=el('workforce-attendance-user-filter');
+  const previousSchedule=scheduleFilter.value,previousAttendance=attendanceUserFilter.value;
+  const employeeFilterOptions=`<option value="ALL">Semua karyawan</option>${data.profiles.map((item)=>`<option value="${escapeHtml(item.user_id)}">${escapeHtml(item.display_name)}</option>`).join('')}`;
+  scheduleFilter.innerHTML=employeeFilterOptions;attendanceUserFilter.innerHTML=employeeFilterOptions;
+  if([...scheduleFilter.options].some((option)=>option.value===previousSchedule))scheduleFilter.value=previousSchedule;
+  if([...attendanceUserFilter.options].some((option)=>option.value===previousAttendance))attendanceUserFilter.value=previousAttendance;
+  if(!el('schedule-date').value)el('schedule-date').value=today;syncScheduleMode();updateScheduleDurationPreview();
   if(!el('target-start').value)el('target-start').value=`${today.slice(0,7)}-01`;
   if(!el('target-end').value)el('target-end').value=new Date(Date.UTC(Number(today.slice(0,4)),Number(today.slice(5,7)),0)).toISOString().slice(0,10);
-  const dayNames=['Sen','Sel','Rab','Kam','Jum','Sab','Min'];
-  const ruleRows=(data.shiftRules??[]).map((rule)=>`<article class="workforce-row recurring-shift-row"><div><span class="status-badge approved">BERLAKU TERUS</span><strong>${escapeHtml(employeeName(rule.user_id))}</strong><small>${(rule.weekdays??[]).map((day)=>dayNames[Number(day)-1]).join(', ')} · ${escapeHtml(String(rule.starts_at).slice(0,5))}–${escapeHtml(String(rule.ends_at).slice(0,5))} · ${escapeHtml(outletName(rule.outlet_id))}</small></div><div><small>Mulai ${localDate(rule.effective_from)}</small><small>${escapeHtml(rule.note??'Sampai diubah manual')}</small>${data.canManage?`<button class="button secondary edit-employee-schedule" type="button" data-kind="RECURRING" data-id="${rule.id}">Edit</button>`:''}</div></article>`);
-  const scheduleRows=data.schedules.map((schedule)=>{
-    const attendance=data.attendance.find((item)=>item.schedule_id===schedule.id)
-      ??data.attendance.find((item)=>item.user_id===schedule.user_id&&item.work_date===schedule.work_date);
-    return `<article class="workforce-row"><div><strong>${escapeHtml(employeeName(schedule.user_id))}</strong><small>${localDate(schedule.work_date)} · ${escapeHtml(String(schedule.starts_at).slice(0,5))}–${escapeHtml(String(schedule.ends_at).slice(0,5))} · ${escapeHtml(outletName(schedule.outlet_id))}</small></div><div>${attendance?attendanceSummaryMarkup(attendance):'<span class="status-badge">BELUM HADIR</span>'}${data.canManage?`<button class="button secondary edit-employee-schedule" type="button" data-kind="ONCE" data-id="${schedule.id}">Edit</button>`:''}</div></article>`;
-  });
-  const scheduledAttendanceIds=new Set(data.schedules.map((schedule)=>schedule.id));
-  const attendanceRows=data.attendance.filter((item)=>!item.schedule_id||!scheduledAttendanceIds.has(item.schedule_id)).map((attendance)=>`<article class="workforce-row attendance-history-row"><div><strong>${escapeHtml(employeeName(attendance.user_id))}</strong><small>${localDate(attendance.work_date)} · ${escapeHtml(outletName(attendance.outlet_id))}</small></div><div>${attendanceSummaryMarkup(attendance)}</div></article>`);
-  el('workforce-schedule-list').innerHTML=[...ruleRows,...scheduleRows,...attendanceRows].join('')||'<div class="empty-state compact">Belum ada jadwal atau kehadiran bulan ini.</div>';
+  const presentIds=new Set(todayAttendance.map((item)=>item.user_id));
+  const lateToday=todayAttendance.filter((item)=>workforceAttendanceFacts(data,item).lateMinutes>0).length;
+  const workedMinutes=(data.attendance??[]).reduce((sum,item)=>sum+workforceAttendanceFacts(data,item).duration,0);
+  el('workforce-attendance-metrics').innerHTML=`<article><span>Terjadwal hari ini</span><strong>${todayShifts.length}</strong><small>orang / shift</small></article><article><span>Sudah hadir</span><strong>${presentIds.size}</strong><small>${todayAttendance.filter((item)=>!item.clock_out_at).length} masih bekerja</small></article><article><span>Terlambat hari ini</span><strong>${lateToday}</strong><small>berdasarkan jam masuk</small></article><article><span>Jam kerja bulan ini</span><strong>${workforceDurationLabel(workedMinutes)}</strong><small>${data.attendance.length} catatan absensi</small></article>`;
+  const todayPeople=[...todayShifts];
+  todayAttendance.filter((attendance)=>!todayPeople.some((shift)=>shift.user_id===attendance.user_id)).forEach((attendance)=>todayPeople.push({...attendance,kind:'UNSCHEDULED'}));
+  el('attendance-today-count').textContent=`${todayPeople.length} orang`;
+  el('workforce-today-team').innerHTML=todayPeople.map((shift)=>{
+    const attendance=todayAttendance.find((item)=>item.user_id===shift.user_id),facts=attendance?workforceAttendanceFacts(data,attendance):null;
+    const status=attendance?attendanceStatusMarkup(facts):'<span class="attendance-state pending">BELUM HADIR</span>';
+    const planned=shift.kind==='UNSCHEDULED'?'Tanpa jadwal':`${String(shift.starts_at).slice(0,5)}–${String(shift.ends_at).slice(0,5)}`;
+    return `<article class="attendance-team-row"><span class="attendance-avatar">${escapeHtml(employeeName(shift.user_id).slice(0,1).toUpperCase())}</span><div><strong>${escapeHtml(employeeName(shift.user_id))}</strong><small>${escapeHtml(planned)} · ${escapeHtml(outletName(shift.outlet_id))}</small></div><div>${status}${attendance?`<small>${new Date(attendance.clock_in_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}${attendance.clock_out_at?`–${new Date(attendance.clock_out_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`:''}</small>`:''}</div></article>`;
+  }).join('')||'<div class="empty-state compact">Belum ada jadwal atau absensi hari ini.</div>';
+  renderWorkforceScheduleDirectory();renderWorkforceAttendanceHistory();
   el('workforce-performance').innerHTML=data.performance.map((item)=>{
     const salesTarget=Number(item.target?.sales_target??0),transactionTarget=Number(item.target?.transaction_target??0);
     const salesProgress=salesTarget?Math.min(100,Number(item.salesTotal)/salesTarget*100):0;
@@ -2546,9 +2609,45 @@ function renderWorkforceOverview(){
   }).join('')||'<div class="empty-state compact">Belum ada data kinerja.</div>';
 }
 
-function attendanceSummaryMarkup(attendance){
+function attendanceSummaryMarkup(attendance,data=state.workforce.overview){
+  const facts=workforceAttendanceFacts(data,attendance);
   const photoButtons=`<span class="attendance-photo-actions">${attendance.clock_in_photo_available?`<button class="link-button view-attendance-photo" type="button" data-attendance-id="${attendance.id}" data-event="in">Foto masuk</button>`:''}${attendance.clock_out_photo_available?`<button class="link-button view-attendance-photo" type="button" data-attendance-id="${attendance.id}" data-event="out">Foto keluar</button>`:''}</span>`;
-  return `<span class="status-badge ${attendance.clock_out_at?'approved':'submitted'}">${escapeHtml(attendance.status)}</span><small>${new Date(attendance.clock_in_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}${attendance.clock_out_at?`–${new Date(attendance.clock_out_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`:''} · ${Math.round(Number(attendance.clock_in_distance_m??0))} m</small>${photoButtons}`;
+  return `${attendanceStatusMarkup(facts)}<small>${new Date(attendance.clock_in_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}${attendance.clock_out_at?`–${new Date(attendance.clock_out_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`:''} · ${workforceDurationLabel(facts.duration)}</small>${photoButtons}`;
+}
+
+function renderWorkforceScheduleDirectory(){
+  const data=state.workforce.overview;if(!data)return;
+  const filter=el('workforce-schedule-filter').value,dayNames=['Sen','Sel','Rab','Kam','Jum','Sab','Min'];
+  const rules=(data.shiftRules??[]).filter((item)=>filter==='ALL'||item.user_id===filter).map((item)=>({kind:'RECURRING',item}));
+  const schedules=(data.schedules??[]).filter((item)=>filter==='ALL'||item.user_id===filter).map((item)=>({kind:'ONCE',item}));
+  const rows=[...rules,...schedules].map(({kind,item})=>{
+    const days=kind==='RECURRING'?(item.weekdays??[]).map((day)=>dayNames[Number(day)-1]).join(', '):localDate(item.work_date);
+    const duration=workforceDurationLabel(workforceDurationMinutes(item.starts_at,item.ends_at));
+    return `<article class="attendance-schedule-row"><div class="attendance-schedule-date"><span>${kind==='RECURRING'?'RUTIN':'KHUSUS'}</span><strong>${escapeHtml(days)}</strong></div><div class="attendance-schedule-main"><strong>${escapeHtml(employeeName(item.user_id))}</strong><small>${escapeHtml(outletName(item.outlet_id))}${item.note?` · ${escapeHtml(item.note)}`:''}</small></div><div class="attendance-schedule-time"><strong>${escapeHtml(String(item.starts_at).slice(0,5))}–${escapeHtml(String(item.ends_at).slice(0,5))}</strong><small>${duration}</small></div>${data.canManage?`<button class="button secondary edit-employee-schedule" type="button" data-kind="${kind}" data-id="${item.id}">Edit</button>`:''}</article>`;
+  });
+  el('workforce-schedule-list').innerHTML=rows.join('')||'<div class="empty-state compact">Belum ada jadwal untuk pilihan ini.</div>';
+}
+
+function renderWorkforceAttendanceHistory(){
+  const data=state.workforce.overview;if(!data)return;
+  const statusFilter=el('workforce-attendance-filter').value,userFilter=el('workforce-attendance-user-filter').value;
+  const rows=(data.attendance??[]).filter((attendance)=>{
+    const facts=workforceAttendanceFacts(data,attendance);
+    if(userFilter!=='ALL'&&attendance.user_id!==userFilter)return false;
+    if(statusFilter==='WORKING'&&!facts.working)return false;
+    if(statusFilter==='COMPLETED'&&facts.working)return false;
+    if(statusFilter==='LATE'&&facts.lateMinutes<=0)return false;
+    return true;
+  }).map((attendance)=>{
+    const facts=workforceAttendanceFacts(data,attendance),planned=facts.planned;
+    return `<article class="attendance-history-row"><div class="attendance-history-date"><strong>${new Date(`${attendance.work_date}T00:00:00`).toLocaleDateString('id-ID',{day:'2-digit'})}</strong><span>${new Date(`${attendance.work_date}T00:00:00`).toLocaleDateString('id-ID',{month:'short'})}</span></div><div class="attendance-history-person"><strong>${escapeHtml(employeeName(attendance.user_id))}</strong><small>${escapeHtml(outletName(attendance.outlet_id))}${planned?` · Jadwal ${String(planned.starts_at).slice(0,5)}–${String(planned.ends_at).slice(0,5)}`:' · Tanpa jadwal'}</small></div><div class="attendance-history-clock"><span>Jam aktual</span><strong>${new Date(attendance.clock_in_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}${attendance.clock_out_at?`–${new Date(attendance.clock_out_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`:'–sekarang'}</strong></div><div class="attendance-history-duration"><span>Durasi</span><strong>${workforceDurationLabel(facts.duration)}</strong></div><div class="attendance-history-status">${attendanceSummaryMarkup(attendance,data)}<small>${Math.round(Number(attendance.clock_in_distance_m??0))} m dari lokasi</small></div></article>`;
+  });
+  el('workforce-attendance-list').innerHTML=rows.join('')||'<div class="empty-state compact">Belum ada riwayat untuk filter ini.</div>';
+}
+
+function updateScheduleDurationPreview(){
+  const target=el('schedule-duration-preview');if(!target)return;
+  target.textContent=`Durasi rencana ${workforceDurationLabel(workforceDurationMinutes(el('schedule-start').value,el('schedule-end').value))}`;
 }
 
 async function loadWorkforceOverview(){
@@ -2593,16 +2692,16 @@ function editEmployeeSchedule(kind,id){
   el('schedule-note').value=schedule.note??'';
   el('schedule-weekdays').querySelectorAll('input').forEach((input)=>input.checked=kind==='RECURRING'&&(schedule.weekdays??[]).map(Number).includes(Number(input.value)));
   el('schedule-form-title').textContent=`Edit jadwal ${employeeName(schedule.user_id)}`;
-  el('save-schedule').textContent='Simpan perubahan';el('cancel-schedule-edit').classList.remove('hidden');syncScheduleMode();
+  el('save-schedule').textContent='Simpan perubahan';el('cancel-schedule-edit').classList.remove('hidden');syncScheduleMode();updateScheduleDurationPreview();
   el('schedule-form').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 function resetEmployeeScheduleForm(){
   el('schedule-id').value='';el('schedule-mode').disabled=false;el('schedule-mode').value='RECURRING';
-  el('schedule-form-title').textContent='Jadwal baru';el('save-schedule').textContent='Simpan jadwal';
+  el('schedule-form-title').textContent='Buat jadwal';el('save-schedule').textContent='Simpan jadwal';
   el('cancel-schedule-edit').classList.add('hidden');el('schedule-note').value='';
   el('schedule-date').value=new Date().toISOString().slice(0,10);el('schedule-start').value='08:00';el('schedule-end').value='17:00';
-  el('schedule-weekdays').querySelectorAll('input').forEach((input)=>input.checked=Number(input.value)<=5);syncScheduleMode();
+  el('schedule-weekdays').querySelectorAll('input').forEach((input)=>input.checked=Number(input.value)<=5);syncScheduleMode();updateScheduleDurationPreview();
 }
 
 function syncScheduleMode(){
@@ -8483,12 +8582,17 @@ el('attendance-camera-fallback').addEventListener('change',async(event)=>{
   }catch(error){toast(error.message);}finally{event.target.value='';}
 });
 el('schedule-mode').addEventListener('change',syncScheduleMode);
+el('schedule-start').addEventListener('input',updateScheduleDurationPreview);
+el('schedule-end').addEventListener('input',updateScheduleDurationPreview);
 el('schedule-form').addEventListener('submit',saveEmployeeSchedule);
 el('cancel-schedule-edit').addEventListener('click',resetEmployeeScheduleForm);
+el('workforce-schedule-filter').addEventListener('change',renderWorkforceScheduleDirectory);
+el('workforce-attendance-filter').addEventListener('change',renderWorkforceAttendanceHistory);
+el('workforce-attendance-user-filter').addEventListener('change',renderWorkforceAttendanceHistory);
 el('workforce-schedule-list').addEventListener('click',(event)=>{
-  const photo=event.target.closest('.view-attendance-photo');if(photo)return openAttendancePhoto(photo.dataset.attendanceId,photo.dataset.event);
   const edit=event.target.closest('.edit-employee-schedule');if(edit)editEmployeeSchedule(edit.dataset.kind,edit.dataset.id);
 });
+el('workforce-attendance-list').addEventListener('click',(event)=>{const photo=event.target.closest('.view-attendance-photo');if(photo)openAttendancePhoto(photo.dataset.attendanceId,photo.dataset.event);});
 el('target-form').addEventListener('submit',saveEmployeeTarget);
 el('refresh-approvals').addEventListener('click',loadApprovals);
 el('approval-request-form').addEventListener('submit',submitApprovalRequest);
