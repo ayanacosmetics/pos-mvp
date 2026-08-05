@@ -168,7 +168,7 @@ function midtransQrUrl(payload={}) {
   if(!action?.url)return null;
   try{
     const url=new URL(action.url);
-    return url.protocol==='https:'&&/(^|\.)midtrans\.com$/i.test(url.hostname)?url.toString():null;
+    return url.protocol==='https:'&&/(^|\.)(midtrans\.com|veritrans\.co\.id)$/i.test(url.hostname)?url.toString():null;
   }catch{return null;}
 }
 
@@ -191,7 +191,7 @@ function validateMidtransIntentStatus(intent,payload,{identityVerifiedByLookup=f
   if(String(payload.order_id??'')!==intent.order_id&&!identityVerifiedByLookup)throw Object.assign(new Error('Order ID Midtrans tidak cocok dengan intent Nusa'),{status:409});
   const paymentType=String(payload.payment_type??'').toLowerCase();
   const isQrisFlow=paymentType==='qris'||(paymentType==='gopay'&&Boolean(midtransQrUrl(payload)));
-  if(!isQrisFlow)throw Object.assign(new Error('Jenis pembayaran Midtrans bukan alur QRIS'),{status:409});
+  if(!isQrisFlow)throw Object.assign(new Error(`Jenis pembayaran Midtrans bukan alur QRIS (${paymentType||'tidak ada'}; URL QR tidak dikenali)`),{status:409});
   if(String(payload.currency??'IDR').toUpperCase()!=='IDR')throw Object.assign(new Error('Mata uang Midtrans bukan IDR'),{status:409});
   if(Math.abs(Number(payload.gross_amount)-Number(intent.gross_amount))>0.001)throw Object.assign(new Error('Nominal Midtrans tidak cocok dengan intent Nusa'),{status:409});
   if(String(payload.transaction_status??'').toLowerCase()==='settlement'&&payload.fraud_status&&String(payload.fraud_status).toLowerCase()!=='accept')throw Object.assign(new Error('Settlement Midtrans tidak memiliki fraud status accept'),{status:409});
