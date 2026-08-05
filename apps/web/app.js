@@ -5488,23 +5488,27 @@ function renderPlatformInfrastructure() {
   const snapshot=state.platformInfrastructure;
   if(!snapshot)return;
   const database=snapshot.database??{},db=database.database??{};
+  const storage=snapshot.storage??{};
   const cloudflare=snapshot.cloudflare??{};
   const cfPeriod=cloudflare.plan==='PAID'?cloudflare.month:cloudflare.last24Hours;
-  const dbPercent=Number(db.usedPercent??0),errorRate=Number(cfPeriod?.errorRate??0);
+  const dbPercent=Number(db.usedPercent??0),storagePercent=Number(storage.usedPercent??0),errorRate=Number(cfPeriod?.errorRate??0);
   const cpuLimit=Number(cloudflare.quota?.cpuPerRequestMs??0);
   const cpuP50=Number(cfPeriod?.cpuP50Ms??0),cpuP99=Number(cfPeriod?.cpuP99Ms??0);
   const cpuP50Over=Boolean(cfPeriod&&cpuLimit&&cpuP50>cpuLimit);
   const cpuP99Over=Boolean(cfPeriod&&cpuLimit&&cpuP99>cpuLimit);
   const databaseCritical=database.available&&dbPercent>=80;
+  const storageCritical=storage.available&&storagePercent>=85;
   const cloudflareCritical=Boolean(cfPeriod&&(errorRate>=1||cpuP50Over));
-  const critical=databaseCritical||cloudflareCritical;
-  const warning=!database.available||!cloudflare.configured||cloudflare.available===false||dbPercent>=65||errorRate>0||cpuP99Over;
+  const critical=databaseCritical||storageCritical||cloudflareCritical;
+  const warning=!database.available||!storage.available||!cloudflare.configured||cloudflare.available===false||dbPercent>=65||storagePercent>=70||errorRate>0||cpuP99Over;
   const status=critical?'critical':warning?'warning':'healthy';
   const statusTitle=databaseCritical?'Kapasitas database perlu tindakan'
+    :storageCritical?'Penyimpanan foto perlu tindakan'
     :cloudflareCritical?'Performa Cloudflare perlu tindakan'
       :cpuP99Over?'Lonjakan CPU perlu dipantau'
         :warning?'Konfigurasi perlu dilengkapi':'Infrastruktur dalam batas aman';
   const statusDetail=databaseCritical?'Database global telah melewati ambang 80%.'
+    :storageCritical?'Supabase File Storage telah melewati ambang 85%. Hapus atau arsipkan file lama.'
     :cpuP50Over?`CPU P50 ${cpuP50.toFixed(2)} ms melewati patokan paket ${cloudflare.plan} ${cpuLimit.toLocaleString('id-ID')} ms. Paket Paid disarankan sebelum operasional.`
       :errorRate>=1?`Error Cloudflare mencapai ${errorRate.toFixed(3)}%. Periksa log sebelum operasional.`
         :cpuP99Over?`CPU P99 ${cpuP99.toFixed(2)} ms melewati patokan ${cpuLimit.toLocaleString('id-ID')} ms, tetapi ini mewakili request terberat dan perlu dibaca bersama P50 serta error.`
@@ -5516,6 +5520,7 @@ function renderPlatformInfrastructure() {
   const requestLimit=Number(cloudflare.quota?.requestLimit??0);
   const requestPercent=requestLimit?Number(cfPeriod?.requests??0)*100/requestLimit:0;
   const metrics=[
+    ['File Storage Supabase',storage.available?`${storagePercent.toFixed(2)}%`:'—',storage.available?`${infrastructureBytes(storage.totalBytes)} dari ${infrastructureBytes(storage.limitBytes)}`:storage.message],
     ['Database Supabase',database.available?`${dbPercent.toFixed(2)}%`:'—',database.available?`${infrastructureBytes(db.usedBytes)} dari ${infrastructureBytes(db.limitBytes)}`:database.message],
     ['Request Cloudflare',cfPeriod?Number(cfPeriod.requests??0).toLocaleString('id-ID'):'—',requestLimit?`${requestPercent.toFixed(2)}% dari kuota ${cloudflare.quota.period==='MONTH'?'bulanan':'harian'}`:cloudflare.message],
     ['Error Cloudflare',cfPeriod?Number(cfPeriod.errors??0).toLocaleString('id-ID'):'—',cfPeriod?`${errorRate.toFixed(3)}% error`:'Analytics belum terhubung'],
@@ -5527,6 +5532,11 @@ function renderPlatformInfrastructure() {
   el('platform-database-detail').innerHTML=database.available
     ?`<div class="infrastructure-progress"><span style="width:${Math.min(100,dbPercent)}%"></span></div><div class="infrastructure-facts"><div><span>Terpakai</span><strong>${infrastructureBytes(db.usedBytes)}</strong></div><div><span>Tersisa</span><strong>${infrastructureBytes(db.remainingBytes)}</strong></div><div><span>Tenant</span><strong>${Number(database.platform?.tenantCount??0).toLocaleString('id-ID')}</strong></div><div><span>Transaksi</span><strong>${Number(database.platform?.saleCount??0).toLocaleString('id-ID')}</strong></div></div>`
     :`<div class="empty-state compact">${escapeHtml(database.message??'Snapshot database belum tersedia.')}</div>`;
+
+  el('platform-storage-badge').textContent=storage.available?(storagePercent>=85?'KRITIS':storagePercent>=70?'WASPADA':'AMAN'):'BELUM TERHUBUNG';
+  el('platform-storage-detail').innerHTML=storage.available
+    ?`<div class="infrastructure-progress"><span style="width:${Math.min(100,storagePercent)}%"></span></div><div class="infrastructure-facts"><div><span>Terpakai</span><strong>${infrastructureBytes(storage.totalBytes)}</strong></div><div><span>Tersisa</span><strong>${infrastructureBytes(storage.remainingBytes)}</strong></div><div><span>Foto absensi</span><strong>${Number(storage.attendanceFiles??0).toLocaleString('id-ID')} file</strong><small>${infrastructureBytes(storage.attendanceBytes)}</small></div><div><span>Foto produk & media</span><strong>${Number(storage.mediaFiles??0).toLocaleString('id-ID')} file</strong><small>${infrastructureBytes(storage.mediaBytes)}</small></div></div>`
+    :`<div class="empty-state compact">${escapeHtml(storage.message??'Snapshot File Storage belum tersedia.')}</div>`;
 
   el('platform-cloudflare-badge').textContent=cloudflare.configured?(cloudflare.available===false?'GAGAL':`${cloudflare.plan}${cpuP50Over?' · RISIKO':cpuP99Over?' · PANTAU':''}`):'PERLU TOKEN';
   el('platform-cloudflare-detail').innerHTML=cfPeriod

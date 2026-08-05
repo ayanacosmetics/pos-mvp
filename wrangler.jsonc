@@ -30,6 +30,7 @@
     "PUBLIC_APP_URL": "https://app.nusapos.my.id",
     "ALLOW_OWNER_BOOTSTRAP": "false",
     "DEFAULT_BUSINESS_NAME": "Kasir Nusa",
-    "CLOUDFLARE_WORKERS_PLAN": "PAID"
+    "CLOUDFLARE_WORKERS_PLAN": "PAID",
+    "SUPABASE_STORAGE_LIMIT_BYTES": "1073741824"
   }
 }

@@ -85,7 +85,8 @@ const env = () => ({
   cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? '',
   cloudflareApiToken: process.env.CLOUDFLARE_ANALYTICS_TOKEN ?? '',
   cloudflareScriptName: process.env.CLOUDFLARE_SCRIPT_NAME ?? 'kasir-nusa-pos',
-  cloudflarePlan: String(process.env.CLOUDFLARE_WORKERS_PLAN ?? 'FREE').toUpperCase()
+  cloudflarePlan: String(process.env.CLOUDFLARE_WORKERS_PLAN ?? 'FREE').toUpperCase(),
+  supabaseStorageLimitBytes: Math.max(1,Number(process.env.SUPABASE_STORAGE_LIMIT_BYTES)||1073741824)
 });
 
 function isPlatformAdmin(session) {
@@ -2178,14 +2179,20 @@ async function routeRequest(request, response, route) {
 
   if (request.method === 'GET' && route === 'platform/infrastructure') {
     requirePlatformAdmin(session);
-    const [databaseResult,cloudflareResult]=await Promise.allSettled([
-      rpc('platform_infrastructure_snapshot_v1',{}),loadCloudflareInfrastructure()
+    const [databaseResult,storageResult,cloudflareResult]=await Promise.allSettled([
+      rpc('platform_infrastructure_snapshot_v1',{}),rpc('platform_storage_snapshot_v1',{}),loadCloudflareInfrastructure()
     ]);
+    const storageLimit=env().supabaseStorageLimitBytes;
+    const storageSnapshot=storageResult.status==='fulfilled'?storageResult.value:null;
+    const storageUsed=Number(storageSnapshot?.totalBytes??0);
     return send(response,200,{
       generatedAt:new Date().toISOString(),
       database:databaseResult.status==='fulfilled'
         ?{available:true,...databaseResult.value}
         :{available:false,message:databaseResult.reason?.message??'Metrik database belum tersedia'},
+      storage:storageSnapshot
+        ?{available:true,...storageSnapshot,limitBytes:storageLimit,remainingBytes:Math.max(0,storageLimit-storageUsed),usedPercent:storageLimit?storageUsed*100/storageLimit:0}
+        :{available:false,message:storageResult.reason?.message??'Metrik penyimpanan file belum tersedia'},
       cloudflare:cloudflareResult.status==='fulfilled'
         ?cloudflareResult.value
         :{configured:true,available:false,message:cloudflareResult.reason?.message??'Metrik Cloudflare belum tersedia'}
