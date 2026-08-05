@@ -6,6 +6,7 @@ import { applyVoucher } from '../packages/domain/src/loyalty.mjs';
 import { calculateEmployeeCommission } from '../packages/domain/src/employee-operations.mjs';
 import { validateJournalLines } from '../packages/domain/src/ledger.mjs';
 import { evaluateSafePricePolicy, normalizeSafePricePolicy } from '../packages/domain/src/safe-price-policy.mjs';
+import { buildPushPayload } from '@block65/webcrypto-web-push';
 
 const PERMISSIONS = {
   OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.transactions','report.view','audit.view','identity.manage_staff','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner','multioutlet.view','multioutlet.manage','pilot.manage','sale.adjust','sale.void','device.configure'],
@@ -87,7 +88,10 @@ const env = () => ({
   cloudflareScriptName: process.env.CLOUDFLARE_SCRIPT_NAME ?? 'kasir-nusa-pos',
   cloudflarePlan: String(process.env.CLOUDFLARE_WORKERS_PLAN ?? 'FREE').toUpperCase(),
   supabaseStorageLimitBytes: Math.max(1,Number(process.env.SUPABASE_STORAGE_LIMIT_BYTES)||1073741824),
-  paymentCredentialsMasterKey: process.env.PAYMENT_CREDENTIALS_MASTER_KEY ?? ''
+  paymentCredentialsMasterKey: process.env.PAYMENT_CREDENTIALS_MASTER_KEY ?? '',
+  webPushPublicKey: process.env.WEB_PUSH_VAPID_PUBLIC_KEY ?? '',
+  webPushPrivateKey: process.env.WEB_PUSH_VAPID_PRIVATE_KEY ?? '',
+  webPushSubject: process.env.WEB_PUSH_VAPID_SUBJECT ?? 'https://nusapos.my.id'
 });
 
 function requireTenantOwner(session) {
@@ -495,6 +499,65 @@ async function restAll(table,query='',options={}){
   }
 }
 const rpc = (name, body) => supabase(`/rest/v1/rpc/${name}`, { method: 'POST', body });
+
+function notificationPayload(notification) {
+  const appUrl=String(process.env.PUBLIC_APP_URL??'https://app.nusapos.my.id').replace(/\/$/,'');
+  const page=String(notification.actionPage??'').replace(/[^a-z0-9-]/gi,'');
+  return {
+    title:String(notification.title??'Kasir Nusa POS').slice(0,120),
+    body:String(notification.message??'Ada pembaruan baru.').slice(0,500),
+    icon:`${appUrl}/icon-192.svg`,badge:`${appUrl}/icon-192.svg`,
+    tag:String(notification.dedupeKey??notification.entityId??notification.type??'nusa-update').slice(0,120),
+    data:{url:page?`${appUrl}/?notification-page=${encodeURIComponent(page)}`:appUrl,page},
+    timestamp:Date.now()
+  };
+}
+
+async function sendWebPush(subscription,notification) {
+  const config=env();
+  if(!config.webPushPublicKey||!config.webPushPrivateKey)return {sent:false,reason:'NOT_CONFIGURED'};
+  const payload=await buildPushPayload({
+    data:JSON.stringify(notificationPayload(notification)),
+    options:{ttl:300,urgency:notification.severity==='CRITICAL'?'high':'normal',topic:String(notification.type??'nusa').slice(0,32)}
+  },{
+    endpoint:subscription.endpoint,expirationTime:subscription.expiration_time===null?null:Number(subscription.expiration_time),
+    keys:{p256dh:subscription.p256dh,auth:subscription.auth_key}
+  },{subject:config.webPushSubject,publicKey:config.webPushPublicKey,privateKey:config.webPushPrivateKey});
+  const response=await fetch(subscription.endpoint,{...payload,signal:AbortSignal.timeout(3500)});
+  if(response.ok){
+    await rest('web_push_subscriptions',`id=eq.${subscription.id}`,{
+      method:'PATCH',body:{last_success_at:new Date().toISOString(),failure_count:0,active:true}
+    }).catch(()=>{});
+    return {sent:true};
+  }
+  const expired=[404,410].includes(response.status);
+  await rest('web_push_subscriptions',`id=eq.${subscription.id}`,{
+    method:'PATCH',body:{active:!expired,failure_count:Number(subscription.failure_count??0)+1,updated_at:new Date().toISOString()}
+  }).catch(()=>{});
+  return {sent:false,status:response.status,expired};
+}
+
+async function notifyTenantOwners(tenantId,notification,waitUntil=null) {
+  try{
+    const recipients=await rpc('create_owner_notifications_v1',{
+      p_tenant_id:tenantId,p_type:notification.type,p_title:notification.title,p_message:notification.message,
+      p_severity:notification.severity??'INFO',p_entity_type:notification.entityType??null,
+      p_entity_id:notification.entityId??null,p_action_page:notification.actionPage??null,
+      p_data_json:notification.data??{},p_dedupe_key:notification.dedupeKey??null
+    });
+    const userIds=[...new Set((Array.isArray(recipients)?recipients:[]).map((row)=>row.recipientUserId).filter(Boolean))];
+    if(!userIds.length||!env().webPushPublicKey||!env().webPushPrivateKey)return;
+    const subscriptions=(await rest('web_push_subscriptions',
+      `tenant_id=eq.${tenantId}&active=eq.true&select=*&limit=100`))
+      .filter((subscription)=>userIds.includes(subscription.user_id));
+    const delivery=Promise.allSettled(subscriptions.map((subscription)=>sendWebPush(subscription,notification)));
+    if(typeof waitUntil==='function')waitUntil(delivery);
+    else await delivery;
+  }catch(error){
+    // Notification delivery is deliberately isolated from sales and attendance.
+    console.error('Owner notification failed',notification.type,error.message);
+  }
+}
 
 async function rawRpc(response,name,body){
   const config=env();
@@ -2360,6 +2423,86 @@ async function routeRequest(request, response, route) {
   if (!session) { const error = new Error('Sesi tidak valid'); error.status = 401; throw error; }
   const context = await cloudContext(session, request);
 
+  if(request.method==='GET'&&route==='notifications'){
+    const limit=Math.min(100,Math.max(10,Number(queryValue(request,'limit'))||40));
+    const rows=await rest('app_notifications',
+      `tenant_id=eq.${context.tenantId}&recipient_user_id=eq.${session.authUser.id}&select=*&order=created_at.desc&limit=${limit}`);
+    const unread=await rest('app_notifications',
+      `tenant_id=eq.${context.tenantId}&recipient_user_id=eq.${session.authUser.id}&read_at=is.null&select=id&limit=1000`);
+    return send(response,200,{unreadCount:unread.length,notifications:rows.map((row)=>({
+      id:row.id,type:row.type,severity:row.severity,title:row.title,message:row.message,
+      entityType:row.entity_type,entityId:row.entity_id,actionPage:row.action_page,
+      data:row.data_json??{},readAt:row.read_at,createdAt:row.created_at
+    }))});
+  }
+
+  if(request.method==='POST'&&route==='notifications/read'){
+    const input=bodyOf(request),now=new Date().toISOString();
+    const ids=Array.isArray(input.ids)?[...new Set(input.ids.map(String).filter((id)=>/^[0-9a-f-]{36}$/i.test(id)))].slice(0,100):[];
+    let query=`tenant_id=eq.${context.tenantId}&recipient_user_id=eq.${session.authUser.id}&read_at=is.null`;
+    if(!input.all){
+      if(!ids.length)throw Object.assign(new Error('Pilih notifikasi yang akan ditandai sudah dibaca'),{status:400});
+      query+=`&id=in.(${ids.join(',')})`;
+    }
+    await rest('app_notifications',query,{method:'PATCH',body:{read_at:now}});
+    return send(response,200,{success:true,readAt:now});
+  }
+
+  if(request.method==='GET'&&route==='notifications/push-config'){
+    requireTenantOwner(session);
+    const config=env();
+    const subscriptions=await rest('web_push_subscriptions',
+      `tenant_id=eq.${context.tenantId}&user_id=eq.${session.authUser.id}&active=eq.true&select=id,endpoint,device_label,updated_at&limit=20`);
+    return send(response,200,{
+      configured:Boolean(config.webPushPublicKey&&config.webPushPrivateKey),
+      publicKey:config.webPushPublicKey||null,subscriptions:subscriptions.length
+    });
+  }
+
+  if(request.method==='POST'&&route==='notifications/push-subscriptions'){
+    requireTenantOwner(session);
+    const input=bodyOf(request),endpoint=String(input.endpoint??'').trim();
+    let endpointUrl;
+    try{endpointUrl=new URL(endpoint);}catch{throw Object.assign(new Error('Alamat langganan notifikasi tidak valid'),{status:400});}
+    if(endpointUrl.protocol!=='https:'||endpoint.length>2048||['localhost','127.0.0.1','::1'].includes(endpointUrl.hostname)){
+      throw Object.assign(new Error('Alamat langganan notifikasi tidak aman'),{status:400});
+    }
+    const p256dh=String(input.keys?.p256dh??''),authKey=String(input.keys?.auth??'');
+    if(!p256dh||!authKey||p256dh.length>256||authKey.length>256){
+      throw Object.assign(new Error('Kunci perangkat notifikasi tidak lengkap'),{status:400});
+    }
+    await rest('web_push_subscriptions','on_conflict=endpoint',{
+      method:'POST',prefer:'resolution=merge-duplicates,return=minimal',body:{
+        tenant_id:context.tenantId,user_id:session.authUser.id,endpoint,p256dh,auth_key:authKey,
+        expiration_time:input.expirationTime??null,user_agent:String(request.headers['user-agent']??'').slice(0,300),
+        device_label:String(input.deviceLabel??'Perangkat Owner').trim().slice(0,80),active:true,failure_count:0,
+        updated_at:new Date().toISOString()
+      }
+    });
+    return send(response,201,{success:true});
+  }
+
+  if(request.method==='DELETE'&&route==='notifications/push-subscriptions'){
+    requireTenantOwner(session);
+    const endpoint=String(bodyOf(request).endpoint??'').trim();
+    if(!endpoint)throw Object.assign(new Error('Perangkat notifikasi tidak ditemukan'),{status:400});
+    await rest('web_push_subscriptions',
+      `tenant_id=eq.${context.tenantId}&user_id=eq.${session.authUser.id}&endpoint=eq.${encodeURIComponent(endpoint)}`,
+      {method:'PATCH',body:{active:false,updated_at:new Date().toISOString()}});
+    return send(response,200,{success:true});
+  }
+
+  if(request.method==='POST'&&route==='notifications/test'){
+    requireTenantOwner(session);
+    await notifyTenantOwners(context.tenantId,{
+      type:'SYSTEM',severity:'SUCCESS',title:'Notifikasi Nusa aktif',
+      message:`Perangkat Owner ${session.profile.display_name} siap menerima kabar penting.`,
+      entityType:'profile',entityId:session.authUser.id,actionPage:'pos',
+      dedupeKey:`push-test:${session.authUser.id}:${Date.now()}`
+    },request.waitUntil);
+    return send(response,201,{success:true});
+  }
+
   if (request.method === 'GET' && route === 'platform/infrastructure') {
     requirePlatformAdmin(session);
     const [databaseResult,storageResult,cloudflareResult]=await Promise.allSettled([
@@ -2837,6 +2980,13 @@ async function routeRequest(request, response, route) {
     }catch(error){
       console.error('Receipt voucher issuance failed after completed sale',error.message);
     }
+    await notifyTenantOwners(context.tenantId,{
+      type:'SALE_COMPLETED',severity:'SUCCESS',title:`Transaksi ${result.receiptNo} berhasil`,
+      message:`${context.outlet.name} · ${session.profile.display_name} · ${new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(quote.grandTotal)}`,
+      entityType:'sale',entityId:result.id,actionPage:'reports-sales',
+      data:{receiptNo:result.receiptNo,grandTotal:Number(quote.grandTotal),outletId:context.outlet.id,cashierId:session.authUser.id},
+      dedupeKey:`sale:${result.id}`
+    },request.waitUntil);
     const tenants = await rest('tenants', `id=eq.${context.tenantId}&select=*`);
     return send(response, 201, { ...result, issuedVoucher, occurredAt: new Date().toISOString(), cashier: session.profile.display_name, customerGroupId:input.customerGroupId, outletName:context.outlet.name, outlet:context.outlet, business:businessPayload(tenants[0]), quote });
   }
@@ -3818,6 +3968,16 @@ async function routeRequest(request, response, route) {
         p_note:String(input.note??'').trim().slice(0,240),p_latitude:latitude,p_longitude:longitude,
         p_accuracy_m:accuracy,p_photo_path:photoPath
       });
+      const clockIn=String(input.action??'').toUpperCase()==='CLOCK_IN';
+      const late=clockIn&&result.status==='LATE';
+      await notifyTenantOwners(context.tenantId,{
+        type:clockIn?'ATTENDANCE_CLOCK_IN':'ATTENDANCE_CLOCK_OUT',severity:late?'WARNING':'INFO',
+        title:clockIn?`${session.profile.display_name} absen masuk`:`${session.profile.display_name} absen pulang`,
+        message:`${context.outlet.name} · ${late?'Terlambat · ':''}${new Date(clockIn?result.clockInAt:result.clockOutAt).toLocaleString('id-ID',{timeZone:context.outlet.timezone??'Asia/Makassar',dateStyle:'medium',timeStyle:'short'})}`,
+        entityType:'attendance',entityId:result.id,actionPage:'workforce-attendance-history',
+        data:{userId:session.authUser.id,outletId:context.outlet.id,action:clockIn?'CLOCK_IN':'CLOCK_OUT',status:result.status},
+        dedupeKey:`attendance:${result.id}:${clockIn?'in':'out'}`
+      },request.waitUntil);
       return send(response,200,result);
     }catch(error){await deleteAttendancePhoto(photoPath);throw error;}
   }
@@ -4743,6 +4903,13 @@ async function routeRequest(request, response, route) {
       p_location_id:input.locationId,p_document_no:input.documentNo,p_items:input.items,
       p_proposed_prices:input.proposedPrices??[],p_note:input.note??''
     });
+    await notifyTenantOwners(context.tenantId,{
+      type:'RESTOCK_APPROVAL',severity:'WARNING',title:`Persetujuan restok ${input.documentNo}`,
+      message:`${session.profile.display_name} mengajukan ${Array.isArray(input.items)?input.items.length:0} barang untuk diperiksa Owner.`,
+      entityType:'restock_approval',entityId:result.id??null,actionPage:'restock-approvals',
+      data:{documentNo:input.documentNo,itemCount:Array.isArray(input.items)?input.items.length:0,requesterId:session.authUser.id},
+      dedupeKey:`restock-approval:${result.id??input.documentNo}`
+    },request.waitUntil);
     return send(response,201,result);
   }
 

@@ -6,7 +6,7 @@ function nodeHeaders(headers) {
   return result;
 }
 
-async function nodeRequest(request) {
+async function nodeRequest(request, executionContext) {
   const url = new URL(request.url);
   const query = {};
   for (const [name, value] of url.searchParams.entries()) {
@@ -25,7 +25,8 @@ async function nodeRequest(request) {
     url: request.url,
     headers: nodeHeaders(request.headers),
     query,
-    body
+    body,
+    waitUntil: executionContext?.waitUntil ? (promise) => executionContext.waitUntil(promise) : undefined
   };
 }
 
@@ -51,18 +52,18 @@ function nodeResponse() {
   };
 }
 
-export async function handleApiRequest(request) {
-  const incoming = await nodeRequest(request);
+export async function handleApiRequest(request, executionContext) {
+  const incoming = await nodeRequest(request, executionContext);
   const outgoing = nodeResponse();
   await vercelHandler(incoming, outgoing);
   return outgoing.toResponse();
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, executionContext) {
     const url = new URL(request.url);
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
-      return handleApiRequest(request);
+      return handleApiRequest(request, executionContext);
     }
     return env.ASSETS.fetch(request);
   }

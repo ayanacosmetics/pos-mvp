@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=191">
+  <link rel="stylesheet" href="/styles.css?v=194">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -210,7 +210,7 @@
     <main class="main">
       <header class="topbar">
         <div class="topbar-leading"><button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Buka menu" aria-controls="app-sidebar" aria-expanded="false"><span></span><span></span><span></span></button><div><p class="eyebrow">OUTLET AKTIF</p><select id="current-outlet-select" aria-label="Pilih outlet aktif"></select></div></div>
-        <div class="status"><span id="network-dot" class="dot"></span><span id="network-status">Online</span><span id="clock"></span></div>
+        <div class="topbar-actions"><button id="open-notifications" class="notification-bell" type="button" aria-label="Buka notifikasi" title="Notifikasi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></svg><span id="notification-badge" class="notification-badge hidden">0</span></button><div class="status"><span id="network-dot" class="dot"></span><span id="network-status">Online</span><span id="clock"></span></div></div>
       </header>
 
       <section id="page-pos" class="page active">
@@ -1022,6 +1022,8 @@
     </main>
   </div>
 
+  <dialog id="notification-center-dialog" class="notification-center-dialog"><div class="notification-center"><header><div><p class="eyebrow">KABAR PENTING</p><h2>Notifikasi</h2><small id="notification-summary">Belum ada notifikasi baru.</small></div><button id="close-notifications" class="icon-button" type="button" aria-label="Tutup notifikasi">×</button></header><section id="push-notification-panel" class="push-notification-panel hidden"><div><strong id="push-notification-title">Aktifkan notifikasi perangkat</strong><small id="push-notification-help">Terima transaksi dan absensi meski Nusa sedang ditutup.</small></div><button id="toggle-push-notifications" class="button primary" type="button">Aktifkan</button><button id="test-push-notification" class="button secondary hidden" type="button">Tes</button></section><div class="notification-toolbar"><button id="refresh-notifications" class="button secondary" type="button">Muat ulang</button><button id="read-all-notifications" class="link-button" type="button">Tandai semua dibaca</button></div><div id="notification-list" class="notification-list"><div class="empty-state compact">Memuat notifikasi...</div></div></div></dialog>
+
   <dialog id="owner-switch-dialog"><div class="dialog-card owner-switch-dialog"><div class="comparison-heading"><div><p class="eyebrow">KONTEKS OWNER</p><h2>Ganti Owner aktif</h2><p class="muted">Pilih Owner lain dalam usaha ini tanpa login ulang. Perpindahan dicatat dalam audit.</p></div><button id="close-owner-switch" class="icon-button" type="button">×</button></div><div id="owner-switch-list" class="owner-switch-list"><div class="empty-state compact">Memuat Owner...</div></div></div></dialog>
 
   <dialog id="pos-customer-dialog"><div class="dialog-card pos-customer-dialog"><div class="comparison-heading"><div><p class="eyebrow">PELANGGAN TRANSAKSI</p><h2>Pilih pelanggan</h2><p class="muted">Cari pelanggan yang sudah terdaftar atau tambahkan pelanggan baru.</p></div><button id="close-pos-customer" class="icon-button" type="button" aria-label="Tutup">×</button></div><div class="customer-pos-picker"><div class="customer-search-control"><input id="customer-search" autocomplete="off" placeholder="Cari nama, kode, atau telepon"><button id="clear-pos-customer" class="icon-button hidden" type="button" aria-label="Gunakan pelanggan umum">×</button></div><div id="customer-search-results" class="customer-search-results"></div></div><button id="new-pos-customer" class="button primary full new-pos-customer" type="button">+ Tambah pelanggan baru</button></div></dialog>
@@ -1138,6 +1140,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=191"></script>
+  <script type="module" src="/app.js?v=194"></script>
 </body>
 </html>

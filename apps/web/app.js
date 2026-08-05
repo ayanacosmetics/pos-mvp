@@ -17,6 +17,7 @@ const kaspinMigrationExpandedSteps=new Set();
 let variantSuggestions=[];
 const selectedVariantSuggestions=new Set();
 const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, platformInfrastructure:null, dataResetScopesSignature:'', dataRestoreSnapshot:null,dataRestoreOtpReady:false, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productAdminPage:1, selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', importSourceReport:null, productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], inventoryBalanceByProduct:new Map(), inventoryListLimit:100, stockView:'list', ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, view:'overview', approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+state.notifications=[];state.notificationUnreadCount=0;state.pushNotificationConfig=null;
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.restockDraftProducts=new Map();
 state.restockNewUnits=[];
@@ -227,6 +228,130 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 }
 
+function notificationKindIcon(type){
+  if(type==='SALE_COMPLETED')return 'Rp';
+  if(type==='ATTENDANCE_CLOCK_IN')return '→';
+  if(type==='ATTENDANCE_CLOCK_OUT')return '←';
+  if(type==='RESTOCK_APPROVAL')return 'PO';
+  return '!';
+}
+
+function updateNotificationBadge(){
+  const count=Math.max(0,Number(state.notificationUnreadCount)||0),badge=el('notification-badge');
+  badge.textContent=count>99?'99+':String(count);badge.classList.toggle('hidden',count===0);
+  el('open-notifications').setAttribute('aria-label',count?`Buka ${count} notifikasi belum dibaca`:'Buka notifikasi');
+  if('setAppBadge' in navigator){
+    (count?navigator.setAppBadge(count):navigator.clearAppBadge()).catch(()=>{});
+  }
+}
+
+function renderNotifications(){
+  const rows=state.notifications??[];
+  el('notification-summary').textContent=state.notificationUnreadCount
+    ?`${state.notificationUnreadCount} belum dibaca`
+    :'Semua notifikasi sudah dibaca.';
+  el('read-all-notifications').disabled=!state.notificationUnreadCount;
+  el('notification-list').innerHTML=rows.length?rows.map((item)=>`<button class="notification-item ${item.readAt?'':'unread'} ${String(item.severity??'info').toLowerCase()}" type="button" data-notification-id="${item.id}" data-notification-page="${escapeHtml(item.actionPage??'')}"><span class="notification-kind">${notificationKindIcon(item.type)}</span><span class="notification-content"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.message)}</span></span><time datetime="${escapeHtml(item.createdAt)}">${new Date(item.createdAt).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</time></button>`).join('')
+    :'<div class="empty-state compact">Belum ada notifikasi. Transaksi dan absensi berikutnya akan muncul di sini.</div>';
+  updateNotificationBadge();
+}
+
+async function loadNotifications({silent=false}={}){
+  if(!state.session)return;
+  try{
+    const data=await request('/api/notifications?limit=50');
+    state.notifications=data.notifications??[];state.notificationUnreadCount=Number(data.unreadCount??0);
+    renderNotifications();
+  }catch(error){
+    if(!silent)toast(error.message);
+    if(el('notification-center-dialog').open)el('notification-list').innerHTML=`<div class="empty-state compact">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function base64UrlBytes(value){
+  const padding='='.repeat((4-value.length%4)%4),base64=(value+padding).replace(/-/g,'+').replace(/_/g,'/');
+  return Uint8Array.from(atob(base64),(character)=>character.charCodeAt(0));
+}
+
+function isInstalledPwa(){return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;}
+
+async function renderPushNotificationControl(){
+  const panel=el('push-notification-panel'),button=el('toggle-push-notifications'),test=el('test-push-notification');
+  panel.classList.toggle('hidden',state.session?.user?.role!=='OWNER');
+  if(state.session?.user?.role!=='OWNER')return;
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){
+    el('push-notification-title').textContent='Perangkat belum mendukung Web Push';
+    el('push-notification-help').textContent='Notifikasi di dalam Nusa tetap tersedia.';button.disabled=true;test.classList.add('hidden');return;
+  }
+  const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if(ios&&!isInstalledPwa()){
+    el('push-notification-title').textContent='Pasang Nusa ke Layar Utama';
+    el('push-notification-help').textContent='Di Safari tekan Bagikan → Tambahkan ke Layar Utama, lalu buka Nusa dari ikon tersebut.';
+    button.textContent='Belum dipasang';button.disabled=true;test.classList.add('hidden');return;
+  }
+  try{
+    state.pushNotificationConfig=await request('/api/notifications/push-config');
+    if(!state.pushNotificationConfig.configured){
+      el('push-notification-title').textContent='Web Push sedang disiapkan';
+      el('push-notification-help').textContent='Lonceng di dalam Nusa sudah aktif; kunci pengiriman perangkat belum dipasang.';
+      button.textContent='Belum siap';button.disabled=true;test.classList.add('hidden');return;
+    }
+    const registration=await navigator.serviceWorker.ready,subscription=await registration.pushManager.getSubscription();
+    const active=Boolean(subscription);
+    el('push-notification-title').textContent=active?'Notifikasi perangkat aktif':'Aktifkan notifikasi perangkat';
+    el('push-notification-help').textContent=active?'Transaksi dan absensi penting dapat muncul di layar perangkat ini.':'Izin hanya diminta setelah tombol Aktifkan ditekan.';
+    button.textContent=active?'Nonaktifkan':'Aktifkan';button.disabled=false;button.dataset.active=String(active);
+    test.classList.toggle('hidden',!active);
+  }catch(error){
+    el('push-notification-title').textContent='Status Web Push belum dapat dibaca';el('push-notification-help').textContent=error.message;
+    button.disabled=true;test.classList.add('hidden');
+  }
+}
+
+async function togglePushNotifications(){
+  const button=el('toggle-push-notifications');button.disabled=true;
+  try{
+    const registration=await navigator.serviceWorker.ready,current=await registration.pushManager.getSubscription();
+    if(current){
+      await request('/api/notifications/push-subscriptions',{method:'DELETE',body:JSON.stringify({endpoint:current.endpoint})});
+      await current.unsubscribe();toast('Notifikasi perangkat dinonaktifkan.');
+    }else{
+      const permission=await Notification.requestPermission();
+      if(permission!=='granted')throw new Error('Izin notifikasi belum diberikan pada perangkat ini.');
+      const config=state.pushNotificationConfig??await request('/api/notifications/push-config');
+      if(!config.configured||!config.publicKey)throw new Error('Web Push belum dikonfigurasi.');
+      const subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:base64UrlBytes(config.publicKey)});
+      const json=subscription.toJSON();
+      await request('/api/notifications/push-subscriptions',{method:'POST',body:JSON.stringify({
+        endpoint:subscription.endpoint,expirationTime:subscription.expirationTime,keys:json.keys,
+        deviceLabel:/iPhone|iPad/i.test(navigator.userAgent)?'iPhone / iPad Owner':'Perangkat Owner'
+      })});
+      toast('Notifikasi perangkat berhasil diaktifkan.');
+    }
+  }catch(error){toast(error.message);}
+  await renderPushNotificationControl();
+}
+
+async function markNotificationsRead({ids=[],all=false}={}){
+  await request('/api/notifications/read',{method:'POST',body:JSON.stringify({ids,all})});
+  const selected=new Set(ids);
+  state.notifications=state.notifications.map((item)=>(all||selected.has(item.id))?{...item,readAt:new Date().toISOString()}:item);
+  state.notificationUnreadCount=state.notifications.filter((item)=>!item.readAt).length;renderNotifications();
+}
+
+function openNotificationPage(page){
+  const button=document.querySelector(`.feature-nav-item[data-page="${CSS.escape(String(page??''))}"]:not(.hidden)`);
+  if(button)showPage(button.dataset.page);
+}
+
+let notificationPollingStarted=false;
+function startNotificationCenter(){
+  loadNotifications({silent:true});
+  if(notificationPollingStarted)return;
+  notificationPollingStarted=true;
+  setInterval(()=>{if(!document.hidden&&state.session)loadNotifications({silent:true});},30000);
+}
+
 function productImageUrl(product) {
   const value = String(product?.imageUrl ?? '').trim();
   if (!value) return '';
@@ -412,6 +537,9 @@ async function applyBootstrap(data, { offline = false } = {}) {
   renderShift();
   renderImportLocations();
   await updateQuote();
+  startNotificationCenter();
+  const notificationPage=new URLSearchParams(location.search).get('notification-page');
+  if(notificationPage){openNotificationPage(notificationPage);history.replaceState(null,'',location.pathname);}
   if (!offline) startDeferredBootstrapLoads();
 }
 
@@ -7868,6 +7996,25 @@ async function switchOwnerContext(ownerId) {
 }
 
 el('switch-account').addEventListener('click', openOwnerSwitch);
+el('open-notifications').addEventListener('click',async()=>{
+  el('notification-center-dialog').showModal();
+  await Promise.all([loadNotifications(),renderPushNotificationControl()]);
+});
+el('close-notifications').addEventListener('click',()=>el('notification-center-dialog').close());
+el('refresh-notifications').addEventListener('click',()=>loadNotifications());
+el('read-all-notifications').addEventListener('click',()=>markNotificationsRead({all:true}).catch((error)=>toast(error.message)));
+el('toggle-push-notifications').addEventListener('click',togglePushNotifications);
+el('test-push-notification').addEventListener('click',async()=>{
+  const button=el('test-push-notification');button.disabled=true;
+  try{await request('/api/notifications/test',{method:'POST',body:'{}'});toast('Notifikasi tes dikirim.');setTimeout(()=>loadNotifications({silent:true}),600);}
+  catch(error){toast(error.message);}finally{button.disabled=false;}
+});
+el('notification-list').addEventListener('click',async(event)=>{
+  const row=event.target.closest('[data-notification-id]');if(!row)return;
+  const item=state.notifications.find((candidate)=>candidate.id===row.dataset.notificationId);
+  try{if(item&&!item.readAt)await markNotificationsRead({ids:[item.id]});}catch(error){toast(error.message);}
+  el('notification-center-dialog').close();openNotificationPage(row.dataset.notificationPage);
+});
 el('sync-now').addEventListener('click', synchronizeData);
 el('close-owner-switch').addEventListener('click',()=>el('owner-switch-dialog').close());
 el('owner-switch-list').addEventListener('click',async(event)=>{
@@ -8868,7 +9015,12 @@ if (typeof navigator !== 'undefined' && navigator.serial) {
   navigator.serial.addEventListener('connect', async () => { await restoreGrantedPrinter(); renderPrinterStatus(); });
   navigator.serial.addEventListener('disconnect', () => renderPrinterStatus('Koneksi printer terputus'));
 }
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/service-worker.js');
+if ('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/service-worker.js');
+  navigator.serviceWorker.addEventListener('message',(event)=>{
+    if(event.data?.type==='OPEN_NOTIFICATION')openNotificationPage(event.data.page??new URL(event.data.url).searchParams.get('notification-page'));
+  });
+}
 async function restoreAppSession() {
   if (state.token || state.refreshToken) return bootstrap();
   try {
