@@ -187,8 +187,8 @@ async function midtransRequest(config,path,{method='GET',body}={}) {
   return payload;
 }
 
-function validateMidtransIntentStatus(intent,payload) {
-  if(String(payload.order_id??'')!==intent.order_id)throw Object.assign(new Error('Order ID Midtrans tidak cocok dengan intent Nusa'),{status:409});
+function validateMidtransIntentStatus(intent,payload,{identityVerifiedByLookup=false}={}) {
+  if(String(payload.order_id??'')!==intent.order_id&&!identityVerifiedByLookup)throw Object.assign(new Error('Order ID Midtrans tidak cocok dengan intent Nusa'),{status:409});
   if(String(payload.payment_type??'').toLowerCase()!=='qris')throw Object.assign(new Error('Jenis pembayaran Midtrans bukan QRIS'),{status:409});
   if(String(payload.currency??'IDR').toUpperCase()!=='IDR')throw Object.assign(new Error('Mata uang Midtrans bukan IDR'),{status:409});
   if(Math.abs(Number(payload.gross_amount)-Number(intent.gross_amount))>0.001)throw Object.assign(new Error('Nominal Midtrans tidak cocok dengan intent Nusa'),{status:409});
@@ -199,8 +199,8 @@ async function recordMidtransEvent(intentId,source,payload,processingResult,sign
   await rest('payment_gateway_events','',{method:'POST',body:{intent_id:intentId,source,event_status:String(payload?.transaction_status??''),signature_verified:signatureVerified,payload_hash:midtransPayloadHash(payload),sanitized_payload:sanitizedMidtransPayload(payload),processing_result:String(processingResult).slice(0,500)}});
 }
 
-async function updateMidtransIntent(intent,payload,source,signatureVerified=null) {
-  validateMidtransIntentStatus(intent,payload);
+async function updateMidtransIntent(intent,payload,source,signatureVerified=null,{identityVerifiedByLookup=false}={}) {
+  validateMidtransIntentStatus(intent,payload,{identityVerifiedByLookup});
   const observedStatus=midtransStatus(payload.transaction_status);
   const terminal=new Set(['SETTLEMENT','EXPIRED','DENIED','CANCELLED']);
   const status=observedStatus==='SETTLEMENT'||intent.status==='SETTLEMENT'?'SETTLEMENT':terminal.has(intent.status)?intent.status:observedStatus;
@@ -2392,10 +2392,11 @@ async function routeRequest(request, response, route) {
     const intent={...created[0],tenant_id:context.tenantId,environment:'SANDBOX',order_id:orderId,gross_amount:amount};
     try{
       const chargePayload=await midtransRequest(config,'/v2/charge',{method:'POST',body:{payment_type:'qris',transaction_details:{order_id:orderId,gross_amount:amount},item_details:[{id:'NUSA-SANDBOX',price:amount,quantity:1,name:'Simulasi QRIS Nusa POS'}],qris:{acquirer:'gopay'}}});
-      const payload=String(chargePayload.order_id??'')===orderId
-        ? chargePayload
-        : {...await midtransRequest(config,`/v2/${encodeURIComponent(orderId)}/status`),actions:chargePayload.actions};
-      const updated=await updateMidtransIntent(intent,payload,'CHARGE',null);
+      const needsStatusVerification=String(chargePayload.order_id??'')!==orderId;
+      const payload=needsStatusVerification
+        ? {...await midtransRequest(config,`/v2/${encodeURIComponent(orderId)}/status`),actions:chargePayload.actions}
+        : chargePayload;
+      const updated=await updateMidtransIntent(intent,payload,'CHARGE',null,{identityVerifiedByLookup:needsStatusVerification});
       await rest('payment_gateway_accounts',`id=eq.${config.id}&tenant_id=eq.${context.tenantId}`,{method:'PATCH',body:{status:'VERIFIED',merchant_id:String(payload.merchant_id??config.merchant_id??'')||null,verified_at:new Date().toISOString(),updated_at:new Date().toISOString()}});
       return send(response,201,{intent:{id:updated.id,orderId:updated.order_id,transactionId:updated.gateway_transaction_id,amount:Number(updated.gross_amount),status:updated.status,qrUrl:updated.qr_url,expiresAt:updated.expires_at,createdAt:updated.created_at},environment:'SANDBOX',operationalMutation:false});
     }catch(error){
@@ -2414,7 +2415,7 @@ async function routeRequest(request, response, route) {
     const config=await midtransAccount(context.tenantId,'SANDBOX');
     if(intent.gateway_account_id&&intent.gateway_account_id!==config.id)throw Object.assign(new Error('Intent dibuat oleh akun Midtrans tenant yang berbeda'),{status:409});
     const payload=await midtransRequest(config,`/v2/${encodeURIComponent(intent.order_id)}/status`);
-    const updated=await updateMidtransIntent(intent,payload,'STATUS_CHECK',null);
+    const updated=await updateMidtransIntent(intent,payload,'STATUS_CHECK',null,{identityVerifiedByLookup:true});
     return send(response,200,{intent:{id:updated.id,orderId:updated.order_id,transactionId:updated.gateway_transaction_id,amount:Number(updated.gross_amount),status:updated.status,qrUrl:updated.qr_url,expiresAt:updated.expires_at,settledAt:updated.settled_at,updatedAt:updated.updated_at},environment:'SANDBOX',operationalMutation:false});
   }
 
