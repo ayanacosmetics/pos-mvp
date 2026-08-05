@@ -4999,7 +4999,9 @@ function restockApprovalDetailMarkup(requestItem,canApprove){
   const status=restockApprovalStatus(requestItem);
   const totalCost=requestItem.items.reduce((sum,item)=>sum+(Number(item.baseQty)*Number(item.unitCost)),0);
   const isRequester=requestItem.requesterId===state.session.user.id;
-  const canDecide=canApprove&&!isRequester;
+  // Owner is the final authority and may also handle restock directly. Keep
+  // separation of duties for Admin, but do not deadlock an Owner-created request.
+  const canDecide=canApprove&&(!isRequester||state.session.user.role==='OWNER');
   const canEditRevision=requestItem.status==='REVISION_REQUIRED'&&isRequester;
   const revisionBanner=requestItem.status==='REVISION_REQUIRED'?`<div class="restock-revision-banner"><div><span class="badge warning">PERLU REVISI</span><strong>Owner meminta pengajuan diperbaiki</strong></div><p>${escapeHtml(requestItem.decisionNote??'Periksa kembali data pada pengajuan ini.')}</p></div>`:'';
   const staffWaiting=!canApprove&&requestItem.status==='PENDING'?'<div class="restock-staff-waiting"><strong>Pengajuan sedang diperiksa Owner</strong><small>Modal lama, perhitungan laba, dan saran harga hanya tampil pada akun Owner. Selisih jumlah PO juga diperiksa Owner.</small></div>':'';

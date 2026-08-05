@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html,app,api,sql,sqlPo,sqlPoNewProduct,sqlRevision,sqlDeliveryVariance,sqlReceivingLock,css]=await Promise.all([
+const [html,app,api,sql,sqlPo,sqlPoNewProduct,sqlRevision,sqlDeliveryVariance,sqlReceivingLock,sqlOwnerSelfDecision,css]=await Promise.all([
   readFile(new URL('../apps/web/index.html',import.meta.url),'utf8'),
   readFile(new URL('../apps/web/app.js',import.meta.url),'utf8'),
   readFile(new URL('../api/index.mjs',import.meta.url),'utf8'),
@@ -12,6 +12,7 @@ const [html,app,api,sql,sqlPo,sqlPoNewProduct,sqlRevision,sqlDeliveryVariance,sq
   readFile(new URL('../supabase/migrations/202608040018_restock_revision_workflow.sql',import.meta.url),'utf8'),
   readFile(new URL('../supabase/migrations/202608050021_purchase_order_delivery_variance.sql',import.meta.url),'utf8'),
   readFile(new URL('../supabase/migrations/202608050022_purchase_order_receiving_lock.sql',import.meta.url),'utf8'),
+  readFile(new URL('../supabase/migrations/202608050023_owner_self_restock_decision.sql',import.meta.url),'utf8'),
   readFile(new URL('../apps/web/styles.css',import.meta.url),'utf8')
 ]);
 
@@ -97,6 +98,12 @@ test('Owner dapat meminta revisi dan Staff mengirim ulang pengajuan yang sama',(
   assert.match(app,/function resubmitRestockApproval/);
   assert.match(app,/Modal lama, perhitungan laba, dan saran harga hanya tampil pada akun Owner/);
   assert.match(css,/\.restock-revision-banner\{display:grid/);
+});
+
+test('Owner dapat memutuskan restok yang dibuat sendiri tanpa membuka hak Admin',()=>{
+  assert.match(app,/!isRequester\|\|state\.session\.user\.role==='OWNER'/);
+  assert.match(sqlOwnerSelfDecision,/v_request\.requester_id=p_actor_id and v_actor_role<>'OWNER'/);
+  assert.match(sqlOwnerSelfDecision,/ownerSelfDecision/);
 });
 
 test('staff hanya melihat pemberitahuan approval tanpa modal lama dan saran harga',()=>{
