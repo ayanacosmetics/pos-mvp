@@ -869,7 +869,17 @@ async function loadPurchaseOrders(tenantId, orderId = null, locationIds = []) {
   const orders = await rest('purchase_orders', `tenant_id=eq.${tenant}${idFilter}${locationFilter}&select=*&order=created_at.desc&limit=100`);
   if (!orders.length) return [];
   const orderIds = orders.map((order) => order.id).join(',');
-  const items = await rest('purchase_order_items', `tenant_id=eq.${tenant}&order_id=in.(${orderIds})&select=*&order=product_name`);
+  const [items,activeApprovals] = await Promise.all([
+    rest('purchase_order_items', `tenant_id=eq.${tenant}&order_id=in.(${orderIds})&select=*&order=product_name`),
+    rest('restock_approval_requests', `tenant_id=eq.${tenant}&status=in.(PENDING,REVISION_REQUIRED,APPROVED)&select=id,status,document_no,items_json,requester_id,requested_at&order=requested_at.desc`)
+  ]);
+  const approvalByOrder=new Map();
+  for(const approval of activeApprovals){
+    const purchaseOrderId=approval.items_json?.find?.((item)=>item?.purchaseOrderId)?.purchaseOrderId??null;
+    if(purchaseOrderId&&!approvalByOrder.has(purchaseOrderId))approvalByOrder.set(purchaseOrderId,{
+      id:approval.id,status:approval.status,documentNo:approval.document_no,requesterId:approval.requester_id,requestedAt:approval.requested_at
+    });
+  }
   const today = new Date().toISOString().slice(0, 10);
   return orders.map((order) => {
     const mappedItems = items.filter((item) => item.order_id === order.id).map((item) => ({
@@ -880,7 +890,7 @@ async function loadPurchaseOrders(tenantId, orderId = null, locationIds = []) {
       purchase_unit_cost:Number(item.purchase_unit_cost??item.unit_cost)
     }));
     return {
-    ...order, approval_required: Boolean(order.approval_required),
+    ...order, approval_required: Boolean(order.approval_required),receiving_approval:approvalByOrder.get(order.id)??null,
     subtotal: Number(order.subtotal), discount_amount: Number(order.discount_amount), tax_amount: Number(order.tax_amount),
     other_cost: Number(order.other_cost), grand_total: Number(order.grand_total),
     outstanding_qty: mappedItems.reduce((sum, item) => sum + item.remaining_qty, 0),
@@ -4453,6 +4463,7 @@ async function routeRequest(request, response, route) {
     if (!key) { const error = new Error('Idempotency-Key wajib diisi'); error.status = 400; throw error; }
     const accessibleOrder = (await loadPurchaseOrders(context.tenantId, orderId, context.locationIds))[0];
     if (!accessibleOrder) { const error = new Error('Purchase Order tidak ditemukan pada lokasi user'); error.status = 404; throw error; }
+    if(accessibleOrder.receiving_approval)throw Object.assign(new Error('PO sedang diproses dalam pengajuan penerimaan. Lanjutkan dari menu Persetujuan harga agar stok tidak diterima dua kali.'),{status:409});
     if(await restockNeedsPriceApproval(context.tenantId,input.items))throw Object.assign(new Error('Modal berubah. Ajukan harga kepada Owner sebelum menerima barang.'),{status:409});
     const result = await rpc('receive_purchase_order', {
       p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_order_id: orderId,
@@ -4477,6 +4488,12 @@ async function routeRequest(request, response, route) {
   if (request.method === 'POST' && route === 'restock-approvals') {
     requirePermission(session, 'purchasing.receive');
     const input=bodyOf(request);requireLocationAccess(context,input.locationId);
+    const purchaseOrderId=input.items?.find?.((item)=>item?.purchaseOrderId)?.purchaseOrderId??null;
+    if(purchaseOrderId){
+      const purchaseOrder=(await loadPurchaseOrders(context.tenantId,purchaseOrderId,context.locationIds))[0];
+      if(!purchaseOrder)throw Object.assign(new Error('Purchase Order tidak ditemukan pada lokasi user'),{status:404});
+      if(purchaseOrder.receiving_approval)throw Object.assign(new Error('PO ini sudah memiliki pengajuan penerimaan yang masih diproses.'),{status:409});
+    }
     const result=await rpc('submit_restock_approval_v2',{
       p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_supplier_id:input.supplierId,
       p_location_id:input.locationId,p_document_no:input.documentNo,p_items:input.items,

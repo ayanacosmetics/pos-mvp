@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html,app,api,sql,sqlPo,sqlPoNewProduct,sqlRevision,sqlDeliveryVariance,css]=await Promise.all([
+const [html,app,api,sql,sqlPo,sqlPoNewProduct,sqlRevision,sqlDeliveryVariance,sqlReceivingLock,css]=await Promise.all([
   readFile(new URL('../apps/web/index.html',import.meta.url),'utf8'),
   readFile(new URL('../apps/web/app.js',import.meta.url),'utf8'),
   readFile(new URL('../api/index.mjs',import.meta.url),'utf8'),
@@ -11,6 +11,7 @@ const [html,app,api,sql,sqlPo,sqlPoNewProduct,sqlRevision,sqlDeliveryVariance,cs
   readFile(new URL('../supabase/migrations/202608040017_restock_po_approved_new_product.sql',import.meta.url),'utf8'),
   readFile(new URL('../supabase/migrations/202608040018_restock_revision_workflow.sql',import.meta.url),'utf8'),
   readFile(new URL('../supabase/migrations/202608050021_purchase_order_delivery_variance.sql',import.meta.url),'utf8'),
+  readFile(new URL('../supabase/migrations/202608050022_purchase_order_receiving_lock.sql',import.meta.url),'utf8'),
   readFile(new URL('../apps/web/styles.css',import.meta.url),'utf8')
 ]);
 
@@ -118,4 +119,18 @@ test('kelebihan kiriman PO hanya diterima melalui persetujuan Owner',()=>{
   assert.match(sqlDeliveryVariance,/overageItemCount/);
   assert.match(sqlDeliveryVariance,/is_supplement/);
   assert.match(sqlDeliveryVariance,/v_request\.status<>'APPROVED'/);
+});
+
+test('PO dikunci selama pengajuan penerimaan masih diproses',()=>{
+  assert.match(api,/receiving_approval:approvalByOrder\.get\(order\.id\)/);
+  assert.match(api,/PO sedang diproses dalam pengajuan penerimaan/);
+  assert.match(api,/PO ini sudah memiliki pengajuan penerimaan yang masih diproses/);
+  assert.match(app,/\['APPROVED','PARTIALLY_RECEIVED'\]\.includes\(order\.status\)&&!receivingApproval/);
+  assert.match(app,/PENERIMAAN DIPROSES/);
+  assert.match(app,/function openPurchaseOrderReceivingApproval/);
+  assert.match(app,/if\(order\.receiving_approval\)return toast/);
+  assert.match(css,/\.purchase-receiving-lock\{/);
+  assert.match(sqlReceivingLock,/guard_active_purchase_order_receiving_v1/);
+  assert.match(sqlReceivingLock,/PENDING','REVISION_REQUIRED','APPROVED/);
+  assert.match(sqlReceivingLock,/for update/);
 });

@@ -3477,7 +3477,7 @@ async function openBarcodeCamera(target) {
 }
 
 function receivablePurchaseOrders(){
-  return (state.purchaseOrders??[]).filter((order)=>['APPROVED','PARTIALLY_RECEIVED'].includes(order.status));
+  return (state.purchaseOrders??[]).filter((order)=>['APPROVED','PARTIALLY_RECEIVED'].includes(order.status)&&!order.receiving_approval);
 }
 
 function renderRestockSourceSelector(){
@@ -3548,12 +3548,12 @@ const purchaseStatus = {
   PARTIALLY_RECEIVED: ['Diterima sebagian', 'partial'], RECEIVED: ['Selesai', 'received'], CANCELLED: ['Dibatalkan', 'cancelled']
 };
 
-function showPurchaseView(name) {
+function showPurchaseView(name,{approvalId=null}={}) {
   document.querySelectorAll('.purchase-view').forEach((view) => view.classList.toggle('hidden', view.id !== `purchase-view-${name}`));
   document.querySelectorAll('.purchase-tab').forEach((button) => button.classList.toggle('active', button.dataset.purchaseView === name));
   document.querySelectorAll('[data-purchase-view-target]').forEach((button)=>button.classList.toggle('active',button.dataset.purchaseViewTarget===name));
   if (name === 'receipt') { setRestockWizardStep('document', { focus: false }); loadPurchaseOrders().then(renderRestockSourceSelector); }
-  if (name === 'approvals') { state.activeRestockApprovalId=null; loadRestockApprovals(); }
+  if (name === 'approvals') { state.activeRestockApprovalId=approvalId; return loadRestockApprovals(); }
 }
 
 const restockWizardSteps = ['document','items','review','history'];
@@ -3841,7 +3841,8 @@ function renderPurchaseOrders() {
   const count = (status) => state.purchaseOrders.filter((order) => status.includes(order.status)).length;
   el('purchase-metrics').innerHTML = [
     ['Semua PO', state.purchaseOrders.length], ['Perlu persetujuan', count(['SUBMITTED'])],
-    ['Siap diterima', count(['APPROVED','PARTIALLY_RECEIVED'])], ['Selesai', count(['RECEIVED'])]
+    ['Siap diterima', state.purchaseOrders.filter((order)=>['APPROVED','PARTIALLY_RECEIVED'].includes(order.status)&&!order.receiving_approval).length],
+    ['Sedang diproses',state.purchaseOrders.filter((order)=>order.receiving_approval).length],['Selesai', count(['RECEIVED'])]
   ].map(([label,value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
   el('purchase-order-list').innerHTML = orders.map((order) => {
     const [label, statusClass] = purchaseStatus[order.status] ?? [order.status, 'draft'];
@@ -3849,20 +3850,26 @@ function renderPurchaseOrders() {
     const received = order.items.reduce((sum,item)=>sum+item.received_qty,0);
     const progress = ordered ? Math.round((received/ordered)*100) : 0;
     const canApprove = ['OWNER','ADMIN'].includes(state.session.user.role);
+    const receivingApproval=order.receiving_approval;
+    const canOpenReceivingApproval=receivingApproval&&(canApprove||receivingApproval.requesterId===state.session.user.id);
+    const receivingApprovalLabel={PENDING:'Menunggu Owner',REVISION_REQUIRED:'Perlu revisi',APPROVED:'Disetujui · lanjutkan penerimaan'}[receivingApproval?.status]??receivingApproval?.status;
     const actions = [
       order.status !== 'CANCELLED' ? `<button class="button secondary po-print" data-id="${order.id}">Cetak / bagikan</button>` : '',
       order.status === 'DRAFT' ? `<button class="button secondary po-open" data-id="${order.id}">Ubah</button><button class="button primary po-action" data-id="${order.id}" data-action="submit">Siapkan pesanan</button>` : '',
       order.status === 'SUBMITTED' && canApprove ? `<button class="button primary po-action" data-id="${order.id}" data-action="approve">Setujui</button>` : '',
-      ['APPROVED','PARTIALLY_RECEIVED'].includes(order.status) ? `<button class="button primary po-receive" data-id="${order.id}">Terima barang</button>` : '',
+      ['APPROVED','PARTIALLY_RECEIVED'].includes(order.status)&&!receivingApproval ? `<button class="button primary po-receive" data-id="${order.id}">Terima barang</button>` : '',
+      canOpenReceivingApproval?`<button class="button secondary po-open-receiving-approval" data-id="${receivingApproval.id}">Lihat proses penerimaan</button>`:'',
       !['RECEIVED','CANCELLED','PARTIALLY_RECEIVED'].includes(order.status) && canApprove ? `<button class="button secondary po-action" data-id="${order.id}" data-action="cancel">Batalkan</button>` : ''
     ].join('');
     const overdue=order.overdue?'<span class="status-badge out">TERLAMBAT</span>':'';
     const approval=order.status==='SUBMITTED'?` · di atas batas ${money.format(order.approval_threshold??0)}`:order.status==='APPROVED'&&!order.approval_required?' · disetujui otomatis':'';
-    return `<article class="purchase-document"><div class="purchase-document-main"><div><div class="document-number"><strong>${order.po_no}</strong><span class="status-badge ${statusClass}">${label}</span>${overdue}</div><p>${order.supplier_name}</p><small>Dibuat ${new Date(order.created_at).toLocaleDateString('id-ID')}${order.expected_on ? ` · estimasi ${new Date(`${order.expected_on}T00:00:00`).toLocaleDateString('id-ID')}` : ''}${approval}</small></div><div class="document-amount"><strong>${money.format(order.grand_total)}</strong><small>${order.items.length} jenis · sisa ${Number(order.outstanding_qty).toLocaleString('id-ID')} pcs</small></div></div><div class="receipt-progress"><span style="width:${progress}%"></span></div><div class="purchase-document-footer"><small>Diterima ${received} dari ${ordered} pcs · ${progress}%</small><div>${actions}</div></div></article>`;
+    const receivingNotice=receivingApproval?`<div class="purchase-receiving-lock"><span class="badge warning">PENERIMAAN DIPROSES</span><div><strong>${escapeHtml(receivingApprovalLabel)}</strong><small>Faktur ${escapeHtml(receivingApproval.documentNo??'-')} · selesaikan pengajuan ini sebelum menerima barang lagi.</small></div></div>`:'';
+    return `<article class="purchase-document"><div class="purchase-document-main"><div><div class="document-number"><strong>${order.po_no}</strong><span class="status-badge ${statusClass}">${label}</span>${overdue}</div><p>${order.supplier_name}</p><small>Dibuat ${new Date(order.created_at).toLocaleDateString('id-ID')}${order.expected_on ? ` · estimasi ${new Date(`${order.expected_on}T00:00:00`).toLocaleDateString('id-ID')}` : ''}${approval}</small></div><div class="document-amount"><strong>${money.format(order.grand_total)}</strong><small>${order.items.length} jenis · sisa ${Number(order.outstanding_qty).toLocaleString('id-ID')} pcs</small></div></div>${receivingNotice}<div class="receipt-progress"><span style="width:${progress}%"></span></div><div class="purchase-document-footer"><small>Diterima ${received} dari ${ordered} pcs · ${progress}%</small><div>${actions}</div></div></article>`;
   }).join('') || '<div class="empty-state compact">Belum ada Purchase Order dengan status ini.</div>';
   document.querySelectorAll('.po-open').forEach((button) => button.addEventListener('click', () => editPurchaseOrder(button.dataset.id)));
   document.querySelectorAll('.po-action').forEach((button) => button.addEventListener('click', () => transitionPurchaseOrder(button.dataset.id, button.dataset.action)));
   document.querySelectorAll('.po-receive').forEach((button) => button.addEventListener('click', () => prepareOrderReceipt(button.dataset.id)));
+  document.querySelectorAll('.po-open-receiving-approval').forEach((button)=>button.addEventListener('click',()=>openPurchaseOrderReceivingApproval(button.dataset.id)));
   document.querySelectorAll('.po-print').forEach((button) => button.addEventListener('click', () => openPurchaseOrderPrint(button.dataset.id)));
 }
 
@@ -4172,6 +4179,7 @@ async function transitionPurchaseOrder(orderId,action) {
 async function prepareOrderReceipt(orderId) {
   const order=state.purchaseOrders.find((item)=>item.id===orderId);
   if (!order) return;
+  if(order.receiving_approval)return toast('PO sedang diproses. Lanjutkan dari pengajuan penerimaan yang sudah dibuat.');
   state.activePurchaseOrder=order;
   await renderRestock();
   for (const item of order.items.filter((line)=>line.remaining_qty>0)) {
@@ -4180,6 +4188,12 @@ async function prepareOrderReceipt(orderId) {
   }
   renderRestockSourceSelector();
   showPurchaseView('receipt');
+}
+
+async function openPurchaseOrderReceivingApproval(approvalId) {
+  await showPurchaseView('approvals',{approvalId});
+  if(!state.restockApprovals.some((item)=>item.id===approvalId))return toast('Pengajuan hanya dapat dibuka oleh pengaju atau Owner/Admin.');
+  document.querySelector('.restock-approval-page')?.scrollIntoView({block:'start'});
 }
 
 async function clearActivePurchaseOrder() {

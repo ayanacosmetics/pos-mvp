@@ -25,6 +25,7 @@ test('restok cloud memakai sesi user untuk Auth dan service key untuk transaksi 
     if (String(url).includes('/rest/v1/stock_locations?')) return responseOf([{ id: '44444444-4444-4444-8444-444444444444', name: 'Gudang Utama', kind: 'WAREHOUSE' }]);
     if (String(url).includes('/rest/v1/purchase_orders?')) return responseOf([{ id: '88888888-8888-4888-8888-888888888888', tenant_id: '22222222-2222-4222-8222-222222222222', location_id: '44444444-4444-4444-8444-444444444444', po_no: 'PO-2607-00001', status: 'DRAFT', subtotal: '0', discount_amount: '0', tax_amount: '0', other_cost: '0', grand_total: '0', created_at: '2026-07-21T00:00:00Z' }]);
     if (String(url).includes('/rest/v1/purchase_order_items?')) return responseOf([]);
+    if (String(url).includes('/rest/v1/restock_approval_requests?')) return responseOf([]);
     if (String(url).includes('/rest/v1/purchase_receipt_items?')) return responseOf([{ product_id: '77777777-7777-4777-8777-777777777777', unit_cost: '17500', purchase_receipts: { received_at: '2026-07-20T00:00:00Z' } }]);
     if (String(url).endsWith('/rest/v1/rpc/receive_purchase')) return responseOf({ id: '55555555-5555-4555-8555-555555555555', document_no: 'INV-TEST-1', status: 'RECEIVED', duplicate: false });
     return responseOf({ message: `Mock belum menangani ${url}` }, 500);
@@ -84,6 +85,7 @@ test('Purchase Order cloud dapat disimpan sebagai draft lalu diajukan', async ()
     if (String(url).includes('/rest/v1/stock_locations?')) return responseOf([{ id: '44444444-4444-4444-8444-444444444444', name: 'Gudang Utama', kind: 'WAREHOUSE' }]);
     if (String(url).includes('/rest/v1/purchase_orders?')) return responseOf([{ id: '88888888-8888-4888-8888-888888888888', tenant_id: '22222222-2222-4222-8222-222222222222', location_id: '44444444-4444-4444-8444-444444444444', po_no: 'PO-2607-00001', status: 'DRAFT', subtotal: '0', discount_amount: '0', tax_amount: '0', other_cost: '0', grand_total: '0', created_at: '2026-07-21T00:00:00Z' }]);
     if (String(url).includes('/rest/v1/purchase_order_items?')) return responseOf([]);
+    if (String(url).includes('/rest/v1/restock_approval_requests?')) return responseOf([]);
     if (String(url).endsWith('/rest/v1/rpc/save_purchase_order')) return responseOf({ id: '88888888-8888-4888-8888-888888888888', po_no: 'PO-2607-00001', status: 'DRAFT' });
     if (String(url).endsWith('/rest/v1/rpc/transition_purchase_order')) return responseOf({ id: '88888888-8888-4888-8888-888888888888', po_no: 'PO-2607-00001', status: 'SUBMITTED' });
     return responseOf({ message: `Mock belum menangani ${url}` }, 500);
