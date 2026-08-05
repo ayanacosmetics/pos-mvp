@@ -189,7 +189,9 @@ async function midtransRequest(config,path,{method='GET',body}={}) {
 
 function validateMidtransIntentStatus(intent,payload,{identityVerifiedByLookup=false}={}) {
   if(String(payload.order_id??'')!==intent.order_id&&!identityVerifiedByLookup)throw Object.assign(new Error('Order ID Midtrans tidak cocok dengan intent Nusa'),{status:409});
-  if(String(payload.payment_type??'').toLowerCase()!=='qris')throw Object.assign(new Error('Jenis pembayaran Midtrans bukan QRIS'),{status:409});
+  const paymentType=String(payload.payment_type??'').toLowerCase();
+  const isQrisFlow=paymentType==='qris'||(paymentType==='gopay'&&Boolean(midtransQrUrl(payload)));
+  if(!isQrisFlow)throw Object.assign(new Error('Jenis pembayaran Midtrans bukan alur QRIS'),{status:409});
   if(String(payload.currency??'IDR').toUpperCase()!=='IDR')throw Object.assign(new Error('Mata uang Midtrans bukan IDR'),{status:409});
   if(Math.abs(Number(payload.gross_amount)-Number(intent.gross_amount))>0.001)throw Object.assign(new Error('Nominal Midtrans tidak cocok dengan intent Nusa'),{status:409});
   if(String(payload.transaction_status??'').toLowerCase()==='settlement'&&payload.fraud_status&&String(payload.fraud_status).toLowerCase()!=='accept')throw Object.assign(new Error('Settlement Midtrans tidak memiliki fraud status accept'),{status:409});
@@ -2394,7 +2396,7 @@ async function routeRequest(request, response, route) {
       const chargePayload=await midtransRequest(config,'/v2/charge',{method:'POST',body:{payment_type:'qris',transaction_details:{order_id:orderId,gross_amount:amount},item_details:[{id:'NUSA-SANDBOX',price:amount,quantity:1,name:'Simulasi QRIS Nusa POS'}],qris:{acquirer:'gopay'}}});
       const needsStatusVerification=String(chargePayload.order_id??'')!==orderId;
       const payload=needsStatusVerification
-        ? {...await midtransRequest(config,`/v2/${encodeURIComponent(orderId)}/status`),actions:chargePayload.actions}
+        ? {...await midtransRequest(config,`/v2/${encodeURIComponent(orderId)}/status`),actions:chargePayload.actions,acquirer:chargePayload.acquirer??'gopay'}
         : chargePayload;
       const updated=await updateMidtransIntent(intent,payload,'CHARGE',null,{identityVerifiedByLookup:needsStatusVerification});
       await rest('payment_gateway_accounts',`id=eq.${config.id}&tenant_id=eq.${context.tenantId}`,{method:'PATCH',body:{status:'VERIFIED',merchant_id:String(payload.merchant_id??config.merchant_id??'')||null,verified_at:new Date().toISOString(),updated_at:new Date().toISOString()}});

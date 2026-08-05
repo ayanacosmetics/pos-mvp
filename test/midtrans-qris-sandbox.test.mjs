@@ -133,7 +133,7 @@ test('Charge Sandbox memeriksa status saat respons awal tidak membawa Order ID y
     if(target==='https://api.sandbox.midtrans.com/v2/charge')return jsonResponse({status_code:'201',transaction_id:'midtrans-qr',gross_amount:'10000.00',currency:'IDR',payment_type:'qris',transaction_status:'pending',actions:[{name:'generate-qr-code',url:'https://api.midtrans.com/v2/qris/midtrans-qr/qr-code'}]});
     if(target.includes('https://api.sandbox.midtrans.com/v2/NUSA-SBX-')&&target.endsWith('/status')){
       const orderId=decodeURIComponent(target.split('/v2/')[1].slice(0,-'/status'.length));
-      return jsonResponse({status_code:'201',transaction_id:'midtrans-qr',order_id:`MIDTRANS-${orderId}`,gross_amount:'10000.00',currency:'IDR',payment_type:'qris',transaction_status:'pending'});
+      return jsonResponse({status_code:'201',transaction_id:'midtrans-qr',order_id:`MIDTRANS-${orderId}`,gross_amount:'10000.00',currency:'IDR',payment_type:'gopay',transaction_status:'pending'});
     }
     if(target.includes('/rest/v1/payment_gateway_intents?')&&options.method==='PATCH')return jsonResponse([{id:ids.intent,order_id:'verified',gross_amount:10000,status:'PENDING'}]);
     if(target.includes('/rest/v1/payment_gateway_accounts?')&&options.method==='PATCH')return jsonResponse([]);
