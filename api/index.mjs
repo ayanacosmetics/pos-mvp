@@ -2389,9 +2389,12 @@ async function routeRequest(request, response, route) {
     if(!Number.isSafeInteger(amount)||amount<1000||amount>10000000)throw Object.assign(new Error('Nominal simulasi harus bilangan bulat Rp1.000 sampai Rp10.000.000'),{status:400});
     const orderId=`NUSA-SBX-${Date.now().toString(36).toUpperCase()}-${randomBytes(6).toString('hex').toUpperCase()}`;
     const created=await rest('payment_gateway_intents','',{method:'POST',prefer:'return=representation',body:{tenant_id:context.tenantId,outlet_id:context.outlet?.id??null,cashier_id:session.authUser.id,gateway_account_id:config.id,provider:'MIDTRANS',environment:'SANDBOX',channel:'QRIS_DYNAMIC',order_id:orderId,gross_amount:amount,currency:'IDR',status:'CREATING'}});
-    const intent=created[0];
+    const intent={...created[0],tenant_id:context.tenantId,environment:'SANDBOX',order_id:orderId,gross_amount:amount};
     try{
-      const payload=await midtransRequest(config,'/v2/charge',{method:'POST',body:{payment_type:'qris',transaction_details:{order_id:orderId,gross_amount:amount},item_details:[{id:'NUSA-SANDBOX',price:amount,quantity:1,name:'Simulasi QRIS Nusa POS'}],qris:{acquirer:'gopay'}}});
+      const chargePayload=await midtransRequest(config,'/v2/charge',{method:'POST',body:{payment_type:'qris',transaction_details:{order_id:orderId,gross_amount:amount},item_details:[{id:'NUSA-SANDBOX',price:amount,quantity:1,name:'Simulasi QRIS Nusa POS'}],qris:{acquirer:'gopay'}}});
+      const payload=String(chargePayload.order_id??'')===orderId
+        ? chargePayload
+        : {...await midtransRequest(config,`/v2/${encodeURIComponent(orderId)}/status`),actions:chargePayload.actions};
       const updated=await updateMidtransIntent(intent,payload,'CHARGE',null);
       await rest('payment_gateway_accounts',`id=eq.${config.id}&tenant_id=eq.${context.tenantId}`,{method:'PATCH',body:{status:'VERIFIED',merchant_id:String(payload.merchant_id??config.merchant_id??'')||null,verified_at:new Date().toISOString(),updated_at:new Date().toISOString()}});
       return send(response,201,{intent:{id:updated.id,orderId:updated.order_id,transactionId:updated.gateway_transaction_id,amount:Number(updated.gross_amount),status:updated.status,qrUrl:updated.qr_url,expiresAt:updated.expires_at,createdAt:updated.created_at},environment:'SANDBOX',operationalMutation:false});

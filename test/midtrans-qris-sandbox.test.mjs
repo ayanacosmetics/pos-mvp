@@ -110,12 +110,41 @@ test('Charge Sandbox menghasilkan intent teknis tanpa memanggil sale RPC',async(
   };
   try{
     const result=await callApi('POST','payment-gateways/midtrans/sandbox/intents',{amount:10000},{authorization:'Bearer token'});
-    assert.equal(result.status,201);
+    assert.equal(result.status,201,JSON.stringify(result.body));
     assert.equal(result.body.environment,'SANDBOX');
     assert.equal(result.body.operationalMutation,false);
     assert.equal(result.body.intent.status,'PENDING');
     assert.ok(result.body.intent.qrUrl.includes('midtrans.com'));
     assert.equal(calls.some(({target})=>/complete_sale|\/rest\/v1\/(sales|payments|stock_balances)/.test(target)),false);
+  }finally{globalThis.fetch=originalFetch;restore();}
+});
+
+test('Charge Sandbox memeriksa status saat respons awal tidak membawa Order ID yang cocok',async()=>{
+  const restore=environment(),originalFetch=globalThis.fetch,calls=[];
+  const account=await encryptedAccount();
+  globalThis.fetch=async(url,options={})=>{
+    const target=String(url);calls.push(target);
+    if(target.endsWith('/auth/v1/user'))return jsonResponse({id:ids.user,email:'owner@example.com'});
+    if(target.includes('/rest/v1/profiles?'))return jsonResponse([{user_id:ids.user,tenant_id:ids.tenant,role:'OWNER',active:true,display_name:'Owner'}]);
+    if(target.includes('/rest/v1/outlets?'))return jsonResponse([{id:ids.outlet,tenant_id:ids.tenant,name:'Toko'}]);
+    if(target.includes('/rest/v1/stock_locations?'))return jsonResponse([{id:ids.location,outlet_id:ids.outlet,name:'Toko',kind:'STORE'}]);
+    if(target.includes('/rest/v1/payment_gateway_accounts?')&&options.method!=='PATCH')return jsonResponse([account]);
+    if(target.endsWith('/rest/v1/payment_gateway_intents'))return jsonResponse([{id:ids.intent}]);
+    if(target==='https://api.sandbox.midtrans.com/v2/charge')return jsonResponse({status_code:'201',transaction_id:'midtrans-qr',gross_amount:'10000.00',currency:'IDR',payment_type:'qris',transaction_status:'pending',actions:[{name:'generate-qr-code',url:'https://api.midtrans.com/v2/qris/midtrans-qr/qr-code'}]});
+    if(target.includes('https://api.sandbox.midtrans.com/v2/NUSA-SBX-')&&target.endsWith('/status')){
+      const orderId=decodeURIComponent(target.split('/v2/')[1].slice(0,-'/status'.length));
+      return jsonResponse({status_code:'201',transaction_id:'midtrans-qr',order_id:orderId,gross_amount:'10000.00',currency:'IDR',payment_type:'qris',transaction_status:'pending'});
+    }
+    if(target.includes('/rest/v1/payment_gateway_intents?')&&options.method==='PATCH')return jsonResponse([{id:ids.intent,order_id:'verified',gross_amount:10000,status:'PENDING'}]);
+    if(target.includes('/rest/v1/payment_gateway_accounts?')&&options.method==='PATCH')return jsonResponse([]);
+    if(target.endsWith('/rest/v1/payment_gateway_events'))return jsonResponse([]);
+    return jsonResponse({message:`Mock belum menangani ${target}`},500);
+  };
+  try{
+    const result=await callApi('POST','payment-gateways/midtrans/sandbox/intents',{amount:10000},{authorization:'Bearer token'});
+    assert.equal(result.status,201,JSON.stringify(result.body));
+    assert.equal(result.body.intent.status,'PENDING');
+    assert.ok(calls.some((target)=>target.includes('/status')));
   }finally{globalThis.fetch=originalFetch;restore();}
 });
 
