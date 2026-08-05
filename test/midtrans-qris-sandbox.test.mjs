@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import handler from '../api/index.mjs';
 
 const ids={user:'11111111-1111-4111-8111-111111111111',tenant:'22222222-2222-4222-8222-222222222222',outlet:'33333333-3333-4333-8333-333333333333',location:'44444444-4444-4444-8444-444444444444',intent:'55555555-5555-4555-8555-555555555555',account:'66666666-6666-4666-8666-666666666666'};
-const serverKey='SB-Mid-server-test-tenant-secret-123';
+const serverKey='Mid-server-sandbox-test-tenant-secret-123';
 const masterKey=Buffer.alloc(32,7);
 const jsonResponse=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json'}});
 

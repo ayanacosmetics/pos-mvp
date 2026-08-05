@@ -138,8 +138,10 @@ async function midtransAccount(tenantId,environment='SANDBOX',{required=true}={}
     throw Object.assign(new Error(`Akun Midtrans ${environment} belum dihubungkan oleh Owner usaha`),{status:503});
   }
   const serverKey=await decryptPaymentCredential(account);
-  const expectedPrefix=environment==='SANDBOX'?'SB-Mid-server-':'Mid-server-';
-  if(!serverKey.startsWith(expectedPrefix))throw Object.assign(new Error(`Server Key Midtrans tidak cocok untuk ${environment}`),{status:503});
+  const validPrefix=environment==='SANDBOX'
+    ? (serverKey.startsWith('SB-Mid-server-')||serverKey.startsWith('Mid-server-'))
+    : serverKey.startsWith('Mid-server-');
+  if(!validPrefix)throw Object.assign(new Error(`Server Key Midtrans tidak cocok untuk ${environment}`),{status:503});
   return {...account,serverKey,baseUrl:environment==='SANDBOX'?'https://api.sandbox.midtrans.com':'https://api.midtrans.com'};
 }
 
@@ -2365,7 +2367,7 @@ async function routeRequest(request, response, route) {
   if(request.method==='PUT'&&route==='payment-gateways/midtrans/sandbox/credentials'){
     requireTenantOwner(session);
     const input=bodyOf(request),serverKey=String(input.serverKey??'').trim(),merchantId=String(input.merchantId??'').trim();
-    if(!serverKey.startsWith('SB-Mid-server-')||serverKey.length<24||serverKey.length>300)throw Object.assign(new Error('Gunakan Server Key dari lingkungan Sandbox Midtrans'),{status:400});
+    if(!(serverKey.startsWith('SB-Mid-server-')||serverKey.startsWith('Mid-server-'))||serverKey.length<24||serverKey.length>300)throw Object.assign(new Error('Gunakan Server Key dari lingkungan Sandbox Midtrans'),{status:400});
     if(merchantId.length>100)throw Object.assign(new Error('Merchant ID terlalu panjang'),{status:400});
     const encrypted=await encryptPaymentCredential(serverKey);
     const saved=await rest('payment_gateway_accounts','on_conflict=tenant_id,provider,environment',{method:'POST',prefer:'resolution=merge-duplicates,return=representation',body:{tenant_id:context.tenantId,provider:'MIDTRANS',environment:'SANDBOX',status:'CONFIGURED',merchant_id:merchantId||null,server_key_ciphertext:encrypted.ciphertext,server_key_iv:encrypted.iv,encryption_key_version:encrypted.keyVersion,configured_by:session.authUser.id,verified_at:null,updated_at:new Date().toISOString()}});
