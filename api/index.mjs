@@ -207,9 +207,11 @@ async function midtransRequest(config,path,{method='GET',body}={}) {
   const text=await response.text();
   let payload={};
   try{payload=text?JSON.parse(text):{};}catch{throw Object.assign(new Error('Respons Midtrans tidak dapat dibaca'),{status:502});}
-  if(!response.ok){
+  const payloadStatusCode=Number(payload?.status_code);
+  if(!response.ok||(Number.isFinite(payloadStatusCode)&&payloadStatusCode>=400)){
     const error=new Error(String(payload.status_message??payload.error_messages?.[0]??`Midtrans ${response.status}`).slice(0,240));
-    error.status=response.status>=500?502:response.status;error.details=sanitizedMidtransPayload(payload);throw error;
+    const observedStatus=Number.isFinite(payloadStatusCode)?payloadStatusCode:response.status;
+    error.status=observedStatus>=500?502:Math.max(400,Math.min(observedStatus,499));error.details=sanitizedMidtransPayload(payload);throw error;
   }
   return payload;
 }
@@ -2423,14 +2425,8 @@ async function routeRequest(request, response, route) {
     try{
       const chargePayload=await midtransRequest(config,'/v2/charge',{method:'POST',body:{payment_type:'qris',transaction_details:{order_id:orderId,gross_amount:amount},item_details:[{id:'NUSA-SANDBOX',price:amount,quantity:1,name:'Simulasi QRIS Nusa POS'}],qris:{acquirer:'gopay'}}});
       diagnosticPayload=chargePayload;
-      const needsStatusVerification=String(chargePayload.order_id??'')!==orderId;
-      let payload=chargePayload;
-      if(needsStatusVerification){
-        const statusPayload=await midtransRequest(config,`/v2/${encodeURIComponent(orderId)}/status`);
-        payload={...statusPayload,actions:chargePayload.actions,acquirer:chargePayload.acquirer??statusPayload.acquirer};
-        diagnosticPayload=payload;
-      }
-      const updated=await updateMidtransIntent(intent,payload,'CHARGE',null,{identityVerifiedByLookup:needsStatusVerification});
+      const payload=chargePayload;
+      const updated=await updateMidtransIntent(intent,payload,'CHARGE');
       await rest('payment_gateway_accounts',`id=eq.${config.id}&tenant_id=eq.${context.tenantId}`,{method:'PATCH',body:{status:'VERIFIED',merchant_id:String(payload.merchant_id??config.merchant_id??'')||null,verified_at:new Date().toISOString(),updated_at:new Date().toISOString()}});
       return send(response,201,{intent:{id:updated.id,orderId:updated.order_id,transactionId:updated.gateway_transaction_id,amount:Number(updated.gross_amount),status:updated.status,qrUrl:updated.qr_url,expiresAt:updated.expires_at,createdAt:updated.created_at},environment:'SANDBOX',operationalMutation:false});
     }catch(error){

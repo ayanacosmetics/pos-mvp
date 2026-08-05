@@ -119,7 +119,7 @@ test('Charge Sandbox menghasilkan intent teknis tanpa memanggil sale RPC',async(
   }finally{globalThis.fetch=originalFetch;restore();}
 });
 
-test('Charge Sandbox memeriksa status saat respons awal tidak membawa Order ID yang cocok',async()=>{
+test('Charge Sandbox menolak respons tanpa Order ID dan tidak menutupi penyebabnya dengan status lookup',async()=>{
   const restore=environment(),originalFetch=globalThis.fetch,calls=[];
   const account=await encryptedAccount();
   globalThis.fetch=async(url,options={})=>{
@@ -142,9 +142,10 @@ test('Charge Sandbox memeriksa status saat respons awal tidak membawa Order ID y
   };
   try{
     const result=await callApi('POST','payment-gateways/midtrans/sandbox/intents',{amount:10000},{authorization:'Bearer token'});
-    assert.equal(result.status,201,JSON.stringify(result.body));
-    assert.equal(result.body.intent.status,'PENDING');
-    assert.ok(calls.some((target)=>target.includes('/status')));
+    assert.equal(result.status,409,JSON.stringify(result.body));
+    assert.match(result.body.error,/Order ID Midtrans tidak cocok/);
+    assert.match(result.body.error,/kode 201/);
+    assert.equal(calls.some((target)=>target.includes('/status')),false);
   }finally{globalThis.fetch=originalFetch;restore();}
 });
 
