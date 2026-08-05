@@ -5799,12 +5799,62 @@ async function loadPlatformInfrastructure() {
   const button=el('refresh-platform-infrastructure');
   if(button)button.disabled=true;
   try{
-    state.platformInfrastructure=await request('/api/platform/infrastructure');
+    const [infrastructure,sandbox]=await Promise.all([
+      request('/api/platform/infrastructure'),
+      request('/api/platform/payment-gateways/midtrans/sandbox')
+    ]);
+    state.platformInfrastructure=infrastructure;
+    state.midtransSandbox=sandbox;
     renderPlatformInfrastructure();
+    renderMidtransSandbox();
   }catch(error){
     el('platform-infrastructure-status').className='health-summary critical';
     el('platform-infrastructure-status').innerHTML=`<div><span class="health-indicator"></span><strong>Akses infrastruktur gagal</strong><small>${escapeHtml(error.message)}</small></div>`;
   }finally{if(button)button.disabled=false;}
+}
+
+function midtransSandboxStatusLabel(status){
+  return ({CREATING:'Membuat QR',PENDING:'Menunggu simulasi',SETTLEMENT:'Simulasi berhasil',EXPIRED:'Kedaluwarsa',DENIED:'Ditolak',CANCELLED:'Dibatalkan',ERROR:'Gagal'})[status]??status;
+}
+
+function renderMidtransSandbox(){
+  const data=state.midtransSandbox??{configured:false,intents:[]};
+  el('midtrans-sandbox-badge').textContent=data.configured?'SANDBOX SIAP':'BELUM DIKONFIGURASI';
+  el('create-midtrans-sandbox').disabled=!data.configured;
+  const rows=data.intents??[];
+  el('midtrans-sandbox-intents').innerHTML=rows.length?rows.map((intent)=>`<article class="midtrans-sandbox-row" data-midtrans-intent="${escapeHtml(intent.id)}"><div><strong>${escapeHtml(intent.orderId)}</strong><small>${new Date(intent.createdAt).toLocaleString('id-ID')} · ${escapeHtml(midtransSandboxStatusLabel(intent.status))}</small></div><strong>${money.format(intent.amount)}</strong><span class="status-badge ${intent.status==='SETTLEMENT'?'approved':intent.status==='PENDING'?'submitted':intent.status==='ERROR'?'danger':''}">${escapeHtml(intent.status)}</span><button class="button secondary open-midtrans-sandbox" type="button">Lihat</button></article>`).join(''):`<div class="empty-state compact">${data.configured?'Belum ada simulasi.':'Pasang secret Sandbox pada Cloudflare sebelum membuat QR.'}</div>`;
+}
+
+function openMidtransSandboxDialog(intent){
+  if(!intent)return;
+  state.activeMidtransSandboxIntent=intent;
+  el('midtrans-sandbox-qr').innerHTML=intent.qrUrl?`<img src="${escapeHtml(intent.qrUrl)}" alt="QRIS Sandbox Midtrans"><strong>${money.format(intent.amount)}</strong>`:'<div class="empty-state compact">QR belum tersedia. Periksa status atau buat simulasi baru.</div>';
+  el('midtrans-sandbox-dialog-status').innerHTML=`<span class="status-badge ${intent.status==='SETTLEMENT'?'approved':intent.status==='PENDING'?'submitted':intent.status==='ERROR'?'danger':''}">${escapeHtml(midtransSandboxStatusLabel(intent.status))}</span><small>Order ID</small><code>${escapeHtml(intent.orderId)}</code>${intent.transactionId?`<small>Transaction ID</small><code>${escapeHtml(intent.transactionId)}</code>`:''}`;
+  el('refresh-midtrans-sandbox').disabled=!['CREATING','PENDING'].includes(intent.status);
+  if(!el('midtrans-sandbox-dialog').open)el('midtrans-sandbox-dialog').showModal();
+}
+
+async function createMidtransSandbox(event){
+  event.preventDefault();
+  const button=el('create-midtrans-sandbox');button.disabled=true;el('midtrans-sandbox-error').textContent='';
+  try{
+    const result=await request('/api/platform/payment-gateways/midtrans/sandbox/intents',{method:'POST',body:JSON.stringify({amount:Number(el('midtrans-sandbox-amount').value)})});
+    if(result.environment!=='SANDBOX'||result.operationalMutation!==false)throw new Error('Respons simulasi tidak memenuhi pengaman Sandbox');
+    state.midtransSandbox.intents=[result.intent,...(state.midtransSandbox.intents??[])];renderMidtransSandbox();openMidtransSandboxDialog(result.intent);
+  }catch(error){el('midtrans-sandbox-error').textContent=error.message;}
+  finally{button.disabled=!(state.midtransSandbox?.configured);}
+}
+
+async function refreshMidtransSandbox(){
+  const intent=state.activeMidtransSandboxIntent;if(!intent)return;
+  const button=el('refresh-midtrans-sandbox');button.disabled=true;
+  try{
+    const result=await request(`/api/platform/payment-gateways/midtrans/sandbox/intents/${encodeURIComponent(intent.id)}/refresh`,{method:'POST',body:'{}'});
+    if(result.environment!=='SANDBOX'||result.operationalMutation!==false)throw new Error('Respons status tidak memenuhi pengaman Sandbox');
+    const index=(state.midtransSandbox.intents??[]).findIndex((item)=>item.id===intent.id);
+    if(index>=0)state.midtransSandbox.intents[index]={...state.midtransSandbox.intents[index],...result.intent};
+    renderMidtransSandbox();openMidtransSandboxDialog({...intent,...result.intent});
+  }catch(error){toast(error.message);button.disabled=false;}
 }
 
 async function loadSettingsWorkspace() {
@@ -8602,6 +8652,15 @@ el('refresh-backups').addEventListener('click', loadBackupHistory);
 el('refresh-settings').addEventListener('click', loadSettingsWorkspace);
 el('refresh-system-health').addEventListener('click', loadSystemHealth);
 el('refresh-platform-infrastructure').addEventListener('click',loadPlatformInfrastructure);
+el('midtrans-sandbox-form').addEventListener('submit',createMidtransSandbox);
+el('midtrans-sandbox-intents').addEventListener('click',(event)=>{
+  const row=event.target.closest('.midtrans-sandbox-row');
+  if(!row||!event.target.closest('.open-midtrans-sandbox'))return;
+  openMidtransSandboxDialog((state.midtransSandbox?.intents??[]).find((item)=>item.id===row.dataset.midtransIntent));
+});
+el('refresh-midtrans-sandbox').addEventListener('click',refreshMidtransSandbox);
+el('close-midtrans-sandbox').addEventListener('click',()=>el('midtrans-sandbox-dialog').close());
+el('dismiss-midtrans-sandbox').addEventListener('click',()=>el('midtrans-sandbox-dialog').close());
 document.querySelectorAll('[data-maintenance-mode]').forEach((button)=>button.addEventListener('click',()=>showDataMaintenanceMode(button.dataset.maintenanceMode)));
 el('data-reset-form').addEventListener('change',(event)=>{if(event.target.matches('input[name="data-reset-scope"]'))syncDataResetForm(event);});
 el('request-data-reset-otp').addEventListener('click',requestDataResetOtp);

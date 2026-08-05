@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { compareCost, quoteBasket } from '../packages/domain/src/pricing.mjs';
 import { summarizeExpiryBatches, todayInTimeZone } from '../packages/domain/src/expiry.mjs';
 import { applySaleAdjustment, normalizeSaleAdjustment, saleAdjustmentFingerprintPayload } from '../packages/domain/src/sale-adjustment.mjs';
@@ -86,8 +86,92 @@ const env = () => ({
   cloudflareApiToken: process.env.CLOUDFLARE_ANALYTICS_TOKEN ?? '',
   cloudflareScriptName: process.env.CLOUDFLARE_SCRIPT_NAME ?? 'kasir-nusa-pos',
   cloudflarePlan: String(process.env.CLOUDFLARE_WORKERS_PLAN ?? 'FREE').toUpperCase(),
-  supabaseStorageLimitBytes: Math.max(1,Number(process.env.SUPABASE_STORAGE_LIMIT_BYTES)||1073741824)
+  supabaseStorageLimitBytes: Math.max(1,Number(process.env.SUPABASE_STORAGE_LIMIT_BYTES)||1073741824),
+  midtransServerKey: process.env.MIDTRANS_SERVER_KEY ?? '',
+  midtransEnvironment: String(process.env.MIDTRANS_ENVIRONMENT ?? '').trim().toUpperCase()
 });
+
+function midtransSandboxConfigured() {
+  const config=env();
+  return config.midtransEnvironment==='SANDBOX'&&config.midtransServerKey.startsWith('SB-Mid-server-');
+}
+
+function midtransSandboxConfig() {
+  const config=env();
+  if(!midtransSandboxConfigured()){
+    const error=new Error('Midtrans Sandbox belum dikonfigurasi. Pasang MIDTRANS_SERVER_KEY Sandbox dan MIDTRANS_ENVIRONMENT=SANDBOX.');
+    error.status=503;throw error;
+  }
+  return {serverKey:config.midtransServerKey,baseUrl:'https://api.sandbox.midtrans.com'};
+}
+
+function safeSecretEqual(left,right) {
+  const a=Buffer.from(String(left??'')),b=Buffer.from(String(right??''));
+  return a.length===b.length&&a.length>0&&timingSafeEqual(a,b);
+}
+
+function sanitizedMidtransPayload(payload={}) {
+  const allowed=['status_code','status_message','transaction_id','order_id','merchant_id','gross_amount','currency','payment_type','transaction_time','settlement_time','expiry_time','transaction_status','fraud_status','acquirer','issuer','reference_id'];
+  return Object.fromEntries(allowed.filter((key)=>payload[key]!==undefined).map((key)=>[key,String(payload[key]).slice(0,300)]));
+}
+
+function midtransPayloadHash(payload={}) {
+  return createHash('sha256').update(JSON.stringify(sanitizedMidtransPayload(payload))).digest('hex');
+}
+
+function midtransStatus(value) {
+  return ({pending:'PENDING',settlement:'SETTLEMENT',expire:'EXPIRED',deny:'DENIED',cancel:'CANCELLED'})[String(value??'').toLowerCase()]??'ERROR';
+}
+
+function midtransQrUrl(payload={}) {
+  const action=(Array.isArray(payload.actions)?payload.actions:[]).find((item)=>['generate-qr-code-v2','generate-qr-code'].includes(item?.name));
+  if(!action?.url)return null;
+  try{
+    const url=new URL(action.url);
+    return url.protocol==='https:'&&/(^|\.)midtrans\.com$/i.test(url.hostname)?url.toString():null;
+  }catch{return null;}
+}
+
+async function midtransSandboxRequest(path,{method='GET',body}={}) {
+  const config=midtransSandboxConfig();
+  const response=await fetch(`${config.baseUrl}${path}`,{
+    method,headers:{authorization:`Basic ${Buffer.from(`${config.serverKey}:`).toString('base64')}`,'content-type':'application/json','accept':'application/json'},
+    ...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(10000)
+  });
+  const text=await response.text();
+  let payload={};
+  try{payload=text?JSON.parse(text):{};}catch{throw Object.assign(new Error('Respons Midtrans tidak dapat dibaca'),{status:502});}
+  if(!response.ok){
+    const error=new Error(String(payload.status_message??payload.error_messages?.[0]??`Midtrans ${response.status}`).slice(0,240));
+    error.status=response.status>=500?502:response.status;error.details=sanitizedMidtransPayload(payload);throw error;
+  }
+  return payload;
+}
+
+function validateMidtransIntentStatus(intent,payload) {
+  if(String(payload.order_id??'')!==intent.order_id)throw Object.assign(new Error('Order ID Midtrans tidak cocok dengan intent Nusa'),{status:409});
+  if(String(payload.payment_type??'').toLowerCase()!=='qris')throw Object.assign(new Error('Jenis pembayaran Midtrans bukan QRIS'),{status:409});
+  if(String(payload.currency??'IDR').toUpperCase()!=='IDR')throw Object.assign(new Error('Mata uang Midtrans bukan IDR'),{status:409});
+  if(Math.abs(Number(payload.gross_amount)-Number(intent.gross_amount))>0.001)throw Object.assign(new Error('Nominal Midtrans tidak cocok dengan intent Nusa'),{status:409});
+  if(String(payload.transaction_status??'').toLowerCase()==='settlement'&&payload.fraud_status&&String(payload.fraud_status).toLowerCase()!=='accept')throw Object.assign(new Error('Settlement Midtrans tidak memiliki fraud status accept'),{status:409});
+}
+
+async function recordMidtransEvent(intentId,source,payload,processingResult,signatureVerified=null) {
+  await rest('payment_gateway_events','',{method:'POST',body:{intent_id:intentId,source,event_status:String(payload?.transaction_status??''),signature_verified:signatureVerified,payload_hash:midtransPayloadHash(payload),sanitized_payload:sanitizedMidtransPayload(payload),processing_result:String(processingResult).slice(0,500)}});
+}
+
+async function updateMidtransSandboxIntent(intent,payload,source,signatureVerified=null) {
+  validateMidtransIntentStatus(intent,payload);
+  const observedStatus=midtransStatus(payload.transaction_status);
+  const terminal=new Set(['SETTLEMENT','EXPIRED','DENIED','CANCELLED']);
+  const status=observedStatus==='SETTLEMENT'||intent.status==='SETTLEMENT'?'SETTLEMENT':terminal.has(intent.status)?intent.status:observedStatus;
+  const body={status,gateway_transaction_id:String(payload.transaction_id??intent.gateway_transaction_id??'')||null,qr_url:midtransQrUrl(payload)??intent.qr_url??null,gateway_status_code:String(payload.status_code??'')||null,gateway_status_message:String(payload.status_message??'').slice(0,500)||null,last_gateway_payload:sanitizedMidtransPayload(payload),updated_at:new Date().toISOString()};
+  if(payload.expiry_time){const expiry=new Date(String(payload.expiry_time).replace(' ','T')+'+07:00');if(Number.isFinite(expiry.getTime()))body.expires_at=expiry.toISOString();}
+  if(observedStatus==='SETTLEMENT'&&!intent.settled_at)body.settled_at=new Date().toISOString();
+  const rows=await rest('payment_gateway_intents',`id=eq.${intent.id}&environment=eq.SANDBOX`,{method:'PATCH',prefer:'return=representation',body});
+  await recordMidtransEvent(intent.id,source,payload,`Sandbox mengamati ${observedStatus}, status tersimpan ${status}; tidak ada penjualan atau stok yang diubah`,signatureVerified);
+  return rows[0]??{...intent,...body};
+}
 
 function isPlatformAdmin(session) {
   const allowed = new Set(env().platformAdminIds.split(',').map((value) => value.trim()).filter(Boolean));
@@ -1978,6 +2062,22 @@ async function routeRequest(request, response, route) {
     return send(response, 200, { status: 'ok', version: '2.17.1-cloud', database: 'supabase', configured: Boolean(config.url && config.anon && config.service) });
   }
 
+  if(request.method==='POST'&&route==='webhooks/midtrans'){
+    const config=midtransSandboxConfig();
+    let payload;
+    try{payload=bodyOf(request);}catch{throw Object.assign(new Error('Payload webhook Midtrans bukan JSON yang valid'),{status:400});}
+    const orderId=String(payload.order_id??'').trim(),statusCode=String(payload.status_code??''),grossAmount=String(payload.gross_amount??''),signature=String(payload.signature_key??'');
+    if(!orderId||!statusCode||!grossAmount||!signature)throw Object.assign(new Error('Payload webhook Midtrans tidak lengkap'),{status:400});
+    const expected=createHash('sha512').update(`${orderId}${statusCode}${grossAmount}${config.serverKey}`).digest('hex');
+    if(!safeSecretEqual(signature,expected))throw Object.assign(new Error('Signature webhook Midtrans tidak valid'),{status:401});
+    const rows=await rest('payment_gateway_intents',`provider=eq.MIDTRANS&environment=eq.SANDBOX&order_id=eq.${encodeURIComponent(orderId)}&select=*&limit=1`);
+    const intent=rows[0];
+    if(!intent)throw Object.assign(new Error('Intent Sandbox Midtrans tidak ditemukan'),{status:404});
+    const verified=await midtransSandboxRequest(`/v2/${encodeURIComponent(orderId)}/status`);
+    const updated=await updateMidtransSandboxIntent(intent,verified,'WEBHOOK',true);
+    return send(response,200,{received:true,environment:'SANDBOX',status:updated.status,operationalMutation:false});
+  }
+
   if (request.method === 'POST' && route === 'register-owner') {
     const input = bodyOf(request);
     const ownerName = String(input.ownerName ?? '').trim().replace(/\s+/g, ' ');
@@ -2209,6 +2309,47 @@ async function routeRequest(request, response, route) {
         ?cloudflareResult.value
         :{configured:true,available:false,message:cloudflareResult.reason?.message??'Metrik Cloudflare belum tersedia'}
     });
+  }
+
+  if(request.method==='GET'&&route==='platform/payment-gateways/midtrans/sandbox'){
+    requirePlatformAdmin(session);
+    const configured=midtransSandboxConfigured();
+    let intents=[];
+    try{
+      intents=await rest('payment_gateway_intents',`tenant_id=eq.${context.tenantId}&provider=eq.MIDTRANS&environment=eq.SANDBOX&select=*&order=created_at.desc&limit=20`);
+    }catch(error){
+      if(!/payment_gateway_intents/i.test(`${error.message} ${JSON.stringify(error.details??{})}`))throw error;
+    }
+    return send(response,200,{configured,environment:'SANDBOX',operationalMutation:false,intents:intents.map((item)=>({id:item.id,orderId:item.order_id,transactionId:item.gateway_transaction_id,amount:Number(item.gross_amount),status:item.status,qrUrl:item.qr_url,expiresAt:item.expires_at,settledAt:item.settled_at,failureMessage:item.failure_message,createdAt:item.created_at,updatedAt:item.updated_at}))});
+  }
+
+  if(request.method==='POST'&&route==='platform/payment-gateways/midtrans/sandbox/intents'){
+    requirePlatformAdmin(session);midtransSandboxConfig();
+    const input=bodyOf(request),amount=Number(input.amount);
+    if(!Number.isSafeInteger(amount)||amount<1000||amount>10000000)throw Object.assign(new Error('Nominal simulasi harus bilangan bulat Rp1.000 sampai Rp10.000.000'),{status:400});
+    const orderId=`NUSA-SBX-${Date.now().toString(36).toUpperCase()}-${randomBytes(6).toString('hex').toUpperCase()}`;
+    const created=await rest('payment_gateway_intents','',{method:'POST',prefer:'return=representation',body:{tenant_id:context.tenantId,outlet_id:context.outlet?.id??null,cashier_id:session.authUser.id,provider:'MIDTRANS',environment:'SANDBOX',channel:'QRIS_DYNAMIC',order_id:orderId,gross_amount:amount,currency:'IDR',status:'CREATING'}});
+    const intent=created[0];
+    try{
+      const payload=await midtransSandboxRequest('/v2/charge',{method:'POST',body:{payment_type:'qris',transaction_details:{order_id:orderId,gross_amount:amount},item_details:[{id:'NUSA-SANDBOX',price:amount,quantity:1,name:'Simulasi QRIS Nusa POS'}],qris:{acquirer:'gopay'}}});
+      const updated=await updateMidtransSandboxIntent(intent,payload,'CHARGE',null);
+      return send(response,201,{intent:{id:updated.id,orderId:updated.order_id,transactionId:updated.gateway_transaction_id,amount:Number(updated.gross_amount),status:updated.status,qrUrl:updated.qr_url,expiresAt:updated.expires_at,createdAt:updated.created_at},environment:'SANDBOX',operationalMutation:false});
+    }catch(error){
+      await rest('payment_gateway_intents',`id=eq.${intent.id}`,{method:'PATCH',body:{status:'ERROR',failure_code:'CHARGE_FAILED',failure_message:String(error.message).slice(0,500),updated_at:new Date().toISOString()}}).catch(()=>null);
+      await recordMidtransEvent(intent.id,'SYSTEM',{},`Charge gagal: ${String(error.message).slice(0,300)}`,null).catch(()=>null);
+      throw error;
+    }
+  }
+
+  if(request.method==='POST'&&/^platform\/payment-gateways\/midtrans\/sandbox\/intents\/[^/]+\/refresh$/.test(route)){
+    requirePlatformAdmin(session);midtransSandboxConfig();
+    const intentId=route.split('/')[5];
+    const rows=await rest('payment_gateway_intents',`tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(intentId)}&provider=eq.MIDTRANS&environment=eq.SANDBOX&select=*&limit=1`);
+    const intent=rows[0];
+    if(!intent)throw Object.assign(new Error('Intent Sandbox Midtrans tidak ditemukan'),{status:404});
+    const payload=await midtransSandboxRequest(`/v2/${encodeURIComponent(intent.order_id)}/status`);
+    const updated=await updateMidtransSandboxIntent(intent,payload,'STATUS_CHECK',null);
+    return send(response,200,{intent:{id:updated.id,orderId:updated.order_id,transactionId:updated.gateway_transaction_id,amount:Number(updated.gross_amount),status:updated.status,qrUrl:updated.qr_url,expiresAt:updated.expires_at,settledAt:updated.settled_at,updatedAt:updated.updated_at},environment:'SANDBOX',operationalMutation:false});
   }
 
   if (request.method === 'GET' && route === 'system/health') {
