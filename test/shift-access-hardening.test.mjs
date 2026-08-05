@@ -21,6 +21,6 @@ test('versi kandidat final tampil pada API, aplikasi, dan cache PWA', async () =
   ]);
   assert.match(api, /2\.17\.1-cloud/);
   assert.match(html, /Migrasi lengkap Kaspin .* v2\.17\.1/);
-  assert.match(worker, /nusa-pos-shell-v196/);
+  assert.match(worker, /nusa-pos-shell-v197/);
   assert.equal(JSON.parse(pkgText).version, '2.17.1');
 });

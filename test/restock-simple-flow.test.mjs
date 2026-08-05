@@ -71,6 +71,9 @@ test('kontrol pesanan berada di atas daftar dan hanya daftar barang yang menggul
   assert.match(css, /#page-restock #restock-planning-list\{[^}]*max-height:calc\(100dvh - 405px\)[^}]*overflow-y:auto/);
   assert.match(css, /#page-restock \.planning-draft-actions\{[^}]*z-index:3/);
   assert.match(css, /@media\(max-width:700px\)[\s\S]*#page-restock \.planning-draft-actions\{grid-template-columns:minmax\(0,1fr\) auto/);
+  assert.match(css, /#page-restock \.planning-compact-row\{grid-template-columns:50px minmax\(0,1fr\) 14px;grid-template-areas:"thumb product arrow" "thumb choice arrow"/);
+  assert.match(css, /#page-restock \.planning-compact-product strong\{[^}]*-webkit-line-clamp:2[^}]*white-space:normal/);
+  assert.match(css, /#page-restock #restock-planning-list\{[^}]*scroll-padding-bottom/);
 });
 
 test('surat pesanan dapat dicetak atau dibagikan sebagai PDF ke supplier', () => {

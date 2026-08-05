@@ -1188,6 +1188,19 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
   .product-image-field{grid-column:auto}
   .product-photo-editor{grid-column:1/-1;grid-template-columns:82px minmax(0,1fr)}.product-photo-preview{width:82px;height:82px}
 }
+
+/* Restock planning on phones: product identity owns the full text column. */
+@media(max-width:560px){
+  #page-restock #restock-planning-list{padding-bottom:max(12px,env(safe-area-inset-bottom));scroll-padding-bottom:max(12px,env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
+  #page-restock .planning-compact-row{grid-template-columns:50px minmax(0,1fr) 14px;grid-template-areas:"thumb product arrow" "thumb choice arrow";gap:6px 10px;min-height:88px;padding:10px 11px;align-items:center}
+  #page-restock .planning-compact-row .product-thumb{grid-area:thumb;align-self:center}
+  #page-restock .planning-compact-product{grid-area:product;width:100%}
+  #page-restock .planning-compact-product strong{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-height:1.25;text-overflow:ellipsis;white-space:normal}
+  #page-restock .planning-compact-product small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #page-restock .planning-compact-row .planning-compact-choice{grid-area:choice;display:flex;align-items:center;justify-items:unset;gap:5px 8px;min-width:0;flex-wrap:wrap}
+  #page-restock .planning-compact-choice .status-badge{margin:0}
+  #page-restock .planning-compact-arrow{grid-area:arrow;align-self:center}
+}
 .report-sales-layout{display:block;min-height:0}
 #report-sales-workspace .pos-history-list{width:100%;max-height:none}
 #page-reports.receipt-page-open>.content-width>:not(#report-sale-receipt-page){display:none!important}
