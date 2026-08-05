@@ -78,14 +78,14 @@ test('scanner dipasangkan dari Bluetooth Android dan aplikasi tidak mengambil al
 });
 
 test('APK pembaruan mempertahankan printer SPP tetapi scanner hanya memakai HID', () => {
-  assert.match(androidBuild, /versionCode 8/);
-  assert.match(androidBuild, /versionName "1\.3\.1"/);
+  assert.match(androidBuild, /versionCode 9/);
+  assert.match(androidBuild, /versionName "1\.4\.0"/);
   assert.doesNotMatch(androidBuild, /release\s*\{[\s\S]*signingConfig signingConfigs\.debug/);
   assert.match(androidBuild, /KASIR_NUSA_KEYSTORE_FILE/);
   assert.match(androidBuild, /KASIR_NUSA_KEYSTORE_PASSWORD/);
   assert.match(androidBuild, /releaseRequested && !releaseSigningConfigured/);
   assert.match(androidBuild, /signingConfig signingConfigs\.release/);
-  assert.match(activity, /KasirNusaAndroid\/1\.3\.1/);
+  assert.match(activity, /KasirNusaAndroid\/1\.4\.0/);
   assert.doesNotMatch(activity, /SCANNER_MODE|scannerSocket|scannerReader/);
 });
 

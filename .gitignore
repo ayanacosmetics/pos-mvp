@@ -13,5 +13,6 @@ node_modules/
 apps/android-cashier/local.properties
 apps/android-cashier/.gradle/
 apps/android-cashier/app/build/
+apps/android-cashier/app/google-services.json
 *.jks
 *.keystore

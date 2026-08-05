@@ -282,9 +282,53 @@ function base64UrlBytes(value){
   return Uint8Array.from(atob(base64),(character)=>character.charCodeAt(0));
 }
 
+function nativePushStatus(){
+  try{
+    const bridge=window.KasirNusaAndroid;
+    if(typeof bridge?.isNativePushSupported!=='function'||!bridge.isNativePushSupported())return null;
+    return JSON.parse(bridge.nativePushStatus?.()??'{}');
+  }catch{return null;}
+}
+
+async function registerNativePushDevice(detail,{silent=false}={}){
+  if(!state.session||!detail?.pushToken||!detail?.installationId)return false;
+  try{
+    await notificationRequest('/api/notifications/native-devices',{method:'POST',body:JSON.stringify(detail)});
+    state.pushNotificationConfig=null;
+    if(!silent)toast('Notifikasi Android berhasil diaktifkan.');
+    return true;
+  }catch(error){if(!silent)toast(error.message);return false;}
+}
+
+async function deactivateNativePushDevice(){
+  const status=nativePushStatus();
+  if(!status?.installationId)return;
+  await notificationRequest('/api/notifications/native-devices',{method:'DELETE',body:JSON.stringify({installationId:status.installationId})});
+  state.pushNotificationConfig=null;
+}
+
 async function renderPushNotificationControl(){
   const panel=el('push-notification-panel'),button=el('toggle-push-notifications'),test=el('test-push-notification');
   panel.classList.remove('hidden');
+  const nativeStatus=nativePushStatus();
+  if(nativeStatus){
+    try{
+      state.pushNotificationConfig=await notificationRequest('/api/notifications/push-config');
+      const active=nativeStatus.permission==='granted'&&Boolean(nativeStatus.pushToken)
+        &&(state.pushNotificationConfig.nativeInstallationIds??[]).includes(nativeStatus.installationId);
+      el('push-notification-title').textContent=active?'Notifikasi Android aktif':'Aktifkan notifikasi Android';
+      el('push-notification-help').textContent=active
+        ?'Kabar penting dapat muncul walaupun APK diminimalkan atau ditutup.'
+        :'Android akan meminta izin satu kali, lalu perangkat ini ditautkan ke akun yang sedang login.';
+      button.textContent=active?'Nonaktifkan':'Aktifkan';button.disabled=false;
+      button.dataset.active=String(active);button.dataset.pushMode='native';
+      test.classList.toggle('hidden',!active||state.session?.user?.role!=='OWNER');
+    }catch(error){
+      el('push-notification-title').textContent='Status notifikasi Android belum dapat dibaca';
+      el('push-notification-help').textContent=error.message;button.disabled=true;test.classList.add('hidden');
+    }
+    return;
+  }
   if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){
     el('push-notification-title').textContent='Perangkat belum mendukung Web Push';
     el('push-notification-help').textContent='Notifikasi di dalam Nusa tetap tersedia.';button.disabled=true;test.classList.add('hidden');return;
@@ -317,6 +361,17 @@ async function renderPushNotificationControl(){
 async function togglePushNotifications(){
   const button=el('toggle-push-notifications');button.disabled=true;
   try{
+    if(button.dataset.pushMode==='native'){
+      if(button.dataset.active==='true'){
+        await deactivateNativePushDevice();toast('Notifikasi Android dinonaktifkan untuk akun ini.');
+      }else{
+        const bridge=window.KasirNusaAndroid;
+        bridge.requestNativePushPermission();
+        setTimeout(()=>bridge.refreshNativePushToken?.(),500);
+      }
+      setTimeout(()=>renderPushNotificationControl(),900);
+      return;
+    }
     const registration=await navigator.serviceWorker.ready,current=await registration.pushManager.getSubscription();
     if(current){
       await request('/api/notifications/push-subscriptions',{method:'DELETE',body:JSON.stringify({endpoint:current.endpoint})});
@@ -357,6 +412,7 @@ function startNotificationCenter(){
   if(!state.session||!button)return;
   button.classList.remove('hidden');
   void loadNotifications({silent:true});
+  window.KasirNusaAndroid?.refreshNativePushToken?.();
   if(notificationPollingStarted)return;
   notificationPollingStarted=true;
   setInterval(()=>{if(!document.hidden&&state.session)loadNotifications({silent:true});},30000);
@@ -7969,6 +8025,7 @@ el('register-owner-form').addEventListener('submit', async (event) => {
 });
 
 async function endCurrentSession(nextPortal = null) {
+  try{if(nativePushStatus())await deactivateNativePushDevice();}catch{}
   try {
     await request('/api/logout', {
       method: 'POST',
@@ -8014,6 +8071,15 @@ async function switchOwnerContext(ownerId) {
 }
 
 el('switch-account').addEventListener('click', openOwnerSwitch);
+window.addEventListener('kasirnusa:native-push-token',async(event)=>{
+  const registered=await registerNativePushDevice(event.detail??{},{silent:true});
+  if(registered&&el('notification-center-dialog').open)await renderPushNotificationControl();
+});
+window.addEventListener('kasirnusa:native-push-error',(event)=>toast(event.detail?.message??'Notifikasi Android belum dapat diaktifkan.'));
+window.addEventListener('kasirnusa:native-notification',(event)=>{
+  const page=String(event.detail?.page??'');if(page)openNotificationPage(page);
+  void loadNotifications({silent:true});
+});
 el('open-notifications').addEventListener('click',async()=>{
   el('notification-center-dialog').showModal();
   await Promise.all([loadNotifications(),renderPushNotificationControl()]);

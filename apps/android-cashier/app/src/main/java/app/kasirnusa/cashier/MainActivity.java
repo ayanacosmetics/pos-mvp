@@ -34,6 +34,9 @@ import android.widget.Toast;
 
 import org.json.JSONObject;
 
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.messaging.FirebaseMessaging;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
@@ -42,6 +45,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.lang.ref.WeakReference;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -51,7 +55,11 @@ public final class MainActivity extends Activity {
     private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb");
     private static final int REQUEST_BLUETOOTH_CONNECT = 301;
     private static final int REQUEST_CAMERA = 302;
-    private static final String PREFS = "kasir_nusa_cashier";
+    static final String PREFS = "kasir_nusa_cashier";
+    static final String NOTIFICATION_PAGE = "notification_page";
+    private static final String INSTALLATION_ID = "native_installation_id";
+    private static final int REQUEST_NOTIFICATIONS = 303;
+    private static WeakReference<MainActivity> activeActivity = new WeakReference<>(null);
     private static final String PRINTER_ADDRESS = "printer_address";
     private static final String PRINTER_NAME = "printer_name";
 
@@ -66,6 +74,7 @@ public final class MainActivity extends Activity {
     private PermissionRequest pendingCameraRequest;
     private long scannerLastKeyAt;
     private long scannerStartedAt;
+    private String pendingNotificationPage;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,6 +85,7 @@ public final class MainActivity extends Activity {
         BluetoothManager bluetoothManager = getSystemService(BluetoothManager.class);
         bluetoothAdapter = bluetoothManager == null ? null : bluetoothManager.getAdapter();
         configureWebView();
+        pendingNotificationPage = getIntent().getStringExtra(NOTIFICATION_PAGE);
         if (savedInstanceState == null) webView.loadUrl(START_URL);
         else webView.restoreState(savedInstanceState);
     }
@@ -99,7 +109,7 @@ public final class MainActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setSupportMultipleWindows(false);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " KasirNusaAndroid/1.3.1");
+        settings.setUserAgentString(settings.getUserAgentString() + " KasirNusaAndroid/1.4.0");
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
@@ -137,6 +147,14 @@ public final class MainActivity extends Activity {
             if (request.isForMainFrame() && errorResponse.getStatusCode() >= 500) {
                 Toast.makeText(MainActivity.this, "Server Kasir Nusa sedang tidak tersedia.", Toast.LENGTH_LONG).show();
             }
+        }
+
+        @Override
+        public void onPageFinished(WebView view, String url) {
+            super.onPageFinished(view, url);
+            if (!isTrusted(Uri.parse(url))) return;
+            emitStoredPushToken();
+            emitPendingNotificationPage();
         }
     }
 
@@ -214,6 +232,121 @@ public final class MainActivity extends Activity {
             });
         }
 
+        @JavascriptInterface
+        public boolean isNativePushSupported() {
+            return firebaseConfigured();
+        }
+
+        @JavascriptInterface
+        public String nativePushStatus() {
+            JSONObject status = new JSONObject();
+            try {
+                status.put("supported", firebaseConfigured());
+                status.put("permission", notificationPermissionState());
+                status.put("installationId", installationId());
+                status.put("pushToken", preferences.getString(NusaFirebaseMessagingService.PUSH_TOKEN, ""));
+                status.put("appVersion", BuildConfig.VERSION_NAME);
+            } catch (Exception ignored) {}
+            return status.toString();
+        }
+
+        @JavascriptInterface
+        public void requestNativePushPermission() {
+            runOnUiThread(MainActivity.this::requestPushPermission);
+        }
+
+        @JavascriptInterface
+        public void refreshNativePushToken() {
+            runOnUiThread(MainActivity.this::fetchAndEmitPushToken);
+        }
+
+    }
+
+    private boolean firebaseConfigured() {
+        return !FirebaseApp.getApps(this).isEmpty();
+    }
+
+    private String installationId() {
+        String existing = preferences.getString(INSTALLATION_ID, "");
+        if (!existing.isEmpty()) return existing;
+        String created = UUID.randomUUID().toString();
+        preferences.edit().putString(INSTALLATION_ID, created).apply();
+        return created;
+    }
+
+    private String notificationPermissionState() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return "granted";
+        return checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                ? "granted" : "prompt";
+    }
+
+    private void requestPushPermission() {
+        if (!firebaseConfigured()) {
+            emitPushError("Firebase belum dipasang pada APK ini.");
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_NOTIFICATIONS);
+            return;
+        }
+        fetchAndEmitPushToken();
+    }
+
+    private void fetchAndEmitPushToken() {
+        if (!firebaseConfigured()) return;
+        FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
+            if (!task.isSuccessful() || task.getResult() == null) {
+                emitPushError("Token notifikasi Android belum dapat dibuat.");
+                return;
+            }
+            String token = task.getResult();
+            preferences.edit().putString(NusaFirebaseMessagingService.PUSH_TOKEN, token).apply();
+            emitPushToken(token);
+        });
+    }
+
+    private void emitStoredPushToken() {
+        String token = preferences.getString(NusaFirebaseMessagingService.PUSH_TOKEN, "");
+        if (!token.isEmpty()) emitPushToken(token);
+    }
+
+    private void emitPushToken(String token) {
+        JSONObject detail = new JSONObject();
+        try {
+            detail.put("pushToken", token);
+            detail.put("installationId", installationId());
+            detail.put("permission", notificationPermissionState());
+            detail.put("appVersion", BuildConfig.VERSION_NAME);
+            detail.put("deviceLabel", Build.MANUFACTURER + " " + Build.MODEL);
+        } catch (Exception ignored) {}
+        String script = "window.dispatchEvent(new CustomEvent('kasirnusa:native-push-token',{detail:"
+                + detail + "}))";
+        runOnUiThread(() -> {
+            if (webView != null) webView.evaluateJavascript(script, null);
+        });
+    }
+
+    private void emitPushError(String message) {
+        String script = "window.dispatchEvent(new CustomEvent('kasirnusa:native-push-error',{detail:{message:"
+                + JSONObject.quote(message) + "}}))";
+        runOnUiThread(() -> {
+            if (webView != null) webView.evaluateJavascript(script, null);
+        });
+    }
+
+    static void deliverPushTokenToActiveActivity(String token) {
+        MainActivity activity = activeActivity.get();
+        if (activity != null) activity.emitPushToken(token);
+    }
+
+    private void emitPendingNotificationPage() {
+        if (pendingNotificationPage == null || pendingNotificationPage.isBlank()) return;
+        String page = pendingNotificationPage;
+        pendingNotificationPage = null;
+        String script = "window.dispatchEvent(new CustomEvent('kasirnusa:native-notification',{detail:{page:"
+                + JSONObject.quote(page) + "}}))";
+        runOnUiThread(() -> webView.evaluateJavascript(script, null));
     }
 
     private boolean hasBluetoothConnectPermission() {
@@ -412,7 +545,31 @@ public final class MainActivity extends Activity {
             if (request == null) return;
             if (granted) request.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
             else request.deny();
+        } else if (requestCode == REQUEST_NOTIFICATIONS) {
+            if (granted) fetchAndEmitPushToken();
+            else emitPushError("Izin notifikasi Android belum diberikan.");
         }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        pendingNotificationPage = intent.getStringExtra(NOTIFICATION_PAGE);
+        emitPendingNotificationPage();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        activeActivity = new WeakReference<>(this);
+        emitStoredPushToken();
+    }
+
+    @Override
+    protected void onPause() {
+        if (activeActivity.get() == this) activeActivity.clear();
+        super.onPause();
     }
 
     @Override

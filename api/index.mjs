@@ -90,7 +90,10 @@ const env = () => ({
   paymentCredentialsMasterKey: process.env.PAYMENT_CREDENTIALS_MASTER_KEY ?? '',
   webPushPublicKey: process.env.WEB_PUSH_VAPID_PUBLIC_KEY ?? '',
   webPushPrivateKey: process.env.WEB_PUSH_VAPID_PRIVATE_KEY ?? '',
-  webPushSubject: process.env.WEB_PUSH_VAPID_SUBJECT ?? 'https://nusapos.my.id'
+  webPushSubject: process.env.WEB_PUSH_VAPID_SUBJECT ?? 'https://nusapos.my.id',
+  firebaseProjectId: process.env.FIREBASE_PROJECT_ID ?? '',
+  firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL ?? '',
+  firebasePrivateKey: process.env.FIREBASE_PRIVATE_KEY ?? ''
 });
 
 function requireTenantOwner(session) {
@@ -538,6 +541,77 @@ async function sendWebPush(subscription,notification) {
   return {sent:false,status:response.status,expired};
 }
 
+let firebaseAccessTokenCache=null;
+const base64Url=(value)=>Buffer.from(value).toString('base64url');
+
+async function firebaseAccessToken(){
+  const config=env(),now=Math.floor(Date.now()/1000);
+  if(firebaseAccessTokenCache?.expiresAt>now+60)return firebaseAccessTokenCache.token;
+  if(!config.firebaseProjectId||!config.firebaseClientEmail||!config.firebasePrivateKey)return null;
+  const header=base64Url(JSON.stringify({alg:'RS256',typ:'JWT'}));
+  const claims=base64Url(JSON.stringify({
+    iss:config.firebaseClientEmail,scope:'https://www.googleapis.com/auth/firebase.messaging',
+    aud:'https://oauth2.googleapis.com/token',iat:now,exp:now+3600
+  }));
+  const pem=config.firebasePrivateKey.replace(/\\n/g,'\n').replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g,'');
+  const key=await globalThis.crypto.subtle.importKey('pkcs8',Buffer.from(pem,'base64'),{
+    name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'
+  },false,['sign']);
+  const unsigned=`${header}.${claims}`;
+  const signature=await globalThis.crypto.subtle.sign('RSASSA-PKCS1-v1_5',key,Buffer.from(unsigned));
+  const assertion=`${unsigned}.${base64Url(Buffer.from(signature))}`;
+  const response=await fetch('https://oauth2.googleapis.com/token',{
+    method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},
+    body:new URLSearchParams({grant_type:'urn:ietf:params:oauth:grant-type:jwt-bearer',assertion}),
+    signal:AbortSignal.timeout(5000)
+  });
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok||!data.access_token)throw new Error(data.error_description??'Token Firebase tidak dapat dibuat');
+  firebaseAccessTokenCache={token:data.access_token,expiresAt:now+Math.min(3500,Number(data.expires_in)||3500)};
+  return data.access_token;
+}
+
+async function sendNativePush(device,notification){
+  const config=env(),accessToken=await firebaseAccessToken();
+  if(!accessToken)return {sent:false,reason:'NOT_CONFIGURED'};
+  const payload=notificationPayload(notification);
+  const response=await fetch(`https://fcm.googleapis.com/v1/projects/${encodeURIComponent(config.firebaseProjectId)}/messages:send`,{
+    method:'POST',headers:{authorization:`Bearer ${accessToken}`,'content-type':'application/json'},
+    body:JSON.stringify({message:{
+      token:device.push_token,
+      notification:{title:payload.title,body:payload.body},
+      data:{url:payload.data.url,page:payload.data.page,type:String(notification.type??'SYSTEM'),entityId:String(notification.entityId??'')},
+      android:{priority:notification.severity==='CRITICAL'?'HIGH':'NORMAL',notification:{channel_id:'nusa_important',sound:'default',tag:payload.tag}}
+    }}),signal:AbortSignal.timeout(5000)
+  });
+  const data=await response.json().catch(()=>({}));
+  if(response.ok){
+    await rest('native_push_devices',`id=eq.${device.id}`,{method:'PATCH',body:{last_success_at:new Date().toISOString(),failure_count:0,active:true}}).catch(()=>{});
+    return {sent:true};
+  }
+  const fcmCode=data?.error?.details?.find((detail)=>detail?.errorCode)?.errorCode??'';
+  const expired=response.status===404||['UNREGISTERED','SENDER_ID_MISMATCH'].includes(fcmCode);
+  await rest('native_push_devices',`id=eq.${device.id}`,{method:'PATCH',body:{active:!expired,failure_count:Number(device.failure_count??0)+1,updated_at:new Date().toISOString()}}).catch(()=>{});
+  return {sent:false,status:response.status,expired};
+}
+
+async function deliverDevicePushes(tenantId,userIds,notification){
+  const recipients=[...new Set(userIds.filter(Boolean))];
+  if(!recipients.length)return;
+  const config=env(),tasks=[];
+  if(config.webPushPublicKey&&config.webPushPrivateKey){
+    const subscriptions=(await rest('web_push_subscriptions',`tenant_id=eq.${tenantId}&active=eq.true&select=*&limit=200`))
+      .filter((subscription)=>recipients.includes(subscription.user_id));
+    tasks.push(...subscriptions.map((subscription)=>sendWebPush(subscription,notification)));
+  }
+  if(config.firebaseProjectId&&config.firebaseClientEmail&&config.firebasePrivateKey){
+    const devices=(await rest('native_push_devices',`tenant_id=eq.${tenantId}&active=eq.true&select=*&limit=200`))
+      .filter((device)=>recipients.includes(device.user_id));
+    tasks.push(...devices.map((device)=>sendNativePush(device,notification)));
+  }
+  await Promise.allSettled(tasks);
+}
+
 async function notifyTenantOwners(tenantId,notification) {
   try{
     const recipients=await rpc('create_owner_notifications_v1',{
@@ -547,11 +621,7 @@ async function notifyTenantOwners(tenantId,notification) {
       p_data_json:notification.data??{},p_dedupe_key:notification.dedupeKey??null
     });
     const userIds=[...new Set((Array.isArray(recipients)?recipients:[]).map((row)=>row.recipientUserId).filter(Boolean))];
-    if(!userIds.length||!env().webPushPublicKey||!env().webPushPrivateKey)return;
-    const subscriptions=(await rest('web_push_subscriptions',
-      `tenant_id=eq.${tenantId}&active=eq.true&select=*&limit=100`))
-      .filter((subscription)=>userIds.includes(subscription.user_id));
-    await Promise.allSettled(subscriptions.map((subscription)=>sendWebPush(subscription,notification)));
+    await deliverDevicePushes(tenantId,userIds,notification);
   }catch(error){
     // Notification delivery is deliberately isolated from sales and attendance.
     console.error('Owner notification failed',notification.type,error.message);
@@ -574,10 +644,7 @@ async function notifyTenantUser(tenantId,userId,notification){
       p_dedupe_key:notification.dedupeKey??null
     });
     const recipientIds=[...new Set((Array.isArray(recipients)?recipients:[]).map((row)=>row.recipientUserId).filter(Boolean))];
-    if(!recipientIds.length||!env().webPushPublicKey||!env().webPushPrivateKey)return;
-    const subscriptions=(await rest('web_push_subscriptions',
-      `tenant_id=eq.${tenantId}&user_id=eq.${encodeURIComponent(userId)}&active=eq.true&select=*&limit=20`));
-    await Promise.allSettled(subscriptions.map((subscription)=>sendWebPush(subscription,notification)));
+    await deliverDevicePushes(tenantId,recipientIds,notification);
   }catch(error){console.error('User notification failed',notification.type,error.message);}
 }
 
@@ -2478,11 +2545,15 @@ async function routeRequest(request, response, route) {
 
   if(request.method==='GET'&&route==='notifications/push-config'){
     const config=env();
-    const subscriptions=await rest('web_push_subscriptions',
-      `tenant_id=eq.${context.tenantId}&user_id=eq.${session.authUser.id}&active=eq.true&select=id,endpoint,device_label,updated_at&limit=20`);
+    const [subscriptions,nativeDevices]=await Promise.all([
+      rest('web_push_subscriptions',`tenant_id=eq.${context.tenantId}&user_id=eq.${session.authUser.id}&active=eq.true&select=id,endpoint,device_label,updated_at&limit=20`),
+      rest('native_push_devices',`tenant_id=eq.${context.tenantId}&user_id=eq.${session.authUser.id}&active=eq.true&select=id,installation_id,device_label,updated_at&limit=20`)
+    ]);
     return send(response,200,{
       configured:Boolean(config.webPushPublicKey&&config.webPushPrivateKey),
-      publicKey:config.webPushPublicKey||null,subscriptions:subscriptions.length
+      publicKey:config.webPushPublicKey||null,subscriptions:subscriptions.length,
+      nativeConfigured:Boolean(config.firebaseProjectId&&config.firebaseClientEmail&&config.firebasePrivateKey),
+      nativeDevices:nativeDevices.length,nativeInstallationIds:nativeDevices.map((device)=>device.installation_id)
     });
   }
 
@@ -2513,6 +2584,36 @@ async function routeRequest(request, response, route) {
     if(!endpoint)throw Object.assign(new Error('Perangkat notifikasi tidak ditemukan'),{status:400});
     await rest('web_push_subscriptions',
       `tenant_id=eq.${context.tenantId}&user_id=eq.${session.authUser.id}&endpoint=eq.${encodeURIComponent(endpoint)}`,
+      {method:'PATCH',body:{active:false,updated_at:new Date().toISOString()}});
+    return send(response,200,{success:true});
+  }
+
+  if(request.method==='POST'&&route==='notifications/native-devices'){
+    const input=bodyOf(request),installationId=String(input.installationId??'').trim().toLowerCase();
+    const pushToken=String(input.pushToken??'').trim();
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(installationId)){
+      throw Object.assign(new Error('Identitas instalasi Android tidak valid'),{status:400});
+    }
+    if(pushToken.length<20||pushToken.length>4096||/\s/.test(pushToken)){
+      throw Object.assign(new Error('Token notifikasi Android tidak valid'),{status:400});
+    }
+    const now=new Date().toISOString();
+    await rest('native_push_devices',`push_token=eq.${encodeURIComponent(pushToken)}&installation_id=neq.${installationId}`,{method:'DELETE'});
+    await rest('native_push_devices','on_conflict=installation_id',{
+      method:'POST',prefer:'resolution=merge-duplicates,return=minimal',body:{
+        tenant_id:context.tenantId,user_id:session.authUser.id,installation_id:installationId,
+        platform:'ANDROID',push_token:pushToken,device_label:String(input.deviceLabel??'Android Kasir Nusa').trim().slice(0,80),
+        app_version:String(input.appVersion??'').trim().slice(0,30)||null,active:true,failure_count:0,last_seen_at:now,updated_at:now
+      }
+    });
+    return send(response,201,{success:true});
+  }
+
+  if(request.method==='DELETE'&&route==='notifications/native-devices'){
+    const installationId=String(bodyOf(request).installationId??'').trim().toLowerCase();
+    if(!/^[0-9a-f-]{36}$/i.test(installationId))throw Object.assign(new Error('Perangkat Android tidak ditemukan'),{status:400});
+    await rest('native_push_devices',
+      `tenant_id=eq.${context.tenantId}&user_id=eq.${session.authUser.id}&installation_id=eq.${installationId}`,
       {method:'PATCH',body:{active:false,updated_at:new Date().toISOString()}});
     return send(response,200,{success:true});
   }
