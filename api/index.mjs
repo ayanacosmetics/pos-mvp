@@ -96,6 +96,10 @@ const env = () => ({
   firebasePrivateKey: process.env.FIREBASE_PRIVATE_KEY ?? ''
 });
 
+function publicAppUrl() {
+  return String(process.env.PUBLIC_APP_URL ?? 'https://app.nusapos.my.id').trim().replace(/\/+$/, '');
+}
+
 function requireTenantOwner(session) {
   if(!session){const error=new Error('Sesi tidak valid');error.status=401;throw error;}
   if(session.profile?.role!=='OWNER'){
@@ -2358,7 +2362,8 @@ async function routeRequest(request, response, route) {
         const error=new Error('Email sudah terdaftar. Silakan masuk sebagai Owner.');error.status=409;throw error;
       }
       if(!existingUser.email_confirmed_at){
-        await supabase('/auth/v1/resend',{
+        const redirectTo=encodeURIComponent(publicAppUrl());
+        await supabase(`/auth/v1/resend?redirect_to=${redirectTo}`,{
           method:'POST',token:config.anon,body:{type:'signup',email}
         });
         return send(response,202,{
@@ -2370,7 +2375,8 @@ async function routeRequest(request, response, route) {
     }
     let auth;
     try {
-      auth=await supabase('/auth/v1/signup', {
+      const redirectTo=encodeURIComponent(publicAppUrl());
+      auth=await supabase(`/auth/v1/signup?redirect_to=${redirectTo}`, {
         method: 'POST',
         token: config.anon,
         body: {email,password,data:{display_name:ownerName,business_name:businessName,registration_source:'NUSA_OWNER_SELF_REGISTRATION'}}
@@ -2401,7 +2407,7 @@ async function routeRequest(request, response, route) {
     if(email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
       const error=new Error('Alamat email tidak valid');error.status=400;throw error;
     }
-    const redirectTo=encodeURIComponent(`${process.env.PUBLIC_APP_URL??'https://kasir-nusa-pos.vercel.app'}/?password-recovery=1`);
+    const redirectTo=encodeURIComponent(`${publicAppUrl()}/?password-recovery=1`);
     try{
       await supabase(`/auth/v1/recover?redirect_to=${redirectTo}`,{method:'POST',token:env().anon,body:{email}});
     }catch(error){

@@ -46,18 +46,20 @@ async function withRegistrationEnvironment(fetchMock, operation) {
   const previous = {
     url: process.env.SUPABASE_URL,
     anon: process.env.SUPABASE_ANON_KEY,
-    service: process.env.SUPABASE_SERVICE_ROLE_KEY
+    service: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    publicAppUrl: process.env.PUBLIC_APP_URL
   };
   process.env.SUPABASE_URL = 'https://project.supabase.test';
   process.env.SUPABASE_ANON_KEY = 'anon';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service';
+  process.env.PUBLIC_APP_URL = 'https://app.nusapos.my.id';
   globalThis.fetch = fetchMock;
   try {
     return await operation();
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(previous)) {
-      const name = { url: 'SUPABASE_URL', anon: 'SUPABASE_ANON_KEY', service: 'SUPABASE_SERVICE_ROLE_KEY' }[key];
+      const name = { url: 'SUPABASE_URL', anon: 'SUPABASE_ANON_KEY', service: 'SUPABASE_SERVICE_ROLE_KEY', publicAppUrl:'PUBLIC_APP_URL' }[key];
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
     }
@@ -71,7 +73,7 @@ test('pendaftaran Owner membuat Auth, workspace, lalu sesi aktif', async () => {
     const target = String(url);
     calls.push({ target, options });
     if (target.includes('/auth/v1/token?grant_type=password')) return responseOf({ message:'Invalid login credentials' },400);
-    if (target.endsWith('/auth/v1/signup')) return responseOf({
+    if (target.includes('/auth/v1/signup?redirect_to=')) return responseOf({
       access_token: 'access',
       refresh_token: 'refresh',
       expires_in: 3600,
@@ -103,7 +105,8 @@ test('pendaftaran Owner membuat Auth, workspace, lalu sesi aktif', async () => {
     assert.equal(result.body.registered, true);
     assert.match(result.headers['set-cookie'], /__Host-kasir_nusa_refresh=/);
   });
-  const signup = calls.find((call) => call.target.endsWith('/auth/v1/signup'));
+  const signup = calls.find((call) => call.target.includes('/auth/v1/signup?redirect_to='));
+  assert.match(signup.target,/redirect_to=https%3A%2F%2Fapp\.nusapos\.my\.id/);
   assert.deepEqual(JSON.parse(signup.options.body), {
     email: 'ayu@example.com',
     password: 'rahasia-kuat',
@@ -119,7 +122,7 @@ test('pendaftaran mengirim ulang konfirmasi untuk identitas lama yang belum akti
     const target = String(url);
     if (target.includes('/auth/v1/token?grant_type=password')) return responseOf({ message:'Email not confirmed' },400);
     if(target.includes('/auth/v1/admin/users?page='))return responseOf({users:[{id:ids.user,email:'ayu@example.com',email_confirmed_at:null}]});
-    if(target.endsWith('/auth/v1/resend')){resent=true;assert.deepEqual(JSON.parse(options.body),{type:'signup',email:'ayu@example.com'});return responseOf({});}
+    if(target.includes('/auth/v1/resend?redirect_to=')){resent=true;assert.match(target,/redirect_to=https%3A%2F%2Fapp\.nusapos\.my\.id/);assert.deepEqual(JSON.parse(options.body),{type:'signup',email:'ayu@example.com'});return responseOf({});}
     if (target.includes('/rest/v1/profiles?')) return responseOf([]);
     return responseOf({}, 500);
   }, async () => {
@@ -142,7 +145,7 @@ test('pendaftaran baru menunggu konfirmasi email sebelum membuat workspace',asyn
     const target=String(url);calls.push(target);
     if(target.includes('/auth/v1/token?grant_type=password'))return responseOf({message:'Invalid login credentials'},400);
     if(target.includes('/auth/v1/admin/users?page='))return responseOf({users:[]});
-    if(target.endsWith('/auth/v1/signup'))return responseOf({user:{id:ids.user,email:'ayu@example.com',identities:[{id:'identity'}]}});
+    if(target.includes('/auth/v1/signup?redirect_to='))return responseOf({user:{id:ids.user,email:'ayu@example.com',identities:[{id:'identity'}]}});
     return responseOf({message:`Mock belum menangani ${target}`},500);
   },async()=>{
     const result=await callRegistration({ownerName:'Ayu',businessName:'Toko Ayu',email:'ayu@example.com',password:'rahasia-kuat'});
@@ -173,7 +176,7 @@ test('pendaftaran menyelesaikan akun Auth lama yang belum mempunyai workspace',a
     assert.equal(result.body.recovered,true);
     assert.equal(result.body.user.role,'OWNER');
   });
-  assert.equal(calls.some((target)=>target.endsWith('/auth/v1/signup')),false);
+  assert.equal(calls.some((target)=>target.includes('/auth/v1/signup')),false);
   assert.equal(workspaceCreated,true);
 });
 
@@ -194,7 +197,7 @@ test('lupa kata sandi mengirim recovery dan penggantian memvalidasi token',async
     assert.equal(reset.body.updated,true);
   });
   const recoveryCall=calls.find(({target})=>target.includes('/auth/v1/recover?redirect_to='));
-  assert.match(recoveryCall.target,/kasir-nusa-pos\.vercel\.app/);
+  assert.match(recoveryCall.target,/app\.nusapos\.my\.id/);
   const updateCall=calls.find(({target,options})=>target.endsWith('/auth/v1/user')&&options.method==='PUT');
   assert.equal(updateCall.options.headers.authorization,'Bearer recovery-token');
   assert.deepEqual(JSON.parse(updateCall.options.body),{password:'kata-sandi-baru'});
