@@ -237,9 +237,11 @@ function notificationKindIcon(type){
 }
 
 function updateNotificationBadge(){
-  const count=Math.max(0,Number(state.notificationUnreadCount)||0),badge=el('notification-badge');
+  const badge=el('notification-badge'),button=el('open-notifications');
+  if(!badge||!button)return;
+  const count=Math.max(0,Number(state.notificationUnreadCount)||0);
   badge.textContent=count>99?'99+':String(count);badge.classList.toggle('hidden',count===0);
-  el('open-notifications').setAttribute('aria-label',count?`Buka ${count} notifikasi belum dibaca`:'Buka notifikasi');
+  button.setAttribute('aria-label',count?`Buka ${count} notifikasi belum dibaca`:'Buka notifikasi');
   if('setAppBadge' in navigator){
     (count?navigator.setAppBadge(count):navigator.clearAppBadge()).catch(()=>{});
   }
@@ -268,12 +270,17 @@ async function loadNotifications({silent=false}={}){
   }
 }
 
+async function notificationRequest(path,options={}){
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),5000);
+  try{return await request(path,{...options,signal:controller.signal});}
+  finally{clearTimeout(timeout);}
+}
+
 function base64UrlBytes(value){
   const padding='='.repeat((4-value.length%4)%4),base64=(value+padding).replace(/-/g,'+').replace(/_/g,'/');
   return Uint8Array.from(atob(base64),(character)=>character.charCodeAt(0));
 }
-
-function isInstalledPwa(){return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;}
 
 async function renderPushNotificationControl(){
   const panel=el('push-notification-panel'),button=el('toggle-push-notifications'),test=el('test-push-notification');
@@ -290,7 +297,7 @@ async function renderPushNotificationControl(){
     button.textContent='Belum dipasang';button.disabled=true;test.classList.add('hidden');return;
   }
   try{
-    state.pushNotificationConfig=await request('/api/notifications/push-config');
+    state.pushNotificationConfig=await notificationRequest('/api/notifications/push-config');
     if(!state.pushNotificationConfig.configured){
       el('push-notification-title').textContent='Web Push sedang disiapkan';
       el('push-notification-help').textContent='Lonceng di dalam Nusa sudah aktif; kunci pengiriman perangkat belum dipasang.';
@@ -345,11 +352,22 @@ function openNotificationPage(page){
 }
 
 let notificationPollingStarted=false;
+let notificationStartupTimer=null;
 function startNotificationCenter(){
-  loadNotifications({silent:true});
+  const button=el('open-notifications');
+  if(!state.session||!button)return;
+  button.classList.remove('hidden');
+  void loadNotifications({silent:true});
   if(notificationPollingStarted)return;
   notificationPollingStarted=true;
   setInterval(()=>{if(!document.hidden&&state.session)loadNotifications({silent:true});},30000);
+}
+
+function scheduleNotificationCenter(){
+  clearTimeout(notificationStartupTimer);
+  notificationStartupTimer=setTimeout(()=>{
+    try{startNotificationCenter();}catch(error){console.warn('Notification center skipped',error);}
+  },4000);
 }
 
 function productImageUrl(product) {
@@ -537,7 +555,8 @@ async function applyBootstrap(data, { offline = false } = {}) {
   renderShift();
   renderImportLocations();
   await updateQuote();
-  startNotificationCenter();
+  // Never let this supplementary feature compete with the critical login path.
+  if(!offline)scheduleNotificationCenter();
   const notificationPage=new URLSearchParams(location.search).get('notification-page');
   if(notificationPage){openNotificationPage(notificationPage);history.replaceState(null,'',location.pathname);}
   if (!offline) startDeferredBootstrapLoads();

@@ -6,7 +6,6 @@ import { applyVoucher } from '../packages/domain/src/loyalty.mjs';
 import { calculateEmployeeCommission } from '../packages/domain/src/employee-operations.mjs';
 import { validateJournalLines } from '../packages/domain/src/ledger.mjs';
 import { evaluateSafePricePolicy, normalizeSafePricePolicy } from '../packages/domain/src/safe-price-policy.mjs';
-import { buildPushPayload } from '@block65/webcrypto-web-push';
 
 const PERMISSIONS = {
   OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.transactions','report.view','audit.view','identity.manage_staff','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner','multioutlet.view','multioutlet.manage','pilot.manage','sale.adjust','sale.void','device.configure'],
@@ -516,6 +515,8 @@ function notificationPayload(notification) {
 async function sendWebPush(subscription,notification) {
   const config=env();
   if(!config.webPushPublicKey||!config.webPushPrivateKey)return {sent:false,reason:'NOT_CONFIGURED'};
+  // Web Push is supplementary; load its crypto implementation only when used.
+  const { buildPushPayload }=await import('@block65/webcrypto-web-push');
   const payload=await buildPushPayload({
     data:JSON.stringify(notificationPayload(notification)),
     options:{ttl:300,urgency:notification.severity==='CRITICAL'?'high':'normal',topic:String(notification.type??'nusa').slice(0,32)}
@@ -537,7 +538,7 @@ async function sendWebPush(subscription,notification) {
   return {sent:false,status:response.status,expired};
 }
 
-async function notifyTenantOwners(tenantId,notification,waitUntil=null) {
+async function notifyTenantOwners(tenantId,notification) {
   try{
     const recipients=await rpc('create_owner_notifications_v1',{
       p_tenant_id:tenantId,p_type:notification.type,p_title:notification.title,p_message:notification.message,
@@ -550,13 +551,17 @@ async function notifyTenantOwners(tenantId,notification,waitUntil=null) {
     const subscriptions=(await rest('web_push_subscriptions',
       `tenant_id=eq.${tenantId}&active=eq.true&select=*&limit=100`))
       .filter((subscription)=>userIds.includes(subscription.user_id));
-    const delivery=Promise.allSettled(subscriptions.map((subscription)=>sendWebPush(subscription,notification)));
-    if(typeof waitUntil==='function')waitUntil(delivery);
-    else await delivery;
+    await Promise.allSettled(subscriptions.map((subscription)=>sendWebPush(subscription,notification)));
   }catch(error){
     // Notification delivery is deliberately isolated from sales and attendance.
     console.error('Owner notification failed',notification.type,error.message);
   }
+}
+
+function queueTenantOwnerNotification(tenantId,notification,waitUntil=null){
+  const task=notifyTenantOwners(tenantId,notification);
+  if(typeof waitUntil==='function')waitUntil(task);
+  else void task;
 }
 
 async function rawRpc(response,name,body){
@@ -2499,7 +2504,7 @@ async function routeRequest(request, response, route) {
       message:`Perangkat Owner ${session.profile.display_name} siap menerima kabar penting.`,
       entityType:'profile',entityId:session.authUser.id,actionPage:'pos',
       dedupeKey:`push-test:${session.authUser.id}:${Date.now()}`
-    },request.waitUntil);
+    });
     return send(response,201,{success:true});
   }
 
@@ -2980,7 +2985,7 @@ async function routeRequest(request, response, route) {
     }catch(error){
       console.error('Receipt voucher issuance failed after completed sale',error.message);
     }
-    await notifyTenantOwners(context.tenantId,{
+    queueTenantOwnerNotification(context.tenantId,{
       type:'SALE_COMPLETED',severity:'SUCCESS',title:`Transaksi ${result.receiptNo} berhasil`,
       message:`${context.outlet.name} · ${session.profile.display_name} · ${new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(quote.grandTotal)}`,
       entityType:'sale',entityId:result.id,actionPage:'reports-sales',
@@ -3970,7 +3975,7 @@ async function routeRequest(request, response, route) {
       });
       const clockIn=String(input.action??'').toUpperCase()==='CLOCK_IN';
       const late=clockIn&&result.status==='LATE';
-      await notifyTenantOwners(context.tenantId,{
+      queueTenantOwnerNotification(context.tenantId,{
         type:clockIn?'ATTENDANCE_CLOCK_IN':'ATTENDANCE_CLOCK_OUT',severity:late?'WARNING':'INFO',
         title:clockIn?`${session.profile.display_name} absen masuk`:`${session.profile.display_name} absen pulang`,
         message:`${context.outlet.name} · ${late?'Terlambat · ':''}${new Date(clockIn?result.clockInAt:result.clockOutAt).toLocaleString('id-ID',{timeZone:context.outlet.timezone??'Asia/Makassar',dateStyle:'medium',timeStyle:'short'})}`,
@@ -4903,7 +4908,7 @@ async function routeRequest(request, response, route) {
       p_location_id:input.locationId,p_document_no:input.documentNo,p_items:input.items,
       p_proposed_prices:input.proposedPrices??[],p_note:input.note??''
     });
-    await notifyTenantOwners(context.tenantId,{
+    queueTenantOwnerNotification(context.tenantId,{
       type:'RESTOCK_APPROVAL',severity:'WARNING',title:`Persetujuan restok ${input.documentNo}`,
       message:`${session.profile.display_name} mengajukan ${Array.isArray(input.items)?input.items.length:0} barang untuk diperiksa Owner.`,
       entityType:'restock_approval',entityId:result.id??null,actionPage:'restock-approvals',

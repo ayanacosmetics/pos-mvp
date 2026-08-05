@@ -39,6 +39,7 @@ test('PWA memiliki pusat notifikasi dan Web Push yang hanya diaktifkan lewat tin
   assert.match(css,/\.notification-center-dialog/);
   assert.match(worker,/addEventListener\('push'/);
   assert.match(worker,/addEventListener\('notificationclick'/);
+  assert.equal((app.match(/function isInstalledPwa\s*\(/g)??[]).length,1,'helper PWA tidak boleh dideklarasikan ganda karena membuat seluruh modul gagal dimuat');
 });
 
 test('service worker membuka halaman tujuan notifikasi dan tidak mencegat API',()=>{
