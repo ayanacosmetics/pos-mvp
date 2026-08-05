@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=190">
+  <link rel="stylesheet" href="/styles.css?v=191">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -705,7 +705,7 @@
           <div class="payment-account-safety"><strong>Kredensial terpisah per usaha</strong><span>Server Key dienkripsi sebelum disimpan. Nusa tidak pernah menampilkan kembali kunci yang sudah tersimpan. Mulai dari Sandbox; Production tetap terkunci.</span></div>
           <form id="midtrans-credentials-form" class="midtrans-credentials-form">
             <label>Merchant ID Sandbox <span class="muted">(opsional)</span><input id="midtrans-merchant-id" maxlength="100" autocomplete="off" placeholder="Contoh: G123456789"></label>
-            <label>Server Key Sandbox<input id="midtrans-server-key" type="password" maxlength="300" autocomplete="new-password" placeholder="SB-Mid-server-..." required><small>Salin dari Midtrans Sandbox → Settings → Access Keys. Jangan gunakan Production Server Key.</small></label>
+            <label>Server Key Sandbox<input id="midtrans-server-key" type="password" maxlength="300" autocomplete="new-password" placeholder="Mid-server-..." required><small id="midtrans-server-key-help">Salin dari Midtrans Sandbox → Settings → Access Keys. Jangan gunakan Production Server Key.</small></label>
             <div class="button-row"><button id="save-midtrans-credentials" class="button primary" type="submit">Hubungkan akun Sandbox</button><button id="disconnect-midtrans-sandbox" class="button danger hidden" type="button">Putuskan akun</button></div>
           </form>
           <p id="midtrans-credentials-error" class="error"></p>
@@ -1138,6 +1138,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=190"></script>
+  <script type="module" src="/app.js?v=191"></script>
 </body>
 </html>

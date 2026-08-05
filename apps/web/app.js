@@ -5828,6 +5828,9 @@ function renderMidtransSandbox(){
   el('midtrans-sandbox-badge').textContent=data.configured?(data.accountStatus==='VERIFIED'?'SANDBOX TERVERIFIKASI':'SANDBOX TERHUBUNG'):'BELUM DIHUBUNGKAN';
   el('midtrans-merchant-id').value=data.merchantId??'';
   el('midtrans-server-key').value='';
+  el('midtrans-server-key').placeholder=data.configured?'Tersimpan terenkripsi — isi hanya untuk mengganti':'Mid-server-...';
+  el('midtrans-server-key-help').textContent=data.configured?'Server Key masih tersimpan aman. Nusa sengaja mengosongkan kolom ini; masukkan kembali hanya jika ingin menggantinya.':'Salin dari Midtrans Sandbox → Settings → Access Keys. Jangan gunakan Production Server Key.';
+  el('save-midtrans-credentials').textContent=data.configured?'Ganti kredensial Sandbox':'Hubungkan akun Sandbox';
   el('disconnect-midtrans-sandbox').classList.toggle('hidden',!data.configured);
   el('midtrans-credentials-error').textContent=data.configurationError??(!data.credentialStorageConfigured?'Platform Admin belum memasang master key penyimpanan kredensial.':'');
   el('create-midtrans-sandbox').disabled=!data.configured;
