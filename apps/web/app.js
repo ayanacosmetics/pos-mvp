@@ -2557,7 +2557,8 @@ function workforceAttendanceFacts(data,attendance){
   const bounds=workforcePlannedBounds(attendance,planned),referenceEnd=clockOut??new Date();
   const lateMinutes=bounds?Math.max(0,Math.floor((clockIn-bounds.start)/60000)):0;
   const overtimeMinutes=bounds?Math.max(0,Math.floor((referenceEnd-bounds.end)/60000)):0;
-  return {planned,bounds,duration,lateMinutes,overtimeMinutes,onTime:Boolean(bounds&&lateMinutes===0),working:!clockOut};
+  const earlyLeaveMinutes=bounds&&clockOut?Math.max(0,Math.floor((bounds.end-clockOut)/60000)):0;
+  return {planned,bounds,duration,lateMinutes,overtimeMinutes,earlyLeaveMinutes,onTime:Boolean(bounds&&lateMinutes===0),working:!clockOut};
 }
 
 function attendanceStatusMarkup(facts){
@@ -2565,7 +2566,9 @@ function attendanceStatusMarkup(facts){
   if(!facts.planned)states.push('<span class="attendance-state unscheduled">TANPA JADWAL</span>');
   else{
     states.push(facts.lateMinutes>0?`<span class="attendance-state late">TERLAMBAT ${facts.lateMinutes} MENIT</span>`:'<span class="attendance-state on-time">TEPAT WAKTU</span>');
-    if(facts.overtimeMinutes>0)states.push(`<span class="attendance-state overtime">LEMBUR ${facts.overtimeMinutes} MENIT</span>`);
+    if(facts.earlyLeaveMinutes>0)states.push(`<span class="attendance-state early-leave">PULANG LEBIH CEPAT ${facts.earlyLeaveMinutes} MENIT</span>`);
+    else if(facts.overtimeMinutes>0)states.push(`<span class="attendance-state overtime">LEMBUR ${facts.overtimeMinutes} MENIT</span>`);
+    else if(!facts.working)states.push('<span class="attendance-state scheduled-leave">PULANG SESUAI JADWAL</span>');
   }
   return `<span class="attendance-state-group">${states.join('')}</span>`;
 }
@@ -2618,8 +2621,9 @@ function renderWorkforceOverview(){
   const lateToday=todayAttendance.filter((item)=>workforceAttendanceFacts(data,item).lateMinutes>0).length;
   const onTimeToday=todayAttendance.filter((item)=>workforceAttendanceFacts(data,item).onTime).length;
   const overtimeToday=todayAttendance.filter((item)=>workforceAttendanceFacts(data,item).overtimeMinutes>0).length;
+  const earlyLeaveToday=todayAttendance.filter((item)=>workforceAttendanceFacts(data,item).earlyLeaveMinutes>0).length;
   const workedMinutes=(data.attendance??[]).reduce((sum,item)=>sum+workforceAttendanceFacts(data,item).duration,0);
-  el('workforce-attendance-metrics').innerHTML=`<article><span>Terjadwal hari ini</span><strong>${todayShifts.length}</strong><small>orang / shift</small></article><article><span>Sudah hadir</span><strong>${presentIds.size}</strong><small>${todayAttendance.filter((item)=>!item.clock_out_at).length} masih bekerja</small></article><article><span>Terlambat hari ini</span><strong>${lateToday}</strong><small>${onTimeToday} tepat waktu</small></article><article><span>Jam kerja bulan ini</span><strong>${workforceDurationLabel(workedMinutes)}</strong><small>${overtimeToday} lembur hari ini</small></article>`;
+  el('workforce-attendance-metrics').innerHTML=`<article><span>Terjadwal hari ini</span><strong>${todayShifts.length}</strong><small>orang / shift</small></article><article><span>Sudah hadir</span><strong>${presentIds.size}</strong><small>${todayAttendance.filter((item)=>!item.clock_out_at).length} masih bekerja</small></article><article><span>Terlambat hari ini</span><strong>${lateToday}</strong><small>${onTimeToday} tepat waktu</small></article><article><span>Jam kerja bulan ini</span><strong>${workforceDurationLabel(workedMinutes)}</strong><small>${overtimeToday} lembur · ${earlyLeaveToday} pulang cepat</small></article>`;
   const todayPeople=[...todayShifts];
   todayAttendance.filter((attendance)=>!todayPeople.some((shift)=>shift.user_id===attendance.user_id)).forEach((attendance)=>todayPeople.push({...attendance,kind:'UNSCHEDULED'}));
   el('attendance-today-count').textContent=`${todayPeople.length} orang`;
@@ -2667,6 +2671,7 @@ function renderWorkforceAttendanceHistory(){
     if(statusFilter==='ON_TIME'&&!facts.onTime)return false;
     if(statusFilter==='LATE'&&facts.lateMinutes<=0)return false;
     if(statusFilter==='OVERTIME'&&facts.overtimeMinutes<=0)return false;
+    if(statusFilter==='EARLY_LEAVE'&&facts.earlyLeaveMinutes<=0)return false;
     if(statusFilter==='UNSCHEDULED'&&facts.planned)return false;
     return true;
   }).map((attendance)=>{

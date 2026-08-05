@@ -27,6 +27,9 @@ test('absensi mewajibkan geofence dan foto wajah privat',async()=>{
   assert.match(api,/distanceMeters\(/);
   assert.match(api,/uploadAttendancePhoto/);
   assert.match(api,/signedAttendancePhotoUrl/);
+  assert.match(api,/canViewAllAttendancePhotos=\['OWNER','ADMIN'\]\.includes\(session\.profile\.role\)/);
+  assert.match(api,/item\.user_id===session\.authUser\.id\|\|canViewAllAttendancePhotos/);
+  assert.match(api,/attendance\.user_id!==session\.authUser\.id&&!\['OWNER','ADMIN'\]\.includes\(session\.profile\.role\)/);
   assert.match(api,/`\$\{config\.url\}\/storage\/v1\$\{signedPath\}`/);
   assert.match(sql,/'attendance-media','attendance-media',false/);
   assert.match(sql,/v_distance>v_tenant\.attendance_radius_m/);
@@ -49,11 +52,13 @@ test('jadwal sekali dan berulang dapat diedit tanpa menimpa jadwal lain',async()
   assert.match(html,/data-workforce-view="history"/);
   assert.match(html,/value="ON_TIME">Tepat waktu/);
   assert.match(html,/value="OVERTIME">Lembur/);
+  assert.match(html,/value="EARLY_LEAVE">Pulang lebih cepat/);
   assert.match(html,/id="schedule-duration-preview"/);
   assert.match(app,/workforceDurationLabel/);
   assert.match(app,/function showWorkforceView/);
   assert.match(app,/TEPAT WAKTU/);
   assert.match(app,/LEMBUR \$\{facts\.overtimeMinutes\} MENIT/);
+  assert.match(app,/PULANG LEBIH CEPAT \$\{facts\.earlyLeaveMinutes\} MENIT/);
   assert.match(app,/workforcePlannedBounds/);
   assert.match(app,/renderWorkforceAttendanceHistory/);
   assert.match(html,/id="schedule-weekdays"/);

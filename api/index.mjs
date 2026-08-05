@@ -3444,6 +3444,7 @@ async function routeRequest(request, response, route) {
   if(request.method==='GET'&&route==='workforce/overview'){
     requirePermission(session,'workforce.self');
     const canManage=session.permissions.includes('workforce.manage');
+    const canViewAllAttendancePhotos=['OWNER','ADMIN'].includes(session.profile.role);
     const tenant=encodeURIComponent(context.tenantId);
     const today=todayInTimeZone(new Date(),context.outlet.timezone??'Asia/Makassar');
     const monthStart=`${today.slice(0,7)}-01`;
@@ -3469,10 +3470,12 @@ async function routeRequest(request, response, route) {
       return {userId:profile.user_id,displayName:profile.display_name,role:profile.role,target,salesTotal,transactions:employeeSales.length,commission};
     });
     const safeAttendance=attendance.map(({clock_in_photo_path,clock_out_photo_path,...item})=>({
-      ...item,clock_in_photo_available:Boolean(clock_in_photo_path),clock_out_photo_available:Boolean(clock_out_photo_path)
+      ...item,
+      clock_in_photo_available:Boolean(clock_in_photo_path)&&(item.user_id===session.authUser.id||canViewAllAttendancePhotos),
+      clock_out_photo_available:Boolean(clock_out_photo_path)&&(item.user_id===session.authUser.id||canViewAllAttendancePhotos)
     }));
     return send(response,200,{
-      canManage,today,profiles,outlets:context.outlets,schedules,shiftRules,attendance:safeAttendance,targets,performance,
+      canManage,canViewAllAttendancePhotos,today,profiles,outlets:context.outlets,schedules,shiftRules,attendance:safeAttendance,targets,performance,
       activeAttendance:safeAttendance.find((item)=>item.user_id===session.authUser.id&&!item.clock_out_at)??null
     });
   }
@@ -3577,7 +3580,7 @@ async function routeRequest(request, response, route) {
     const rows=await rest('attendance_records',`tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(attendanceId)}&select=user_id,clock_in_photo_path,clock_out_photo_path&limit=1`);
     const attendance=rows[0];
     if(!attendance)throw Object.assign(new Error('Absensi tidak ditemukan'),{status:404});
-    if(attendance.user_id!==session.authUser.id&&!session.permissions.includes('workforce.manage')){
+    if(attendance.user_id!==session.authUser.id&&!['OWNER','ADMIN'].includes(session.profile.role)){
       throw Object.assign(new Error('Anda tidak dapat membuka foto absensi ini'),{status:403});
     }
     const path=event==='out'?attendance.clock_out_photo_path:attendance.clock_in_photo_path;
