@@ -31,8 +31,8 @@ const androidIcon = await readFile(
 const pwaIcon = await readFile(new URL('../apps/web/icon-512.svg', import.meta.url), 'utf8');
 const releaseApk = await readFile(new URL('../releases/Kasir-Nusa-POS-1.3.0-uat.apk', import.meta.url));
 const publicApk = await readFile(new URL('../apps/web/downloads/Kasir-Nusa-POS-1.3.0-uat.apk', import.meta.url));
-const finalReleaseApk = await readFile(new URL('../releases/Kasir-Nusa-POS-1.3.1.apk', import.meta.url));
-const publicFinalApk = await readFile(new URL('../apps/web/downloads/Kasir-Nusa-POS-1.3.1.apk', import.meta.url));
+const finalReleaseApk = await readFile(new URL('../releases/Kasir-Nusa-POS-1.4.0.apk', import.meta.url));
+const publicFinalApk = await readFile(new URL('../apps/web/downloads/Kasir-Nusa-POS-1.4.0.apk', import.meta.url));
 const vercelConfig = await readFile(new URL('../vercel.json', import.meta.url), 'utf8');
 
 test('Android cashier app locks its WebView to the production POS and blocks unsafe file access', () => {
@@ -105,11 +105,11 @@ test('APK UAT v1.3.0 tersedia sebagai unduhan yang identik dengan hasil build', 
   assert.match(vercelConfig, /attachment; filename=Kasir-Nusa-POS-1\.3\.0-uat\.apk/);
 });
 
-test('APK final v1.3.1 tersedia sebagai pembaruan resmi yang identik', () => {
+test('APK final v1.4.0 dengan Firebase tersedia sebagai pembaruan resmi yang identik', () => {
   assert.deepEqual(publicFinalApk, finalReleaseApk);
   assert.notDeepEqual(finalReleaseApk, releaseApk);
-  assert.match(vercelConfig, /\/downloads\/Kasir-Nusa-POS-1\.3\.1\.apk/);
-  assert.match(vercelConfig, /attachment; filename=Kasir-Nusa-POS-1\.3\.1\.apk/);
+  assert.match(vercelConfig, /\/downloads\/Kasir-Nusa-POS-1\.4\.0\.apk/);
+  assert.match(vercelConfig, /attachment; filename=Kasir-Nusa-POS-1\.4\.0\.apk/);
 });
 
 test('APK dan PWA memakai nama serta identitas visual Kasir Nusa POS yang konsisten', () => {
