@@ -148,6 +148,37 @@ test('Charge Sandbox memeriksa status saat respons awal tidak membawa Order ID y
   }finally{globalThis.fetch=originalFetch;restore();}
 });
 
+test('respons Sandbox yang bukan QRIS menampilkan diagnostik aman dan menyimpannya',async()=>{
+  const restore=environment(),originalFetch=globalThis.fetch;
+  const account=await encryptedAccount();let failurePatch=null;
+  globalThis.fetch=async(url,options={})=>{
+    const target=String(url);
+    if(target.endsWith('/auth/v1/user'))return jsonResponse({id:ids.user,email:'owner@example.com'});
+    if(target.includes('/rest/v1/profiles?'))return jsonResponse([{user_id:ids.user,tenant_id:ids.tenant,role:'OWNER',active:true,display_name:'Owner'}]);
+    if(target.includes('/rest/v1/outlets?'))return jsonResponse([{id:ids.outlet,tenant_id:ids.tenant,name:'Toko'}]);
+    if(target.includes('/rest/v1/stock_locations?'))return jsonResponse([{id:ids.location,outlet_id:ids.outlet,name:'Toko',kind:'STORE'}]);
+    if(target.includes('/rest/v1/payment_gateway_accounts?'))return jsonResponse([account]);
+    if(target.endsWith('/rest/v1/payment_gateway_intents'))return jsonResponse([{id:ids.intent}]);
+    if(target==='https://api.sandbox.midtrans.com/v2/charge')return jsonResponse({status_code:'200',status_message:'Payment channel is not activated',unexpected_field:'safe-value'});
+    if(target.includes('/status'))return jsonResponse({status_code:'200',status_message:'Payment channel is not activated',unexpected_field:'safe-value'});
+    if(target.includes('/rest/v1/payment_gateway_intents?')&&options.method==='PATCH'){
+      failurePatch=JSON.parse(options.body);return jsonResponse([]);
+    }
+    if(target.endsWith('/rest/v1/payment_gateway_events'))return jsonResponse([]);
+    return jsonResponse({message:`Mock belum menangani ${target}`},500);
+  };
+  try{
+    const result=await callApi('POST','payment-gateways/midtrans/sandbox/intents',{amount:10000},{authorization:'Bearer token'});
+    assert.equal(result.status,409,JSON.stringify(result.body));
+    assert.match(result.body.error,/Payment channel is not activated/);
+    assert.match(result.body.error,/kolom status_code, status_message, unexpected_field/);
+    assert.equal(result.body.error.includes(serverKey),false);
+    assert.equal(failurePatch.last_gateway_payload.status_message,'Payment channel is not activated');
+    assert.deepEqual(failurePatch.last_gateway_payload.response_keys,['status_code','status_message','unexpected_field']);
+    assert.equal(JSON.stringify(failurePatch).includes(serverKey),false);
+  }finally{globalThis.fetch=originalFetch;restore();}
+});
+
 test('webhook dengan signature palsu ditolak sebelum cek status atau mutasi',async()=>{
   const restore=environment(),originalFetch=globalThis.fetch,calls=[];const account=await encryptedAccount();
   globalThis.fetch=async(url,options={})=>{

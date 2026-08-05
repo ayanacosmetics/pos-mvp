@@ -151,8 +151,35 @@ function safeSecretEqual(left,right) {
 }
 
 function sanitizedMidtransPayload(payload={}) {
-  const allowed=['status_code','status_message','transaction_id','order_id','merchant_id','gross_amount','currency','payment_type','transaction_time','settlement_time','expiry_time','transaction_status','fraud_status','acquirer','issuer','reference_id'];
-  return Object.fromEntries(allowed.filter((key)=>payload[key]!==undefined).map((key)=>[key,String(payload[key]).slice(0,300)]));
+  const allowed=['status_code','status_message','transaction_id','order_id','merchant_id','gross_amount','currency','payment_type','transaction_time','settlement_time','expiry_time','transaction_status','fraud_status','acquirer','issuer','reference_id','channel_response_code','channel_response_message'];
+  const sanitized=Object.fromEntries(allowed.filter((key)=>payload?.[key]!==undefined).map((key)=>[key,String(payload[key]).slice(0,300)]));
+  const actions=Array.isArray(payload?.actions)?payload.actions:[];
+  if(actions.length){
+    sanitized.action_names=actions.map((item)=>String(item?.name??'').slice(0,80)).filter(Boolean).slice(0,10);
+    sanitized.action_hosts=actions.map((item)=>{try{return new URL(String(item?.url??'')).hostname;}catch{return '';}}).filter(Boolean).slice(0,10);
+  }
+  if(Array.isArray(payload?.error_messages))sanitized.error_messages=payload.error_messages.map((item)=>String(item).slice(0,200)).slice(0,10);
+  sanitized.response_keys=Object.keys(payload&&typeof payload==='object'?payload:{}).filter((key)=>payload[key]!==undefined&&!['actions','signature_key'].includes(key)).slice(0,30);
+  return sanitized;
+}
+
+function midtransResponseDiagnostic(payload={}) {
+  const safe=sanitizedMidtransPayload(payload);
+  const values=[
+    `kode ${safe.status_code??'tidak ada'}`,
+    `pesan ${safe.status_message??safe.error_messages?.join(' / ')??'tidak ada'}`,
+    `status ${safe.transaction_status??'tidak ada'}`,
+    `tipe ${safe.payment_type??'tidak ada'}`,
+    `aksi ${safe.action_names?.join(', ')||'tidak ada'}`,
+    `host ${safe.action_hosts?.join(', ')||'tidak ada'}`,
+    `kolom ${safe.response_keys?.join(', ')||'tidak ada'}`
+  ];
+  return values.join('; ').slice(0,700);
+}
+
+function midtransValidationError(message,payload) {
+  const details=sanitizedMidtransPayload(payload);
+  return Object.assign(new Error(`${message}. Respons Midtrans: ${midtransResponseDiagnostic(payload)}`),{status:409,details});
 }
 
 function midtransPayloadHash(payload={}) {
@@ -188,13 +215,13 @@ async function midtransRequest(config,path,{method='GET',body}={}) {
 }
 
 function validateMidtransIntentStatus(intent,payload,{identityVerifiedByLookup=false}={}) {
-  if(String(payload.order_id??'')!==intent.order_id&&!identityVerifiedByLookup)throw Object.assign(new Error('Order ID Midtrans tidak cocok dengan intent Nusa'),{status:409});
+  if(String(payload.order_id??'')!==intent.order_id&&!identityVerifiedByLookup)throw midtransValidationError('Order ID Midtrans tidak cocok dengan intent Nusa',payload);
   const paymentType=String(payload.payment_type??'').toLowerCase();
   const isQrisFlow=paymentType==='qris'||(paymentType==='gopay'&&Boolean(midtransQrUrl(payload)));
-  if(!isQrisFlow)throw Object.assign(new Error(`Jenis pembayaran Midtrans bukan alur QRIS (${paymentType||'tidak ada'}; URL QR tidak dikenali)`),{status:409});
-  if(String(payload.currency??'IDR').toUpperCase()!=='IDR')throw Object.assign(new Error('Mata uang Midtrans bukan IDR'),{status:409});
-  if(Math.abs(Number(payload.gross_amount)-Number(intent.gross_amount))>0.001)throw Object.assign(new Error('Nominal Midtrans tidak cocok dengan intent Nusa'),{status:409});
-  if(String(payload.transaction_status??'').toLowerCase()==='settlement'&&payload.fraud_status&&String(payload.fraud_status).toLowerCase()!=='accept')throw Object.assign(new Error('Settlement Midtrans tidak memiliki fraud status accept'),{status:409});
+  if(!isQrisFlow)throw midtransValidationError('Jenis pembayaran Midtrans bukan alur QRIS atau URL QR tidak dikenali',payload);
+  if(String(payload.currency??'IDR').toUpperCase()!=='IDR')throw midtransValidationError('Mata uang Midtrans bukan IDR',payload);
+  if(Math.abs(Number(payload.gross_amount)-Number(intent.gross_amount))>0.001)throw midtransValidationError('Nominal Midtrans tidak cocok dengan intent Nusa',payload);
+  if(String(payload.transaction_status??'').toLowerCase()==='settlement'&&payload.fraud_status&&String(payload.fraud_status).toLowerCase()!=='accept')throw midtransValidationError('Settlement Midtrans tidak memiliki fraud status accept',payload);
 }
 
 async function recordMidtransEvent(intentId,source,payload,processingResult,signatureVerified=null) {
@@ -2392,18 +2419,24 @@ async function routeRequest(request, response, route) {
     const orderId=`NUSA-SBX-${Date.now().toString(36).toUpperCase()}-${randomBytes(6).toString('hex').toUpperCase()}`;
     const created=await rest('payment_gateway_intents','',{method:'POST',prefer:'return=representation',body:{tenant_id:context.tenantId,outlet_id:context.outlet?.id??null,cashier_id:session.authUser.id,gateway_account_id:config.id,provider:'MIDTRANS',environment:'SANDBOX',channel:'QRIS_DYNAMIC',order_id:orderId,gross_amount:amount,currency:'IDR',status:'CREATING'}});
     const intent={...created[0],tenant_id:context.tenantId,environment:'SANDBOX',order_id:orderId,gross_amount:amount};
+    let diagnosticPayload={};
     try{
       const chargePayload=await midtransRequest(config,'/v2/charge',{method:'POST',body:{payment_type:'qris',transaction_details:{order_id:orderId,gross_amount:amount},item_details:[{id:'NUSA-SANDBOX',price:amount,quantity:1,name:'Simulasi QRIS Nusa POS'}],qris:{acquirer:'gopay'}}});
+      diagnosticPayload=chargePayload;
       const needsStatusVerification=String(chargePayload.order_id??'')!==orderId;
-      const payload=needsStatusVerification
-        ? {...await midtransRequest(config,`/v2/${encodeURIComponent(orderId)}/status`),actions:chargePayload.actions,acquirer:chargePayload.acquirer??'gopay'}
-        : chargePayload;
+      let payload=chargePayload;
+      if(needsStatusVerification){
+        const statusPayload=await midtransRequest(config,`/v2/${encodeURIComponent(orderId)}/status`);
+        payload={...statusPayload,actions:chargePayload.actions,acquirer:chargePayload.acquirer??statusPayload.acquirer};
+        diagnosticPayload=payload;
+      }
       const updated=await updateMidtransIntent(intent,payload,'CHARGE',null,{identityVerifiedByLookup:needsStatusVerification});
       await rest('payment_gateway_accounts',`id=eq.${config.id}&tenant_id=eq.${context.tenantId}`,{method:'PATCH',body:{status:'VERIFIED',merchant_id:String(payload.merchant_id??config.merchant_id??'')||null,verified_at:new Date().toISOString(),updated_at:new Date().toISOString()}});
       return send(response,201,{intent:{id:updated.id,orderId:updated.order_id,transactionId:updated.gateway_transaction_id,amount:Number(updated.gross_amount),status:updated.status,qrUrl:updated.qr_url,expiresAt:updated.expires_at,createdAt:updated.created_at},environment:'SANDBOX',operationalMutation:false});
     }catch(error){
-      await rest('payment_gateway_intents',`id=eq.${intent.id}`,{method:'PATCH',body:{status:'ERROR',failure_code:'CHARGE_FAILED',failure_message:String(error.message).slice(0,500),updated_at:new Date().toISOString()}}).catch(()=>null);
-      await recordMidtransEvent(intent.id,'SYSTEM',{},`Charge gagal: ${String(error.message).slice(0,300)}`,null).catch(()=>null);
+      const safePayload=Object.keys(error.details??{}).length?error.details:sanitizedMidtransPayload(diagnosticPayload);
+      await rest('payment_gateway_intents',`id=eq.${intent.id}`,{method:'PATCH',body:{status:'ERROR',failure_code:'CHARGE_FAILED',failure_message:String(error.message).slice(0,500),last_gateway_payload:safePayload,updated_at:new Date().toISOString()}}).catch(()=>null);
+      await recordMidtransEvent(intent.id,'SYSTEM',diagnosticPayload,`Charge gagal: ${String(error.message).slice(0,300)}`,null).catch(()=>null);
       throw error;
     }
   }

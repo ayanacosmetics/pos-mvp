@@ -5862,7 +5862,7 @@ function openMidtransSandboxDialog(intent){
   if(!intent)return;
   state.activeMidtransSandboxIntent=intent;
   el('midtrans-sandbox-qr').innerHTML=intent.qrUrl?`<img src="${escapeHtml(intent.qrUrl)}" alt="QRIS Sandbox Midtrans"><strong>${money.format(intent.amount)}</strong>`:'<div class="empty-state compact">QR belum tersedia. Periksa status atau buat simulasi baru.</div>';
-  el('midtrans-sandbox-dialog-status').innerHTML=`<span class="status-badge ${intent.status==='SETTLEMENT'?'approved':intent.status==='PENDING'?'submitted':intent.status==='ERROR'?'danger':''}">${escapeHtml(midtransSandboxStatusLabel(intent.status))}</span><small>Order ID</small><code>${escapeHtml(intent.orderId)}</code>${intent.transactionId?`<small>Transaction ID</small><code>${escapeHtml(intent.transactionId)}</code>`:''}`;
+  el('midtrans-sandbox-dialog-status').innerHTML=`<span class="status-badge ${intent.status==='SETTLEMENT'?'approved':intent.status==='PENDING'?'submitted':intent.status==='ERROR'?'danger':''}">${escapeHtml(midtransSandboxStatusLabel(intent.status))}</span><small>Order ID</small><code>${escapeHtml(intent.orderId)}</code>${intent.transactionId?`<small>Transaction ID</small><code>${escapeHtml(intent.transactionId)}</code>`:''}${intent.failureMessage?`<small>Diagnostik aman</small><p>${escapeHtml(intent.failureMessage)}</p>`:''}`;
   el('refresh-midtrans-sandbox').disabled=!['CREATING','PENDING'].includes(intent.status);
   if(!el('midtrans-sandbox-dialog').open)el('midtrans-sandbox-dialog').showModal();
 }
