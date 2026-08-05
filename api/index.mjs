@@ -4412,7 +4412,12 @@ async function routeRequest(request, response, route) {
         error.status = 400;
         throw error;
       }
-      return { productId: item.productId, baseQty: qty, unitCost: cost, lineDiscount: 0 };
+      return {
+        productId:item.productId,baseQty:qty,unitCost:cost,lineDiscount:0,
+        purchaseQty:Number(item.purchaseQty??qty),purchaseUnitId:item.purchaseUnitId??null,
+        purchaseUnitName:item.purchaseUnitName??'pcs',purchaseUnitFactor:Number(item.purchaseUnitFactor??1),
+        purchaseUnitCost:Number(item.purchaseUnitCost??cost)
+      };
     });
     const result = await rpc('create_restock_purchase_order_v1', {
       p_tenant_id: context.tenantId, p_actor_id: session.authUser.id,

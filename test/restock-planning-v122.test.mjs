@@ -57,7 +57,7 @@ test('API meneruskan lokasi rencana dan membuat draft rekomendasi melalui RPC at
   process.env.SUPABASE_URL='https://project.supabase.test';
   process.env.SUPABASE_ANON_KEY='anon';
   process.env.SUPABASE_SERVICE_ROLE_KEY='service';
-  const ids={user:'11111111-1111-4111-8111-111111111111',tenant:'22222222-2222-4222-8222-222222222222',outlet:'33333333-3333-4333-8333-333333333333',location:'44444444-4444-4444-8444-444444444444',supplier:'55555555-5555-4555-8555-555555555555',product:'66666666-6666-4666-8666-666666666666'};
+  const ids={user:'11111111-1111-4111-8111-111111111111',tenant:'22222222-2222-4222-8222-222222222222',outlet:'33333333-3333-4333-8333-333333333333',location:'44444444-4444-4444-8444-444444444444',supplier:'55555555-5555-4555-8555-555555555555',product:'66666666-6666-4666-8666-666666666666',unit:'88888888-8888-4888-8888-888888888888'};
   const calls=[];
   const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json'}});
   globalThis.fetch=async(url,options={})=>{
@@ -81,12 +81,17 @@ test('API meneruskan lokasi rencana dan membuat draft rekomendasi melalui RPC at
     assert.equal(plan.body.locationId,ids.location);
     const draft=await call('POST','restock-planning/draft',{
       supplierId:ids.supplier,locationId:ids.location,expectedOn:'2026-08-02',
-      items:[{productId:ids.product,baseQty:12,unitCost:18000}]
+      items:[{productId:ids.product,baseQty:12,unitCost:18000,purchaseQty:1,purchaseUnitId:ids.unit,purchaseUnitName:'lusin',purchaseUnitFactor:12,purchaseUnitCost:216000}]
     });
     assert.equal(draft.status,201);
     assert.equal(draft.body.planningSource,'RESTOCK_PLAN');
     assert.equal(calls.find((entry)=>entry.target.endsWith('/rpc/get_restock_recommendations_v1')).body.p_location_id,ids.location);
-    assert.equal(calls.find((entry)=>entry.target.endsWith('/rpc/create_restock_purchase_order_v1')).body.p_items[0].baseQty,12);
+    const draftItem=calls.find((entry)=>entry.target.endsWith('/rpc/create_restock_purchase_order_v1')).body.p_items[0];
+    assert.equal(draftItem.baseQty,12);
+    assert.equal(draftItem.purchaseQty,1);
+    assert.equal(draftItem.purchaseUnitId,ids.unit);
+    assert.equal(draftItem.purchaseUnitFactor,12);
+    assert.equal(draftItem.purchaseUnitCost,216000);
   }finally{
     globalThis.fetch=originalFetch;
     for(const [key,name] of Object.entries({url:'SUPABASE_URL',anon:'SUPABASE_ANON_KEY',service:'SUPABASE_SERVICE_ROLE_KEY'})){

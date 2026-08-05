@@ -3694,13 +3694,13 @@ function renderRestockPlanning() {
     const [urgencyLabel,urgencyClass]=planningUrgency[item.urgency]??[item.urgency,'draft'];
     const product=productById.get(item.productId);
     const price=product?retailPriceOf(product):Number(item.retailPrice??0);
-    const selectedQty=state.restockSelection.get(item.productId);
-    return `<button class="planning-compact-row ${selectedQty?'selected':''}" data-product-id="${escapeHtml(item.productId)}" type="button">
+    const selection=planningSelectionOf(item.productId);
+    return `<button class="planning-compact-row ${selection?'selected':''}" data-product-id="${escapeHtml(item.productId)}" type="button">
       ${productThumbnail(product ?? {name:item.productName})}
       <span class="planning-compact-product"><strong>${escapeHtml(item.productName)}</strong><small>${escapeHtml(item.sku)}</small></span>
       <span class="planning-compact-fact"><small>Harga jual</small><strong>${money.format(price)}</strong></span>
       <span class="planning-compact-fact"><small>Stok</small><strong>${Number(item.stock).toLocaleString('id-ID')} pcs</strong></span>
-      <span class="planning-compact-choice">${selectedQty?`<small>Dipilih</small><strong>${Number(selectedQty).toLocaleString('id-ID')} pcs</strong>`:`<span class="status-badge ${urgencyClass}">${urgencyLabel}</span><strong>Pilih</strong>`}</span>
+      <span class="planning-compact-choice">${selection?`<small>Dipilih${selection.factor>1?` · ${Number(selection.qty*selection.factor).toLocaleString('id-ID')} pcs`:''}</small><strong>${Number(selection.qty).toLocaleString('id-ID')} ${escapeHtml(selection.unitName)}</strong>`:`<span class="status-badge ${urgencyClass}">${urgencyLabel}</span><strong>Pilih</strong>`}</span>
       <span class="planning-compact-arrow" aria-hidden="true">›</span>
     </button>`;
   }).join('') || '<div class="empty-state compact">Tidak ada barang yang sesuai pencarian atau filter.</div>';
@@ -3713,6 +3713,38 @@ function planningItem(productId) {
   return state.restockPlanning.recommendations.find((item)=>item.productId===productId);
 }
 
+function planningSelectionOf(productId) {
+  const selection=state.restockSelection.get(productId);
+  if(selection===undefined)return null;
+  return typeof selection==='number'?{qty:selection,unitId:null,unitName:'pcs',factor:1}:selection;
+}
+
+function planningPurchaseUnits(product) {
+  const units=sortedProductUnits(product).reverse();
+  return units.length?units:[{id:'',name:'pcs',factor:1}];
+}
+
+function updatePlanningItemUnit({convertQuantity=false}={}) {
+  const productId=el('planning-item-product-id').value;
+  const item=planningItem(productId);
+  const select=el('planning-item-unit');
+  const unit=select.selectedOptions[0];
+  const factor=Number(unit?.dataset.factor??1);
+  const previousFactor=Number(select.dataset.previousFactor??factor);
+  if(convertQuantity&&previousFactor>0){
+    const baseQty=Number(el('planning-item-qty').value||0)*previousFactor;
+    el('planning-item-qty').value=Number((baseQty/factor).toFixed(6));
+  }
+  select.dataset.previousFactor=String(factor);
+  el('planning-item-conversion').textContent=factor>1
+    ? `1 ${unit?.dataset.name??unit?.textContent??'satuan'} = ${factor.toLocaleString('id-ID')} pcs. Jumlah PO dan penerimaan akan memakai satuan ini.`
+    : 'Satuan dasar produk (pcs).';
+  const suggestedBase=Number(item?.suggestedQty??0);
+  el('planning-item-suggestion').innerHTML=suggestedBase>0
+    ? `<strong>Saran sistem: ${Math.ceil(suggestedBase/factor).toLocaleString('id-ID')} ${escapeHtml(unit?.dataset.name??'pcs')}</strong><small>Setara minimal ${suggestedBase.toLocaleString('id-ID')} pcs.${item?.supplierName?` Supplier yang pernah dipakai: ${escapeHtml(item.supplierName)}`:' Supplier dipilih setelah barang terkumpul.'}</small>`
+    : '<strong>Belum perlu restok menurut sistem</strong><small>Anda tetap dapat menentukan jumlah secara manual.</small>';
+}
+
 function syncPlanningSelection() {
   el('planning-selected-count').textContent = `${state.restockSelection.size} barang dipilih`;
   el('create-planning-draft').disabled = !state.restockSelection.size || !el('planning-order-supplier').value;
@@ -3722,20 +3754,23 @@ function openPlanningItem(productId) {
   const item=planningItem(productId);
   if(!item)return;
   const product=state.products.find((entry)=>entry.id===productId);
-  const selectedQty=state.restockSelection.get(productId);
-  const suggestedQty=Number(item.suggestedQty)>0?Number(item.suggestedQty):1;
+  const selection=planningSelectionOf(productId);
+  const units=planningPurchaseUnits(product);
+  const selectedUnit=units.find((unit)=>unit.id===selection?.unitId)??units[0];
+  const factor=Number(selectedUnit?.factor??1);
+  const suggestedQty=Number(item.suggestedQty)>0?Math.ceil(Number(item.suggestedQty)/factor):1;
   el('planning-item-product-id').value=productId;
   el('planning-item-name').textContent=item.productName;
   el('planning-item-sku').textContent=item.sku;
   el('planning-item-price').textContent=money.format(product?retailPriceOf(product):Number(item.retailPrice??0));
   el('planning-item-stock').textContent=`${Number(item.stock).toLocaleString('id-ID')} pcs`;
-  el('planning-item-qty').value=selectedQty??suggestedQty;
-  el('planning-item-suggestion').innerHTML=Number(item.suggestedQty)>0
-    ? `<strong>Saran sistem: ${Number(item.suggestedQty).toLocaleString('id-ID')} pcs</strong><small>${item.supplierName?`Supplier yang pernah dipakai: ${escapeHtml(item.supplierName)}`:'Supplier dipilih setelah barang terkumpul.'}</small>`
-    : '<strong>Belum perlu restok menurut sistem</strong><small>Anda tetap dapat menentukan jumlah secara manual.</small>';
+  el('planning-item-unit').innerHTML=units.map((unit)=>`<option value="${escapeHtml(unit.id??'')}" data-name="${escapeHtml(unit.name??'pcs')}" data-factor="${Number(unit.factor??1)}" ${unit.id===selectedUnit?.id?'selected':''}>${escapeHtml(unit.name??'pcs')}${Number(unit.factor??1)>1?` (${Number(unit.factor).toLocaleString('id-ID')} pcs)`:''}</option>`).join('');
+  el('planning-item-unit').dataset.previousFactor=String(factor);
+  el('planning-item-qty').value=selection?.qty??suggestedQty;
+  updatePlanningItemUnit();
   el('planning-item-error').textContent='';
-  el('remove-planning-item').classList.toggle('hidden',!selectedQty);
-  el('save-planning-item').textContent=selectedQty?'Perbarui jumlah':'Pilih barang';
+  el('remove-planning-item').classList.toggle('hidden',!selection);
+  el('save-planning-item').textContent=selection?'Perbarui pesanan':'Pilih barang';
   el('planning-item-compare').classList.toggle('hidden',!item.supplierId);
   el('planning-item-dialog').showModal();
   requestAnimationFrame(()=>{el('planning-item-qty').focus();el('planning-item-qty').select();});
@@ -3746,7 +3781,8 @@ function savePlanningItem(event) {
   const productId=el('planning-item-product-id').value;
   const qty=Number(el('planning-item-qty').value);
   if(!(qty>0)){el('planning-item-error').textContent='Jumlah pesanan harus lebih dari nol.';return;}
-  state.restockSelection.set(productId,qty);
+  const option=el('planning-item-unit').selectedOptions[0];
+  state.restockSelection.set(productId,{qty,unitId:option?.value||null,unitName:option?.dataset.name??'pcs',factor:Number(option?.dataset.factor??1)});
   el('planning-item-dialog').close();
   renderRestockPlanning();
 }
@@ -3799,8 +3835,8 @@ async function savePlanningSettings(event) {
 }
 
 async function createPlanningDraft() {
-  const selected=[...state.restockSelection.entries()].map(([productId,orderQty])=>({...planningItem(productId),orderQty}));
-  if(selected.some((item)=>!(item.orderQty>0)))return toast('Jumlah pesanan setiap barang harus lebih dari nol.');
+  const selected=[...state.restockSelection.keys()].map((productId)=>({...planningItem(productId),...planningSelectionOf(productId)}));
+  if(selected.some((item)=>!(item.qty>0)||!(item.factor>0)))return toast('Jumlah atau satuan pesanan setiap barang belum valid.');
   const supplierId=el('planning-order-supplier').value;
   if(!supplierId)return toast('Pilih supplier tujuan pesanan.');
   const maxLead=Math.max(...selected.map((item)=>Number(item.leadTimeDays??0)));
@@ -3809,7 +3845,7 @@ async function createPlanningDraft() {
   try{
     const result=await request('/api/restock-planning/draft',{method:'POST',body:JSON.stringify({
       supplierId,locationId:el('planning-location').value,expectedOn:expected.toISOString().slice(0,10),
-      items:selected.map((item)=>({productId:item.productId,baseQty:item.orderQty,unitCost:Number(item.estimatedCost??0)}))
+      items:selected.map((item)=>({productId:item.productId,baseQty:item.qty*item.factor,unitCost:Number(item.estimatedCost??0),purchaseQty:item.qty,purchaseUnitId:item.unitId,purchaseUnitName:item.unitName,purchaseUnitFactor:item.factor,purchaseUnitCost:Number(item.estimatedCost??0)*item.factor}))
     })});
     let status='DRAFT';
     if(result.id){
@@ -8068,6 +8104,7 @@ el('restock-planning-list').addEventListener('click',(event)=>{
 });
 el('create-planning-draft').addEventListener('click',createPlanningDraft);
 el('planning-item-form').addEventListener('submit',savePlanningItem);
+el('planning-item-unit').addEventListener('change',()=>updatePlanningItemUnit({convertQuantity:true}));
 el('close-planning-item').addEventListener('click',()=>el('planning-item-dialog').close());
 el('cancel-planning-item').addEventListener('click',()=>el('planning-item-dialog').close());
 el('remove-planning-item').addEventListener('click',removePlanningItem);

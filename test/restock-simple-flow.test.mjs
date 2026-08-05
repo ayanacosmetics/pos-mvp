@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html, app, css] = await Promise.all([
+const [html, app, api, css] = await Promise.all([
   readFile(new URL('../apps/web/index.html', import.meta.url), 'utf8'),
   readFile(new URL('../apps/web/app.js', import.meta.url), 'utf8'),
+  readFile(new URL('../api/index.mjs', import.meta.url), 'utf8'),
   readFile(new URL('../apps/web/styles.css', import.meta.url), 'utf8')
 ]);
 
@@ -27,12 +28,13 @@ test('pilihan barang menampilkan seluruh produk dari stok paling sedikit', () =>
   assert.match(app, /<small>Stok<\/small>/);
 });
 
-test('jumlah restok diisi dalam popup setelah barang ditekan', () => {
-  for (const id of ['planning-item-dialog','planning-item-qty','save-planning-item','remove-planning-item']) {
+test('jumlah dan satuan restok diisi dalam popup setelah barang ditekan', () => {
+  for (const id of ['planning-item-dialog','planning-item-unit','planning-item-qty','planning-item-conversion','save-planning-item','remove-planning-item']) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
   assert.match(app, /function openPlanningItem/);
-  assert.match(app, /state\.restockSelection\.set\(productId,qty\)/);
+  assert.match(app, /function planningPurchaseUnits/);
+  assert.match(app, /state\.restockSelection\.set\(productId,\{qty,unitId:/);
   assert.match(app, /state\.restockSelection\.delete/);
   assert.doesNotMatch(app, /class="planning-select" type="checkbox"/);
 });
@@ -47,8 +49,8 @@ test('daftar besar mempunyai pencarian dan dimuat bertahap', () => {
 
 test('pilihan tersimpan ketika daftar dirender ulang', () => {
   assert.match(app, /state\.restockSelection = new Map\(\)/);
-  assert.match(app, /state\.restockSelection\.get\(item\.productId\)/);
-  assert.match(app, /\[\.\.\.state\.restockSelection\.entries\(\)\]/);
+  assert.match(app, /function planningSelectionOf/);
+  assert.match(app, /\[\.\.\.state\.restockSelection\.keys\(\)\]/);
   assert.match(app, /state\.restockSelection\.clear\(\)/);
 });
 
@@ -56,7 +58,10 @@ test('satu tombol membuat pesanan supplier dan mengajukannya untuk diproses', ()
   assert.match(html, /id="create-planning-draft"[\s\S]*Buat pesanan supplier/);
   assert.match(html, /id="planning-order-supplier"/);
   assert.match(app, /purchase-orders\/\$\{result\.id\}\/submit/);
-  assert.match(app, /baseQty:item\.orderQty/);
+  assert.match(app, /baseQty:item\.qty\*item\.factor/);
+  assert.match(app, /purchaseUnitId:item\.unitId/);
+  assert.match(app, /purchaseUnitCost:Number\(item\.estimatedCost\?\?0\)\*item\.factor/);
+  assert.match(api, /purchaseUnitFactor:Number\(item\.purchaseUnitFactor\?\?1\)/);
   assert.match(app, /Pilih supplier tujuan pesanan/);
   assert.match(app, /supplierId,locationId/);
 });
