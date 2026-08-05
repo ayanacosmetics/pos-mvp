@@ -44,8 +44,17 @@ test('jadwal sekali dan berulang dapat diedit tanpa menimpa jadwal lain',async()
   assert.match(html,/id="workforce-attendance-metrics"/);
   assert.match(html,/id="workforce-today-team"/);
   assert.match(html,/id="workforce-attendance-list"/);
+  assert.match(html,/data-workforce-view="overview"/);
+  assert.match(html,/data-workforce-view="schedule"/);
+  assert.match(html,/data-workforce-view="history"/);
+  assert.match(html,/value="ON_TIME">Tepat waktu/);
+  assert.match(html,/value="OVERTIME">Lembur/);
   assert.match(html,/id="schedule-duration-preview"/);
   assert.match(app,/workforceDurationLabel/);
+  assert.match(app,/function showWorkforceView/);
+  assert.match(app,/TEPAT WAKTU/);
+  assert.match(app,/LEMBUR \$\{facts\.overtimeMinutes\} MENIT/);
+  assert.match(app,/workforcePlannedBounds/);
   assert.match(app,/renderWorkforceAttendanceHistory/);
   assert.match(html,/id="schedule-weekdays"/);
   assert.match(app,/mode==='RECURRING'/);

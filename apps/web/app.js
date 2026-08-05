@@ -16,7 +16,7 @@ let kaspinMigrationPackage=null;
 const kaspinMigrationExpandedSteps=new Set();
 let variantSuggestions=[];
 const selectedVariantSuggestions=new Set();
-const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, platformInfrastructure:null, dataResetScopesSignature:'', dataRestoreSnapshot:null,dataRestoreOtpReady:false, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productAdminPage:1, selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', importSourceReport:null, productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], inventoryBalanceByProduct:new Map(), inventoryListLimit:100, stockView:'list', ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
+const state = { token: storedAuth.token, refreshToken: storedAuth.refreshToken, expiresAt: storedAuth.expiresAt, session: null, business: { name: 'Kasir Nusa', receiptFooter: 'Terima kasih telah berbelanja.' }, deviceSettings: { paperWidth: 80, autoPrint: false, receiptCopies: 1 }, settings: { outlets: [], locations: [], devices: [] }, systemHealth: null, platformInfrastructure:null, dataResetScopesSignature:'', dataRestoreSnapshot:null,dataRestoreOtpReady:false, outlets: [], activeOutletId: null, products: [], posCategoryFilter: '', favoriteOnly: false, unitPicker:null, posSales: [], selectedPosSaleId: null, managedProducts: [], productAdminPage:1, selectedProductIds:new Set(), productActionId:null, productLabelCopies:new Map(), productImportMode:'GENERAL', importSourceReport:null, productUnitsDraft: [], productPriceTiers: {}, pricePolicyRules: [], pricePolicyPreview:null, productImageFile:null, productImagePreviewUrl:'', promotions: [], promotionVersions: [], loyalty: { settings:null,tiers:[],vouchers:[],receiptCampaigns:[] }, crmDashboard:null, voucherCode:'', customerGroups: [], customers: [], customerEditorSource: 'relations', customerAging: null, activeCustomerStatement:null, suppliers: [], activeSupplierStatement:null, locations: [], purchaseOrders: [], editingOrderId: null, poLines: [], activePurchaseOrder: null, supplierReturnReceipt: null, recentSupplierReturns: [], currentShift: null, cart: [], quote: null, saleAuthorization: null, adjustmentTargetIndex: null, paymentDraft: [], paymentKeypadIndex:0, paymentKeypadFresh:true, heldSales: [], lastReceipt: null, inventory: [], inventoryProducts: [], inventoryBalanceByProduct:new Map(), inventoryListLimit:100, stockView:'list', ledger: [], stockProductId:null, stockProductDetail:null, stockProductView:'overview', stockLogEntryId:null, expiryBatches: [], expiryMetrics: null, expiryError: null, report: null, ownerFinance: null, accounting:null, manualJournalLines:[], users: [], syncReview: [], returnSale: null, recentReturns: [], importDraft: null, importJobs: [], backupExports: [], workforce: { overview:null, view:'overview', approvals:null,activity:[], reconciliations:[] }, multioutlet:{transfers:[],pricing:{overrides:[],baseRules:[]},promotions:[],consolidation:null,notifications:[]}, pilot:null };
 const money = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 state.restockDraftProducts=new Map();
 state.restockNewUnits=[];
@@ -556,7 +556,7 @@ async function synchronizeData() {
     if (accountingPages.has(page)) tasks.push(loadAccounting({ sync: true }));
     if (pilotPages.has(page) && page !== 'pilot-sop') tasks.push(loadPilotDashboard());
     if (page.startsWith('owner-') && state.session.permissions.includes('finance.owner')) tasks.push(loadOwnerFinance());
-    if (page === 'workforce-schedule' || page === 'workforce-targets') tasks.push(loadWorkforceOverview());
+    if (target === 'workforce-schedule' || page === 'workforce-targets') tasks.push(loadWorkforceOverview());
     if (page === 'workforce-approvals') tasks.push(loadApprovals());
     if (page === 'workforce-activity' && state.session.permissions.includes('workforce.manage')) tasks.push(loadWorkforceActivity());
     if (page === 'workforce-reconciliation' && state.session.permissions.includes('workforce.manage')) tasks.push(loadWorkforceReconciliations());
@@ -2542,19 +2542,45 @@ function workforceScheduleForAttendance(data,attendance){
     ??workforcePlannedShifts(data,attendance.work_date).find((item)=>item.user_id===attendance.user_id);
 }
 
+function workforcePlannedBounds(attendance,planned){
+  if(!planned)return null;
+  const start=new Date(`${attendance.work_date}T${String(planned.starts_at).slice(0,5)}:00`);
+  const end=new Date(`${attendance.work_date}T${String(planned.ends_at).slice(0,5)}:00`);
+  if(end<=start)end.setDate(end.getDate()+1);
+  return {start,end};
+}
+
 function workforceAttendanceFacts(data,attendance){
   const planned=workforceScheduleForAttendance(data,attendance);
   const clockIn=new Date(attendance.clock_in_at),clockOut=attendance.clock_out_at?new Date(attendance.clock_out_at):null;
   const duration=Math.max(0,Math.round(((clockOut??new Date())-clockIn)/60000));
-  const actualStart=clockIn.getHours()*60+clockIn.getMinutes();
-  const lateMinutes=planned?Math.max(0,actualStart-workforceTimeMinutes(planned.starts_at)):0;
-  return {planned,duration,lateMinutes,working:!clockOut};
+  const bounds=workforcePlannedBounds(attendance,planned),referenceEnd=clockOut??new Date();
+  const lateMinutes=bounds?Math.max(0,Math.floor((clockIn-bounds.start)/60000)):0;
+  const overtimeMinutes=bounds?Math.max(0,Math.floor((referenceEnd-bounds.end)/60000)):0;
+  return {planned,bounds,duration,lateMinutes,overtimeMinutes,onTime:Boolean(bounds&&lateMinutes===0),working:!clockOut};
 }
 
 function attendanceStatusMarkup(facts){
-  if(facts.working)return '<span class="attendance-state working">SEDANG BEKERJA</span>';
-  if(facts.lateMinutes>0)return `<span class="attendance-state late">TERLAMBAT ${facts.lateMinutes} MENIT</span>`;
-  return '<span class="attendance-state complete">SELESAI</span>';
+  const states=[facts.working?'<span class="attendance-state working">SEDANG BEKERJA</span>':'<span class="attendance-state complete">SELESAI</span>'];
+  if(!facts.planned)states.push('<span class="attendance-state unscheduled">TANPA JADWAL</span>');
+  else{
+    states.push(facts.lateMinutes>0?`<span class="attendance-state late">TERLAMBAT ${facts.lateMinutes} MENIT</span>`:'<span class="attendance-state on-time">TEPAT WAKTU</span>');
+    if(facts.overtimeMinutes>0)states.push(`<span class="attendance-state overtime">LEMBUR ${facts.overtimeMinutes} MENIT</span>`);
+  }
+  return `<span class="attendance-state-group">${states.join('')}</span>`;
+}
+
+function showWorkforceView(name='overview'){
+  const view=['overview','schedule','history'].includes(name)?name:'overview';
+  state.workforce.view=view;
+  const headings={
+    overview:['OPERASIONAL HARI INI','Absensi hari ini','Absen masuk atau keluar dan lihat tim yang sedang bertugas.'],
+    schedule:['RENCANA KERJA','Jadwal shift','Lihat dan atur jam kerja rutin maupun jadwal tanggal khusus.'],
+    history:['REKAP KEHADIRAN','Riwayat absensi','Periksa tepat waktu, terlambat, lembur, durasi, lokasi, dan foto bukti.']
+  };
+  const [eyebrow,title,description]=headings[view];
+  el('workforce-page-eyebrow').textContent=eyebrow;el('workforce-page-title').textContent=title;el('workforce-page-description').textContent=description;
+  document.querySelectorAll('#page-workforce-schedule .workforce-view').forEach((node)=>node.classList.toggle('hidden',node.id!==`workforce-view-${view}`));
 }
 
 function renderWorkforceOverview(){
@@ -2566,9 +2592,9 @@ function renderWorkforceOverview(){
   const activeFacts=active?workforceAttendanceFacts(data,active):null;
   el('attendance-live-date').textContent=new Date(`${today}T00:00:00`).toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long'});
   el('attendance-current').innerHTML=active
-    ? `<div class="attendance-live-status"><span class="attendance-pulse"></span><div><span>Sedang bekerja sejak</span><strong>${new Date(active.clock_in_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</strong><small>Durasi berjalan ${workforceDurationLabel(activeFacts.duration)}</small></div></div>`
+    ? `<div class="attendance-live-status"><span class="attendance-pulse"></span><div><span>Sedang bekerja sejak</span><strong>${new Date(active.clock_in_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</strong><small>Durasi berjalan ${workforceDurationLabel(activeFacts.duration)}</small>${attendanceStatusMarkup(activeFacts)}</div></div>`
     : myToday?.clock_out_at
-      ? `<div class="attendance-live-status complete"><div><span>Shift hari ini selesai</span><strong>${new Date(myToday.clock_out_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</strong><small>Total kerja ${workforceDurationLabel(workforceAttendanceFacts(data,myToday).duration)}</small></div></div>`
+      ? `<div class="attendance-live-status complete"><div><span>Shift hari ini selesai</span><strong>${new Date(myToday.clock_out_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</strong><small>Total kerja ${workforceDurationLabel(workforceAttendanceFacts(data,myToday).duration)}</small>${attendanceStatusMarkup(workforceAttendanceFacts(data,myToday))}</div></div>`
       : '<div class="attendance-live-status idle"><div><span>Status kehadiran</span><strong>Belum absen masuk</strong><small>Siapkan foto dan aktifkan GPS untuk memulai.</small></div></div>';
   el('attendance-today-context').innerHTML=myShift
     ? `<div><span>Jadwal hari ini</span><strong>${escapeHtml(String(myShift.starts_at).slice(0,5))} &ndash; ${escapeHtml(String(myShift.ends_at).slice(0,5))}</strong></div><div><span>Durasi rencana</span><strong>${workforceDurationLabel(workforceDurationMinutes(myShift.starts_at,myShift.ends_at))}</strong></div><div><span>Lokasi</span><strong>${escapeHtml(outletName(myShift.outlet_id))}</strong></div>`
@@ -2590,8 +2616,10 @@ function renderWorkforceOverview(){
   if(!el('target-end').value)el('target-end').value=new Date(Date.UTC(Number(today.slice(0,4)),Number(today.slice(5,7)),0)).toISOString().slice(0,10);
   const presentIds=new Set(todayAttendance.map((item)=>item.user_id));
   const lateToday=todayAttendance.filter((item)=>workforceAttendanceFacts(data,item).lateMinutes>0).length;
+  const onTimeToday=todayAttendance.filter((item)=>workforceAttendanceFacts(data,item).onTime).length;
+  const overtimeToday=todayAttendance.filter((item)=>workforceAttendanceFacts(data,item).overtimeMinutes>0).length;
   const workedMinutes=(data.attendance??[]).reduce((sum,item)=>sum+workforceAttendanceFacts(data,item).duration,0);
-  el('workforce-attendance-metrics').innerHTML=`<article><span>Terjadwal hari ini</span><strong>${todayShifts.length}</strong><small>orang / shift</small></article><article><span>Sudah hadir</span><strong>${presentIds.size}</strong><small>${todayAttendance.filter((item)=>!item.clock_out_at).length} masih bekerja</small></article><article><span>Terlambat hari ini</span><strong>${lateToday}</strong><small>berdasarkan jam masuk</small></article><article><span>Jam kerja bulan ini</span><strong>${workforceDurationLabel(workedMinutes)}</strong><small>${data.attendance.length} catatan absensi</small></article>`;
+  el('workforce-attendance-metrics').innerHTML=`<article><span>Terjadwal hari ini</span><strong>${todayShifts.length}</strong><small>orang / shift</small></article><article><span>Sudah hadir</span><strong>${presentIds.size}</strong><small>${todayAttendance.filter((item)=>!item.clock_out_at).length} masih bekerja</small></article><article><span>Terlambat hari ini</span><strong>${lateToday}</strong><small>${onTimeToday} tepat waktu</small></article><article><span>Jam kerja bulan ini</span><strong>${workforceDurationLabel(workedMinutes)}</strong><small>${overtimeToday} lembur hari ini</small></article>`;
   const todayPeople=[...todayShifts];
   todayAttendance.filter((attendance)=>!todayPeople.some((shift)=>shift.user_id===attendance.user_id)).forEach((attendance)=>todayPeople.push({...attendance,kind:'UNSCHEDULED'}));
   el('attendance-today-count').textContent=`${todayPeople.length} orang`;
@@ -2636,7 +2664,10 @@ function renderWorkforceAttendanceHistory(){
     if(userFilter!=='ALL'&&attendance.user_id!==userFilter)return false;
     if(statusFilter==='WORKING'&&!facts.working)return false;
     if(statusFilter==='COMPLETED'&&facts.working)return false;
+    if(statusFilter==='ON_TIME'&&!facts.onTime)return false;
     if(statusFilter==='LATE'&&facts.lateMinutes<=0)return false;
+    if(statusFilter==='OVERTIME'&&facts.overtimeMinutes<=0)return false;
+    if(statusFilter==='UNSCHEDULED'&&facts.planned)return false;
     return true;
   }).map((attendance)=>{
     const facts=workforceAttendanceFacts(data,attendance),planned=facts.planned;
@@ -7457,6 +7488,7 @@ function showPage(name) {
   if(item?.dataset.stockView)showStockView(item.dataset.stockView);
   if(item?.dataset.reportView)showReportView(item.dataset.reportView);
   if(item?.dataset.settingsView)showSettingsView(item.dataset.settingsView);
+  if(item?.dataset.workforceView)showWorkforceView(item.dataset.workforceView);
   if(target==='pos')setMobilePosView('catalog',{focus:false});
   const group=item?.closest('[data-nav-panel]')?.dataset.navPanel;
   if(group)openNavGroup(group);
