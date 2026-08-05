@@ -4258,7 +4258,8 @@ function updateRestockLineSummary(row){
   if(!summary)return;
   summary.querySelector('.restock-line-summary-qty').textContent=`${qty.toLocaleString('id-ID')} ${unit}`;
   summary.querySelector('.restock-line-summary-cost').textContent=canReviewRestockCostDetails()?`${money.format(cost)} / ${restockSelectedUnit(row).name}`:'Modal dicatat dari nota';
-  summary.querySelector('.restock-line-summary-extra').textContent=[batch?`Batch ${batch}`:null,expiry?`EXP ${expiry}`:null].filter(Boolean).join(' · ')||'Batch & EXP belum diisi';
+  const variance=restockPoQuantityVariance(row);
+  summary.querySelector('.restock-line-summary-extra').textContent=[variance?.excess>0?`Lebih kirim ${variance.excess.toLocaleString('id-ID')} dasar`:null,batch?`Batch ${batch}`:null,expiry?`EXP ${expiry}`:null].filter(Boolean).join(' · ')||'Batch & EXP belum diisi';
 }
 
 function prepareRestockLineEditor(row,product,{newProduct=false}={}){
@@ -4268,8 +4269,8 @@ function prepareRestockLineEditor(row,product,{newProduct=false}={}){
   summary.innerHTML=`<span class="restock-line-summary-main"><span class="eyebrow">${newProduct?'BARANG BARU · PERLU OWNER':'BARANG DATANG'}</span><strong>${escapeHtml(product?.name??'Barang')}</strong><small>${escapeHtml(product?.sku??'')}</small></span><span class="restock-line-summary-values"><strong class="restock-line-summary-qty">-</strong><small class="restock-line-summary-cost">-</small><small class="restock-line-summary-extra">-</small></span><span class="restock-line-summary-arrow" aria-hidden="true">›</span>`;
   row.append(summary,editor);
   summary.addEventListener('click',()=>openRestockLineDialog(row));
-  editor.addEventListener('input',()=>updateRestockLineSummary(row));
-  editor.addEventListener('change',()=>updateRestockLineSummary(row));
+  editor.addEventListener('input',()=>{updateRestockLineSummary(row);syncRestockApprovalRequirement(row);});
+  editor.addEventListener('change',()=>{updateRestockLineSummary(row);syncRestockApprovalRequirement(row);});
   updateRestockLineSummary(row);
 }
 
@@ -4383,6 +4384,33 @@ function formatExpiryInput(event) {
   event.target.setCustomValidity('');
 }
 
+function restockPoQuantityVariance(row){
+  if(!state.activePurchaseOrder)return null;
+  const line=state.activePurchaseOrder.items?.find((item)=>item.product_id===row.dataset.product)??null;
+  const factor=restockSelectedUnit(row).factor;
+  const actual=Math.max(0,Number(row.querySelector('.restock-qty')?.value??0)*factor);
+  const remaining=line?Math.max(0,Number(line.remaining_qty)):0;
+  return {actual,remaining,excess:Math.max(0,actual-remaining),unplanned:!line};
+}
+
+function syncRestockApprovalRequirement(row){
+  if(row.dataset.productKey){row.dataset.needsApproval='true';return;}
+  const variance=restockPoQuantityVariance(row);
+  const quantityNeedsApproval=Boolean(variance&&(variance.unplanned||variance.excess>0));
+  row.dataset.quantityNeedsApproval=String(quantityNeedsApproval);
+  const costNeedsApproval=row.dataset.costNeedsApproval==='true';
+  row.dataset.needsApproval=String(costNeedsApproval||quantityNeedsApproval);
+  const staffNote=row.querySelector('.restock-owner-approval-slot');
+  if(staffNote){
+    const needsApproval=costNeedsApproval||quantityNeedsApproval;
+    const message=quantityNeedsApproval
+      ?(variance.unplanned?'Barang di luar PO perlu persetujuan Owner sebelum diterima.':`Jumlah datang lebih ${variance.excess.toLocaleString('id-ID')} satuan dasar dari sisa PO dan perlu persetujuan Owner.`)
+      :'Modal berubah dan perlu persetujuan Owner sebelum diterima.';
+    staffNote.classList.toggle('hidden',!needsApproval);
+    staffNote.innerHTML=needsApproval?staffRestockApprovalNote(message):'';
+  }
+}
+
 async function updateRestockComparison(row) {
   try {
     const comparison = await request('/api/cost-comparison', { method: 'POST', body: JSON.stringify({ productId: row.dataset.product, supplierId: el('restock-supplier').value || null, newCost: restockBaseCost(row) }) });
@@ -4393,15 +4421,14 @@ async function updateRestockComparison(row) {
     const product=state.products.find((item)=>item.id===row.dataset.product);
     row.dataset.lastCost=comparison.lastCost??'';
     const needsApproval=comparison.lastCost===null||Number(comparison.lastCost)!==restockBaseCost(row);
-    row.dataset.needsApproval=String(needsApproval);
+    row.dataset.costNeedsApproval=String(needsApproval);
+    syncRestockApprovalRequirement(row);
     const proposalSlot=row.querySelector('.restock-price-proposal-slot');
     if(needsApproval&&!proposalSlot.querySelector('.restock-price-proposal')){
       proposalSlot.innerHTML=restockPriceProposalMarkup(row.dataset.product,proposalPricesForProduct(product));
       if(!canReviewRestockCostDetails())proposalSlot.querySelector('.restock-price-proposal')?.classList.add('hidden','restock-staff-proposal-data');
     }
     if(!needsApproval)proposalSlot.innerHTML='';
-    const staffNote=row.querySelector('.restock-owner-approval-slot');
-    if(staffNote){staffNote.classList.toggle('hidden',!needsApproval);staffNote.innerHTML=needsApproval?staffRestockApprovalNote():'';}
     const retail=product?retailPriceOf(product):null;
     const suggestion=markupPreservingRecommendation(restockBaseCost(row),comparison.lastCost,retail);
     const suggestionBox=row.querySelector('.retail-suggestion');
@@ -4412,7 +4439,8 @@ async function updateRestockComparison(row) {
       row.querySelector('.apply-suggested-retail').dataset.price=suggestion.recommended;
     }
   } catch (error) {
-    row.dataset.needsApproval='true';
+    row.dataset.costNeedsApproval='true';
+    syncRestockApprovalRequirement(row);
     const staffNote=row.querySelector('.restock-owner-approval-slot');
     if(staffNote){staffNote.classList.remove('hidden');staffNote.innerHTML=staffRestockApprovalNote('Pemeriksaan modal akan dilanjutkan oleh Owner.');}
     toast(error.message);
@@ -4834,8 +4862,12 @@ function showRestockReceiveError(message = '') {
 function restockRowPayload(row){
   const expiry=row.querySelector('.restock-expiry').value.trim(),productKey=row.dataset.productKey??row.dataset.product;
   const unit=restockSelectedUnit(row),purchaseQty=Number(row.querySelector('.restock-qty').value),purchaseUnitCost=Number(row.querySelector('.restock-cost').value);
+  const poLine=state.activePurchaseOrder?.items?.find((item)=>item.product_id===row.dataset.product)??null;
+  const poRemainingBaseQty=poLine?Math.max(0,Number(poLine.remaining_qty)):0;
+  const baseQty=purchaseQty*unit.factor;
   return {productId:row.dataset.product??null,productKey,newProduct:row.dataset.productKey?state.restockDraftProducts.get(row.dataset.productKey):null,
     baseQty:purchaseQty*unit.factor,unitCost:purchaseUnitCost/unit.factor,purchaseQty,purchaseUnitId:unit.id,purchaseUnitName:unit.name,purchaseUnitFactor:unit.factor,purchaseUnitCost,
+    poOrderedBaseQty:poLine?Number(poLine.ordered_qty):0,poRemainingBaseQty,poExcessBaseQty:state.activePurchaseOrder?Math.max(0,baseQty-poRemainingBaseQty):0,
     previousCost:row.dataset.lastCost===''||row.dataset.lastCost===undefined?null:Number(row.dataset.lastCost),batchNo:row.querySelector('.restock-batch').value.trim()||null,
     expiresOn:expiry?parseExpiryDate(expiry):null};
 }
@@ -4896,6 +4928,16 @@ function restockApprovalCostGuideMarkup(item,prices){
   return `<div class="restock-approval-cost-guide"><div><span>Modal lama</span><strong>${previous===null?'Belum ada':money.format(previous)}</strong></div><div><span>Modal baru</span><strong>${money.format(current)}</strong></div><div><span>Perubahan modal</span><strong class="${deltaClass}">${deltaText}</strong></div><div><span>Harga jual saat ini</span><strong>${retail===null?'-':money.format(Number(retail))}</strong></div><div class="restock-approval-recommendation"><span>Saran harga jual baru</span><strong>${recommended===null?'Belum dapat dihitung':money.format(recommended)}</strong><small>${suggestion?`Mempertahankan laba lama ${money.format(suggestion.previousProfit)} / pcs`:'Tetapkan berdasarkan modal dan target laba.'}</small>${recommended!==null?`<button type="button" class="button secondary apply-approval-suggestion" data-product-key="${escapeHtml(key)}" data-price="${recommended}">Pakai saran</button>`:''}</div></div>`;
 }
 
+function restockApprovalQuantityGuideMarkup(item){
+  if(!item.purchaseOrderId)return '';
+  const actual=Number(item.baseQty),remaining=Number(item.poRemainingBaseQty??0),excess=Math.max(0,Number(item.poExcessBaseQty??actual-remaining));
+  if(item.poVarianceType!=='UNPLANNED'&&excess<=0)return '';
+  const message=item.poVarianceType==='UNPLANNED'
+    ?'Barang ini tidak tercantum pada PO dan akan dicatat sebagai tambahan yang disetujui.'
+    :`Supplier mengirim ${excess.toLocaleString('id-ID')} satuan dasar lebih banyak dari sisa PO.`;
+  return `<div class="restock-approval-quantity-guide"><span class="badge warning">SELISIH JUMLAH</span><div><strong>${escapeHtml(message)}</strong><small>PO tersisa ${remaining.toLocaleString('id-ID')} dasar · datang ${actual.toLocaleString('id-ID')} dasar. Stok dan nilai penerimaan mengikuti jumlah aktual.</small></div></div>`;
+}
+
 function restockApprovalStatus(requestItem){
   const labels={PENDING:'Menunggu Owner',REVISION_REQUIRED:'Perlu revisi',APPROVED:'Disetujui',REJECTED:'Ditolak',RECEIVED:'Sudah diterima',CANCELLED:'Dibatalkan'};
   return {label:labels[requestItem.status]??requestItem.status,tone:requestItem.status==='APPROVED'||requestItem.status==='RECEIVED'?'ok':requestItem.status==='REJECTED'||requestItem.status==='CANCELLED'?'danger':'warning'};
@@ -4910,17 +4952,17 @@ function restockApprovalDetailMarkup(requestItem,canApprove){
   const canDecide=canApprove&&!isRequester;
   const canEditRevision=requestItem.status==='REVISION_REQUIRED'&&isRequester;
   const revisionBanner=requestItem.status==='REVISION_REQUIRED'?`<div class="restock-revision-banner"><div><span class="badge warning">PERLU REVISI</span><strong>Owner meminta pengajuan diperbaiki</strong></div><p>${escapeHtml(requestItem.decisionNote??'Periksa kembali data pada pengajuan ini.')}</p></div>`:'';
-  const staffWaiting=!canApprove&&requestItem.status==='PENDING'?'<div class="restock-staff-waiting"><strong>Pengajuan sedang diperiksa Owner</strong><small>Modal lama, perhitungan laba, dan saran harga hanya tampil pada akun Owner.</small></div>':'';
+  const staffWaiting=!canApprove&&requestItem.status==='PENDING'?'<div class="restock-staff-waiting"><strong>Pengajuan sedang diperiksa Owner</strong><small>Modal lama, perhitungan laba, dan saran harga hanya tampil pada akun Owner. Selisih jumlah PO juga diperiksa Owner.</small></div>':'';
   const items=requestItem.items.map((item,index)=>{
     const purchaseFactor=Math.max(1,Number(item.purchaseUnitFactor??1));
     const purchaseQty=Number(item.purchaseQty??(Number(item.baseQty)/purchaseFactor));
     const purchaseUnitName=item.purchaseUnitName??'satuan dasar';
     const purchaseUnitCost=Number(item.purchaseUnitCost??(Number(item.unitCost)*purchaseFactor));
-    const ownerDetails=canApprove&&!canEditRevision?`${restockApprovalCostGuideMarkup(item,prices)}<div class="restock-approval-price-grid">${restockApprovalPriceMarkup(item,prices,requestItem.status,canDecide)}</div>`:'';
+    const ownerDetails=canApprove&&!canEditRevision?`${restockApprovalQuantityGuideMarkup(item)}${restockApprovalCostGuideMarkup(item,prices)}<div class="restock-approval-price-grid">${restockApprovalPriceMarkup(item,prices,requestItem.status,canDecide)}</div>`:'';
     const revisionFields=canEditRevision?`<div class="restock-revision-fields"><label>Jumlah ${escapeHtml(purchaseUnitName)}<input class="revision-purchase-qty" data-index="${index}" type="number" min="0.000001" step="any" value="${purchaseQty}"></label><label>Modal / ${escapeHtml(purchaseUnitName)}<input class="revision-purchase-cost" data-index="${index}" type="number" min="0" step="any" value="${purchaseUnitCost}"></label></div>`:'';
     return `<section><div class="restock-approval-item-head"><div><strong>${escapeHtml(restockApprovalItemName(item))}</strong><small>${item.newProduct?'Barang baru':canApprove?'Perbandingan modal per satuan dasar':'Data barang yang diajukan'}</small></div><span>${purchaseQty.toLocaleString('id-ID')} ${escapeHtml(purchaseUnitName)} · ${Number(item.baseQty).toLocaleString('id-ID')} dasar</span></div>${ownerDetails}${revisionFields}</section>`;
   }).join('');
-  const pendingActions=requestItem.status==='PENDING'&&canDecide?'<input class="approval-note" placeholder="Catatan keputusan atau alasan revisi"><button class="button secondary revise-restock-approval" type="button">Minta revisi</button><button class="button danger-button reject-restock-approval" type="button">Tolak</button><button class="button primary approve-restock-approval" type="button">Setujui harga</button>':'';
+  const pendingActions=requestItem.status==='PENDING'&&canDecide?'<input class="approval-note" placeholder="Catatan keputusan atau alasan revisi"><button class="button secondary revise-restock-approval" type="button">Minta revisi</button><button class="button danger-button reject-restock-approval" type="button">Tolak</button><button class="button primary approve-restock-approval" type="button">Setujui perubahan</button>':'';
   const revisionActions=canEditRevision?'<input class="revision-response-note" placeholder="Catatan perbaikan (opsional)"><button class="button primary resubmit-restock-approval" type="button">Kirim ulang ke Owner</button>':'';
   return `<div class="restock-approval-detail-toolbar"><button class="button secondary back-restock-approvals" type="button">← Daftar pengajuan</button><div><span>Detail pengajuan</span><strong>${escapeHtml(requestItem.documentNo)}</strong></div></div>${revisionBanner}<article class="restock-approval-card status-${requestItem.status.toLowerCase()}" data-approval-id="${requestItem.id}"><header><div><p class="eyebrow">FAKTUR ${escapeHtml(requestItem.documentNo)}</p><h3>${escapeHtml(supplier)}</h3><small>${new Date(requestItem.requestedAt).toLocaleString('id-ID')} · ${requestItem.items.length} barang · ${money.format(totalCost)}</small></div><span class="badge ${status.tone} restock-approval-status">${status.label}</span></header>${staffWaiting}<div class="restock-approval-items">${items}</div>${requestItem.decisionNote&&requestItem.status!=='REVISION_REQUIRED'?`<p class="restock-decision-note">Catatan: ${escapeHtml(requestItem.decisionNote)}</p>`:''}<footer>${pendingActions}${revisionActions}${requestItem.status==='APPROVED'?'<button class="button primary receive-approved-restock" type="button">Lanjut terima barang</button>':''}</footer></article>`;
 }
@@ -4951,7 +4993,7 @@ async function decideRestockApproval(card,decision){
   const note=card.querySelector('.approval-note')?.value.trim()??'';
   if(decision==='revise'&&!note)return toast('Tuliskan alasan revisi agar Staff mengetahui yang harus diperbaiki.');
   const button=card.querySelector(`.${decision}-restock-approval`);button.disabled=true;
-  try{await request(`/api/restock-approvals/${card.dataset.approvalId}/${decision}`,{method:'POST',body:JSON.stringify({prices,note})});toast(decision==='approve'?'Harga disetujui. Staf dapat melanjutkan penerimaan.':decision==='revise'?'Pengajuan dikembalikan kepada Staff untuk diperbaiki.':'Pengajuan ditolak.');state.activeRestockApprovalId=null;await loadRestockApprovals();}catch(error){toast(error.message);button.disabled=false;}
+  try{await request(`/api/restock-approvals/${card.dataset.approvalId}/${decision}`,{method:'POST',body:JSON.stringify({prices,note})});toast(decision==='approve'?'Perubahan disetujui. Staf dapat melanjutkan penerimaan.':decision==='revise'?'Pengajuan dikembalikan kepada Staff untuk diperbaiki.':'Pengajuan ditolak.');state.activeRestockApprovalId=null;await loadRestockApprovals();}catch(error){toast(error.message);button.disabled=false;}
 }
 
 async function resubmitRestockApproval(card,button){

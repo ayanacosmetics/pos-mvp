@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html,app,api,sql,sqlPo,sqlPoNewProduct,sqlRevision,css]=await Promise.all([
+const [html,app,api,sql,sqlPo,sqlPoNewProduct,sqlRevision,sqlDeliveryVariance,css]=await Promise.all([
   readFile(new URL('../apps/web/index.html',import.meta.url),'utf8'),
   readFile(new URL('../apps/web/app.js',import.meta.url),'utf8'),
   readFile(new URL('../api/index.mjs',import.meta.url),'utf8'),
@@ -10,6 +10,7 @@ const [html,app,api,sql,sqlPo,sqlPoNewProduct,sqlRevision,css]=await Promise.all
   readFile(new URL('../supabase/migrations/202608030016_restock_approval_purchase_order.sql',import.meta.url),'utf8'),
   readFile(new URL('../supabase/migrations/202608040017_restock_po_approved_new_product.sql',import.meta.url),'utf8'),
   readFile(new URL('../supabase/migrations/202608040018_restock_revision_workflow.sql',import.meta.url),'utf8'),
+  readFile(new URL('../supabase/migrations/202608050021_purchase_order_delivery_variance.sql',import.meta.url),'utf8'),
   readFile(new URL('../apps/web/styles.css',import.meta.url),'utf8')
 ]);
 
@@ -105,4 +106,16 @@ test('staff hanya melihat pemberitahuan approval tanpa modal lama dan saran harg
   assert.match(app,/restock-staff-proposal-data/);
   assert.match(app,/canReviewRestockCostDetails\(\)\?`\$\{money\.format\(cost\)\} \/ \$\{restockSelectedUnit\(row\)\.name\}`:'Modal dicatat dari nota'/);
   assert.match(css,/\.restock-owner-approval-note\{display:flex/);
+});
+
+test('kelebihan kiriman PO hanya diterima melalui persetujuan Owner',()=>{
+  assert.match(api,/submit_restock_approval_v2/);
+  assert.match(app,/function restockPoQuantityVariance/);
+  assert.match(app,/Lebih kirim/);
+  assert.match(app,/SELISIH JUMLAH/);
+  assert.match(sqlDeliveryVariance,/poVarianceType/);
+  assert.match(sqlDeliveryVariance,/PURCHASE_ORDER_DELIVERY_VARIANCE_APPROVED/);
+  assert.match(sqlDeliveryVariance,/overageItemCount/);
+  assert.match(sqlDeliveryVariance,/is_supplement/);
+  assert.match(sqlDeliveryVariance,/v_request\.status<>'APPROVED'/);
 });

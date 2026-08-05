@@ -4477,7 +4477,7 @@ async function routeRequest(request, response, route) {
   if (request.method === 'POST' && route === 'restock-approvals') {
     requirePermission(session, 'purchasing.receive');
     const input=bodyOf(request);requireLocationAccess(context,input.locationId);
-    const result=await rpc('submit_restock_approval_v1',{
+    const result=await rpc('submit_restock_approval_v2',{
       p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_supplier_id:input.supplierId,
       p_location_id:input.locationId,p_document_no:input.documentNo,p_items:input.items,
       p_proposed_prices:input.proposedPrices??[],p_note:input.note??''
