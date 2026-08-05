@@ -3036,10 +3036,11 @@ function renderPurchaseProductResults(kind, query = '') {
   container.innerHTML = products.map((product) => {
     const stock = Number(product.stockBase ?? 0);
     const baseUnit = product.units.find((unit) => Number(unit.factor) === 1) ?? product.units[0];
+    const purchaseUnit = [...product.units].sort((a,b)=>Number(b.factor)-Number(a.factor))[0] ?? baseUnit;
     return `<article class="purchase-product-option ${stock === 0 ? 'zero-stock' : ''}">
       <div><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku ?? '')} · ${escapeHtml(product.brand ?? 'tanpa merek')}</small></div>
       <div class="purchase-product-stock"><span>Stok</span><strong>${stock} pcs</strong></div>
-      <button class="button secondary choose-purchase-product" type="button" data-kind="${kind}" data-product-id="${escapeHtml(product.id)}" data-unit-id="${escapeHtml(baseUnit?.id ?? '')}">Tambah</button>
+      <button class="button secondary choose-purchase-product" type="button" data-kind="${kind}" data-product-id="${escapeHtml(product.id)}" data-unit-id="${escapeHtml(purchaseUnit?.id ?? '')}">Tambah</button>
     </article>`;
   }).join('') || `<div class="empty-state compact"><strong>Barang tidak ditemukan.</strong><br><small>Periksa nama, SKU, atau barcode.</small>${canCreate?'<button class="button primary create-restock-product" type="button">+ Buat produk baru</button>':''}</div>`;
   container.querySelectorAll('.choose-purchase-product').forEach((button) => button.addEventListener('click', () => choosePurchaseProduct(button.dataset.kind, button.dataset.productId, button.dataset.unitId)));
@@ -3439,13 +3440,13 @@ function renderRestockReview() {
   const items = rows.map((row) => {
     const product = row.dataset.product?state.products.find((item) => item.id === row.dataset.product):state.restockDraftProducts.get(row.dataset.productKey);
     const qty = Number(row.querySelector('.restock-qty').value);
-    const unit = row.querySelector('.restock-unit').selectedOptions[0]?.textContent ?? 'pcs';
+    const unit = restockSelectedUnit(row);
     const factor = Number(row.dataset.factor ?? 1);
     const cost = Number(row.querySelector('.restock-cost').value);
     const batch = row.querySelector('.restock-batch').value.trim();
     const expiry = row.querySelector('.restock-expiry').value.trim();
     const approval=row.dataset.needsApproval==='true'?'<span class="badge warning">PERLU OWNER</span>':'';
-    return `<article class="restock-review-row"><div><strong>${escapeHtml(product?.name ?? row.dataset.product)}</strong>${approval}<small>${qty.toLocaleString('id-ID')} ${escapeHtml(unit)} · ${Number(qty*factor).toLocaleString('id-ID')} satuan dasar${batch?` · batch ${escapeHtml(batch)}`:''}${expiry?` · EXP ${escapeHtml(expiry)}`:''}</small></div><div><span>${money.format(cost)} / dasar</span><strong>${money.format(qty*factor*cost)}</strong></div></article>`;
+    return `<article class="restock-review-row"><div><strong>${escapeHtml(product?.name ?? row.dataset.product)}</strong>${approval}<small>${qty.toLocaleString('id-ID')} ${escapeHtml(unit.name)} · ${Number(qty*factor).toLocaleString('id-ID')} satuan dasar${batch?` · batch ${escapeHtml(batch)}`:''}${expiry?` · EXP ${escapeHtml(expiry)}`:''}</small></div><div><span>${money.format(cost)} / ${escapeHtml(unit.name)}</span><strong>${money.format(qty*cost)}</strong><small>${factor>1?`${money.format(cost/factor)} / dasar`:''}</small></div></article>`;
   }).join('');
   el('restock-review-list').innerHTML = heading + items;
   updateRestockTotal();
@@ -3890,7 +3891,7 @@ async function editPurchaseOrder(orderId) {
   state.editingOrderId = order.id;
   state.poLines = await Promise.all(order.items.map(async (item) => {
     const snapshot = await purchaseCostSnapshot(item.product_id, item.unit_cost, order.supplier_id);
-    return { productId:item.product_id, qty:item.ordered_qty, factor:1, unitId:null, unitCost:item.unit_cost, lineDiscount:item.line_discount, ...snapshot };
+    return { productId:item.product_id, qty:Number(item.ordered_purchase_qty??item.ordered_qty), factor:Number(item.purchase_unit_factor??1), unitId:item.purchase_unit_id??null, unitCost:item.unit_cost, lineDiscount:item.line_discount, ...snapshot };
   }));
   el('po-editor-title').textContent = order.po_no;
   el('po-supplier').value = order.supplier_id;
@@ -3913,7 +3914,7 @@ async function appendPoLine(productId, preferredUnitId = null) {
   if (state.poLines.some((line) => line.productId === productId)) return toast('Produk sudah ada dalam Purchase Order.');
   const product = state.products.find((item) => item.id === productId);
   if (!product) return;
-  const unit = product.units.find((item) => item.id === preferredUnitId) ?? product.units.find((item) => Number(item.factor) === 1) ?? product.units[0];
+  const unit = product.units.find((item) => item.id === preferredUnitId) ?? [...product.units].sort((a,b)=>Number(b.factor)-Number(a.factor))[0] ?? product.units[0];
   const line = {
     productId,
     qty: 1,
@@ -3978,10 +3979,13 @@ function renderPoLines() {
     const product = state.products.find((item) => item.id === line.productId);
     if (!product) return '';
     const units = product.units.map((unit) => `<option value="${unit.id}" data-factor="${unit.factor}" ${unit.id===line.unitId?'selected':''}>${unit.name}${unit.factor>1?` (${unit.factor} pcs)`:''}</option>`).join('');
-    const lineTotal = Math.max(0,(line.qty*line.factor*line.unitCost)-line.lineDiscount);
-    return `<article class="po-line" data-index="${index}"><div class="po-line-title"><div><strong>${product.name}</strong><small>${product.sku}</small></div><button class="icon-button po-remove" type="button">×</button></div><div class="po-line-grid"><label>Jumlah<input class="po-field" data-field="qty" type="number" min="0.000001" step="any" value="${line.qty}"></label><label>Satuan<select class="po-unit">${units}</select></label><label>Perkiraan modal / pcs<input class="po-field" data-field="unitCost" type="number" min="0" step="any" value="${line.unitCost}"></label><label>Diskon baris<input class="po-field" data-field="lineDiscount" type="number" min="0" step="any" value="${line.lineDiscount}"></label><div class="po-line-total"><span>Total baris</span><strong>${money.format(lineTotal)}</strong></div></div>${poIntelligence(line,product)}</article>`;
+    const selectedUnit=product.units.find((unit)=>unit.id===line.unitId)??product.units[0];
+    const selectedUnitCost=Number(line.unitCost)*Number(line.factor);
+    const lineTotal = Math.max(0,(line.qty*selectedUnitCost)-line.lineDiscount);
+    return `<article class="po-line" data-index="${index}"><div class="po-line-title"><div><strong>${product.name}</strong><small>${product.sku}</small></div><button class="icon-button po-remove" type="button">×</button></div><div class="po-line-grid"><label>Jumlah<input class="po-field" data-field="qty" type="number" min="0.000001" step="any" value="${line.qty}"></label><label>Satuan<select class="po-unit">${units}</select></label><label>Perkiraan modal / ${escapeHtml(selectedUnit?.name??'satuan')}<input class="po-selected-cost" type="number" min="0" step="any" value="${selectedUnitCost}"></label><label>Diskon baris<input class="po-field" data-field="lineDiscount" type="number" min="0" step="any" value="${line.lineDiscount}"></label><div class="po-line-total"><span>Total baris</span><strong>${money.format(lineTotal)}</strong><small>${Number(line.factor)>1?`${money.format(line.unitCost)} / satuan dasar`:''}</small></div></div>${poIntelligence(line,product)}</article>`;
   }).join('');
   document.querySelectorAll('.po-field').forEach((input) => { input.addEventListener('input', () => { const line=state.poLines[Number(input.closest('.po-line').dataset.index)]; line[input.dataset.field]=Number(input.value); renderPoTotal(); input.closest('.po-line').querySelector('.po-line-total strong').textContent=money.format(Math.max(0,(line.qty*line.factor*line.unitCost)-line.lineDiscount)); }); input.addEventListener('change',renderPoLines); });
+  document.querySelectorAll('.po-selected-cost').forEach((input)=>{input.addEventListener('input',()=>{const line=state.poLines[Number(input.closest('.po-line').dataset.index)];line.unitCost=Number(input.value)/Number(line.factor||1);renderPoTotal();input.closest('.po-line').querySelector('.po-line-total strong').textContent=money.format(Math.max(0,(line.qty*Number(input.value))-line.lineDiscount));});input.addEventListener('change',renderPoLines);});
   document.querySelectorAll('.po-unit').forEach((select) => select.addEventListener('change', () => { const line=state.poLines[Number(select.closest('.po-line').dataset.index)]; line.unitId=select.value; line.factor=Number(select.selectedOptions[0]?.dataset.factor ?? 1); renderPoLines(); }));
   document.querySelectorAll('.po-remove').forEach((button) => button.addEventListener('click', () => { state.poLines.splice(Number(button.closest('.po-line').dataset.index),1); renderPoLines(); }));
   document.querySelectorAll('.po-compare-supplier').forEach((button) => button.addEventListener('click', () => { const line=state.poLines[Number(button.closest('.po-line').dataset.index)]; showSupplierComparison(line.productId); }));
@@ -4001,7 +4005,7 @@ async function savePurchaseOrder() {
   if (!state.poLines.length) return toast('Tambahkan minimal satu barang ke PO.');
   if (state.poLines.some((line)=>!(line.qty>0)||!(line.unitCost>=0))) return toast('Periksa jumlah dan modal PO.');
   const amounts=poAmounts();
-  const payload={ orderId:state.editingOrderId, supplierId:el('po-supplier').value, locationId:el('po-location').value, expectedOn:el('po-expected').value||null, notes:el('po-notes').value, discountAmount:amounts.discount, taxAmount:amounts.tax, otherCost:amounts.other, items:state.poLines.map((line)=>({productId:line.productId,baseQty:line.qty*line.factor,unitCost:line.unitCost,lineDiscount:line.lineDiscount})) };
+  const payload={ orderId:state.editingOrderId, supplierId:el('po-supplier').value, locationId:el('po-location').value, expectedOn:el('po-expected').value||null, notes:el('po-notes').value, discountAmount:amounts.discount, taxAmount:amounts.tax, otherCost:amounts.other, items:state.poLines.map((line)=>{const product=state.products.find((item)=>item.id===line.productId),selected=product?.units.find((unit)=>unit.id===line.unitId);return {productId:line.productId,baseQty:line.qty*line.factor,unitCost:line.unitCost,lineDiscount:line.lineDiscount,purchaseQty:line.qty,purchaseUnitId:line.unitId,purchaseUnitName:selected?.name??'pcs',purchaseUnitFactor:line.factor,purchaseUnitCost:line.unitCost*line.factor};}) };
   const button=el('save-po-draft'); button.disabled=true; button.textContent='Menyimpan...';
   try { const result=await request('/api/purchase-orders',{method:'POST',body:JSON.stringify(payload)}); toast(`${result.po_no} tersimpan sebagai draft`); await loadPurchaseOrders(); showPurchaseView('documents'); }
   catch(error){ toast(error.message); }
@@ -4018,7 +4022,10 @@ async function prepareOrderReceipt(orderId) {
   if (!order) return;
   state.activePurchaseOrder=order;
   await renderRestock();
-  for (const item of order.items.filter((line)=>line.remaining_qty>0)) await appendRestockLine(item.product_id,item.remaining_qty,item.unit_cost,'pcs');
+  for (const item of order.items.filter((line)=>line.remaining_qty>0)) {
+    const factor=Number(item.purchase_unit_factor??1),remainingBase=Number(item.remaining_qty);
+    await appendRestockLine(item.product_id,remainingBase/factor,item.unit_cost,item.purchase_unit_name??'pcs');
+  }
   renderRestockSourceSelector();
   showPurchaseView('receipt');
 }
@@ -4068,6 +4075,27 @@ function staffRestockApprovalNote(message='Perubahan modal akan diperiksa pada a
   return `<div class="restock-owner-approval-note"><span class="badge warning">PERLU OWNER</span><div><strong>Perlu persetujuan Owner</strong><small>${escapeHtml(message)}</small></div></div>`;
 }
 
+function restockSelectedUnit(row){
+  const option=row.querySelector('.restock-unit')?.selectedOptions[0];
+  return {id:option?.value||null,name:option?.dataset.name||option?.textContent?.replace(/\s*\(.*/, '').trim()||'pcs',factor:Number(option?.dataset.factor??row.dataset.factor??1)};
+}
+
+function restockBaseCost(row){
+  const unit=restockSelectedUnit(row);
+  return Number(row.querySelector('.restock-cost')?.value??0)/Math.max(1,unit.factor);
+}
+
+function changeRestockUnit(row){
+  const oldFactor=Math.max(1,Number(row.dataset.factor??1));
+  const baseCost=Number(row.querySelector('.restock-cost')?.value??0)/oldFactor;
+  const unit=restockSelectedUnit(row);
+  row.dataset.factor=unit.factor;
+  row.querySelector('.restock-cost').value=baseCost*unit.factor;
+  const label=row.querySelector('.restock-cost-label');if(label)label.textContent=`Modal / ${unit.name}`;
+  updateRestockLineSummary(row);updateRestockTotal();
+  if(row.dataset.product)updateRestockComparison(row);
+}
+
 function updateRestockLineSummary(row){
   const qty=Number(row.querySelector('.restock-qty')?.value??0);
   const unit=row.querySelector('.restock-unit')?.selectedOptions[0]?.textContent?.trim()??'pcs';
@@ -4077,7 +4105,7 @@ function updateRestockLineSummary(row){
   const summary=row.querySelector('.restock-line-summary');
   if(!summary)return;
   summary.querySelector('.restock-line-summary-qty').textContent=`${qty.toLocaleString('id-ID')} ${unit}`;
-  summary.querySelector('.restock-line-summary-cost').textContent=canReviewRestockCostDetails()?`${money.format(cost)} / dasar`:'Modal dicatat dari nota';
+  summary.querySelector('.restock-line-summary-cost').textContent=canReviewRestockCostDetails()?`${money.format(cost)} / ${restockSelectedUnit(row).name}`:'Modal dicatat dari nota';
   summary.querySelector('.restock-line-summary-extra').textContent=[batch?`Batch ${batch}`:null,expiry?`EXP ${expiry}`:null].filter(Boolean).join(' · ')||'Batch & EXP belum diisi';
 }
 
@@ -4125,8 +4153,9 @@ function removeRestockLine(row){
 
 function appendRestockNewLine(productKey,product){
   if(document.querySelector(`.restock-line[data-product-key="${CSS.escape(productKey)}"]`))return;
-  const row=document.createElement('article');row.className='restock-line restock-line-new';row.dataset.productKey=productKey;row.dataset.factor=1;row.dataset.needsApproval='true';
-  row.innerHTML=`<div class="restock-card-header"><div><p class="eyebrow">BARANG BARU · DRAFT</p><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)} · belum aktif</small></div><div class="restock-card-tools"><span class="badge warning">PERLU OWNER</span><button type="button" class="icon-button remove-restock" aria-label="Hapus barang">×</button></div></div><div class="restock-card-grid"><label>Jumlah<input class="restock-qty" type="number" min="0.000001" step="any" value="1"></label><label>Satuan<select class="restock-unit">${product.units.map((unit)=>`<option data-factor="${unit.factor}">${escapeHtml(unit.name)}${unit.factor>1?` (${unit.factor} ${escapeHtml(product.units[0].name)})`:''}</option>`).join('')}</select></label><label>Modal / ${escapeHtml(product.units[0].name)}<input class="restock-cost" type="number" min="0" step="any" value="0"></label><details class="restock-line-options"><summary>Batch dan EXP <span>Opsional</span></summary><label>Nomor batch<input class="restock-batch"></label><label>Tanggal EXP<input class="restock-expiry" type="text" inputmode="numeric" maxlength="10" placeholder="DD/MM/YYYY"></label></details><div class="cost-insight"><span>Modal sebelumnya</span><strong>Barang baru</strong><small>Wajib diperiksa Owner</small></div></div>${restockPriceProposalMarkup(productKey,product.prices)}`;
+  const incomingUnits=[...product.units].sort((a,b)=>Number(b.factor)-Number(a.factor)),incomingUnit=incomingUnits[0]??product.units[0];
+  const row=document.createElement('article');row.className='restock-line restock-line-new';row.dataset.productKey=productKey;row.dataset.factor=incomingUnit?.factor??1;row.dataset.needsApproval='true';
+  row.innerHTML=`<div class="restock-card-header"><div><p class="eyebrow">BARANG BARU · DRAFT</p><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)} · belum aktif</small></div><div class="restock-card-tools"><span class="badge warning">PERLU OWNER</span><button type="button" class="icon-button remove-restock" aria-label="Hapus barang">×</button></div></div><div class="restock-card-grid"><label>Jumlah<input class="restock-qty" type="number" min="0.000001" step="any" value="1"></label><label>Satuan<select class="restock-unit">${incomingUnits.map((unit)=>`<option value="" data-factor="${unit.factor}" data-name="${escapeHtml(unit.name)}">${escapeHtml(unit.name)}${unit.factor>1?` (${unit.factor} ${escapeHtml(product.units[0].name)})`:''}</option>`).join('')}</select></label><label><span class="restock-cost-label">Modal / ${escapeHtml(incomingUnit?.name??product.units[0].name)}</span><input class="restock-cost" type="number" min="0" step="any" value="0"></label><details class="restock-line-options"><summary>Batch dan EXP <span>Opsional</span></summary><label>Nomor batch<input class="restock-batch"></label><label>Tanggal EXP<input class="restock-expiry" type="text" inputmode="numeric" maxlength="10" placeholder="DD/MM/YYYY"></label></details><div class="cost-insight"><span>Modal sebelumnya</span><strong>Barang baru</strong><small>Wajib diperiksa Owner</small></div></div>${restockPriceProposalMarkup(productKey,product.prices)}`;
   if(!canReviewRestockCostDetails()){
     const note=document.createElement('div');note.innerHTML=staffRestockApprovalNote('Barang baru dan harga jual akan diperiksa oleh Owner.');
     row.querySelector('.cost-insight')?.replaceWith(note.firstElementChild);
@@ -4134,7 +4163,7 @@ function appendRestockNewLine(productKey,product){
   }
   prepareRestockLineEditor(row,product,{newProduct:true});
   row.querySelectorAll('.restock-qty,.restock-cost').forEach((input)=>input.addEventListener('input',updateRestockTotal));
-  row.querySelector('.restock-unit').addEventListener('change',(event)=>{row.dataset.factor=event.target.selectedOptions[0]?.dataset.factor??1;updateRestockTotal();});
+  row.querySelector('.restock-unit').addEventListener('change',()=>changeRestockUnit(row));
   row.querySelector('.restock-expiry').addEventListener('input',formatExpiryInput);
   row.querySelector('.remove-restock').addEventListener('click',()=>removeRestockLine(row));
   el('restock-body').append(row);syncRestockVisibility();updateRestockTotal();
@@ -4147,7 +4176,7 @@ async function appendRestockLine(productId, qty = 1, newCost = 0, unit = 'pcs') 
   const row = document.createElement('article');
   const factor = product.units.find((item) => item.name === unit)?.factor ?? 1;
   row.className = 'restock-line'; row.dataset.product = productId; row.dataset.factor = factor;
-  const unitOptions = product.units.map((item) => `<option value="${item.id}" data-factor="${item.factor}" ${item.name === unit ? 'selected' : ''}>${item.name}${item.factor > 1 ? ` (${item.factor} pcs)` : ''}</option>`).join('');
+  const unitOptions = product.units.map((item) => `<option value="${item.id}" data-factor="${item.factor}" data-name="${escapeHtml(item.name)}" ${item.name === unit ? 'selected' : ''}>${item.name}${item.factor > 1 ? ` (${item.factor} pcs)` : ''}</option>`).join('');
   row.innerHTML = `
     <div class="restock-card-header">
       <div><p class="eyebrow">BARANG RESTOK</p><strong>${product.name}</strong><small>${product.sku ?? ''}</small></div>
@@ -4156,7 +4185,7 @@ async function appendRestockLine(productId, qty = 1, newCost = 0, unit = 'pcs') 
     <div class="restock-card-grid">
       <label>Jumlah<input class="restock-qty" type="number" min="0.000001" step="any" value="${qty}"></label>
       <label>Satuan<select class="restock-unit">${unitOptions}</select></label>
-      <label>Modal per pcs<input class="restock-cost" type="number" min="0" step="any" value="${newCost}"></label>
+      <label><span class="restock-cost-label">Modal / ${escapeHtml(unit)}</span><input class="restock-cost" type="number" min="0" step="any" value="${Number(newCost)*Number(factor)}"></label>
       <details class="restock-line-options"><summary>Batch dan EXP <span>Opsional</span></summary><label>Nomor batch<input class="restock-batch" placeholder="Contoh: BATCH-001"></label><label>Tanggal EXP<input class="restock-expiry" type="text" inputmode="numeric" maxlength="10" placeholder="DD/MM/YYYY" aria-label="Tanggal kedaluwarsa format DD/MM/YYYY"></label></details>
       <div class="cost-insight"><span>Modal sebelumnya</span><strong class="last-cost">Memuat...</strong><small class="last-meta">Mengecek histori supplier</small><div class="cost-delta"><span class="badge neutral">CEK</span></div><div class="retail-suggestion hidden"><span>Saran harga ecer</span><strong class="suggested-retail">-</strong><small class="suggested-retail-note"></small><button type="button" class="button secondary apply-suggested-retail">Gunakan saran</button></div></div>
     </div><div class="restock-price-proposal-slot"></div>`;
@@ -4169,10 +4198,7 @@ async function appendRestockLine(productId, qty = 1, newCost = 0, unit = 'pcs') 
   row.querySelector('.restock-cost').addEventListener('change', () => updateRestockComparison(row));
   row.querySelector('.restock-cost').addEventListener('input', updateRestockTotal);
   row.querySelector('.restock-qty').addEventListener('input', updateRestockTotal);
-  row.querySelector('.restock-unit').addEventListener('change', (event) => {
-    row.dataset.factor = event.target.selectedOptions[0]?.dataset.factor ?? 1;
-    updateRestockTotal();
-  });
+  row.querySelector('.restock-unit').addEventListener('change',()=>changeRestockUnit(row));
   row.querySelector('.restock-expiry').addEventListener('input', formatExpiryInput);
   row.querySelector('.restock-expiry').addEventListener('blur', (event) => {
     if (!event.target.value) return;
@@ -4207,14 +4233,14 @@ function formatExpiryInput(event) {
 
 async function updateRestockComparison(row) {
   try {
-    const comparison = await request('/api/cost-comparison', { method: 'POST', body: JSON.stringify({ productId: row.dataset.product, supplierId: el('restock-supplier').value || null, newCost: Number(row.querySelector('.restock-cost').value) }) });
+    const comparison = await request('/api/cost-comparison', { method: 'POST', body: JSON.stringify({ productId: row.dataset.product, supplierId: el('restock-supplier').value || null, newCost: restockBaseCost(row) }) });
     const lastCost=row.querySelector('.last-cost'),lastMeta=row.querySelector('.last-meta'),costDelta=row.querySelector('.cost-delta');
     if(lastCost)lastCost.textContent = comparison.lastCost === null ? 'Baru' : money.format(comparison.lastCost);
     if(lastMeta)lastMeta.textContent = costMeta(comparison);
     if(costDelta)costDelta.innerHTML = costBadge(comparison);
     const product=state.products.find((item)=>item.id===row.dataset.product);
     row.dataset.lastCost=comparison.lastCost??'';
-    const needsApproval=comparison.lastCost===null||Number(comparison.lastCost)!==Number(row.querySelector('.restock-cost').value);
+    const needsApproval=comparison.lastCost===null||Number(comparison.lastCost)!==restockBaseCost(row);
     row.dataset.needsApproval=String(needsApproval);
     const proposalSlot=row.querySelector('.restock-price-proposal-slot');
     if(needsApproval&&!proposalSlot.querySelector('.restock-price-proposal')){
@@ -4225,7 +4251,7 @@ async function updateRestockComparison(row) {
     const staffNote=row.querySelector('.restock-owner-approval-slot');
     if(staffNote){staffNote.classList.toggle('hidden',!needsApproval);staffNote.innerHTML=needsApproval?staffRestockApprovalNote():'';}
     const retail=product?retailPriceOf(product):null;
-    const suggestion=markupPreservingRecommendation(Number(row.querySelector('.restock-cost').value),comparison.lastCost,retail);
+    const suggestion=markupPreservingRecommendation(restockBaseCost(row),comparison.lastCost,retail);
     const suggestionBox=row.querySelector('.retail-suggestion');
     suggestionBox?.classList.toggle('hidden',!suggestion);
     if(suggestion&&suggestionBox){
@@ -4244,9 +4270,8 @@ async function updateRestockComparison(row) {
 function updateRestockTotal() {
   const total = [...document.querySelectorAll('.restock-line')].reduce((sum, row) => {
     const qty = Number(row.querySelector('.restock-qty').value);
-    const factor = Number(row.dataset.factor ?? 1);
     const cost = Number(row.querySelector('.restock-cost').value);
-    return sum + (qty * factor * cost);
+    return sum + (qty * cost);
   }, 0);
   el('restock-total').textContent = `Total modal ${money.format(total)}`;
 }
@@ -4656,8 +4681,9 @@ function showRestockReceiveError(message = '') {
 
 function restockRowPayload(row){
   const expiry=row.querySelector('.restock-expiry').value.trim(),productKey=row.dataset.productKey??row.dataset.product;
+  const unit=restockSelectedUnit(row),purchaseQty=Number(row.querySelector('.restock-qty').value),purchaseUnitCost=Number(row.querySelector('.restock-cost').value);
   return {productId:row.dataset.product??null,productKey,newProduct:row.dataset.productKey?state.restockDraftProducts.get(row.dataset.productKey):null,
-    baseQty:Number(row.querySelector('.restock-qty').value)*Number(row.dataset.factor??1),unitCost:Number(row.querySelector('.restock-cost').value),
+    baseQty:purchaseQty*unit.factor,unitCost:purchaseUnitCost/unit.factor,purchaseQty,purchaseUnitId:unit.id,purchaseUnitName:unit.name,purchaseUnitFactor:unit.factor,purchaseUnitCost,
     previousCost:row.dataset.lastCost===''||row.dataset.lastCost===undefined?null:Number(row.dataset.lastCost),batchNo:row.querySelector('.restock-batch').value.trim()||null,
     expiresOn:expiry?parseExpiryDate(expiry):null};
 }
@@ -4734,9 +4760,13 @@ function restockApprovalDetailMarkup(requestItem,canApprove){
   const revisionBanner=requestItem.status==='REVISION_REQUIRED'?`<div class="restock-revision-banner"><div><span class="badge warning">PERLU REVISI</span><strong>Owner meminta pengajuan diperbaiki</strong></div><p>${escapeHtml(requestItem.decisionNote??'Periksa kembali data pada pengajuan ini.')}</p></div>`:'';
   const staffWaiting=!canApprove&&requestItem.status==='PENDING'?'<div class="restock-staff-waiting"><strong>Pengajuan sedang diperiksa Owner</strong><small>Modal lama, perhitungan laba, dan saran harga hanya tampil pada akun Owner.</small></div>':'';
   const items=requestItem.items.map((item,index)=>{
+    const purchaseFactor=Math.max(1,Number(item.purchaseUnitFactor??1));
+    const purchaseQty=Number(item.purchaseQty??(Number(item.baseQty)/purchaseFactor));
+    const purchaseUnitName=item.purchaseUnitName??'satuan dasar';
+    const purchaseUnitCost=Number(item.purchaseUnitCost??(Number(item.unitCost)*purchaseFactor));
     const ownerDetails=canApprove&&!canEditRevision?`${restockApprovalCostGuideMarkup(item,prices)}<div class="restock-approval-price-grid">${restockApprovalPriceMarkup(item,prices,requestItem.status,canDecide)}</div>`:'';
-    const revisionFields=canEditRevision?`<div class="restock-revision-fields"><label>Jumlah satuan dasar<input class="revision-base-qty" data-index="${index}" type="number" min="0.000001" step="any" value="${Number(item.baseQty)}"></label><label>Modal baru / dasar<input class="revision-unit-cost" data-index="${index}" type="number" min="0" step="any" value="${Number(item.unitCost)}"></label></div>`:'';
-    return `<section><div class="restock-approval-item-head"><div><strong>${escapeHtml(restockApprovalItemName(item))}</strong><small>${item.newProduct?'Barang baru':canApprove?'Perbandingan modal per satuan dasar':'Data barang yang diajukan'}</small></div><span>${Number(item.baseQty).toLocaleString('id-ID')} dasar</span></div>${ownerDetails}${revisionFields}</section>`;
+    const revisionFields=canEditRevision?`<div class="restock-revision-fields"><label>Jumlah ${escapeHtml(purchaseUnitName)}<input class="revision-purchase-qty" data-index="${index}" type="number" min="0.000001" step="any" value="${purchaseQty}"></label><label>Modal / ${escapeHtml(purchaseUnitName)}<input class="revision-purchase-cost" data-index="${index}" type="number" min="0" step="any" value="${purchaseUnitCost}"></label></div>`:'';
+    return `<section><div class="restock-approval-item-head"><div><strong>${escapeHtml(restockApprovalItemName(item))}</strong><small>${item.newProduct?'Barang baru':canApprove?'Perbandingan modal per satuan dasar':'Data barang yang diajukan'}</small></div><span>${purchaseQty.toLocaleString('id-ID')} ${escapeHtml(purchaseUnitName)} · ${Number(item.baseQty).toLocaleString('id-ID')} dasar</span></div>${ownerDetails}${revisionFields}</section>`;
   }).join('');
   const pendingActions=requestItem.status==='PENDING'&&canDecide?'<input class="approval-note" placeholder="Catatan keputusan atau alasan revisi"><button class="button secondary revise-restock-approval" type="button">Minta revisi</button><button class="button danger-button reject-restock-approval" type="button">Tolak</button><button class="button primary approve-restock-approval" type="button">Setujui harga</button>':'';
   const revisionActions=canEditRevision?'<input class="revision-response-note" placeholder="Catatan perbaikan (opsional)"><button class="button primary resubmit-restock-approval" type="button">Kirim ulang ke Owner</button>':'';
@@ -4775,7 +4805,7 @@ async function decideRestockApproval(card,decision){
 async function resubmitRestockApproval(card,button){
   const requestItem=state.restockApprovals.find((item)=>item.id===card.dataset.approvalId);
   if(!requestItem)return toast('Pengajuan tidak ditemukan.');
-  const items=requestItem.items.map((item,index)=>({...item,baseQty:Number(card.querySelector(`.revision-base-qty[data-index="${index}"]`)?.value),unitCost:Number(card.querySelector(`.revision-unit-cost[data-index="${index}"]`)?.value)}));
+  const items=requestItem.items.map((item,index)=>{const factor=Math.max(1,Number(item.purchaseUnitFactor??1)),purchaseQty=Number(card.querySelector(`.revision-purchase-qty[data-index="${index}"]`)?.value),purchaseUnitCost=Number(card.querySelector(`.revision-purchase-cost[data-index="${index}"]`)?.value);return {...item,purchaseQty,purchaseUnitCost,baseQty:purchaseQty*factor,unitCost:purchaseUnitCost/factor};});
   if(items.some((item)=>!(item.baseQty>0)||!(item.unitCost>=0)))return toast('Periksa jumlah dan modal baru setiap barang.');
   button.disabled=true;button.textContent='Mengirim ulang…';
   try{await request(`/api/restock-approvals/${card.dataset.approvalId}/resubmit`,{method:'POST',body:JSON.stringify({items,note:card.querySelector('.revision-response-note')?.value??''})});toast('Perbaikan dikirim ulang kepada Owner.');state.activeRestockApprovalId=null;await loadRestockApprovals();}catch(error){toast(error.message);button.disabled=false;button.textContent='Kirim ulang ke Owner';}
@@ -6786,7 +6816,7 @@ function renderPurchaseReportReceipts(){
   const query=el('purchase-report-search').value.trim().toLowerCase();
   const receipts=(state.purchaseReportReceipts??[]).filter((receipt)=>!query||`${receipt.documentNo} ${receipt.supplierName} ${receipt.outletName} ${receipt.receiver}`.toLowerCase().includes(query));
   const metrics=(state.purchaseReportReceipts??[]).reduce((sum,receipt)=>{
-    sum.total+=Number(receipt.total);sum.qty+=receipt.lines.reduce((qty,line)=>qty+Number(line.qty),0);sum.suppliers.add(receipt.supplierId??receipt.supplierName);return sum;
+    sum.total+=Number(receipt.total);sum.qty+=receipt.lines.reduce((qty,line)=>qty+Number(line.baseQty??line.qty),0);sum.suppliers.add(receipt.supplierId??receipt.supplierName);return sum;
   },{total:0,qty:0,suppliers:new Set()});
   el('purchase-report-metrics').innerHTML=`<article><small>Jumlah transaksi</small><strong>${Number(state.purchaseReportReceipts?.length??0).toLocaleString('id-ID')}</strong></article><article><small>Total pembelian</small><strong>${money.format(metrics.total)}</strong></article><article><small>Qty diterima</small><strong>${metrics.qty.toLocaleString('id-ID')} pcs</strong></article><article><small>Supplier</small><strong>${metrics.suppliers.size.toLocaleString('id-ID')}</strong></article>`;
   el('purchase-report-list').innerHTML=receipts.length?receipts.map((receipt)=>`<button class="purchase-report-row" type="button" data-purchase-report-id="${escapeHtml(receipt.id)}"><span><small>Nomor struk</small><strong>${escapeHtml(receipt.documentNo)}</strong><small>${escapeHtml(receipt.supplierName)}</small></span><span><small>Waktu transaksi</small><strong>${new Date(receipt.occurredAt).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</strong><small>${new Date(receipt.occurredAt).toLocaleDateString('id-ID')}</small></span><span><small>Total pembelian</small><strong>${money.format(receipt.total)}</strong><small>${receipt.lines.length} jenis · ${escapeHtml(receipt.outletName)}</small></span><b>›</b></button>`).join(''):'<div class="empty-state compact">Pembelian tidak ditemukan pada periode ini.</div>';
@@ -6808,7 +6838,7 @@ function openPurchaseReportReceipt(receipt){
   if(!receipt)return;
   state.activePurchaseReportReceipt=receipt;
   el('purchase-report-number').textContent=receipt.documentNo;
-  el('purchase-report-content').innerHTML=`<header><p class="eyebrow">STRUK PEMBELIAN</p><h1>${escapeHtml(state.business.name??'Kasir Nusa POS')}</h1><strong>${escapeHtml(receipt.documentNo)}</strong><small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small></header><section class="purchase-original-meta"><div><span>Supplier</span><strong>${escapeHtml(receipt.supplierName)}</strong></div><div><span>Outlet</span><strong>${escapeHtml(receipt.outletName)}</strong></div><div><span>Lokasi penerimaan</span><strong>${escapeHtml(receipt.locationName)}</strong></div><div><span>Diterima oleh</span><strong>${escapeHtml(receipt.receiver)}</strong></div></section><section class="purchase-receipt-lines"><div class="purchase-receipt-line heading"><span>Barang</span><span>Jumlah</span><span>Modal</span><span>Total</span></div>${receipt.lines.map((line)=>`<div class="purchase-receipt-line"><span><strong>${escapeHtml(line.productName)}</strong><small>${escapeHtml(line.sku)}${line.batchNo?` · Batch ${escapeHtml(line.batchNo)}`:''}${line.expiresOn?` · EXP ${new Date(`${line.expiresOn}T00:00:00`).toLocaleDateString('id-ID')}`:''}</small></span><span data-label="Jumlah">${Number(line.qty).toLocaleString('id-ID')} ${escapeHtml(line.unitName)}</span><span data-label="Modal">${money.format(line.unitCost)}</span><strong data-label="Total">${money.format(line.total)}</strong></div>`).join('')}<div class="purchase-receipt-total"><span>TOTAL PEMBELIAN</span><strong>${money.format(receipt.total)}</strong></div></section><footer><small>Dokumen ini merupakan catatan penerimaan barang sesuai data yang tersimpan pada sistem.</small></footer>`;
+  el('purchase-report-content').innerHTML=`<header><p class="eyebrow">STRUK PEMBELIAN</p><h1>${escapeHtml(state.business.name??'Kasir Nusa POS')}</h1><strong>${escapeHtml(receipt.documentNo)}</strong><small>${new Date(receipt.occurredAt).toLocaleString('id-ID')}</small></header><section class="purchase-original-meta"><div><span>Supplier</span><strong>${escapeHtml(receipt.supplierName)}</strong></div><div><span>Outlet</span><strong>${escapeHtml(receipt.outletName)}</strong></div><div><span>Lokasi penerimaan</span><strong>${escapeHtml(receipt.locationName)}</strong></div><div><span>Diterima oleh</span><strong>${escapeHtml(receipt.receiver)}</strong></div></section><section class="purchase-receipt-lines"><div class="purchase-receipt-line heading"><span>Barang</span><span>Jumlah</span><span>Modal</span><span>Total</span></div>${receipt.lines.map((line)=>`<div class="purchase-receipt-line"><span><strong>${escapeHtml(line.productName)}</strong><small>${escapeHtml(line.sku)}${line.batchNo?` · Batch ${escapeHtml(line.batchNo)}`:''}${line.expiresOn?` · EXP ${new Date(`${line.expiresOn}T00:00:00`).toLocaleDateString('id-ID')}`:''}</small></span><span data-label="Jumlah">${Number(line.qty).toLocaleString('id-ID')} ${escapeHtml(line.unitName)}${Number(line.unitFactor)>1?`<small>${Number(line.baseQty).toLocaleString('id-ID')} satuan dasar</small>`:''}</span><span data-label="Modal">${money.format(line.unitCost)} / ${escapeHtml(line.unitName)}${Number(line.unitFactor)>1?`<small>${money.format(line.costPerBase)} / dasar</small>`:''}</span><strong data-label="Total">${money.format(line.total)}</strong></div>`).join('')}<div class="purchase-receipt-total"><span>TOTAL PEMBELIAN</span><strong>${money.format(receipt.total)}</strong></div></section><footer><small>Dokumen ini merupakan catatan penerimaan barang sesuai data yang tersimpan pada sistem.</small></footer>`;
   el('purchase-report-receipt-page').classList.remove('hidden');
   el('page-reports').classList.add('purchase-receipt-open');
   document.body.classList.add('purchase-receipt-open');

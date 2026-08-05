@@ -103,6 +103,6 @@ test('staff hanya melihat pemberitahuan approval tanpa modal lama dan saran harg
   assert.match(app,/querySelector\('\.cost-insight'\)\?\.replaceWith/);
   assert.match(app,/querySelector\('\.history-button'\)\?\.remove/);
   assert.match(app,/restock-staff-proposal-data/);
-  assert.match(app,/canReviewRestockCostDetails\(\)\?`\$\{money\.format\(cost\)\} \/ dasar`:'Modal dicatat dari nota'/);
+  assert.match(app,/canReviewRestockCostDetails\(\)\?`\$\{money\.format\(cost\)\} \/ \$\{restockSelectedUnit\(row\)\.name\}`:'Modal dicatat dari nota'/);
   assert.match(css,/\.restock-owner-approval-note\{display:flex/);
 });

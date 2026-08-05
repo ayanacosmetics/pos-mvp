@@ -872,7 +872,9 @@ async function loadPurchaseOrders(tenantId, orderId = null, locationIds = []) {
     const mappedItems = items.filter((item) => item.order_id === order.id).map((item) => ({
       ...item, ordered_qty: Number(item.ordered_qty), received_qty: Number(item.received_qty),
       remaining_qty: Number(item.ordered_qty) - Number(item.received_qty), unit_cost: Number(item.unit_cost),
-      line_discount: Number(item.line_discount), line_total: Number(item.line_total)
+      line_discount: Number(item.line_discount), line_total: Number(item.line_total),
+      purchase_unit_factor:Number(item.purchase_unit_factor??1),ordered_purchase_qty:Number(item.ordered_purchase_qty??item.ordered_qty),
+      purchase_unit_cost:Number(item.purchase_unit_cost??item.unit_cost)
     }));
     return {
     ...order, approval_required: Boolean(order.approval_required),
@@ -4668,9 +4670,13 @@ async function routeRequest(request, response, route) {
     ]);
     return send(response,200,{receipts:receipts.map((receipt)=>{
       const lines=items.filter((item)=>item.receipt_id===receipt.id).map((item)=>{
-        const product=products.find((row)=>row.id===item.product_id),qty=Number(item.base_qty),unitCost=Number(item.unit_cost);
-        return{productId:item.product_id,sku:product?.sku??'',productName:product?.name??'Produk',qty,unitName:'pcs',
-          unitCost,total:qty*unitCost,batchNo:item.batch_no??'',expiresOn:item.expires_on??null};
+        const product=products.find((row)=>row.id===item.product_id),baseQty=Number(item.base_qty),costPerBase=Number(item.unit_cost);
+        const unitFactor=Math.max(1,Number(item.purchase_unit_factor??1));
+        const qty=Number(item.received_purchase_qty??(baseQty/unitFactor));
+        const unitCost=Number(item.purchase_unit_cost??(costPerBase*unitFactor));
+        return{productId:item.product_id,sku:product?.sku??'',productName:product?.name??'Produk',qty,baseQty,
+          unitName:item.purchase_unit_name??'pcs',unitFactor,unitCost,costPerBase,total:baseQty*costPerBase,
+          batchNo:item.batch_no??'',expiresOn:item.expires_on??null};
       });
       const location=locations.find((item)=>item.id===receipt.location_id);
       return{id:receipt.id,documentNo:receipt.document_no,supplierId:receipt.supplier_id,supplierName:receipt.supplier_name,
