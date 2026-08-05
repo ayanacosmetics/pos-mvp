@@ -12,6 +12,8 @@ test('absensi mewajibkan geofence dan foto wajah privat',async()=>{
   assert.match(html,/id="setting-attendance-latitude"/);
   assert.match(html,/id="setting-attendance-longitude"/);
   assert.match(html,/id="attendance-camera-video"[^>]+playsinline/);
+  assert.match(html,/id="attendance-photo-dialog"/);
+  assert.match(html,/id="attendance-photo-image"/);
   assert.match(html,/id="retry-attendance-camera"/);
   assert.match(html,/Gunakan &amp; lanjutkan absensi/);
   assert.match(app,/getUserMedia\(\{video:\{facingMode:'user'/);
@@ -19,9 +21,13 @@ test('absensi mewajibkan geofence dan foto wajah privat',async()=>{
   assert.match(app,/captureAttendanceCamera/);
   assert.match(app,/enableHighAccuracy:true/);
   assert.match(app,/photoDataUrl:state\.attendancePhotoDataUrl/);
+  assert.match(app,/attendance-photo-dialog/);
+  assert.match(app,/dialog\.showModal\(\)/);
+  assert.doesNotMatch(app,/window\.open\('about:blank','_blank'\)/);
   assert.match(api,/distanceMeters\(/);
   assert.match(api,/uploadAttendancePhoto/);
   assert.match(api,/signedAttendancePhotoUrl/);
+  assert.match(api,/`\$\{config\.url\}\/storage\/v1\$\{signedPath\}`/);
   assert.match(sql,/'attendance-media','attendance-media',false/);
   assert.match(sql,/v_distance>v_tenant\.attendance_radius_m/);
   assert.match(sql,/clock_in_photo_path/);

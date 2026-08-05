@@ -320,7 +320,9 @@ async function signedAttendancePhotoUrl(objectPath) {
   });
   const data=await response.json().catch(()=>({}));
   if(!response.ok||!data.signedURL)throw Object.assign(new Error('Foto absensi belum dapat dibuka'),{status:response.status||500});
-  return data.signedURL.startsWith('http')?data.signedURL:`${config.url}${data.signedURL}`;
+  if(data.signedURL.startsWith('http'))return data.signedURL;
+  const signedPath=data.signedURL.startsWith('/')?data.signedURL:`/${data.signedURL}`;
+  return signedPath.startsWith('/storage/v1/')?`${config.url}${signedPath}`:`${config.url}/storage/v1${signedPath}`;
 }
 
 function distanceMeters(lat1,lon1,lat2,lon2){

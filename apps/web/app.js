@@ -2487,9 +2487,26 @@ async function acceptAttendanceCamera(){
 }
 
 async function openAttendancePhoto(attendanceId,event){
-  const viewer=window.open('about:blank','_blank');
-  try{const data=await request(`/api/workforce/attendance/${attendanceId}/photo?event=${event}`);if(viewer)viewer.location.href=data.url;else toast('Izinkan pop-up untuk membuka foto absensi.');}
-  catch(error){viewer?.close();toast(error.message);}
+  const dialog=el('attendance-photo-dialog');
+  const image=el('attendance-photo-image');
+  const status=el('attendance-photo-status');
+  el('attendance-photo-title').textContent=event==='out'?'Foto absen keluar':'Foto absen masuk';
+  image.classList.add('hidden');image.removeAttribute('src');
+  status.classList.remove('hidden','error');status.textContent='Memuat foto...';
+  if(!dialog.open)dialog.showModal();
+  try{
+    const data=await request(`/api/workforce/attendance/${attendanceId}/photo?event=${event}`);
+    image.onload=()=>{status.classList.add('hidden');image.classList.remove('hidden');};
+    image.onerror=()=>{image.classList.add('hidden');status.classList.remove('hidden');status.classList.add('error');status.textContent='Foto tidak dapat ditampilkan. Silakan coba lagi.';};
+    image.src=data.url;
+  }catch(error){status.classList.add('error');status.textContent=error.message;}
+}
+
+function closeAttendancePhoto(){
+  const dialog=el('attendance-photo-dialog');
+  const image=el('attendance-photo-image');
+  image.onload=null;image.onerror=null;image.removeAttribute('src');
+  if(dialog.open)dialog.close();
 }
 
 function renderWorkforceOverview(){
@@ -8454,6 +8471,9 @@ el('open-attendance-camera').addEventListener('click',openAttendanceCamera);
 el('close-attendance-camera').addEventListener('click',closeAttendanceCamera);
 el('cancel-attendance-camera').addEventListener('click',closeAttendanceCamera);
 el('attendance-camera-dialog').addEventListener('close',stopAttendanceCamera);
+el('close-attendance-photo').addEventListener('click',closeAttendancePhoto);
+el('dismiss-attendance-photo').addEventListener('click',closeAttendancePhoto);
+el('attendance-photo-dialog').addEventListener('close',()=>{const image=el('attendance-photo-image');image.onload=null;image.onerror=null;image.removeAttribute('src');});
 el('retry-attendance-camera').addEventListener('click',startAttendanceCamera);
 el('use-attendance-camera').addEventListener('click',acceptAttendanceCamera);
 el('attendance-camera-upload').addEventListener('click',()=>el('attendance-camera-fallback').click());
