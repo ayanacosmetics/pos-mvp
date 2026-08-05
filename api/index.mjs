@@ -564,6 +564,29 @@ function queueTenantOwnerNotification(tenantId,notification,waitUntil=null){
   else void task;
 }
 
+async function notifyTenantUser(tenantId,userId,notification){
+  try{
+    const recipients=await rpc('create_user_notification_v1',{
+      p_tenant_id:tenantId,p_recipient_user_id:userId,p_type:notification.type,
+      p_title:notification.title,p_message:notification.message,p_severity:notification.severity??'INFO',
+      p_entity_type:notification.entityType??null,p_entity_id:notification.entityId??null,
+      p_action_page:notification.actionPage??null,p_data_json:notification.data??{},
+      p_dedupe_key:notification.dedupeKey??null
+    });
+    const recipientIds=[...new Set((Array.isArray(recipients)?recipients:[]).map((row)=>row.recipientUserId).filter(Boolean))];
+    if(!recipientIds.length||!env().webPushPublicKey||!env().webPushPrivateKey)return;
+    const subscriptions=(await rest('web_push_subscriptions',
+      `tenant_id=eq.${tenantId}&user_id=eq.${encodeURIComponent(userId)}&active=eq.true&select=*&limit=20`));
+    await Promise.allSettled(subscriptions.map((subscription)=>sendWebPush(subscription,notification)));
+  }catch(error){console.error('User notification failed',notification.type,error.message);}
+}
+
+function queueTenantUserNotification(tenantId,userId,notification,waitUntil=null){
+  const task=notifyTenantUser(tenantId,userId,notification);
+  if(typeof waitUntil==='function')waitUntil(task);
+  else void task;
+}
+
 async function rawRpc(response,name,body){
   const config=env();
   const upstream=await fetch(`${config.url}/rest/v1/rpc/${name}`,{
@@ -2454,7 +2477,6 @@ async function routeRequest(request, response, route) {
   }
 
   if(request.method==='GET'&&route==='notifications/push-config'){
-    requireTenantOwner(session);
     const config=env();
     const subscriptions=await rest('web_push_subscriptions',
       `tenant_id=eq.${context.tenantId}&user_id=eq.${session.authUser.id}&active=eq.true&select=id,endpoint,device_label,updated_at&limit=20`);
@@ -2465,7 +2487,6 @@ async function routeRequest(request, response, route) {
   }
 
   if(request.method==='POST'&&route==='notifications/push-subscriptions'){
-    requireTenantOwner(session);
     const input=bodyOf(request),endpoint=String(input.endpoint??'').trim();
     let endpointUrl;
     try{endpointUrl=new URL(endpoint);}catch{throw Object.assign(new Error('Alamat langganan notifikasi tidak valid'),{status:400});}
@@ -2488,7 +2509,6 @@ async function routeRequest(request, response, route) {
   }
 
   if(request.method==='DELETE'&&route==='notifications/push-subscriptions'){
-    requireTenantOwner(session);
     const endpoint=String(bodyOf(request).endpoint??'').trim();
     if(!endpoint)throw Object.assign(new Error('Perangkat notifikasi tidak ditemukan'),{status:400});
     await rest('web_push_subscriptions',
@@ -4921,10 +4941,26 @@ async function routeRequest(request, response, route) {
   if (request.method === 'POST' && /^restock-approvals\/[^/]+\/(approve|reject|revise)$/.test(route)) {
     if(!['OWNER','ADMIN'].includes(session.profile.role))throw Object.assign(new Error('Hanya Owner/Admin yang dapat memutuskan'),{status:403});
     const [,requestId,action]=route.split('/'),input=bodyOf(request);
+    const approval=(await rest('restock_approval_requests',
+      `tenant_id=eq.${context.tenantId}&id=eq.${requestId}&select=id,requester_id,document_no&limit=1`))[0];
+    if(!approval)throw Object.assign(new Error('Pengajuan restok tidak ditemukan'),{status:404});
     const result=await rpc('decide_restock_approval_v1',{
       p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_request_id:requestId,
       p_decision:action.toUpperCase(),p_approved_prices:input.prices??[],p_note:input.note??''
     });
+    const decision={
+      approve:{severity:'SUCCESS',title:`Restok ${approval.document_no} disetujui`,message:'Owner telah menyetujui pengajuan. Silakan lanjutkan penerimaan barang.',status:'APPROVED'},
+      revise:{severity:'WARNING',title:`Restok ${approval.document_no} perlu diperbaiki`,message:input.note?`Catatan Owner: ${String(input.note).trim()}`:'Buka pengajuan dan perbaiki data yang diminta Owner.',status:'REVISION_REQUIRED'},
+      reject:{severity:'CRITICAL',title:`Restok ${approval.document_no} ditolak`,message:input.note?`Alasan Owner: ${String(input.note).trim()}`:'Pengajuan ditolak oleh Owner.',status:'REJECTED'}
+    }[action];
+    queueTenantUserNotification(context.tenantId,approval.requester_id,{
+      type:'RESTOCK_APPROVAL_DECISION',severity:decision.severity,title:decision.title,message:decision.message,
+      entityType:'restock_approval',entityId:requestId,actionPage:'restock-approvals',
+      data:{documentNo:approval.document_no,status:decision.status,decidedBy:session.authUser.id},
+      // A request may be revised and resubmitted more than once. Each valid
+      // decision must therefore produce a fresh staff notification.
+      dedupeKey:`restock-decision:${requestId}:${action}:${Date.now()}`
+    },request.waitUntil);
     return send(response,200,result);
   }
 

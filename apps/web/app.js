@@ -232,7 +232,7 @@ function notificationKindIcon(type){
   if(type==='SALE_COMPLETED')return 'Rp';
   if(type==='ATTENDANCE_CLOCK_IN')return '→';
   if(type==='ATTENDANCE_CLOCK_OUT')return '←';
-  if(type==='RESTOCK_APPROVAL')return 'PO';
+  if(type==='RESTOCK_APPROVAL'||type==='RESTOCK_APPROVAL_DECISION')return 'PO';
   return '!';
 }
 
@@ -284,8 +284,7 @@ function base64UrlBytes(value){
 
 async function renderPushNotificationControl(){
   const panel=el('push-notification-panel'),button=el('toggle-push-notifications'),test=el('test-push-notification');
-  panel.classList.toggle('hidden',state.session?.user?.role!=='OWNER');
-  if(state.session?.user?.role!=='OWNER')return;
+  panel.classList.remove('hidden');
   if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){
     el('push-notification-title').textContent='Perangkat belum mendukung Web Push';
     el('push-notification-help').textContent='Notifikasi di dalam Nusa tetap tersedia.';button.disabled=true;test.classList.add('hidden');return;
@@ -331,7 +330,7 @@ async function togglePushNotifications(){
       const json=subscription.toJSON();
       await request('/api/notifications/push-subscriptions',{method:'POST',body:JSON.stringify({
         endpoint:subscription.endpoint,expirationTime:subscription.expirationTime,keys:json.keys,
-        deviceLabel:/iPhone|iPad/i.test(navigator.userAgent)?'iPhone / iPad Owner':'Perangkat Owner'
+        deviceLabel:/iPhone|iPad/i.test(navigator.userAgent)?'iPhone / iPad':'Perangkat Nusa POS'
       })});
       toast('Notifikasi perangkat berhasil diaktifkan.');
     }
