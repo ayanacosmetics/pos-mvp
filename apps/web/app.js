@@ -5799,18 +5799,24 @@ async function loadPlatformInfrastructure() {
   const button=el('refresh-platform-infrastructure');
   if(button)button.disabled=true;
   try{
-    const [infrastructure,sandbox]=await Promise.all([
-      request('/api/platform/infrastructure'),
-      request('/api/platform/payment-gateways/midtrans/sandbox')
-    ]);
+    const infrastructure=await request('/api/platform/infrastructure');
     state.platformInfrastructure=infrastructure;
-    state.midtransSandbox=sandbox;
     renderPlatformInfrastructure();
-    renderMidtransSandbox();
   }catch(error){
     el('platform-infrastructure-status').className='health-summary critical';
     el('platform-infrastructure-status').innerHTML=`<div><span class="health-indicator"></span><strong>Akses infrastruktur gagal</strong><small>${escapeHtml(error.message)}</small></div>`;
   }finally{if(button)button.disabled=false;}
+}
+
+async function loadMidtransSandbox(){
+  if(state.session?.user?.role!=='OWNER')return;
+  try{
+    state.midtransSandbox=await request('/api/payment-gateways/midtrans/sandbox');
+    renderMidtransSandbox();
+  }catch(error){
+    state.midtransSandbox={configured:false,intents:[],configurationError:error.message};
+    renderMidtransSandbox();
+  }
 }
 
 function midtransSandboxStatusLabel(status){
@@ -5819,10 +5825,34 @@ function midtransSandboxStatusLabel(status){
 
 function renderMidtransSandbox(){
   const data=state.midtransSandbox??{configured:false,intents:[]};
-  el('midtrans-sandbox-badge').textContent=data.configured?'SANDBOX SIAP':'BELUM DIKONFIGURASI';
+  el('midtrans-sandbox-badge').textContent=data.configured?(data.accountStatus==='VERIFIED'?'SANDBOX TERVERIFIKASI':'SANDBOX TERHUBUNG'):'BELUM DIHUBUNGKAN';
+  el('midtrans-merchant-id').value=data.merchantId??'';
+  el('midtrans-server-key').value='';
+  el('disconnect-midtrans-sandbox').classList.toggle('hidden',!data.configured);
+  el('midtrans-credentials-error').textContent=data.configurationError??(!data.credentialStorageConfigured?'Platform Admin belum memasang master key penyimpanan kredensial.':'');
   el('create-midtrans-sandbox').disabled=!data.configured;
   const rows=data.intents??[];
-  el('midtrans-sandbox-intents').innerHTML=rows.length?rows.map((intent)=>`<article class="midtrans-sandbox-row" data-midtrans-intent="${escapeHtml(intent.id)}"><div><strong>${escapeHtml(intent.orderId)}</strong><small>${new Date(intent.createdAt).toLocaleString('id-ID')} · ${escapeHtml(midtransSandboxStatusLabel(intent.status))}</small></div><strong>${money.format(intent.amount)}</strong><span class="status-badge ${intent.status==='SETTLEMENT'?'approved':intent.status==='PENDING'?'submitted':intent.status==='ERROR'?'danger':''}">${escapeHtml(intent.status)}</span><button class="button secondary open-midtrans-sandbox" type="button">Lihat</button></article>`).join(''):`<div class="empty-state compact">${data.configured?'Belum ada simulasi.':'Pasang secret Sandbox pada Cloudflare sebelum membuat QR.'}</div>`;
+  el('midtrans-sandbox-intents').innerHTML=rows.length?rows.map((intent)=>`<article class="midtrans-sandbox-row" data-midtrans-intent="${escapeHtml(intent.id)}"><div><strong>${escapeHtml(intent.orderId)}</strong><small>${new Date(intent.createdAt).toLocaleString('id-ID')} · ${escapeHtml(midtransSandboxStatusLabel(intent.status))}</small></div><strong>${money.format(intent.amount)}</strong><span class="status-badge ${intent.status==='SETTLEMENT'?'approved':intent.status==='PENDING'?'submitted':intent.status==='ERROR'?'danger':''}">${escapeHtml(intent.status)}</span><button class="button secondary open-midtrans-sandbox" type="button">Lihat</button></article>`).join(''):`<div class="empty-state compact">${data.configured?'Belum ada simulasi.':'Hubungkan akun Midtrans Sandbox milik usaha untuk memulai pengujian.'}</div>`;
+}
+
+async function saveMidtransCredentials(event){
+  event.preventDefault();
+  const button=el('save-midtrans-credentials');button.disabled=true;el('midtrans-credentials-error').textContent='';
+  try{
+    await request('/api/payment-gateways/midtrans/sandbox/credentials',{method:'PUT',body:JSON.stringify({merchantId:el('midtrans-merchant-id').value,serverKey:el('midtrans-server-key').value})});
+    toast('Akun Midtrans Sandbox usaha berhasil dihubungkan.');await loadMidtransSandbox();
+  }catch(error){el('midtrans-credentials-error').textContent=error.message;}
+  finally{button.disabled=false;}
+}
+
+async function disconnectMidtransSandbox(){
+  if(!confirm('Putuskan akun Midtrans Sandbox usaha ini? Riwayat simulasi tetap disimpan.'))return;
+  const button=el('disconnect-midtrans-sandbox');button.disabled=true;
+  try{
+    await request('/api/payment-gateways/midtrans/sandbox/credentials',{method:'DELETE'});
+    toast('Akun Midtrans Sandbox diputuskan.');await loadMidtransSandbox();
+  }catch(error){toast(error.message);}
+  finally{button.disabled=false;}
 }
 
 function openMidtransSandboxDialog(intent){
@@ -5838,7 +5868,7 @@ async function createMidtransSandbox(event){
   event.preventDefault();
   const button=el('create-midtrans-sandbox');button.disabled=true;el('midtrans-sandbox-error').textContent='';
   try{
-    const result=await request('/api/platform/payment-gateways/midtrans/sandbox/intents',{method:'POST',body:JSON.stringify({amount:Number(el('midtrans-sandbox-amount').value)})});
+    const result=await request('/api/payment-gateways/midtrans/sandbox/intents',{method:'POST',body:JSON.stringify({amount:Number(el('midtrans-sandbox-amount').value)})});
     if(result.environment!=='SANDBOX'||result.operationalMutation!==false)throw new Error('Respons simulasi tidak memenuhi pengaman Sandbox');
     state.midtransSandbox.intents=[result.intent,...(state.midtransSandbox.intents??[])];renderMidtransSandbox();openMidtransSandboxDialog(result.intent);
   }catch(error){el('midtrans-sandbox-error').textContent=error.message;}
@@ -5849,7 +5879,7 @@ async function refreshMidtransSandbox(){
   const intent=state.activeMidtransSandboxIntent;if(!intent)return;
   const button=el('refresh-midtrans-sandbox');button.disabled=true;
   try{
-    const result=await request(`/api/platform/payment-gateways/midtrans/sandbox/intents/${encodeURIComponent(intent.id)}/refresh`,{method:'POST',body:'{}'});
+    const result=await request(`/api/payment-gateways/midtrans/sandbox/intents/${encodeURIComponent(intent.id)}/refresh`,{method:'POST',body:'{}'});
     if(result.environment!=='SANDBOX'||result.operationalMutation!==false)throw new Error('Respons status tidak memenuhi pengaman Sandbox');
     const index=(state.midtransSandbox.intents??[]).findIndex((item)=>item.id===intent.id);
     if(index>=0)state.midtransSandbox.intents[index]={...state.midtransSandbox.intents[index],...result.intent};
@@ -7393,8 +7423,9 @@ function showReportView(name='summary'){
 
 function showSettingsView(name='business'){
   const page=el('page-settings'),splits=[...page.querySelectorAll('.settings-split')];
-  const views={business:el('business-settings-form'),receipt:el('receipt-settings-form'),outlets:splits[0],locations:splits[1],health:page.querySelector('.system-health'),reset:el('data-reset-settings'),device:el('device-settings-form')};
+  const views={business:el('business-settings-form'),payments:el('payment-gateway-settings'),receipt:el('receipt-settings-form'),outlets:splits[0],locations:splits[1],health:page.querySelector('.system-health'),reset:el('data-reset-settings'),device:el('device-settings-form')};
   Object.entries(views).forEach(([key,node])=>node?.classList.toggle('hidden',key!==name));
+  if(name==='payments')loadMidtransSandbox();
 }
 
 const multioutletPages=new Set([
@@ -8653,6 +8684,8 @@ el('refresh-settings').addEventListener('click', loadSettingsWorkspace);
 el('refresh-system-health').addEventListener('click', loadSystemHealth);
 el('refresh-platform-infrastructure').addEventListener('click',loadPlatformInfrastructure);
 el('midtrans-sandbox-form').addEventListener('submit',createMidtransSandbox);
+el('midtrans-credentials-form').addEventListener('submit',saveMidtransCredentials);
+el('disconnect-midtrans-sandbox').addEventListener('click',disconnectMidtransSandbox);
 el('midtrans-sandbox-intents').addEventListener('click',(event)=>{
   const row=event.target.closest('.midtrans-sandbox-row');
   if(!row||!event.target.closest('.open-midtrans-sandbox'))return;

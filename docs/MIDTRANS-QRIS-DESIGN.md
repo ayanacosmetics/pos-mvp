@@ -15,7 +15,8 @@ Versi pertama QRIS dinamis hanya menerima pembayaran penuh dengan satu metode. S
 
 ## 2. Aturan mutlak
 
-- Kunci Server Midtrans hanya disimpan sebagai Cloudflare secret dan tidak pernah dikirim ke browser, APK, log, atau database.
+- Setiap tenant menghubungkan akun Midtrans dan rekening pencairannya sendiri; akun Nusa tidak menampung atau mencampur dana merchant.
+- Server Key tenant dienkripsi AES-256-GCM sebelum masuk database. Master key hanya disimpan sebagai Cloudflare secret dan tidak pernah dikirim ke browser, APK, log, backup tenant, atau database.
 - QR `pending` tidak membuat penjualan, struk, poin, jurnal pendapatan, atau pengurangan stok final.
 - Penjualan hanya boleh dibuat satu kali setelah status Midtrans `settlement`, nilai pembayaran sama persis, jenis pembayaran `qris`, dan intent masih sah.
 - Webhook tidak dipercaya sendirian. Tanda tangan SHA-512 wajib benar dan server mengambil ulang status langsung dari Midtrans.
@@ -53,6 +54,7 @@ SETTLEMENT -> PAID_NEEDS_ACTION
 ### `payment_gateway_intents`
 
 - identitas: `id`, `tenant_id`, `outlet_id`, `shift_id`, `cashier_id`
+- akun: `gateway_account_id` menunjuk akun gateway milik tenant yang membuat intent
 - gateway: `provider=MIDTRANS`, `environment=SANDBOX|PRODUCTION`, `channel=QRIS_DYNAMIC`
 - referensi: `order_id` unik global, `gateway_transaction_id`, `sale_id`
 - nilai: `gross_amount`, `currency=IDR`
@@ -76,6 +78,14 @@ SETTLEMENT -> PAID_NEEDS_ACTION
 - append-only untuk hash payload, jenis status, waktu diterima, hasil verifikasi, dan hasil pemrosesan
 - deduplikasi event mencegah webhook yang sama diproses dua kali
 - payload sensitif tidak disimpan mentah tanpa batas
+
+### `payment_gateway_accounts`
+
+- cakupan unik: `tenant_id`, `provider`, `environment`
+- status: `CONFIGURED | VERIFIED | DISABLED`
+- metadata aman: `merchant_id`, `verified_at`, `configured_by`
+- rahasia terenkripsi: `server_key_ciphertext`, `server_key_iv`, `encryption_key_version`
+- hanya `service_role` yang dapat mengakses tabel; ciphertext tidak masuk ekspor backup tenant dan tidak pernah dikirim melalui API
 
 ## 5. Transaksi database atomik
 

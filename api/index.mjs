@@ -87,22 +87,60 @@ const env = () => ({
   cloudflareScriptName: process.env.CLOUDFLARE_SCRIPT_NAME ?? 'kasir-nusa-pos',
   cloudflarePlan: String(process.env.CLOUDFLARE_WORKERS_PLAN ?? 'FREE').toUpperCase(),
   supabaseStorageLimitBytes: Math.max(1,Number(process.env.SUPABASE_STORAGE_LIMIT_BYTES)||1073741824),
-  midtransServerKey: process.env.MIDTRANS_SERVER_KEY ?? '',
-  midtransEnvironment: String(process.env.MIDTRANS_ENVIRONMENT ?? '').trim().toUpperCase()
+  paymentCredentialsMasterKey: process.env.PAYMENT_CREDENTIALS_MASTER_KEY ?? ''
 });
 
-function midtransSandboxConfigured() {
-  const config=env();
-  return config.midtransEnvironment==='SANDBOX'&&config.midtransServerKey.startsWith('SB-Mid-server-');
+function requireTenantOwner(session) {
+  if(!session){const error=new Error('Sesi tidak valid');error.status=401;throw error;}
+  if(session.profile?.role!=='OWNER'){
+    const error=new Error('Pengaturan pembayaran hanya dapat dikelola Owner usaha');error.status=403;throw error;
+  }
 }
 
-function midtransSandboxConfig() {
-  const config=env();
-  if(!midtransSandboxConfigured()){
-    const error=new Error('Midtrans Sandbox belum dikonfigurasi. Pasang MIDTRANS_SERVER_KEY Sandbox dan MIDTRANS_ENVIRONMENT=SANDBOX.');
+function paymentCredentialsMasterKey() {
+  const encoded=String(env().paymentCredentialsMasterKey??'').trim();
+  let bytes;
+  try{bytes=Buffer.from(encoded,'base64');}catch{bytes=Buffer.alloc(0);}
+  if(bytes.length!==32){
+    const error=new Error('Penyimpanan kredensial pembayaran belum dikonfigurasi oleh Platform Admin');
     error.status=503;throw error;
   }
-  return {serverKey:config.midtransServerKey,baseUrl:'https://api.sandbox.midtrans.com'};
+  return bytes;
+}
+
+async function paymentCryptoKey() {
+  return globalThis.crypto.subtle.importKey('raw',paymentCredentialsMasterKey(),{name:'AES-GCM'},false,['encrypt','decrypt']);
+}
+
+async function encryptPaymentCredential(value) {
+  const iv=randomBytes(12),key=await paymentCryptoKey();
+  const ciphertext=await globalThis.crypto.subtle.encrypt({name:'AES-GCM',iv},key,Buffer.from(String(value),'utf8'));
+  return {ciphertext:Buffer.from(ciphertext).toString('base64'),iv:iv.toString('base64'),keyVersion:1};
+}
+
+async function decryptPaymentCredential(account) {
+  try{
+    const key=await paymentCryptoKey(),iv=Buffer.from(String(account.server_key_iv??''),'base64');
+    if(iv.length!==12||!account.server_key_ciphertext)throw new Error('ciphertext tidak lengkap');
+    const plaintext=await globalThis.crypto.subtle.decrypt({name:'AES-GCM',iv},key,Buffer.from(account.server_key_ciphertext,'base64'));
+    return Buffer.from(plaintext).toString('utf8');
+  }catch(error){
+    if(error?.status)throw error;
+    throw Object.assign(new Error('Kredensial pembayaran tenant tidak dapat dibuka; hubungi Platform Admin'),{status:503});
+  }
+}
+
+async function midtransAccount(tenantId,environment='SANDBOX',{required=true}={}) {
+  const rows=await rest('payment_gateway_accounts',`tenant_id=eq.${encodeURIComponent(tenantId)}&provider=eq.MIDTRANS&environment=eq.${environment}&select=*&limit=1`);
+  const account=rows[0];
+  if(!account||account.status==='DISABLED'){
+    if(!required)return null;
+    throw Object.assign(new Error(`Akun Midtrans ${environment} belum dihubungkan oleh Owner usaha`),{status:503});
+  }
+  const serverKey=await decryptPaymentCredential(account);
+  const expectedPrefix=environment==='SANDBOX'?'SB-Mid-server-':'Mid-server-';
+  if(!serverKey.startsWith(expectedPrefix))throw Object.assign(new Error(`Server Key Midtrans tidak cocok untuk ${environment}`),{status:503});
+  return {...account,serverKey,baseUrl:environment==='SANDBOX'?'https://api.sandbox.midtrans.com':'https://api.midtrans.com'};
 }
 
 function safeSecretEqual(left,right) {
@@ -132,8 +170,7 @@ function midtransQrUrl(payload={}) {
   }catch{return null;}
 }
 
-async function midtransSandboxRequest(path,{method='GET',body}={}) {
-  const config=midtransSandboxConfig();
+async function midtransRequest(config,path,{method='GET',body}={}) {
   const response=await fetch(`${config.baseUrl}${path}`,{
     method,headers:{authorization:`Basic ${Buffer.from(`${config.serverKey}:`).toString('base64')}`,'content-type':'application/json','accept':'application/json'},
     ...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(10000)
@@ -160,7 +197,7 @@ async function recordMidtransEvent(intentId,source,payload,processingResult,sign
   await rest('payment_gateway_events','',{method:'POST',body:{intent_id:intentId,source,event_status:String(payload?.transaction_status??''),signature_verified:signatureVerified,payload_hash:midtransPayloadHash(payload),sanitized_payload:sanitizedMidtransPayload(payload),processing_result:String(processingResult).slice(0,500)}});
 }
 
-async function updateMidtransSandboxIntent(intent,payload,source,signatureVerified=null) {
+async function updateMidtransIntent(intent,payload,source,signatureVerified=null) {
   validateMidtransIntentStatus(intent,payload);
   const observedStatus=midtransStatus(payload.transaction_status);
   const terminal=new Set(['SETTLEMENT','EXPIRED','DENIED','CANCELLED']);
@@ -168,8 +205,8 @@ async function updateMidtransSandboxIntent(intent,payload,source,signatureVerifi
   const body={status,gateway_transaction_id:String(payload.transaction_id??intent.gateway_transaction_id??'')||null,qr_url:midtransQrUrl(payload)??intent.qr_url??null,gateway_status_code:String(payload.status_code??'')||null,gateway_status_message:String(payload.status_message??'').slice(0,500)||null,last_gateway_payload:sanitizedMidtransPayload(payload),updated_at:new Date().toISOString()};
   if(payload.expiry_time){const expiry=new Date(String(payload.expiry_time).replace(' ','T')+'+07:00');if(Number.isFinite(expiry.getTime()))body.expires_at=expiry.toISOString();}
   if(observedStatus==='SETTLEMENT'&&!intent.settled_at)body.settled_at=new Date().toISOString();
-  const rows=await rest('payment_gateway_intents',`id=eq.${intent.id}&environment=eq.SANDBOX`,{method:'PATCH',prefer:'return=representation',body});
-  await recordMidtransEvent(intent.id,source,payload,`Sandbox mengamati ${observedStatus}, status tersimpan ${status}; tidak ada penjualan atau stok yang diubah`,signatureVerified);
+  const rows=await rest('payment_gateway_intents',`id=eq.${intent.id}&tenant_id=eq.${intent.tenant_id}&environment=eq.${intent.environment}`,{method:'PATCH',prefer:'return=representation',body});
+  await recordMidtransEvent(intent.id,source,payload,`${intent.environment} mengamati ${observedStatus}, status tersimpan ${status}; belum ada penjualan atau stok yang diubah`,signatureVerified);
   return rows[0]??{...intent,...body};
 }
 
@@ -2063,19 +2100,20 @@ async function routeRequest(request, response, route) {
   }
 
   if(request.method==='POST'&&route==='webhooks/midtrans'){
-    const config=midtransSandboxConfig();
     let payload;
     try{payload=bodyOf(request);}catch{throw Object.assign(new Error('Payload webhook Midtrans bukan JSON yang valid'),{status:400});}
     const orderId=String(payload.order_id??'').trim(),statusCode=String(payload.status_code??''),grossAmount=String(payload.gross_amount??''),signature=String(payload.signature_key??'');
     if(!orderId||!statusCode||!grossAmount||!signature)throw Object.assign(new Error('Payload webhook Midtrans tidak lengkap'),{status:400});
+    const rows=await rest('payment_gateway_intents',`provider=eq.MIDTRANS&order_id=eq.${encodeURIComponent(orderId)}&select=*&limit=1`);
+    const intent=rows[0];
+    if(!intent)throw Object.assign(new Error('Intent Midtrans tidak ditemukan'),{status:404});
+    const config=await midtransAccount(intent.tenant_id,intent.environment);
+    if(intent.gateway_account_id&&intent.gateway_account_id!==config.id)throw Object.assign(new Error('Akun Midtrans intent tidak cocok dengan tenant'),{status:409});
     const expected=createHash('sha512').update(`${orderId}${statusCode}${grossAmount}${config.serverKey}`).digest('hex');
     if(!safeSecretEqual(signature,expected))throw Object.assign(new Error('Signature webhook Midtrans tidak valid'),{status:401});
-    const rows=await rest('payment_gateway_intents',`provider=eq.MIDTRANS&environment=eq.SANDBOX&order_id=eq.${encodeURIComponent(orderId)}&select=*&limit=1`);
-    const intent=rows[0];
-    if(!intent)throw Object.assign(new Error('Intent Sandbox Midtrans tidak ditemukan'),{status:404});
-    const verified=await midtransSandboxRequest(`/v2/${encodeURIComponent(orderId)}/status`);
-    const updated=await updateMidtransSandboxIntent(intent,verified,'WEBHOOK',true);
-    return send(response,200,{received:true,environment:'SANDBOX',status:updated.status,operationalMutation:false});
+    const verified=await midtransRequest(config,`/v2/${encodeURIComponent(orderId)}/status`);
+    const updated=await updateMidtransIntent(intent,verified,'WEBHOOK',true);
+    return send(response,200,{received:true,environment:intent.environment,status:updated.status,operationalMutation:false});
   }
 
   if (request.method === 'POST' && route === 'register-owner') {
@@ -2311,28 +2349,49 @@ async function routeRequest(request, response, route) {
     });
   }
 
-  if(request.method==='GET'&&route==='platform/payment-gateways/midtrans/sandbox'){
-    requirePlatformAdmin(session);
-    const configured=midtransSandboxConfigured();
+  if(request.method==='GET'&&route==='payment-gateways/midtrans/sandbox'){
+    requireTenantOwner(session);
+    let account=null,configurationError=null;
+    try{account=await midtransAccount(context.tenantId,'SANDBOX',{required:false});}catch(error){configurationError=error.message;}
     let intents=[];
     try{
       intents=await rest('payment_gateway_intents',`tenant_id=eq.${context.tenantId}&provider=eq.MIDTRANS&environment=eq.SANDBOX&select=*&order=created_at.desc&limit=20`);
     }catch(error){
       if(!/payment_gateway_intents/i.test(`${error.message} ${JSON.stringify(error.details??{})}`))throw error;
     }
-    return send(response,200,{configured,environment:'SANDBOX',operationalMutation:false,intents:intents.map((item)=>({id:item.id,orderId:item.order_id,transactionId:item.gateway_transaction_id,amount:Number(item.gross_amount),status:item.status,qrUrl:item.qr_url,expiresAt:item.expires_at,settledAt:item.settled_at,failureMessage:item.failure_message,createdAt:item.created_at,updatedAt:item.updated_at}))});
+    return send(response,200,{configured:Boolean(account),credentialStorageConfigured:Boolean(env().paymentCredentialsMasterKey),configurationError,merchantId:account?.merchant_id??null,verifiedAt:account?.verified_at??null,accountStatus:account?.status??'DISCONNECTED',environment:'SANDBOX',operationalMutation:false,intents:intents.map((item)=>({id:item.id,orderId:item.order_id,transactionId:item.gateway_transaction_id,amount:Number(item.gross_amount),status:item.status,qrUrl:item.qr_url,expiresAt:item.expires_at,settledAt:item.settled_at,failureMessage:item.failure_message,createdAt:item.created_at,updatedAt:item.updated_at}))});
   }
 
-  if(request.method==='POST'&&route==='platform/payment-gateways/midtrans/sandbox/intents'){
-    requirePlatformAdmin(session);midtransSandboxConfig();
+  if(request.method==='PUT'&&route==='payment-gateways/midtrans/sandbox/credentials'){
+    requireTenantOwner(session);
+    const input=bodyOf(request),serverKey=String(input.serverKey??'').trim(),merchantId=String(input.merchantId??'').trim();
+    if(!serverKey.startsWith('SB-Mid-server-')||serverKey.length<24||serverKey.length>300)throw Object.assign(new Error('Gunakan Server Key dari lingkungan Sandbox Midtrans'),{status:400});
+    if(merchantId.length>100)throw Object.assign(new Error('Merchant ID terlalu panjang'),{status:400});
+    const encrypted=await encryptPaymentCredential(serverKey);
+    const saved=await rest('payment_gateway_accounts','on_conflict=tenant_id,provider,environment',{method:'POST',prefer:'resolution=merge-duplicates,return=representation',body:{tenant_id:context.tenantId,provider:'MIDTRANS',environment:'SANDBOX',status:'CONFIGURED',merchant_id:merchantId||null,server_key_ciphertext:encrypted.ciphertext,server_key_iv:encrypted.iv,encryption_key_version:encrypted.keyVersion,configured_by:session.authUser.id,verified_at:null,updated_at:new Date().toISOString()}});
+    await rest('audit_logs','',{method:'POST',body:{tenant_id:context.tenantId,actor_id:session.authUser.id,action:'PAYMENT_GATEWAY_CONFIGURED',entity_type:'payment_gateway_account',entity_id:saved[0]?.id??null,details_json:{provider:'MIDTRANS',environment:'SANDBOX',merchantId:merchantId||null}}});
+    return send(response,200,{configured:true,environment:'SANDBOX',merchantId:merchantId||null,accountStatus:'CONFIGURED',operationalMutation:false});
+  }
+
+  if(request.method==='DELETE'&&route==='payment-gateways/midtrans/sandbox/credentials'){
+    requireTenantOwner(session);
+    const rows=await rest('payment_gateway_accounts',`tenant_id=eq.${context.tenantId}&provider=eq.MIDTRANS&environment=eq.SANDBOX`,{method:'PATCH',prefer:'return=representation',body:{status:'DISABLED',server_key_ciphertext:null,server_key_iv:null,verified_at:null,configured_by:session.authUser.id,updated_at:new Date().toISOString()}});
+    await rest('audit_logs','',{method:'POST',body:{tenant_id:context.tenantId,actor_id:session.authUser.id,action:'PAYMENT_GATEWAY_DISCONNECTED',entity_type:'payment_gateway_account',entity_id:rows[0]?.id??null,details_json:{provider:'MIDTRANS',environment:'SANDBOX'}}});
+    return send(response,200,{configured:false,environment:'SANDBOX',operationalMutation:false});
+  }
+
+  if(request.method==='POST'&&route==='payment-gateways/midtrans/sandbox/intents'){
+    requireTenantOwner(session);
+    const config=await midtransAccount(context.tenantId,'SANDBOX');
     const input=bodyOf(request),amount=Number(input.amount);
     if(!Number.isSafeInteger(amount)||amount<1000||amount>10000000)throw Object.assign(new Error('Nominal simulasi harus bilangan bulat Rp1.000 sampai Rp10.000.000'),{status:400});
     const orderId=`NUSA-SBX-${Date.now().toString(36).toUpperCase()}-${randomBytes(6).toString('hex').toUpperCase()}`;
-    const created=await rest('payment_gateway_intents','',{method:'POST',prefer:'return=representation',body:{tenant_id:context.tenantId,outlet_id:context.outlet?.id??null,cashier_id:session.authUser.id,provider:'MIDTRANS',environment:'SANDBOX',channel:'QRIS_DYNAMIC',order_id:orderId,gross_amount:amount,currency:'IDR',status:'CREATING'}});
+    const created=await rest('payment_gateway_intents','',{method:'POST',prefer:'return=representation',body:{tenant_id:context.tenantId,outlet_id:context.outlet?.id??null,cashier_id:session.authUser.id,gateway_account_id:config.id,provider:'MIDTRANS',environment:'SANDBOX',channel:'QRIS_DYNAMIC',order_id:orderId,gross_amount:amount,currency:'IDR',status:'CREATING'}});
     const intent=created[0];
     try{
-      const payload=await midtransSandboxRequest('/v2/charge',{method:'POST',body:{payment_type:'qris',transaction_details:{order_id:orderId,gross_amount:amount},item_details:[{id:'NUSA-SANDBOX',price:amount,quantity:1,name:'Simulasi QRIS Nusa POS'}],qris:{acquirer:'gopay'}}});
-      const updated=await updateMidtransSandboxIntent(intent,payload,'CHARGE',null);
+      const payload=await midtransRequest(config,'/v2/charge',{method:'POST',body:{payment_type:'qris',transaction_details:{order_id:orderId,gross_amount:amount},item_details:[{id:'NUSA-SANDBOX',price:amount,quantity:1,name:'Simulasi QRIS Nusa POS'}],qris:{acquirer:'gopay'}}});
+      const updated=await updateMidtransIntent(intent,payload,'CHARGE',null);
+      await rest('payment_gateway_accounts',`id=eq.${config.id}&tenant_id=eq.${context.tenantId}`,{method:'PATCH',body:{status:'VERIFIED',merchant_id:String(payload.merchant_id??config.merchant_id??'')||null,verified_at:new Date().toISOString(),updated_at:new Date().toISOString()}});
       return send(response,201,{intent:{id:updated.id,orderId:updated.order_id,transactionId:updated.gateway_transaction_id,amount:Number(updated.gross_amount),status:updated.status,qrUrl:updated.qr_url,expiresAt:updated.expires_at,createdAt:updated.created_at},environment:'SANDBOX',operationalMutation:false});
     }catch(error){
       await rest('payment_gateway_intents',`id=eq.${intent.id}`,{method:'PATCH',body:{status:'ERROR',failure_code:'CHARGE_FAILED',failure_message:String(error.message).slice(0,500),updated_at:new Date().toISOString()}}).catch(()=>null);
@@ -2341,14 +2400,16 @@ async function routeRequest(request, response, route) {
     }
   }
 
-  if(request.method==='POST'&&/^platform\/payment-gateways\/midtrans\/sandbox\/intents\/[^/]+\/refresh$/.test(route)){
-    requirePlatformAdmin(session);midtransSandboxConfig();
-    const intentId=route.split('/')[5];
+  if(request.method==='POST'&&/^payment-gateways\/midtrans\/sandbox\/intents\/[^/]+\/refresh$/.test(route)){
+    requireTenantOwner(session);
+    const intentId=route.split('/')[4];
     const rows=await rest('payment_gateway_intents',`tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(intentId)}&provider=eq.MIDTRANS&environment=eq.SANDBOX&select=*&limit=1`);
     const intent=rows[0];
     if(!intent)throw Object.assign(new Error('Intent Sandbox Midtrans tidak ditemukan'),{status:404});
-    const payload=await midtransSandboxRequest(`/v2/${encodeURIComponent(intent.order_id)}/status`);
-    const updated=await updateMidtransSandboxIntent(intent,payload,'STATUS_CHECK',null);
+    const config=await midtransAccount(context.tenantId,'SANDBOX');
+    if(intent.gateway_account_id&&intent.gateway_account_id!==config.id)throw Object.assign(new Error('Intent dibuat oleh akun Midtrans tenant yang berbeda'),{status:409});
+    const payload=await midtransRequest(config,`/v2/${encodeURIComponent(intent.order_id)}/status`);
+    const updated=await updateMidtransIntent(intent,payload,'STATUS_CHECK',null);
     return send(response,200,{intent:{id:updated.id,orderId:updated.order_id,transactionId:updated.gateway_transaction_id,amount:Number(updated.gross_amount),status:updated.status,qrUrl:updated.qr_url,expiresAt:updated.expires_at,settledAt:updated.settled_at,updatedAt:updated.updated_at},environment:'SANDBOX',operationalMutation:false});
   }
 
