@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=201">
+  <link rel="stylesheet" href="/styles.css?v=202">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -300,6 +300,17 @@
             <div class="surface purchase-documents">
               <div class="document-toolbar"><div><p class="eyebrow">LANGKAH 2</p><h2>Pesanan supplier</h2><small>Cetak atau bagikan dokumen ini ke supplier. Dokumen bukan bukti pembayaran.</small></div><div><select id="purchase-status-filter"><option value="">Semua status</option><option value="DRAFT">Belum dikirim</option><option value="SUBMITTED">Menunggu persetujuan</option><option value="APPROVED">Sudah dikirim / menunggu barang</option><option value="PARTIALLY_RECEIVED">Tiba sebagian</option><option value="RECEIVED">Selesai</option><option value="CANCELLED">Dibatalkan</option></select><button id="refresh-purchase-orders" class="button secondary">Muat ulang</button><button id="new-purchase-order" class="button secondary">Pesanan manual</button></div></div>
               <div id="purchase-order-list"></div>
+            </div>
+          </div>
+
+          <div id="purchase-view-detail" class="purchase-view hidden">
+            <div class="surface purchase-order-detail-page">
+              <header class="purchase-order-detail-head">
+                <button id="back-purchase-order-detail" class="button secondary" type="button">← Daftar PO</button>
+                <div><p class="eyebrow">DETAIL PESANAN SUPPLIER</p><h2 id="purchase-order-detail-title">Purchase Order</h2><p id="purchase-order-detail-subtitle" class="muted"></p></div>
+                <span id="purchase-order-detail-status" class="status-badge draft">DRAFT</span>
+              </header>
+              <div id="purchase-order-detail-content"></div>
             </div>
           </div>
 
@@ -1156,6 +1167,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=201"></script>
+  <script type="module" src="/app.js?v=202"></script>
 </body>
 </html>

@@ -129,6 +129,82 @@ textarea{font:inherit;width:100%;resize:vertical;border:1px solid var(--line);bo
   background:var(--paper);
 }
 
+/* Purchase Orders: compact list first, read-only detail on its own page. */
+.purchase-metrics{
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:0;
+  margin-bottom:10px;
+  overflow:hidden;
+}
+.purchase-metrics .metric{min-height:70px;padding:12px 14px;border-radius:0;border-right:0}
+.purchase-metrics .metric:first-child{border-radius:12px 0 0 12px}
+.purchase-metrics .metric:last-child{border-right:1px solid var(--line);border-radius:0 12px 12px 0}
+.purchase-metrics .metric span{font-size:10px}
+.purchase-metrics .metric strong{font-size:21px}
+.document-toolbar{padding:14px 16px}
+.purchase-document{
+  padding:12px 16px;
+  cursor:pointer;
+  transition:background-color .15s ease,box-shadow .15s ease;
+}
+.purchase-document:hover,.purchase-document:focus-visible{background:#f5faf8;outline:0;box-shadow:inset 3px 0 var(--brand)}
+.purchase-document p{margin:3px 0}
+.purchase-document-footer{margin-top:7px}
+.purchase-document-detail-link{display:inline-flex;align-items:center;gap:6px;color:var(--brand);font-size:12px}
+.purchase-document-detail-link span{font-size:20px;line-height:10px}
+.purchase-document .receipt-progress{height:4px;margin-top:8px}
+.purchase-document .purchase-receiving-lock{margin-top:8px;padding:8px 10px}
+.purchase-order-detail-page{max-width:1120px;margin:0 auto;padding:0;overflow:hidden}
+.purchase-order-detail-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:14px;padding:16px 18px;border-bottom:1px solid var(--line)}
+.purchase-order-detail-head h2,.purchase-order-detail-head p{margin:0}
+.purchase-order-detail-head .eyebrow{margin-bottom:3px}
+.purchase-order-detail-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-bottom:1px solid var(--line)}
+.purchase-order-detail-summary>div{display:grid;gap:3px;padding:12px 16px;border-right:1px solid var(--line)}
+.purchase-order-detail-summary>div:last-child{border-right:0}
+.purchase-order-detail-summary span,.purchase-order-detail-line span,.purchase-order-detail-totals span,.purchase-order-detail-note>span{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.purchase-order-detail-summary small,.purchase-order-detail-line small{color:var(--muted)}
+.purchase-order-detail-lines{padding:8px 16px}
+.purchase-order-detail-line{display:grid;grid-template-columns:minmax(220px,2fr) repeat(5,minmax(95px,1fr));gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.purchase-order-detail-line:last-child{border-bottom:0}
+.purchase-order-detail-line>div{display:grid;gap:2px;min-width:0}
+.purchase-order-detail-line>div:first-child strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.purchase-order-detail-line-total{text-align:right}
+.purchase-order-detail-note{margin:0 16px;padding:10px 12px;border-radius:10px;background:var(--paper)}
+.purchase-order-detail-note p{margin:4px 0 0}
+.purchase-order-detail-totals{display:flex;justify-content:flex-end;align-items:stretch;gap:0;margin-top:8px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.purchase-order-detail-totals>div{display:grid;gap:3px;min-width:120px;padding:10px 14px;border-left:1px solid var(--line)}
+.purchase-order-detail-totals .grand{min-width:170px;background:var(--paper)}
+.purchase-order-detail-totals .grand strong{font-size:18px}
+.purchase-order-detail-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;padding:12px 16px}
+
+@media(max-width:760px){
+  .purchase-metrics{display:flex;overflow-x:auto;scroll-snap-type:x proximity;border-radius:12px}
+  .purchase-metrics .metric{flex:0 0 118px;min-height:60px;padding:9px 11px;scroll-snap-align:start}
+  .purchase-metrics .metric strong{font-size:18px}
+  .document-toolbar{gap:10px;padding:12px}
+  .purchase-document{padding:11px 12px}
+  .purchase-document-main{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+  .purchase-document .document-number{gap:5px;flex-wrap:wrap}
+  .purchase-document .document-amount{font-size:13px}
+  .purchase-document-footer{flex-direction:row;align-items:center}
+  .purchase-order-detail-head{grid-template-columns:auto minmax(0,1fr);padding:12px}
+  .purchase-order-detail-head>.status-badge{grid-column:2;justify-self:start}
+  .purchase-order-detail-head .button{padding:8px 10px}
+  .purchase-order-detail-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .purchase-order-detail-summary>div{padding:10px 12px;border-bottom:1px solid var(--line)}
+  .purchase-order-detail-summary>div:nth-child(2n){border-right:0}
+  .purchase-order-detail-lines{padding:5px 12px}
+  .purchase-order-detail-line{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px 0}
+  .purchase-order-detail-line>div:first-child{grid-column:1/-1}
+  .purchase-order-detail-line-total{text-align:left}
+  .purchase-order-detail-note{margin:5px 12px}
+  .purchase-order-detail-totals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .purchase-order-detail-totals>div{min-width:0;border-left:0;border-right:1px solid var(--line)}
+  .purchase-order-detail-totals .grand{grid-column:1/-1;min-width:0}
+  .purchase-order-detail-actions{position:sticky;bottom:0;background:rgba(255,255,255,.96);box-shadow:0 -8px 24px rgba(24,54,52,.08);padding-bottom:max(12px,env(safe-area-inset-bottom))}
+  .purchase-order-detail-actions .button{flex:1 1 145px}
+}
+
 /* Compact restock proposal and approval flow */
 .restock-source-grid{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(300px,1.4fr);gap:10px;margin:10px 0}.restock-source-grid label{margin:0}.restock-source-grid small{display:block;margin-top:4px;color:var(--muted)}.restock-source-guidance{display:flex;gap:8px;align-items:baseline;padding:9px 11px;margin:0 0 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface-soft)}.restock-source-guidance strong{white-space:nowrap}.restock-source-guidance span{color:var(--muted);font-size:.84rem}
 .restock-item-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}

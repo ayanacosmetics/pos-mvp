@@ -100,3 +100,17 @@ test('dokumen supplier memakai tata cetak A4 terpisah dari struk penjualan', () 
   assert.match(app, /requestAnimationFrame\(\(\)=>requestAnimationFrame\(\(\)=>window\.print\(\)\)\)/);
   assert.match(app, /window\.addEventListener\('afterprint',cleanup/);
 });
+
+test('daftar PO ringkas membuka halaman detail penuh yang aman', () => {
+  for (const id of ['purchase-view-detail','back-purchase-order-detail','purchase-order-detail-content']) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  assert.match(app, /class="purchase-document purchase-document-open"/);
+  assert.match(app, /function openPurchaseOrderDetail/);
+  assert.match(app, /role="button" tabindex="0"/);
+  assert.match(app, /purchase-order-detail-line/);
+  assert.match(app, /function purchaseOrderDetailActions/);
+  assert.match(css, /\.purchase-metrics\{\s*grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+  assert.match(css, /\.purchase-order-detail-page/);
+  assert.match(css, /@media\(max-width:760px\)[\s\S]*\.purchase-metrics\{display:flex;overflow-x:auto/);
+});

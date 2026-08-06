@@ -4159,30 +4159,69 @@ function renderPurchaseOrders() {
     const ordered = order.items.reduce((sum,item)=>sum+item.ordered_qty,0);
     const received = order.items.reduce((sum,item)=>sum+item.received_qty,0);
     const progress = ordered ? Math.round((received/ordered)*100) : 0;
-    const canApprove = ['OWNER','ADMIN'].includes(state.session.user.role);
     const receivingApproval=order.receiving_approval;
-    const canOpenReceivingApproval=receivingApproval&&(canApprove||receivingApproval.requesterId===state.session.user.id);
     const receivingApprovalLabel={PENDING:'Menunggu Owner',REVISION_REQUIRED:'Perlu revisi',APPROVED:'Disetujui · lanjutkan penerimaan'}[receivingApproval?.status]??receivingApproval?.status;
-    const actions = [
-      order.status !== 'CANCELLED' ? `<button class="button secondary po-print" data-id="${order.id}">Cetak / bagikan</button>` : '',
-      ['SUBMITTED','APPROVED','PARTIALLY_RECEIVED'].includes(order.status) ? `<button class="button secondary po-whatsapp" data-id="${order.id}">WhatsApp supplier</button>` : '',
-      order.status === 'DRAFT' ? `<button class="button secondary po-open" data-id="${order.id}">Ubah</button><button class="button primary po-action" data-id="${order.id}" data-action="submit">Siapkan pesanan</button>` : '',
-      order.status === 'SUBMITTED' && canApprove ? `<button class="button primary po-action" data-id="${order.id}" data-action="approve">Setujui</button>` : '',
-      ['APPROVED','PARTIALLY_RECEIVED'].includes(order.status)&&!receivingApproval ? `<button class="button primary po-receive" data-id="${order.id}">Terima barang</button>` : '',
-      canOpenReceivingApproval?`<button class="button secondary po-open-receiving-approval" data-id="${receivingApproval.id}">Lihat proses penerimaan</button>`:'',
-      !['RECEIVED','CANCELLED','PARTIALLY_RECEIVED'].includes(order.status) && canApprove ? `<button class="button secondary po-action" data-id="${order.id}" data-action="cancel">Batalkan</button>` : ''
-    ].join('');
     const overdue=order.overdue?'<span class="status-badge out">TERLAMBAT</span>':'';
     const approval=order.status==='SUBMITTED'?` · di atas batas ${money.format(order.approval_threshold??0)}`:order.status==='APPROVED'&&!order.approval_required?' · disetujui otomatis':'';
     const receivingNotice=receivingApproval?`<div class="purchase-receiving-lock"><span class="badge warning">PENERIMAAN DIPROSES</span><div><strong>${escapeHtml(receivingApprovalLabel)}</strong><small>Faktur ${escapeHtml(receivingApproval.documentNo??'-')} · selesaikan pengajuan ini sebelum menerima barang lagi.</small></div></div>`:'';
-    return `<article class="purchase-document"><div class="purchase-document-main"><div><div class="document-number"><strong>${order.po_no}</strong><span class="status-badge ${statusClass}">${label}</span>${overdue}</div><p>${order.supplier_name}</p><small>Dibuat ${new Date(order.created_at).toLocaleDateString('id-ID')}${order.expected_on ? ` · estimasi ${new Date(`${order.expected_on}T00:00:00`).toLocaleDateString('id-ID')}` : ''}${approval}</small></div><div class="document-amount"><strong>${money.format(order.grand_total)}</strong><small>${order.items.length} jenis · sisa ${Number(order.outstanding_qty).toLocaleString('id-ID')} pcs</small></div></div>${receivingNotice}<div class="receipt-progress"><span style="width:${progress}%"></span></div><div class="purchase-document-footer"><small>Diterima ${received} dari ${ordered} pcs · ${progress}%</small><div>${actions}</div></div></article>`;
+    return `<article class="purchase-document purchase-document-open" data-id="${escapeHtml(order.id)}" role="button" tabindex="0" aria-label="Lihat detail ${escapeHtml(order.po_no)}"><div class="purchase-document-main"><div><div class="document-number"><strong>${escapeHtml(order.po_no)}</strong><span class="status-badge ${statusClass}">${escapeHtml(label)}</span>${overdue}</div><p>${escapeHtml(order.supplier_name)}</p><small>Dibuat ${new Date(order.created_at).toLocaleDateString('id-ID')}${order.expected_on ? ` · estimasi ${new Date(`${order.expected_on}T00:00:00`).toLocaleDateString('id-ID')}` : ''}${approval}</small></div><div class="document-amount"><strong>${money.format(order.grand_total)}</strong><small>${order.items.length} jenis · sisa ${Number(order.outstanding_qty).toLocaleString('id-ID')} pcs</small></div></div>${receivingNotice}<div class="receipt-progress"><span style="width:${progress}%"></span></div><div class="purchase-document-footer"><small>Diterima ${received} dari ${ordered} pcs · ${progress}%</small><strong class="purchase-document-detail-link">Lihat detail <span aria-hidden="true">›</span></strong></div></article>`;
   }).join('') || '<div class="empty-state compact">Belum ada Purchase Order dengan status ini.</div>';
-  document.querySelectorAll('.po-open').forEach((button) => button.addEventListener('click', () => editPurchaseOrder(button.dataset.id)));
-  document.querySelectorAll('.po-action').forEach((button) => button.addEventListener('click', () => transitionPurchaseOrder(button.dataset.id, button.dataset.action)));
-  document.querySelectorAll('.po-receive').forEach((button) => button.addEventListener('click', () => prepareOrderReceipt(button.dataset.id)));
-  document.querySelectorAll('.po-open-receiving-approval').forEach((button)=>button.addEventListener('click',()=>openPurchaseOrderReceivingApproval(button.dataset.id)));
-  document.querySelectorAll('.po-print').forEach((button) => button.addEventListener('click', () => openPurchaseOrderPrint(button.dataset.id)));
-  document.querySelectorAll('.po-whatsapp').forEach((button) => button.addEventListener('click', () => openPurchaseOrderWhatsApp(button.dataset.id)));
+  el('purchase-order-list').querySelectorAll('.purchase-document-open').forEach((card)=>{
+    const open=()=>openPurchaseOrderDetail(card.dataset.id);
+    card.addEventListener('click',open);
+    card.addEventListener('keydown',(event)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}});
+  });
+}
+
+function purchaseOrderDetailActions(order) {
+  const canApprove=['OWNER','ADMIN'].includes(state.session.user.role);
+  const receivingApproval=order.receiving_approval;
+  const canOpenApproval=receivingApproval&&(canApprove||receivingApproval.requesterId===state.session.user.id);
+  return [
+    order.status!=='CANCELLED'?`<button class="button secondary po-print" data-id="${escapeHtml(order.id)}">Cetak / bagikan</button>`:'',
+    ['SUBMITTED','APPROVED','PARTIALLY_RECEIVED'].includes(order.status)?`<button class="button secondary po-whatsapp" data-id="${escapeHtml(order.id)}">WhatsApp supplier</button>`:'',
+    order.status==='DRAFT'?`<button class="button secondary po-open" data-id="${escapeHtml(order.id)}">Ubah draft</button><button class="button primary po-action" data-id="${escapeHtml(order.id)}" data-action="submit">Siapkan pesanan</button>`:'',
+    order.status==='SUBMITTED'&&canApprove?`<button class="button primary po-action" data-id="${escapeHtml(order.id)}" data-action="approve">Setujui</button>`:'',
+    ['APPROVED','PARTIALLY_RECEIVED'].includes(order.status)&&!receivingApproval?`<button class="button primary po-receive" data-id="${escapeHtml(order.id)}">Terima barang</button>`:'',
+    canOpenApproval?`<button class="button secondary po-open-receiving-approval" data-id="${escapeHtml(receivingApproval.id)}">Lihat proses penerimaan</button>`:'',
+    !['RECEIVED','CANCELLED','PARTIALLY_RECEIVED'].includes(order.status)&&canApprove?`<button class="button danger po-action" data-id="${escapeHtml(order.id)}" data-action="cancel">Batalkan PO</button>`:''
+  ].join('');
+}
+
+function bindPurchaseOrderDetailActions(root) {
+  root.querySelectorAll('.po-open').forEach((button)=>button.addEventListener('click',()=>editPurchaseOrder(button.dataset.id)));
+  root.querySelectorAll('.po-action').forEach((button)=>button.addEventListener('click',()=>transitionPurchaseOrder(button.dataset.id,button.dataset.action)));
+  root.querySelectorAll('.po-receive').forEach((button)=>button.addEventListener('click',()=>prepareOrderReceipt(button.dataset.id)));
+  root.querySelectorAll('.po-open-receiving-approval').forEach((button)=>button.addEventListener('click',()=>openPurchaseOrderReceivingApproval(button.dataset.id)));
+  root.querySelectorAll('.po-print').forEach((button)=>button.addEventListener('click',()=>openPurchaseOrderPrint(button.dataset.id)));
+  root.querySelectorAll('.po-whatsapp').forEach((button)=>button.addEventListener('click',()=>openPurchaseOrderWhatsApp(button.dataset.id)));
+}
+
+function openPurchaseOrderDetail(orderId) {
+  const order=state.purchaseOrders.find((item)=>item.id===orderId);
+  if(!order)return toast('Detail Purchase Order tidak ditemukan. Muat ulang daftar lalu coba kembali.');
+  state.activePurchaseOrderDetailId=orderId;
+  const [statusLabel,statusClass]=purchaseStatus[order.status]??[order.status,'draft'];
+  el('purchase-order-detail-title').textContent=order.po_no;
+  el('purchase-order-detail-subtitle').textContent=`${order.supplier_name} · dibuat ${new Date(order.created_at).toLocaleDateString('id-ID')}`;
+  el('purchase-order-detail-status').className=`status-badge ${statusClass}`;
+  el('purchase-order-detail-status').textContent=statusLabel;
+  const ordered=order.items.reduce((sum,item)=>sum+Number(item.ordered_qty),0);
+  const received=order.items.reduce((sum,item)=>sum+Number(item.received_qty),0);
+  const remaining=Math.max(0,ordered-received);
+  const rows=order.items.map((item)=>{
+    const factor=Math.max(1,Number(item.purchase_unit_factor??1));
+    const unitName=item.purchase_unit_name??'pcs';
+    const orderedPurchase=Number(item.ordered_purchase_qty??Number(item.ordered_qty)/factor);
+    const receivedPurchase=Number(item.received_qty)/factor;
+    const remainingPurchase=Math.max(0,Number(item.remaining_qty))/factor;
+    return `<article class="purchase-order-detail-line"><div><strong>${escapeHtml(item.product_name)}</strong><small>${escapeHtml(item.sku??'')}</small></div><div><span>Dipesan</span><strong>${orderedPurchase.toLocaleString('id-ID')} ${escapeHtml(unitName)}</strong><small>${factor>1?`${Number(item.ordered_qty).toLocaleString('id-ID')} pcs`:''}</small></div><div><span>Diterima</span><strong>${receivedPurchase.toLocaleString('id-ID')} ${escapeHtml(unitName)}</strong><small>${factor>1?`${Number(item.received_qty).toLocaleString('id-ID')} pcs`:''}</small></div><div><span>Sisa</span><strong>${remainingPurchase.toLocaleString('id-ID')} ${escapeHtml(unitName)}</strong><small>${factor>1?`${Number(item.remaining_qty).toLocaleString('id-ID')} pcs`:''}</small></div><div><span>Estimasi modal</span><strong>${money.format(item.purchase_unit_cost??Number(item.unit_cost)*factor)}</strong><small>/ ${escapeHtml(unitName)}</small></div><div class="purchase-order-detail-line-total"><span>Jumlah</span><strong>${money.format(item.line_total)}</strong></div></article>`;
+  }).join('');
+  const location=state.locations.find((item)=>item.id===order.location_id);
+  el('purchase-order-detail-content').innerHTML=`<section class="purchase-order-detail-summary"><div><span>Lokasi tujuan</span><strong>${escapeHtml(location?.name??'-')}</strong></div><div><span>Perkiraan tiba</span><strong>${order.expected_on?new Date(`${order.expected_on}T00:00:00`).toLocaleDateString('id-ID'):'Belum ditentukan'}</strong></div><div><span>Jenis barang</span><strong>${order.items.length.toLocaleString('id-ID')}</strong></div><div><span>Progres</span><strong>${received.toLocaleString('id-ID')} / ${ordered.toLocaleString('id-ID')} pcs</strong><small>Sisa ${remaining.toLocaleString('id-ID')} pcs</small></div></section><section class="purchase-order-detail-lines">${rows||'<div class="empty-state compact">PO ini belum memiliki barang.</div>'}</section>${order.notes?`<section class="purchase-order-detail-note"><span>Catatan supplier</span><p>${escapeHtml(order.notes)}</p></section>`:''}<section class="purchase-order-detail-totals"><div><span>Subtotal</span><strong>${money.format(order.subtotal)}</strong></div><div><span>Diskon</span><strong>${money.format(order.discount_amount)}</strong></div><div><span>Pajak</span><strong>${money.format(order.tax_amount)}</strong></div><div><span>Biaya lain</span><strong>${money.format(order.other_cost)}</strong></div><div class="grand"><span>Total PO</span><strong>${money.format(order.grand_total)}</strong></div></section><footer class="purchase-order-detail-actions">${purchaseOrderDetailActions(order)}</footer>`;
+  bindPurchaseOrderDetailActions(el('purchase-order-detail-content'));
+  showPurchaseView('detail');
+  window.scrollTo({top:0,behavior:'smooth'});
 }
 
 function purchaseOrderShareText(order) {
@@ -4493,7 +4532,7 @@ async function savePurchaseOrder() {
 }
 
 async function transitionPurchaseOrder(orderId,action) {
-  try { const result=await request(`/api/purchase-orders/${orderId}/${action}`,{method:'POST',body:'{}'}); toast(`${result.po_no}: ${purchaseStatus[result.status]?.[0] ?? result.status}`); await loadPurchaseOrders(); }
+  try { const result=await request(`/api/purchase-orders/${orderId}/${action}`,{method:'POST',body:'{}'}); toast(`${result.po_no}: ${purchaseStatus[result.status]?.[0] ?? result.status}`); await loadPurchaseOrders(); if(state.activePurchaseOrderDetailId===orderId)openPurchaseOrderDetail(orderId); }
   catch(error){ toast(error.message); }
 }
 
@@ -8588,6 +8627,7 @@ el('select-all-supplier-return').addEventListener('click',()=>{el('supplier-retu
 el('supplier-return-form').addEventListener('submit',postSupplierReturn);
 el('refresh-supplier-returns').addEventListener('click',loadRecentSupplierReturns);
 el('new-purchase-order').addEventListener('click', newPurchaseOrder);
+el('back-purchase-order-detail').addEventListener('click',()=>{state.activePurchaseOrderDetailId=null;showPurchaseView('documents');});
 el('cancel-po-edit').addEventListener('click', () => showPurchaseView('documents'));
 el('refresh-purchase-orders').addEventListener('click', loadPurchaseOrders);
 el('purchase-status-filter').addEventListener('change', renderPurchaseOrders);
