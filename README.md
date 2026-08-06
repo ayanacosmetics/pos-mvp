@@ -247,12 +247,12 @@ verifikasi printer, scanner, jaringan, dan alur kas pada perangkat toko.
 ## Aplikasi kasir Android
 
 APK produksi dapat diunduh dari
-<https://app.nusapos.my.id/downloads/Kasir-Nusa-POS-1.4.1.apk>.
+<https://app.nusapos.my.id/downloads/Kasir-Nusa-POS-1.4.2.apk>.
 Printer dihubungkan dari halaman Perangkat. Scanner dipasangkan sebagai
 keyboard/HID melalui Pengaturan Bluetooth Android, bukan dari aplikasi. Setelah
 tersambung, barcode diteruskan otomatis ke halaman Kasir dan scanner sebaiknya
-mengirim Enter setelah barcode. APK produksi v1.4.1 memiliki SHA-256
-`560BEAAE37D0E707BF57D64A500FBA3887DD144C27EDE899451497CF313C1097` dan
+mengirim Enter setelah barcode. APK produksi v1.4.2 memiliki SHA-256
+`4461E85EAE0EF2F0D00E0492E7FFB9AB74E187B7521CBD9E7E4F91EAFA434867` dan
 ditandatangani kunci permanen Kasir Nusa. Seluruh pembaruan berikutnya wajib
 memakai kunci yang sama. APK `1.3.0-uat` tetap hanya untuk pengujian internal.
 

@@ -26,3 +26,11 @@ Gunakan bersama `PROJECT-HANDOFF.md`. Baca masing-masing sekali saja. Jangan men
 - Commit fitur `08c7c59 fix: enable Android attendance location` sudah didorong ke `main`.
 - Deployment Cloudflare berhasil, Version ID `bd09c3ee-f71f-43ad-afbc-34f849a3e141`.
 - URL publik APK, checksum hasil unduhan, petunjuk izin pada `app.js`, dan API health sudah diverifikasi pada `app.nusapos.my.id`.
+
+## APK Android 1.4.2 — hotfix origin lokasi
+
+- WebView menserialisasi origin produksi sebagai `https://app.nusapos.my.id/`; validasi 1.4.1 keliru hanya menerima path kosong sehingga lokasi ditolak walaupun izin Android aktif.
+- Validasi 1.4.2 menerima path kosong atau `/` untuk origin HTTPS, host, dan port resmi yang sama, serta tetap menolak path, query, fragment, user-info, atau host lain.
+- APK memakai versionCode `11`, versionName `1.4.2`, package dan sertifikat permanen yang sama.
+- APK release identik di `releases/` dan `apps/web/downloads/`, SHA-256 `4461E85EAE0EF2F0D00E0492E7FFB9AB74E187B7521CBD9E7E4F91EAFA434867`.
+- Tidak memerlukan SQL.

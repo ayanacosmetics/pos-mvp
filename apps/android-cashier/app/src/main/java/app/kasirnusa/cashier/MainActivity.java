@@ -137,7 +137,7 @@ public final class MainActivity extends Activity {
         return "https".equalsIgnoreCase(uri.getScheme())
                 && TRUSTED_HOST.equalsIgnoreCase(uri.getHost())
                 && (port == -1 || port == 443)
-                && (uri.getPath() == null || uri.getPath().isEmpty())
+                && (uri.getPath() == null || uri.getPath().isEmpty() || "/".equals(uri.getPath()))
                 && uri.getQuery() == null
                 && uri.getFragment() == null
                 && uri.getUserInfo() == null;
