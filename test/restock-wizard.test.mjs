@@ -37,6 +37,19 @@ test('wizard memvalidasi dokumen dan barang sebelum maju', () => {
   assert.match(app, /function moveRestockWizard/);
 });
 
+test('penerimaan PO membedakan belum diperiksa, tidak datang, dan jumlah aktual', () => {
+  assert.match(html, /id="receive-all-po-items"/);
+  assert.match(html, /Isi 0 bila barang PO tidak datang/);
+  assert.match(app, /appendRestockLine\(item\.product_id,'',item\.unit_cost/);
+  assert.match(app, /row\.dataset\.poLine='true'/);
+  assert.match(app, /Periksa semua barang PO: isi jumlah yang datang, atau 0 bila tidak datang/);
+  assert.match(app, /receivedRows=rows\.filter\(\(row\)=>Number\(row\.querySelector\('\.restock-qty'\)\.value\)>0\)/);
+  assert.match(app, /submitRestockForApproval\(payload,receivedRows\)/);
+  assert.match(app, /TIDAK DATANG/);
+  assert.match(api, /function requirePositiveReceiptItems/);
+  assert.match(api, /Barang yang tidak datang tidak boleh dikirim sebagai penerimaan/);
+});
+
 test('tahap periksa membangun ringkasan tanpa memindahkan input transaksi', () => {
   assert.match(html, /id="restock-review-list"/);
   assert.match(app, /function renderRestockReview/);

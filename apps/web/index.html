@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=200">
+  <link rel="stylesheet" href="/styles.css?v=201">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -338,7 +338,7 @@
 
             <section class="restock-wizard-panel hidden" data-restock-step="items">
               <div class="surface restock-surface">
-                <div class="restock-step-heading"><div><p class="eyebrow">LANGKAH 2 DARI 4</p><h2>Barang yang datang</h2><p class="muted">Pilih barang lama atau daftarkan barang baru tanpa harus memindai barcode.</p></div><div class="restock-item-actions"><button id="toggle-restock-extra-product" class="button secondary" type="button" aria-expanded="false">Cari / scan barang</button><button id="open-restock-new-product" class="button primary" type="button">+ Tambah barang baru</button></div></div>
+                <div class="restock-step-heading"><div><p class="eyebrow">LANGKAH 2 DARI 4</p><h2>Barang yang datang</h2><p class="muted">Isi jumlah aktual yang datang. Isi 0 bila barang PO tidak datang; kolom kosong berarti belum diperiksa.</p></div><div class="restock-item-actions"><button id="receive-all-po-items" class="button secondary hidden" type="button">Terima semua sesuai PO</button><button id="toggle-restock-extra-product" class="button secondary" type="button" aria-expanded="false">Cari / scan barang</button><button id="open-restock-new-product" class="button primary" type="button">+ Tambah barang baru</button></div></div>
                 <div id="restock-extra-product-picker" class="purchase-product-picker hidden">
                   <div class="purchase-product-search"><input id="restock-product-search" autocomplete="off" placeholder="Cari nama, SKU, atau scan barcode"><button id="search-restock-product" class="button secondary" type="button">Cari</button><button id="scan-restock-product" class="button secondary scan-icon-button hardware-scan-button" type="button" aria-label="Aktifkan scanner barcode" title="Scanner barcode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a2 2 0 0 1 2 2v8H4V5a2 2 0 0 1 2-2Z"/><path d="M7 6v4M10 6v4M13 6v4M17 6v4M8 13l-2 8h6l2-8"/></svg></button><button id="camera-restock-product" class="button secondary scan-icon-button camera-scan-button" type="button" aria-label="Scan barcode dengan kamera" title="Scan dengan kamera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5 10 3.5h4l1.5 2H19A2.5 2.5 0 0 1 21.5 8v9A2.5 2.5 0 0 1 19 19.5H5A2.5 2.5 0 0 1 2.5 17V8A2.5 2.5 0 0 1 5 5.5h3.5Z"/><circle cx="12" cy="12.5" r="4"/></svg></button></div>
                   <div id="restock-product-results" class="purchase-product-results"></div>
@@ -1156,6 +1156,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=200"></script>
+  <script type="module" src="/app.js?v=201"></script>
 </body>
 </html>

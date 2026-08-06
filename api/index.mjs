@@ -1224,6 +1224,16 @@ async function restockNeedsPriceApproval(tenantId,items=[]){
   return items.some((item)=>!latest.has(item.productId)||latest.get(item.productId)!==Number(item.unitCost));
 }
 
+function requirePositiveReceiptItems(items){
+  if(!Array.isArray(items)||!items.length)throw Object.assign(new Error('Minimal satu barang yang benar-benar diterima wajib dikirim'),{status:400});
+  for(const item of items){
+    const baseQty=Number(item?.baseQty),unitCost=Number(item?.unitCost);
+    if(!Number.isFinite(baseQty)||baseQty<=0)throw Object.assign(new Error('Jumlah diterima harus lebih dari 0. Barang yang tidak datang tidak boleh dikirim sebagai penerimaan.'),{status:400});
+    if(!Number.isFinite(unitCost)||unitCost<0)throw Object.assign(new Error('Modal barang tidak valid'),{status:400});
+  }
+  return items;
+}
+
 async function shiftDetail(tenantId, shift) {
   if (!shift) return null;
   const [sales, movements, cashier] = await Promise.all([
@@ -5015,15 +5025,16 @@ async function routeRequest(request, response, route) {
     requirePermission(session, 'purchasing.receive');
     const [, orderId] = route.split('/');
     const input = bodyOf(request);
+    const receiptItems=requirePositiveReceiptItems(input.items);
     const key = request.headers['idempotency-key'];
     if (!key) { const error = new Error('Idempotency-Key wajib diisi'); error.status = 400; throw error; }
     const accessibleOrder = (await loadPurchaseOrders(context.tenantId, orderId, context.locationIds))[0];
     if (!accessibleOrder) { const error = new Error('Purchase Order tidak ditemukan pada lokasi user'); error.status = 404; throw error; }
     if(accessibleOrder.receiving_approval)throw Object.assign(new Error('PO sedang diproses dalam pengajuan penerimaan. Lanjutkan dari menu Persetujuan harga agar stok tidak diterima dua kali.'),{status:409});
-    if(await restockNeedsPriceApproval(context.tenantId,input.items))throw Object.assign(new Error('Modal berubah. Ajukan harga kepada Owner sebelum menerima barang.'),{status:409});
+    if(await restockNeedsPriceApproval(context.tenantId,receiptItems))throw Object.assign(new Error('Modal berubah. Ajukan harga kepada Owner sebelum menerima barang.'),{status:409});
     const result = await rpc('receive_purchase_order', {
       p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_order_id: orderId,
-      p_idempotency_key: key, p_document_no: input.documentNo, p_items: input.items
+      p_idempotency_key: key, p_document_no: input.documentNo, p_items: receiptItems
     });
     return send(response, result.duplicate ? 200 : 201, result);
   }
@@ -5044,7 +5055,8 @@ async function routeRequest(request, response, route) {
   if (request.method === 'POST' && route === 'restock-approvals') {
     requirePermission(session, 'purchasing.receive');
     const input=bodyOf(request);requireLocationAccess(context,input.locationId);
-    const purchaseOrderId=input.items?.find?.((item)=>item?.purchaseOrderId)?.purchaseOrderId??null;
+    const receiptItems=requirePositiveReceiptItems(input.items);
+    const purchaseOrderId=receiptItems.find?.((item)=>item?.purchaseOrderId)?.purchaseOrderId??null;
     if(purchaseOrderId){
       const purchaseOrder=(await loadPurchaseOrders(context.tenantId,purchaseOrderId,context.locationIds))[0];
       if(!purchaseOrder)throw Object.assign(new Error('Purchase Order tidak ditemukan pada lokasi user'),{status:404});
@@ -5052,7 +5064,7 @@ async function routeRequest(request, response, route) {
     }
     const result=await rpc('submit_restock_approval_v2',{
       p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_supplier_id:input.supplierId,
-      p_location_id:input.locationId,p_document_no:input.documentNo,p_items:input.items,
+      p_location_id:input.locationId,p_document_no:input.documentNo,p_items:receiptItems,
       p_proposed_prices:input.proposedPrices??[],p_note:input.note??''
     });
     queueTenantOwnerNotification(context.tenantId,{
@@ -5094,9 +5106,10 @@ async function routeRequest(request, response, route) {
   if (request.method === 'POST' && /^restock-approvals\/[^/]+\/resubmit$/.test(route)) {
     requirePermission(session,'purchasing.receive');
     const [,requestId]=route.split('/'),input=bodyOf(request);
+    const receiptItems=requirePositiveReceiptItems(input.items);
     const result=await rpc('resubmit_restock_approval_v1',{
       p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_request_id:requestId,
-      p_items:input.items,p_note:input.note??''
+      p_items:receiptItems,p_note:input.note??''
     });
     return send(response,200,result);
   }
@@ -5114,10 +5127,11 @@ async function routeRequest(request, response, route) {
   if (request.method === 'POST' && route === 'purchase-receipts') {
     requirePermission(session, 'purchasing.receive');
     const input = bodyOf(request);
+    const receiptItems=requirePositiveReceiptItems(input.items);
     const key = request.headers['idempotency-key'];
     if (!key) { const error = new Error('Idempotency-Key wajib diisi'); error.status = 400; throw error; }
     requireLocationAccess(context, input.locationId);
-    if(await restockNeedsPriceApproval(context.tenantId,input.items))throw Object.assign(new Error('Modal berubah. Ajukan harga kepada Owner sebelum menerima barang.'),{status:409});
+    if(await restockNeedsPriceApproval(context.tenantId,receiptItems))throw Object.assign(new Error('Modal berubah. Ajukan harga kepada Owner sebelum menerima barang.'),{status:409});
     const result = await rpc('receive_purchase', {
       p_tenant_id: context.tenantId,
       p_actor_id: session.authUser.id,
@@ -5125,7 +5139,7 @@ async function routeRequest(request, response, route) {
       p_supplier_id: input.supplierId,
       p_location_id: input.locationId,
       p_document_no: input.documentNo,
-      p_items: input.items
+      p_items: receiptItems
     });
     return send(response, result.duplicate ? 200 : 201, result);
   }

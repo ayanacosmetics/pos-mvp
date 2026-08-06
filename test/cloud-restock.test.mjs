@@ -69,6 +69,41 @@ test('restok cloud memakai sesi user untuk Auth dan service key untuk transaksi 
   }
 });
 
+test('API menolak jumlah penerimaan nol sebelum RPC stok dipanggil', async () => {
+  const originalFetch = globalThis.fetch;
+  const previousEnv = { url: process.env.SUPABASE_URL, anon: process.env.SUPABASE_ANON_KEY, service: process.env.SUPABASE_SERVICE_ROLE_KEY };
+  process.env.SUPABASE_URL = 'https://project.supabase.test';
+  process.env.SUPABASE_ANON_KEY = 'anon-test-key';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-test-key';
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    if (String(url).endsWith('/auth/v1/user')) return responseOf({ id: '11111111-1111-4111-8111-111111111111' });
+    if (String(url).includes('/rest/v1/profiles?')) return responseOf([{ user_id: '11111111-1111-4111-8111-111111111111', tenant_id: '22222222-2222-4222-8222-222222222222', display_name: 'Owner', role: 'OWNER', active: true }]);
+    if (String(url).includes('/rest/v1/outlets?')) return responseOf([{ id: '33333333-3333-4333-8333-333333333333', active: true }]);
+    if (String(url).includes('/rest/v1/stock_locations?')) return responseOf([{ id: '44444444-4444-4444-8444-444444444444', kind: 'WAREHOUSE' }]);
+    return responseOf([]);
+  };
+  try {
+    let payload = '';
+    const request = {
+      method: 'POST', url: '/api/index?route=purchase-receipts', query: { route: 'purchase-receipts' },
+      headers: { authorization: 'Bearer user-access-token', 'idempotency-key': 'zero-receipt' },
+      body: { supplierId: '66666666-6666-4666-8666-666666666666', locationId: '44444444-4444-4444-8444-444444444444', documentNo: 'INV-ZERO', items: [{ productId: '77777777-7777-4777-8777-777777777777', baseQty: 0, unitCost: 0 }] }
+    };
+    const response = { statusCode: 0, setHeader() {}, end(value) { payload = value; } };
+    await handler(request, response);
+    assert.equal(response.statusCode, 400);
+    assert.match(JSON.parse(payload).error, /Jumlah diterima harus lebih dari 0/);
+    assert.equal(calls.some((url) => url.endsWith('/rest/v1/rpc/receive_purchase')), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousEnv.url === undefined) delete process.env.SUPABASE_URL; else process.env.SUPABASE_URL = previousEnv.url;
+    if (previousEnv.anon === undefined) delete process.env.SUPABASE_ANON_KEY; else process.env.SUPABASE_ANON_KEY = previousEnv.anon;
+    if (previousEnv.service === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY; else process.env.SUPABASE_SERVICE_ROLE_KEY = previousEnv.service;
+  }
+});
+
 test('Purchase Order cloud dapat disimpan sebagai draft lalu diajukan', async () => {
   const originalFetch = globalThis.fetch;
   const previousEnv = { url: process.env.SUPABASE_URL, anon: process.env.SUPABASE_ANON_KEY, service: process.env.SUPABASE_SERVICE_ROLE_KEY };
