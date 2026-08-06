@@ -4,17 +4,19 @@ import { readFile } from 'node:fs/promises';
 
 const root = new URL('../', import.meta.url);
 
-test('halaman supplier menyediakan direktori, pencarian, dan formulir tambah/edit', async () => {
+test('daftar supplier membuka halaman tambah atau edit yang terpisah', async () => {
   const [html, app, css] = await Promise.all([
     readFile(new URL('apps/web/index.html', root), 'utf8'),
     readFile(new URL('apps/web/app.js', root), 'utf8'),
     readFile(new URL('apps/web/styles.css', root), 'utf8'),
   ]);
 
-  for (const id of ['supplier-metrics', 'supplier-search', 'supplier-list', 'supplier-form', 'supplier-edit-id']) {
+  for (const id of ['supplier-metrics', 'supplier-search', 'supplier-list', 'page-supplier-editor', 'supplier-editor-back', 'supplier-form', 'supplier-edit-id']) {
     assert.match(html, new RegExp(`id=["']${id}["']`));
   }
+  assert.ok(html.indexOf('id="supplier-form"') > html.indexOf('id="page-supplier-editor"'));
   assert.match(app, /function renderSupplierDirectory\(\)/);
+  assert.match(app, /function showSupplierEditorPage\(\)/);
   assert.match(app, /function openSupplierEditor\(supplierId/);
   assert.match(app, /method:id\?'PUT':'POST'/);
   assert.match(css, /\.supplier-directory-layout/);

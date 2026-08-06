@@ -1622,14 +1622,22 @@ async function recordCustomerPayment(event){
 function resetSupplierForm({focus=false}={}) {
   el('supplier-form').reset();
   el('supplier-edit-id').value='';
+  el('supplier-editor-page-title').textContent='Tambah supplier';
   el('supplier-form-title').textContent='Supplier baru';
   el('supplier-form-subtitle').textContent='Lengkapi kontak yang dipakai saat membuat dan mengirim PO.';
   el('supplier-form-code').textContent='BARU';
   el('supplier-form-error').textContent='';
-  el('cancel-supplier-edit').classList.add('hidden');
   el('save-supplier').textContent='Simpan supplier';
   renderSupplierDirectory();
+  showSupplierEditorPage();
   if(focus){el('supplier-name').focus();el('supplier-form')?.scrollIntoView?.({behavior:'smooth',block:'start'});}
+}
+
+function showSupplierEditorPage(){
+  showPage('supplier-editor');
+  document.querySelector('.feature-nav-item[data-page="suppliers"]')?.classList.add('active');
+  localStorage.setItem('pos_active_page','suppliers');
+  openNavGroup('relations');
 }
 
 function openSupplierEditor(supplierId,{focus=false}={}) {
@@ -1639,13 +1647,14 @@ function openSupplierEditor(supplierId,{focus=false}={}) {
   el('supplier-name').value=supplier.name??'';
   el('supplier-phone').value=supplier.phone??'';
   el('supplier-address').value=supplier.address??'';
+  el('supplier-editor-page-title').textContent='Edit supplier';
   el('supplier-form-title').textContent=supplier.name;
   el('supplier-form-subtitle').textContent='Perubahan profil tidak memutus riwayat PO, penerimaan, maupun hutang.';
   el('supplier-form-code').textContent=supplier.code??'SUPPLIER';
   el('supplier-form-error').textContent='';
-  el('cancel-supplier-edit').classList.remove('hidden');
   el('save-supplier').textContent='Simpan perubahan';
   renderSupplierDirectory();
+  showSupplierEditorPage();
   if(focus){el('supplier-name').focus();el('supplier-form')?.scrollIntoView?.({behavior:'smooth',block:'start'});}
 }
 
@@ -9060,9 +9069,10 @@ el('customer-payment-form').addEventListener('submit',recordCustomerPayment);
 el('customer-payment-method').addEventListener('change',()=>el('customer-payment-reference-wrap').classList.toggle('hidden',el('customer-payment-method').value==='CASH'));
 el('supplier-form').addEventListener('submit',saveSupplier);
 el('new-supplier').addEventListener('click',()=>resetSupplierForm({focus:true}));
-el('cancel-supplier-edit').addEventListener('click',()=>resetSupplierForm());
+el('cancel-supplier-edit').addEventListener('click',()=>showPage('suppliers'));
+el('supplier-editor-back').addEventListener('click',()=>showPage('suppliers'));
 el('supplier-search').addEventListener('input',renderSupplierDirectory);
-el('supplier-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-supplier-id]');if(!row)return;if(event.target.closest('.supplier-statement'))openSupplierStatement(row.dataset.supplierId);else if(event.target.closest('.supplier-profile-open,.supplier-edit'))openSupplierEditor(row.dataset.supplierId,{focus:true});});
+el('supplier-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-supplier-id]');if(!row)return;if(event.target.closest('.supplier-statement'))openSupplierStatement(row.dataset.supplierId);else openSupplierEditor(row.dataset.supplierId,{focus:true});});
 el('close-supplier-statement').addEventListener('click',()=>el('supplier-statement-dialog').close());
 el('supplier-payment-form').addEventListener('submit',recordSupplierPayment);
 el('supplier-payment-method').addEventListener('change',()=>el('supplier-payment-reference-wrap').classList.toggle('hidden',el('supplier-payment-method').value==='CASH'));

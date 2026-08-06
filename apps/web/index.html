@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=199">
+  <link rel="stylesheet" href="/styles.css?v=200">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -953,22 +953,24 @@
       </div></section>
 
       <section id="page-suppliers" class="page"><div class="content-width">
-        <div class="page-title"><div><p class="eyebrow">SUPPLIER & HUTANG</p><h1>Supplier</h1><p class="muted">Kelola kontak supplier, rekening hutang, dan hubungan pembelian dalam satu halaman.</p></div><button id="new-supplier" class="button primary" type="button">Tambah supplier</button></div>
+        <div class="page-title"><div><p class="eyebrow">SUPPLIER & HUTANG</p><h1>Supplier</h1><p class="muted">Temukan supplier, lihat ringkasan hutang, atau buka profil untuk memperbarui kontak.</p></div><button id="new-supplier" class="button primary" type="button">Tambah supplier</button></div>
         <div id="supplier-metrics" class="metrics"></div>
-        <div id="supplier-panel" class="supplier-directory-layout">
-          <section class="surface supplier-directory-panel">
-            <div class="supplier-directory-heading"><div><p class="eyebrow">DIREKTORI SUPPLIER</p><h2>Daftar pemasok</h2></div><span id="supplier-directory-count" class="badge neutral">0 supplier</span></div>
-            <input id="supplier-search" type="search" autocomplete="off" placeholder="Cari nama, kode, telepon, atau alamat">
-            <div id="supplier-list" class="supplier-directory-list"></div>
-          </section>
-          <form id="supplier-form" class="surface supplier-profile-form">
+        <section id="supplier-panel" class="surface supplier-directory-panel">
+          <div class="supplier-directory-heading"><div><p class="eyebrow">DIREKTORI SUPPLIER</p><h2>Daftar pemasok</h2></div><span id="supplier-directory-count" class="badge neutral">0 supplier</span></div>
+          <input id="supplier-search" type="search" autocomplete="off" placeholder="Cari nama, kode, telepon, atau alamat">
+          <div id="supplier-list" class="supplier-directory-list"></div>
+        </section>
+      </div></section>
+
+      <section id="page-supplier-editor" class="page"><div class="content-width supplier-editor-page">
+        <div class="page-title"><div><p class="eyebrow">PROFIL SUPPLIER</p><h1 id="supplier-editor-page-title">Tambah supplier</h1><p class="muted">Simpan identitas dan kontak yang dipakai untuk Purchase Order.</p></div><button id="supplier-editor-back" class="button secondary" type="button">&larr; Daftar supplier</button></div>
+        <form id="supplier-form" class="surface supplier-profile-form">
             <input id="supplier-edit-id" type="hidden">
             <div class="supplier-form-heading"><div><p class="eyebrow">PROFIL SUPPLIER</p><h2 id="supplier-form-title">Supplier baru</h2><p id="supplier-form-subtitle" class="muted">Lengkapi kontak yang dipakai saat membuat dan mengirim PO.</p></div><span id="supplier-form-code" class="badge neutral">BARU</span></div>
             <div class="supplier-form-fields"><label>Nama supplier<input id="supplier-name" required maxlength="120" placeholder="Contoh: PT Sumber Makmur"></label><label>Nomor WhatsApp / telepon<input id="supplier-phone" inputmode="tel" maxlength="30" placeholder="Contoh: 081234567890"><small>Nomor ini dipakai tombol WhatsApp pada Purchase Order.</small></label><label>Alamat supplier<textarea id="supplier-address" rows="4" maxlength="500" placeholder="Alamat kantor, toko, atau gudang supplier"></textarea></label></div>
             <p id="supplier-form-error" class="error"></p>
-            <div class="button-row"><button id="cancel-supplier-edit" class="button secondary hidden" type="button">Batal edit</button><button id="save-supplier" class="button primary" type="submit">Simpan supplier</button></div>
-          </form>
-        </div>
+            <div class="button-row"><button id="cancel-supplier-edit" class="button secondary" type="button">Batal</button><button id="save-supplier" class="button primary" type="submit">Simpan supplier</button></div>
+        </form>
       </div></section>
 
       <section id="page-promotions" class="page"><div class="content-width">
@@ -1154,6 +1156,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=199"></script>
+  <script type="module" src="/app.js?v=200"></script>
 </body>
 </html>
