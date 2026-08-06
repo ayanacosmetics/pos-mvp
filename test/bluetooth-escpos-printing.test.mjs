@@ -45,6 +45,18 @@ test('cetak ulang ESC/POS menandai barang dan total yang sudah diretur', () => {
   assert.match(text,/Rp 25\.000/);
 });
 
+test('struk tunai membedakan total, uang diterima, dan kembalian dengan benar', () => {
+  const bytes=buildEscPosReceipt({
+    receiptNo:'UTM-000125',occurredAt:'2026-08-06T11:42:22.000Z',cashier:'Alya',change:30000,
+    quote:{lines:[{productName:'Minyak Kayu Putih',qty:1,unitName:'pcs',gross:22000,total:22000}],subtotal:22000,discountTotal:0,grandTotal:22000}
+  },[{method:'CASH',amount:22000,tendered:30000}],{paperWidth:58},{business:{name:'Ayana Cosmetics'},outlet:{name:'Toko Utama'}});
+  const text=new TextDecoder().decode(bytes);
+  assert.match(text,/Tunai\s+Rp 22\.000/);
+  assert.match(text,/Uang diterima\s+Rp 30\.000/);
+  assert.match(text,/Kembalian\s+Rp 8\.000/);
+  assert.doesNotMatch(text,/Kembalian\s+Rp 30\.000/);
+});
+
 test('UI printer Bluetooth Classic menyediakan koneksi, tes, status, dan fallback aman', async () => {
   const [html, script, worker, printer] = await Promise.all([
     readFile(new URL('../apps/web/index.html', import.meta.url), 'utf8'),

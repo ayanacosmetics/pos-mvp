@@ -1,4 +1,4 @@
-import { customerReceiptView } from './receipt.mjs';
+import { customerReceiptView, receiptPaymentLabel, receiptPaymentSummary } from './receipt.mjs';
 import { barcodeRasterBits } from './product-labels.mjs';
 
 const encoder = new TextEncoder();
@@ -148,7 +148,7 @@ export function buildEscPosReceipt(receipt, payments = [], settings = {}, contex
   const address = outlet.address || business.address;
   const phone = outlet.phone || business.phone;
   const occurredAt = new Date(receipt.occurredAt ?? Date.now()).toLocaleString('id-ID');
-  const change = Number(receipt.change ?? 0);
+  const paymentSummary = receiptPaymentSummary(payments, receipt.change);
   const separator=layout.separator==='double'?'='.repeat(width):rule(width);
   const bytes = [ESC, 0x40, ESC, 0x61, layout.headerAlignment==='left'?0x00:0x01];
   if(layout.showLogo&&context.logoRaster)bytes.push(...context.logoRaster);
@@ -185,8 +185,11 @@ export function buildEscPosReceipt(receipt, payments = [], settings = {}, contex
     bytes.push(...lineBytes(columns('RETUR / REFUND',`-${rupiah(returnTotal)}`,width)));
     bytes.push(ESC,0x45,0x01,...lineBytes(columns('TOTAL SETELAH RETUR',rupiah(receipt.netTotal??Math.max(0,quote.grandTotal-returnTotal)),width)),ESC,0x45,0x00);
   }else bytes.push(ESC, 0x45, 0x01, ...lineBytes(columns('TOTAL', rupiah(quote.grandTotal), width)), ESC, 0x45, 0x00);
-  if(layout.showPaymentDetail)for (const payment of payments) bytes.push(...lineBytes(columns(payment.method || 'Pembayaran', rupiah(payment.amount), width)));
-  if (layout.showPaymentDetail&&change) bytes.push(...lineBytes(columns('Kembalian', rupiah(change), width)));
+  if(layout.showPaymentDetail)for (const payment of payments) bytes.push(...lineBytes(columns(receiptPaymentLabel(payment.method), rupiah(payment.amount), width)));
+  if(layout.showPaymentDetail&&paymentSummary.hasCash){
+    bytes.push(...lineBytes(columns('Uang diterima',rupiah(paymentSummary.cashReceived),width)));
+    bytes.push(...lineBytes(columns('Kembalian',rupiah(paymentSummary.change),width)));
+  }
   if (layout.showTransactionNote&&receipt.notes) {
     bytes.push(...lineBytes(separator));
     for (const row of wrap(`Catatan: ${receipt.notes}`, width)) bytes.push(...lineBytes(row));

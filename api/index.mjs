@@ -1440,6 +1440,7 @@ async function loadPosSales(context, query = '', { outletIds = [context.outlet.i
         minPurchase:Number(issued.min_purchase),startsAt:issued.starts_at,endsAt:issued.ends_at,active:issued.active}:null,
       payments:payments.filter((item) => item.sale_id === sale.id).map((item) => ({
         method:item.method,amount:Number(item.amount),tendered:item.tendered_amount == null ? null : Number(item.tendered_amount),
+        change:Number(item.change_amount??0),
         reference:item.reference ?? ''
       }))
     };
