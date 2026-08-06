@@ -34,3 +34,5 @@ Gunakan bersama `PROJECT-HANDOFF.md`. Baca masing-masing sekali saja. Jangan men
 - APK memakai versionCode `11`, versionName `1.4.2`, package dan sertifikat permanen yang sama.
 - APK release identik di `releases/` dan `apps/web/downloads/`, SHA-256 `4461E85EAE0EF2F0D00E0492E7FFB9AB74E187B7521CBD9E7E4F91EAFA434867`.
 - Tidak memerlukan SQL.
+- Seluruh 367 tes lulus; commit fitur `6c0d3c2 fix: accept canonical WebView location origin` sudah didorong ke `main`.
+- Deployment Cloudflare berhasil, Version ID `c2c3bd47-5b5a-4dd0-be53-c99198e801c4`; URL publik APK dan API health sudah diverifikasi.
