@@ -205,6 +205,32 @@ textarea{font:inherit;width:100%;resize:vertical;border:1px solid var(--line);bo
   .purchase-order-detail-actions .button{flex:1 1 145px}
 }
 
+/* Seluruh indikator daftar PO harus terlihat utuh pada layar kasir mobile. */
+@media(max-width:760px){
+  #purchase-view-documents .purchase-metrics{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    overflow:hidden;
+    scroll-snap-type:none;
+  }
+  #purchase-view-documents .purchase-metrics .metric{
+    min-width:0;
+    min-height:58px;
+    padding:9px 11px;
+    border:0;
+    border-bottom:1px solid var(--line);
+    border-radius:0;
+  }
+  #purchase-view-documents .purchase-metrics .metric:nth-child(odd):not(:last-child){border-right:1px solid var(--line)}
+  #purchase-view-documents .purchase-metrics .metric:last-child{
+    grid-column:1/-1;
+    border:0;
+    border-radius:0;
+  }
+  #purchase-view-documents .purchase-metrics .metric span{margin-bottom:4px;line-height:1.25;white-space:normal}
+  #purchase-view-documents .purchase-metrics .metric strong{font-size:18px}
+}
+
 /* Compact restock proposal and approval flow */
 .restock-source-grid{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(300px,1.4fr);gap:10px;margin:10px 0}.restock-source-grid label{margin:0}.restock-source-grid small{display:block;margin-top:4px;color:var(--muted)}.restock-source-guidance{display:flex;gap:8px;align-items:baseline;padding:9px 11px;margin:0 0 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface-soft)}.restock-source-guidance strong{white-space:nowrap}.restock-source-guidance span{color:var(--muted);font-size:.84rem}
 .restock-item-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
