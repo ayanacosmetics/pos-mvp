@@ -3062,9 +3062,78 @@ async function loadWorkforceActivity(){
 async function loadWorkforceReconciliations(){
   try{
     const data=await request('/api/workforce/reconciliations');state.workforce.reconciliations=data.shifts;
-    el('workforce-reconciliation-list').innerHTML=data.shifts.map((shift)=>`<article class="surface reconciliation-card"><div class="settings-section-head"><div><strong>${escapeHtml(shift.cashierName)}</strong><small>${new Date(shift.closed_at).toLocaleString('id-ID')} · ${escapeHtml(outletName(shift.outlet_id))}</small></div><span class="status-badge ${Math.abs(Number(shift.difference))<0.01?'approved':'danger'}">${money.format(shift.difference)}</span></div><div class="reconciliation-methods">${shift.methods.map((method)=>`<div><span>${escapeHtml(method.payment_method)}</span><small>Sistem ${money.format(method.expected_amount)}</small><strong>${money.format(method.declared_amount)}</strong><em>${Number(method.difference)>=0?'+':''}${money.format(method.difference)}</em></div>`).join('')}</div></article>`).join('')||'<div class="empty-state">Belum ada shift yang direkonsiliasi.</div>';
+    renderWorkforceReconciliations();
   }catch(error){toast(error.message);}
 }
+
+function reconciliationKind(shift){
+  const difference=Number(shift.difference??0);
+  if(Math.abs(difference)<0.01)return 'MATCH';
+  return difference>0?'OVER':'SHORT';
+}
+
+function reconciliationStatusMarkup(shift){
+  const difference=Number(shift.difference??0),kind=reconciliationKind(shift);
+  if(kind==='MATCH')return '<span class="reconciliation-status match">Sesuai · Rp0</span>';
+  return `<span class="reconciliation-status ${kind.toLowerCase()}">${kind==='OVER'?'Kas lebih':'Kas kurang'} · ${difference>0?'+':''}${money.format(difference)}</span>`;
+}
+
+function reconciliationShiftDuration(shift){
+  return workforceDurationLabel(Math.max(0,Math.round((new Date(shift.closed_at)-new Date(shift.opened_at))/60000)));
+}
+
+function renderWorkforceReconciliations(){
+  const all=state.workforce.reconciliations??[];
+  const outletSelect=el('reconciliation-outlet-filter');
+  if(outletSelect&&outletSelect.options.length<=1){
+    const outletIds=[...new Set(all.map((shift)=>shift.outlet_id))];
+    outletSelect.innerHTML='<option value="ALL">Semua outlet</option>'+outletIds.map((id)=>`<option value="${escapeHtml(id)}">${escapeHtml(outletName(id))}</option>`).join('');
+  }
+  const search=String(el('reconciliation-search')?.value??'').trim().toLowerCase();
+  const status=el('reconciliation-status-filter')?.value??'ALL';
+  const outletId=outletSelect?.value??'ALL';
+  const filtered=all.filter((shift)=>{
+    const searchable=`${shift.cashierName??''} ${shift.id??''}`.toLowerCase();
+    return (!search||searchable.includes(search))&&(status==='ALL'||reconciliationKind(shift)===status)&&(outletId==='ALL'||shift.outlet_id===outletId);
+  });
+  const matching=all.filter((shift)=>reconciliationKind(shift)==='MATCH').length;
+  const over=all.filter((shift)=>reconciliationKind(shift)==='OVER');
+  const short=all.filter((shift)=>reconciliationKind(shift)==='SHORT');
+  el('reconciliation-summary').innerHTML=`
+    <div><span>Shift ditutup</span><strong>${all.length.toLocaleString('id-ID')}</strong></div>
+    <div><span>Sesuai</span><strong>${matching.toLocaleString('id-ID')}</strong></div>
+    <div class="over"><span>Kas lebih</span><strong>${money.format(over.reduce((sum,shift)=>sum+Number(shift.difference),0))}</strong><small>${over.length} shift</small></div>
+    <div class="short"><span>Kas kurang</span><strong>${money.format(Math.abs(short.reduce((sum,shift)=>sum+Number(shift.difference),0)))}</strong><small>${short.length} shift</small></div>`;
+  el('workforce-reconciliation-list').innerHTML=filtered.length?filtered.map((shift)=>{
+    const closed=new Date(shift.closed_at);
+    return `<button class="reconciliation-row" type="button" data-reconciliation-id="${escapeHtml(shift.id)}">
+      <span class="reconciliation-person"><strong>${escapeHtml(shift.cashierName)}</strong><small>${escapeHtml(outletName(shift.outlet_id))} · ${closed.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}</small></span>
+      <span class="reconciliation-time"><small>Waktu shift</small><strong>${new Date(shift.opened_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}–${closed.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</strong><small>${reconciliationShiftDuration(shift)}</small></span>
+      <span class="reconciliation-money"><small>Kas sistem</small><strong>${money.format(shift.expected_cash??0)}</strong></span>
+      <span class="reconciliation-money"><small>Kas fisik</small><strong>${money.format(shift.closing_cash??0)}</strong></span>
+      ${reconciliationStatusMarkup(shift)}<span class="reconciliation-open">Lihat detail ›</span>
+    </button>`;
+  }).join(''):'<div class="empty-state compact">Tidak ada shift yang sesuai filter.</div>';
+}
+
+function openReconciliationDetail(shiftId){
+  const shift=(state.workforce.reconciliations??[]).find((item)=>item.id===shiftId);if(!shift)return;
+  el('reconciliation-directory-view').classList.add('hidden');el('reconciliation-detail-view').classList.remove('hidden');
+  el('reconciliation-detail-title').textContent=`Shift ${shift.cashierName}`;
+  const cashMethod=(shift.methods??[]).find((method)=>method.payment_method==='CASH');
+  const opened=new Date(shift.opened_at),closed=new Date(shift.closed_at),movements=shift.movements??[];
+  el('reconciliation-detail-content').innerHTML=`
+    <section class="surface reconciliation-detail-overview">
+      <div class="reconciliation-detail-top"><div><strong>${escapeHtml(shift.cashierName)}</strong><small>${escapeHtml(outletName(shift.outlet_id))} · ${opened.toLocaleString('id-ID')}–${closed.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})} · ${reconciliationShiftDuration(shift)}</small></div>${reconciliationStatusMarkup(shift)}</div>
+      <div class="reconciliation-cash-flow"><div><span>Modal awal</span><strong>${money.format(shift.opening_cash??0)}</strong></div><b>+</b><div><span>Penjualan tunai</span><strong>${money.format(shift.cashSales??0)}</strong></div><b>+</b><div><span>Kas masuk</span><strong>${money.format(shift.cashIn??0)}</strong></div><b>−</b><div><span>Kas keluar/refund</span><strong>${money.format(shift.cashOut??0)}</strong></div><b>=</b><div class="total"><span>Kas seharusnya</span><strong>${money.format(cashMethod?.expected_amount??shift.expected_cash??0)}</strong></div></div>
+      <div class="reconciliation-final-compare"><div><span>Menurut sistem</span><strong>${money.format(cashMethod?.expected_amount??shift.expected_cash??0)}</strong></div><div><span>Dihitung kasir</span><strong>${money.format(cashMethod?.declared_amount??shift.closing_cash??0)}</strong></div><div class="${reconciliationKind(shift).toLowerCase()}"><span>Selisih tunai</span><strong>${Number(shift.difference)>0?'+':''}${money.format(shift.difference??0)}</strong></div></div>
+    </section>
+    <section class="surface reconciliation-detail-section"><div class="compact-section-heading"><div><p class="eyebrow">SEMUA METODE</p><h2>Perbandingan pembayaran</h2></div><small>Angka penutupan bersifat permanen.</small></div><div class="reconciliation-method-table"><div class="head"><span>Metode</span><span>Sistem</span><span>Dilaporkan</span><span>Selisih</span></div>${(shift.methods??[]).map((method)=>`<div><strong>${escapeHtml(method.payment_method==='CASH'?'Tunai':method.payment_method)}</strong><span>${money.format(method.expected_amount)}</span><span>${money.format(method.declared_amount)}</span><strong class="${Number(method.difference)<0?'negative':Number(method.difference)>0?'positive':''}">${Number(method.difference)>0?'+':''}${money.format(method.difference)}</strong></div>`).join('')}</div></section>
+    <section class="surface reconciliation-detail-section"><div class="compact-section-heading"><div><p class="eyebrow">PERGERAKAN LACI</p><h2>Kas masuk dan keluar</h2></div><small>${movements.length} catatan</small></div><div class="reconciliation-movement-list">${movements.length?movements.map((item)=>`<div><span><strong>${escapeHtml(item.note||'Tanpa catatan')}</strong><small>${new Date(item.occurred_at).toLocaleString('id-ID')}</small></span><strong class="${item.movement_type==='CASH_IN'?'positive':'negative'}">${item.movement_type==='CASH_IN'?'+':'−'}${money.format(item.amount)}</strong></div>`).join(''):'<div class="empty-state compact">Tidak ada pergerakan kas di luar transaksi.</div>'}</div></section>`;
+  globalThis.scrollTo?.({top:0,behavior:'smooth'});
+}
+
+function closeReconciliationDetail(){el('reconciliation-detail-view').classList.add('hidden');el('reconciliation-directory-view').classList.remove('hidden');}
 
 async function refreshShift() {
   const data = await request('/api/shifts/current');
@@ -8070,6 +8139,7 @@ function showPage(name) {
     el('sales-report-subnav-toggle').setAttribute('aria-expanded','true');
   }
   localStorage.setItem('pos_active_page',name);
+  if(name==='workforce-reconciliation'&&el('reconciliation-detail-view'))closeReconciliationDetail();
   if(target==='products')loadProductManagement().catch((error)=>toast(error.message));
   if(name==='platform-infrastructure')loadPlatformInfrastructure().catch((error)=>toast(error.message));
   if(target==='customers'&&state.session.permissions.includes('pos.sell')){
@@ -9253,6 +9323,11 @@ el('approval-policy-form').addEventListener('submit',saveApprovalPolicy);
 el('approval-request-list').addEventListener('click',decideApproval);
 el('refresh-workforce-activity').addEventListener('click',loadWorkforceActivity);
 el('refresh-reconciliations').addEventListener('click',loadWorkforceReconciliations);
+el('reconciliation-search').addEventListener('input',renderWorkforceReconciliations);
+el('reconciliation-status-filter').addEventListener('change',renderWorkforceReconciliations);
+el('reconciliation-outlet-filter').addEventListener('change',renderWorkforceReconciliations);
+el('workforce-reconciliation-list').addEventListener('click',(event)=>{const row=event.target.closest('[data-reconciliation-id]');if(row)openReconciliationDetail(row.dataset.reconciliationId);});
+el('back-to-reconciliations').addEventListener('click',closeReconciliationDetail);
 window.addEventListener('error',()=>reportClientTelemetry('CLIENT_ERROR','/api/client/runtime'));
 window.addEventListener('unhandledrejection',()=>reportClientTelemetry('CLIENT_ERROR','/api/client/runtime'));
 window.addEventListener('online', () => { el('network-dot').classList.remove('offline'); el('network-status').textContent = 'Online'; syncQueue(); });

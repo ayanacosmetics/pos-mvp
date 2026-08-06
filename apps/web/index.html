@@ -946,8 +946,22 @@
       </div></section>
 
       <section id="page-workforce-reconciliation" class="page"><div class="content-width">
-        <div class="page-title"><div><p class="eyebrow">TUTUP SHIFT</p><h1>Rekonsiliasi pembayaran</h1><p class="muted">Bandingkan jumlah sistem dan jumlah fisik/settlement untuk setiap metode pembayaran.</p></div><button id="refresh-reconciliations" class="button secondary" type="button">Muat ulang</button></div>
-        <div id="workforce-reconciliation-list"></div>
+        <div id="reconciliation-directory-view">
+          <div class="page-title reconciliation-page-title"><div><p class="eyebrow">TUTUP SHIFT</p><h1>Rekonsiliasi pembayaran</h1><p class="muted">Periksa selisih kas dan pembayaran setiap shift.</p></div><button id="refresh-reconciliations" class="button secondary" type="button">Muat ulang</button></div>
+          <div id="reconciliation-summary" class="reconciliation-summary"></div>
+          <section class="surface reconciliation-directory">
+            <div class="reconciliation-toolbar">
+              <label><span>Cari kasir</span><input id="reconciliation-search" type="search" placeholder="Nama kasir atau ID shift"></label>
+              <label><span>Status</span><select id="reconciliation-status-filter"><option value="ALL">Semua status</option><option value="MATCH">Sesuai</option><option value="OVER">Kas lebih</option><option value="SHORT">Kas kurang</option></select></label>
+              <label><span>Outlet</span><select id="reconciliation-outlet-filter"><option value="ALL">Semua outlet</option></select></label>
+            </div>
+            <div id="workforce-reconciliation-list" class="reconciliation-list"></div>
+          </section>
+        </div>
+        <div id="reconciliation-detail-view" class="hidden">
+          <div class="reconciliation-detail-heading"><button id="back-to-reconciliations" class="button secondary" type="button">← Daftar shift</button><div><p class="eyebrow">DETAIL TUTUP SHIFT</p><h1 id="reconciliation-detail-title">Rekonsiliasi shift</h1></div></div>
+          <div id="reconciliation-detail-content"></div>
+        </div>
       </div></section>
 
       <section id="page-customers" class="page"><div class="content-width">

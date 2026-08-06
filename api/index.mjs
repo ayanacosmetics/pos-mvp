@@ -4390,12 +4390,20 @@ async function routeRequest(request, response, route) {
     requirePermission(session,'workforce.manage');
     const shifts=await rest('shifts',`tenant_id=eq.${context.tenantId}&outlet_id=${inFilter(context.outlets.map((outlet)=>outlet.id))}&status=eq.CLOSED&select=*&order=closed_at.desc&limit=50`);
     const ids=shifts.map((shift)=>shift.id);
-    const [rows,cashiers]=ids.length?await Promise.all([
+    const [rows,cashiers,movements]=ids.length?await Promise.all([
       rest('shift_reconciliations',`tenant_id=eq.${context.tenantId}&shift_id=${inFilter(ids)}&select=*&order=reconciled_at.desc`),
-      rest('profiles',`tenant_id=eq.${context.tenantId}&user_id=${inFilter([...new Set(shifts.map((shift)=>shift.cashier_id))])}&select=user_id,display_name`)
-    ]):[[],[]];
-    return send(response,200,{shifts:shifts.map((shift)=>({...shift,cashierName:cashiers.find((item)=>item.user_id===shift.cashier_id)?.display_name??'Karyawan',
-      methods:rows.filter((row)=>row.shift_id===shift.id)}))});
+      rest('profiles',`tenant_id=eq.${context.tenantId}&user_id=${inFilter([...new Set(shifts.map((shift)=>shift.cashier_id))])}&select=user_id,display_name`),
+      rest('cash_movements',`tenant_id=eq.${context.tenantId}&shift_id=${inFilter(ids)}&select=*&order=occurred_at.asc`)
+    ]):[[],[],[]];
+    return send(response,200,{shifts:shifts.map((shift)=>{
+      const methods=rows.filter((row)=>row.shift_id===shift.id);
+      const shiftMovements=movements.filter((row)=>row.shift_id===shift.id);
+      const cashIn=shiftMovements.filter((row)=>row.movement_type==='CASH_IN').reduce((sum,row)=>sum+Number(row.amount),0);
+      const cashOut=shiftMovements.filter((row)=>row.movement_type==='CASH_OUT').reduce((sum,row)=>sum+Number(row.amount),0);
+      const cashExpected=Number(methods.find((row)=>row.payment_method==='CASH')?.expected_amount??shift.expected_cash??0);
+      return {...shift,cashierName:cashiers.find((item)=>item.user_id===shift.cashier_id)?.display_name??'Karyawan',methods,
+        movements:shiftMovements,cashIn,cashOut,cashSales:Math.max(0,cashExpected-Number(shift.opening_cash??0)-cashIn+cashOut)};
+    })});
   }
 
   if (request.method === 'POST' && route === 'shifts/open') {

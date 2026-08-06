@@ -75,4 +75,10 @@ test('fondasi operasional karyawan mencakup database, API, hak akses, dan halama
   ]) assert.match(html, new RegExp(`id="page-${page}"`));
   assert.match(app, /shift-declared-payment/);
   assert.match(app, /loadWorkforceOverview/);
+  assert.match(app, /Kas seharusnya/);
+  assert.match(app, /Dihitung kasir/);
+  assert.match(app, /openReconciliationDetail/);
+  assert.match(api, /cashSales/);
+  assert.match(html, /reconciliation-status-filter/);
+  assert.match(html, /reconciliation-detail-view/);
 });
