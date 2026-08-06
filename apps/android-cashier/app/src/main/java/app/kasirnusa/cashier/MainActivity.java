@@ -21,6 +21,7 @@ import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
+import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
@@ -55,6 +56,7 @@ public final class MainActivity extends Activity {
     private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb");
     private static final int REQUEST_BLUETOOTH_CONNECT = 301;
     private static final int REQUEST_CAMERA = 302;
+    private static final int REQUEST_LOCATION = 304;
     static final String PREFS = "kasir_nusa_cashier";
     static final String NOTIFICATION_PAGE = "notification_page";
     private static final String INSTALLATION_ID = "native_installation_id";
@@ -72,6 +74,8 @@ public final class MainActivity extends Activity {
     private SharedPreferences preferences;
     private String pendingBluetoothRequestId;
     private PermissionRequest pendingCameraRequest;
+    private GeolocationPermissions.Callback pendingLocationCallback;
+    private String pendingLocationOrigin;
     private long scannerLastKeyAt;
     private long scannerStartedAt;
     private String pendingNotificationPage;
@@ -102,6 +106,7 @@ public final class MainActivity extends Activity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
+        settings.setGeolocationEnabled(true);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -109,7 +114,7 @@ public final class MainActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setSupportMultipleWindows(false);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " KasirNusaAndroid/1.4.0");
+        settings.setUserAgentString(settings.getUserAgentString() + " KasirNusaAndroid/" + BuildConfig.VERSION_NAME);
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
@@ -123,6 +128,32 @@ public final class MainActivity extends Activity {
         return uri != null
                 && "https".equalsIgnoreCase(uri.getScheme())
                 && TRUSTED_HOST.equalsIgnoreCase(uri.getHost());
+    }
+
+    private boolean isTrustedGeolocationOrigin(String origin) {
+        if (origin == null) return false;
+        Uri uri = Uri.parse(origin);
+        int port = uri.getPort();
+        return "https".equalsIgnoreCase(uri.getScheme())
+                && TRUSTED_HOST.equalsIgnoreCase(uri.getHost())
+                && (port == -1 || port == 443)
+                && (uri.getPath() == null || uri.getPath().isEmpty())
+                && uri.getQuery() == null
+                && uri.getFragment() == null
+                && uri.getUserInfo() == null;
+    }
+
+    private boolean hasLocationPermission() {
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void finishLocationPermission(boolean allowed) {
+        GeolocationPermissions.Callback callback = pendingLocationCallback;
+        String origin = pendingLocationOrigin;
+        pendingLocationCallback = null;
+        pendingLocationOrigin = null;
+        if (callback != null && origin != null) callback.invoke(origin, allowed, false);
     }
 
     private void openExternal(Uri uri) {
@@ -159,6 +190,35 @@ public final class MainActivity extends Activity {
     }
 
     private final class CashierWebChromeClient extends WebChromeClient {
+        @Override
+        public void onGeolocationPermissionsShowPrompt(
+                String origin,
+                GeolocationPermissions.Callback callback
+        ) {
+            runOnUiThread(() -> {
+                if (!isTrustedGeolocationOrigin(origin)) {
+                    callback.invoke(origin, false, false);
+                    return;
+                }
+                finishLocationPermission(false);
+                if (hasLocationPermission()) {
+                    callback.invoke(origin, true, false);
+                    return;
+                }
+                pendingLocationOrigin = origin;
+                pendingLocationCallback = callback;
+                requestPermissions(new String[]{
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                }, REQUEST_LOCATION);
+            });
+        }
+
+        @Override
+        public void onGeolocationPermissionsHidePrompt() {
+            finishLocationPermission(false);
+        }
+
         @Override
         public void onPermissionRequest(PermissionRequest request) {
             runOnUiThread(() -> {
@@ -548,6 +608,8 @@ public final class MainActivity extends Activity {
         } else if (requestCode == REQUEST_NOTIFICATIONS) {
             if (granted) fetchAndEmitPushToken();
             else emitPushError("Izin notifikasi Android belum diberikan.");
+        } else if (requestCode == REQUEST_LOCATION) {
+            finishLocationPermission(hasLocationPermission());
         }
     }
 
@@ -586,6 +648,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        finishLocationPermission(false);
         closePrinterSocket();
         printerExecutor.shutdownNow();
         if (webView != null) {

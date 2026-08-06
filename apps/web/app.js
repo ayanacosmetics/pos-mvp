@@ -2634,7 +2634,7 @@ function localDate(value){
 function currentDevicePosition(){
   if(!navigator.geolocation)return Promise.reject(new Error('Perangkat ini tidak mendukung GPS.'));
   return new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,(error)=>{
-    const message=error.code===1?'Izin lokasi ditolak. Aktifkan izin lokasi untuk Kasir Nusa.'
+    const message=error.code===1?'Izin lokasi ditolak. Buka Pengaturan Android > Aplikasi > Kasir Nusa POS > Izin, lalu aktifkan Lokasi.'
       :error.code===2?'Lokasi belum ditemukan. Aktifkan GPS dan pindah ke area terbuka.'
       :'Pemeriksaan GPS terlalu lama. Coba kembali.';
     reject(new Error(message));

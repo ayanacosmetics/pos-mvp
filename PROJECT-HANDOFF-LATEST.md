@@ -12,30 +12,14 @@ Gunakan bersama `PROJECT-HANDOFF.md`. Baca masing-masing sekali saja. Jangan men
 - Deployment Cloudflare terakhir berhasil, Version ID `b861c671-1888-40d0-a0dc-8295a830b79d`.
 - Tidak ada SQL baru untuk pekerjaan rekonsiliasi tersebut.
 
-## Masalah aktif berikutnya
+## APK Android 1.4.1 — izin lokasi absensi selesai
 
-APK Android 1.4.0 belum dapat memberikan lokasi ke absensi.
-
-Diagnosis yang sudah dipastikan:
-
-- `apps/android-cashier/app/src/main/AndroidManifest.xml` belum memiliki `ACCESS_FINE_LOCATION` dan `ACCESS_COARSE_LOCATION`.
-- `MainActivity.java` sudah menangani kamera, notifikasi, dan Bluetooth, tetapi belum menangani callback geolokasi WebView (`onGeolocationPermissionsShowPrompt`) serta izin lokasi runtime Android.
-- Perbaikan ini tidak cukup melalui deploy web; wajib membuat APK pembaruan.
-
-## Pekerjaan yang harus dilanjutkan
-
-1. Tambahkan izin lokasi kasar dan presisi pada manifest.
-2. Tambahkan alur izin runtime yang dipicu ketika halaman absensi meminta lokasi, bukan meminta izin tanpa konteks saat aplikasi dibuka.
-3. Teruskan keputusan izin ke WebView dengan aman, hanya untuk origin resmi `https://app.nusapos.my.id`.
-4. Jika izin ditolak, kembalikan kegagalan dengan bersih dan biarkan aplikasi memberi petunjuk membuka Pengaturan Android.
-5. Pertahankan kamera, Bluetooth printer, scanner HID, Firebase/FCM, package `app.kasirnusa.cashier`, dan kunci penandatanganan yang sama.
-6. Naikkan APK menjadi versi `1.4.1` dengan versionCode berikutnya.
-7. Tambahkan/perbarui tes Android untuk manifest, runtime permission, pembatasan origin, dan identitas pembaruan.
-8. Jalankan seluruh tes, build APK release dengan kunci permanen yang sama, salin ke lokasi unduhan resmi, perbarui referensi versi/checksum, commit, push, lalu deploy web bila halaman unduhan berubah.
-9. Pastikan APK baru dapat dipasang langsung di atas 1.4.0 tanpa uninstall.
-
-Tidak perlu SQL untuk perbaikan izin lokasi APK.
-
-## Solusi sementara operasional
-
-Sampai APK 1.4.1 terpasang, staff dapat absen melalui Chrome di `https://app.nusapos.my.id`, mengizinkan kamera dan lokasi presisi, serta memastikan GPS aktif.
+- Manifest memuat `ACCESS_FINE_LOCATION` dan `ACCESS_COARSE_LOCATION`.
+- Izin runtime baru diminta ketika WebView meminta geolokasi saat alur absensi, bukan saat aplikasi dibuka.
+- Callback geolokasi hanya mengizinkan origin resmi `https://app.nusapos.my.id`; origin lain ditolak bersih.
+- Penolakan izin diteruskan ke halaman dan petunjuk mengarahkan pengguna ke Pengaturan Android.
+- Kamera, Bluetooth printer, scanner HID, Firebase/FCM, dan package `app.kasirnusa.cashier` dipertahankan.
+- APK memakai versionCode `10`, versionName `1.4.1`, dan sertifikat yang sama persis dengan 1.4.0 sehingga dapat dipasang sebagai pembaruan tanpa uninstall.
+- APK release identik di `releases/` dan `apps/web/downloads/`, SHA-256 `560BEAAE37D0E707BF57D64A500FBA3887DD144C27EDE899451497CF313C1097`.
+- Build Android berhasil dan seluruh 367 tes otomatis lulus.
+- Tidak memerlukan SQL.
