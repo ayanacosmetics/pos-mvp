@@ -3948,10 +3948,30 @@ async function routeRequest(request, response, route) {
 
   if (request.method === 'POST' && route === 'suppliers') {
     requirePermission(session, 'purchasing.receive');
-    const input = bodyOf(request);
+    const input = bodyOf(request),name=String(input.name??'').trim().replace(/\s+/g,' '),phone=String(input.phone??'').trim(),address=String(input.address??'').trim();
+    if(name.length<2||name.length>120)throw Object.assign(new Error('Nama supplier harus berisi 2 sampai 120 karakter'),{status:400});
+    if(phone.length>30)throw Object.assign(new Error('Nomor telepon supplier maksimal 30 karakter'),{status:400});
+    if(address.length>500)throw Object.assign(new Error('Alamat supplier maksimal 500 karakter'),{status:400});
+    const duplicate=await rest('suppliers',`tenant_id=eq.${context.tenantId}&name=ilike.${encodeURIComponent(name)}&select=id&limit=1`);
+    if(duplicate.length)throw Object.assign(new Error('Supplier dengan nama tersebut sudah terdaftar'),{status:409});
     const count = await rest('suppliers', `tenant_id=eq.${context.tenantId}&select=id`);
-    const rows = await rest('suppliers', '', { method: 'POST', prefer: 'return=representation', body: { tenant_id: context.tenantId, code: `SUP-${String(count.length + 1).padStart(4,'0')}`, name: input.name, phone: input.phone || null, address: input.address || null } });
+    const rows = await rest('suppliers', '', { method: 'POST', prefer: 'return=representation', body: { tenant_id: context.tenantId, code: `SUP-${String(count.length + 1).padStart(4,'0')}`, name, phone:phone||null, address:address||null } });
+    await rest('audit_logs','',{method:'POST',body:{tenant_id:context.tenantId,actor_id:session.authUser.id,action:'SUPPLIER_CREATED',entity_type:'supplier',entity_id:rows[0].id,details_json:{name,phone}}});
     return send(response, 201, rows[0]);
+  }
+
+  if(request.method==='PUT'&&/^suppliers\/[^/]+$/.test(route)){
+    requirePermission(session,'purchasing.receive');
+    const supplierId=route.split('/')[1],input=bodyOf(request),name=String(input.name??'').trim().replace(/\s+/g,' '),phone=String(input.phone??'').trim(),address=String(input.address??'').trim();
+    if(name.length<2||name.length>120)throw Object.assign(new Error('Nama supplier harus berisi 2 sampai 120 karakter'),{status:400});
+    if(phone.length>30)throw Object.assign(new Error('Nomor telepon supplier maksimal 30 karakter'),{status:400});
+    if(address.length>500)throw Object.assign(new Error('Alamat supplier maksimal 500 karakter'),{status:400});
+    const duplicate=await rest('suppliers',`tenant_id=eq.${context.tenantId}&name=ilike.${encodeURIComponent(name)}&id=neq.${encodeURIComponent(supplierId)}&select=id&limit=1`);
+    if(duplicate.length)throw Object.assign(new Error('Supplier dengan nama tersebut sudah terdaftar'),{status:409});
+    const rows=await rest('suppliers',`tenant_id=eq.${context.tenantId}&id=eq.${encodeURIComponent(supplierId)}`,{method:'PATCH',prefer:'return=representation',body:{name,phone:phone||null,address:address||null}});
+    if(!rows.length)throw Object.assign(new Error('Supplier tidak ditemukan'),{status:404});
+    await rest('audit_logs','',{method:'POST',body:{tenant_id:context.tenantId,actor_id:session.authUser.id,action:'SUPPLIER_UPDATED',entity_type:'supplier',entity_id:supplierId,details_json:{name,phone}}});
+    return send(response,200,rows[0]);
   }
 
   if(request.method==='GET'&&/^suppliers\/[^/]+\/statement$/.test(route)){
