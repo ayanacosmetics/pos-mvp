@@ -23,3 +23,6 @@ Gunakan bersama `PROJECT-HANDOFF.md`. Baca masing-masing sekali saja. Jangan men
 - APK release identik di `releases/` dan `apps/web/downloads/`, SHA-256 `560BEAAE37D0E707BF57D64A500FBA3887DD144C27EDE899451497CF313C1097`.
 - Build Android berhasil dan seluruh 367 tes otomatis lulus.
 - Tidak memerlukan SQL.
+- Commit fitur `08c7c59 fix: enable Android attendance location` sudah didorong ke `main`.
+- Deployment Cloudflare berhasil, Version ID `bd09c3ee-f71f-43ad-afbc-34f849a3e141`.
+- URL publik APK, checksum hasil unduhan, petunjuk izin pada `app.js`, dan API health sudah diverifikasi pada `app.nusapos.my.id`.
