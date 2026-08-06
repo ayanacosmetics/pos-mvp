@@ -77,7 +77,7 @@ test('kontrol pesanan berada di atas daftar dan hanya daftar barang yang menggul
 });
 
 test('surat pesanan dapat dicetak atau dibagikan sebagai PDF ke supplier', () => {
-  for (const id of ['purchase-order-dialog','purchase-order-print-content','purchase-order-print-root','share-purchase-order','print-purchase-order']) {
+  for (const id of ['purchase-order-dialog','purchase-order-print-content','purchase-order-print-root','whatsapp-purchase-order','share-purchase-order','print-purchase-order']) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
   assert.match(app, /BUKAN BUKTI PEMBAYARAN/);
@@ -87,6 +87,9 @@ test('surat pesanan dapat dicetak atau dibagikan sebagai PDF ke supplier', () =>
   assert.match(app, /https:\/\/wa\.me\/\$\{phone\}/);
   assert.match(app, /Nomor WhatsApp supplier belum diisi/);
   assert.match(app, /class="button secondary po-print"/);
+  assert.match(app, /class="button secondary po-whatsapp"/);
+  assert.match(app, /Tambahan barang baru yang belum tercatat di Nusa/);
+  assert.match(app, /function openPurchaseOrderWhatsApp/);
 });
 
 test('dokumen supplier memakai tata cetak A4 terpisah dari struk penjualan', () => {

@@ -4093,6 +4093,7 @@ function renderPurchaseOrders() {
     const receivingApprovalLabel={PENDING:'Menunggu Owner',REVISION_REQUIRED:'Perlu revisi',APPROVED:'Disetujui · lanjutkan penerimaan'}[receivingApproval?.status]??receivingApproval?.status;
     const actions = [
       order.status !== 'CANCELLED' ? `<button class="button secondary po-print" data-id="${order.id}">Cetak / bagikan</button>` : '',
+      ['SUBMITTED','APPROVED','PARTIALLY_RECEIVED'].includes(order.status) ? `<button class="button secondary po-whatsapp" data-id="${order.id}">WhatsApp supplier</button>` : '',
       order.status === 'DRAFT' ? `<button class="button secondary po-open" data-id="${order.id}">Ubah</button><button class="button primary po-action" data-id="${order.id}" data-action="submit">Siapkan pesanan</button>` : '',
       order.status === 'SUBMITTED' && canApprove ? `<button class="button primary po-action" data-id="${order.id}" data-action="approve">Setujui</button>` : '',
       ['APPROVED','PARTIALLY_RECEIVED'].includes(order.status)&&!receivingApproval ? `<button class="button primary po-receive" data-id="${order.id}">Terima barang</button>` : '',
@@ -4109,12 +4110,13 @@ function renderPurchaseOrders() {
   document.querySelectorAll('.po-receive').forEach((button) => button.addEventListener('click', () => prepareOrderReceipt(button.dataset.id)));
   document.querySelectorAll('.po-open-receiving-approval').forEach((button)=>button.addEventListener('click',()=>openPurchaseOrderReceivingApproval(button.dataset.id)));
   document.querySelectorAll('.po-print').forEach((button) => button.addEventListener('click', () => openPurchaseOrderPrint(button.dataset.id)));
+  document.querySelectorAll('.po-whatsapp').forEach((button) => button.addEventListener('click', () => openPurchaseOrderWhatsApp(button.dataset.id)));
 }
 
 function purchaseOrderShareText(order) {
   const business=state.business??{};
   const lines=order.items.map((item,index)=>`${index+1}. ${item.product_name} — ${Number(item.ordered_qty).toLocaleString('id-ID')} pcs`).join('\n');
-  return `${business.name??'Kasir Nusa'}\nSURAT PESANAN BARANG ${order.po_no}\nSupplier: ${order.supplier_name}\n\n${lines}\n\nEstimasi total: ${money.format(order.grand_total)}\nDokumen ini adalah permintaan barang, BUKAN BUKTI PEMBAYARAN.`;
+  return `Halo ${order.supplier_name}, berikut pesanan dari ${business.name??'Kasir Nusa'}.\n\nPO: ${order.po_no}\n\n${lines}\n\nTambahan barang baru yang belum tercatat di Nusa (isi bila ada):\n- \n\nEstimasi total barang yang tercatat: ${money.format(order.grand_total)}\nMohon konfirmasi ketersediaan dan jumlahnya. Terima kasih.`;
 }
 
 function purchaseOrderSheet(order) {
@@ -4235,6 +4237,15 @@ function supplierWhatsAppNumber(phone) {
   if(digits.startsWith('0'))digits=`62${digits.slice(1)}`;
   else if(digits.startsWith('8'))digits=`62${digits}`;
   return digits;
+}
+
+function openPurchaseOrderWhatsApp(orderId=state.printingPurchaseOrder?.id) {
+  const order=state.purchaseOrders.find((item)=>item.id===orderId)??state.printingPurchaseOrder;
+  if(!order)return;
+  const supplier=state.suppliers.find((item)=>item.id===order.supplier_id);
+  const phone=supplierWhatsAppNumber(supplier?.phone);
+  if(!phone)return toast('Nomor WhatsApp supplier belum diisi. Lengkapi dahulu di menu Supplier.');
+  window.location.href=`https://wa.me/${phone}?text=${encodeURIComponent(purchaseOrderShareText(order))}`;
 }
 
 async function sharePurchaseOrder() {
@@ -8360,6 +8371,7 @@ el('whatsapp-receipt').addEventListener('click',shareReceiptWhatsApp);
 el('print-receipt').addEventListener('click',()=>printReceiptDirect(state.lastReceipt,state.lastReceipt?.payments??state.paymentDraft));
 el('close-purchase-order-print').addEventListener('click',()=>el('purchase-order-dialog').close());
 el('share-purchase-order').addEventListener('click',sharePurchaseOrder);
+el('whatsapp-purchase-order').addEventListener('click',()=>openPurchaseOrderWhatsApp());
 el('print-purchase-order').addEventListener('click',printPurchaseOrder);
 el('purchase-order-dialog').addEventListener('close',()=>document.body.classList.remove('printing-purchase-order'));
 el('sync-button').addEventListener('click', syncQueue);
