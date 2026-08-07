@@ -44,3 +44,5 @@ Gunakan bersama `PROJECT-HANDOFF.md`. Baca masing-masing sekali saja. Jangan men
 - APK memakai versionCode `12`, versionName `1.4.3`, package dan sertifikat permanen yang sama.
 - APK release identik di `releases/` dan `apps/web/downloads/`, SHA-256 `28F7587A121207582DA94E0E55464054932FF5524477FD6EA55B115D02A7F931`.
 - Build Android berhasil dan seluruh 368 tes lulus. Tidak memerlukan SQL.
+- Commit fitur `3f8562c fix: keep scanner on active workflow` sudah didorong ke `main`.
+- Deployment Cloudflare berhasil, Version ID `08a50f93-5499-498a-b34e-5bd264f93586`; APK publik, handler scanner restok, dan API health sudah diverifikasi.
