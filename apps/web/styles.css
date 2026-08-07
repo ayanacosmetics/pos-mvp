@@ -1033,6 +1033,7 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
 }
 
 /* Guided restock receipt */
+.restock-draft-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:10px;padding:10px 12px;border:1px solid #9dc9bd;border-radius:12px;background:#eef8f4}.restock-draft-banner.save-failed{border-color:#e2a4a4;background:#fff2f2}.restock-draft-banner div{display:grid;gap:2px}.restock-draft-banner strong{color:var(--brand);font-size:12px}.restock-draft-banner.save-failed strong{color:var(--danger)}.restock-draft-banner small{color:var(--muted);font-size:10px}
 .restock-wizard-steps{
   display:grid;
   grid-template-columns:repeat(4,minmax(0,1fr));
@@ -1739,6 +1740,7 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
 /* Dense mobile restock: preserve tap targets while reducing vertical scanning. */
 .approval-price-readonly{display:grid;gap:2px;padding:8px 9px;border:1px solid var(--line);border-radius:9px;background:#fff}.approval-price-readonly span{color:var(--muted);font-size:9px;font-weight:750}.approval-price-readonly strong{font-size:12px}.approval-price-empty{grid-column:1/-1;margin:0;color:var(--muted);font-size:10px}
 @media(max-width:650px){
+  .restock-draft-banner{align-items:flex-start;padding:8px 9px}.restock-draft-banner .button{min-height:34px;padding:7px 9px;font-size:9px;white-space:nowrap}
   #purchase-view-receipt,#purchase-view-approvals{margin-inline:-7px}
   .restock-wizard-steps{margin-bottom:9px;border-radius:9px}
   .restock-wizard-step{flex:1 0 25%;min-width:78px;min-height:46px;grid-template-columns:22px minmax(0,1fr);padding:6px;gap:2px 5px}

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=204">
+  <link rel="stylesheet" href="/styles.css?v=205">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -113,7 +113,7 @@
         <div data-nav-panel="restock" class="feature-nav-panel">
           <button data-page="restock-planning" data-target-page="restock" data-purchase-view-target="planning" class="feature-nav-item" data-permission="purchasing.view_cost"><span>Pilih barang</span><small>Stok paling sedikit dahulu</small></button>
           <button data-page="purchase-documents" data-target-page="restock" data-purchase-view-target="documents" class="feature-nav-item" data-permission="purchasing.receive"><span>Pesanan supplier</span><small>Cetak, bagikan, dan pantau</small></button>
-          <button data-page="purchase-receipt" data-target-page="restock" data-purchase-view-target="receipt" class="feature-nav-item" data-permission="purchasing.receive"><span>Terima barang</span><small>Catat barang yang sudah tiba</small></button>
+          <button data-page="purchase-receipt" data-target-page="restock" data-purchase-view-target="receipt" class="feature-nav-item" data-permission="purchasing.receive"><span>Terima barang</span><small id="restock-nav-draft-status">Catat barang yang sudah tiba</small></button>
           <button data-page="restock-approvals" data-target-page="restock" data-purchase-view-target="approvals" class="feature-nav-item" data-permission="purchasing.receive"><span>Persetujuan harga</span><small>Harga baru sebelum diterima</small></button>
           <button data-page="supplier-return" data-target-page="restock" data-purchase-view-target="supplier-return" class="feature-nav-item" data-permission="purchasing.receive"><span>Retur supplier</span><small>Kembalikan barang bermasalah</small></button>
         </div>
@@ -330,6 +330,7 @@
           </div>
 
           <div id="purchase-view-receipt" class="purchase-view hidden">
+            <div id="restock-draft-banner" class="restock-draft-banner hidden" role="status"><div><strong id="restock-draft-heading">Draft penerimaan tersimpan</strong><small id="restock-draft-status">Perubahan disimpan otomatis pada perangkat ini.</small></div><button id="discard-restock-draft" class="button secondary" type="button">Batalkan draft</button></div>
             <nav class="restock-wizard-steps" aria-label="Tahapan penerimaan barang">
               <button class="restock-wizard-step active" type="button" data-restock-step-target="document"><span>1</span><strong>Dokumen</strong><small>Supplier & faktur</small></button>
               <button class="restock-wizard-step" type="button" data-restock-step-target="items"><span>2</span><strong>Barang</strong><small>Pilih & isi jumlah</small></button>
@@ -1181,6 +1182,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=204"></script>
+  <script type="module" src="/app.js?v=205"></script>
 </body>
 </html>

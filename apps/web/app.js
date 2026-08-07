@@ -10,6 +10,7 @@ import { createProductExportWorkbook, createTemplateWorkbook, productExportRows,
 import { barcodeModuleCount, barcodeSvg, labelSize, normalizeCode128Text } from './product-labels.mjs';
 import { parseKaspinProductWorkbook, parseKaspinProductExtensionWorkbook, parseKaspinFifoWorkbooks, parseKaspinSalesWorkbooks, parseKaspinSalesWorkbookSets, parseKaspinCustomerWorkbook, parseKaspinSupplierWorkbook } from './kaspin-import.mjs';
 import { buildVariantSuggestions } from './variant-suggestions.mjs';
+import { readRestockDraft, removeRestockDraft, restockDraftStorageKey, writeRestockDraft } from './restock-draft.mjs';
 
 const storedAuth = loadAuth();
 let kaspinMigrationPackage=null;
@@ -30,6 +31,8 @@ state.restockPlanning = { recommendations: [], settings: { approvalThreshold: 50
 state.restockSelection = new Map();
 state.restockPlanningLimit = 100;
 state.restockWizardStep = 'document';
+state.restockDraftRestoring = false;
+state.restockDraftSaveTimer = null;
 state.salesPeriodLevel = 'DAY';
 state.salesPeriodValue = null;
 state.salesReportOpen = false;
@@ -3841,7 +3844,135 @@ function renderRestockSourceSelector(){
   }
 }
 
-async function renderRestock() {
+function currentRestockDraftKey(){
+  return restockDraftStorageKey(state.session?.user?.id,state.activeOutletId);
+}
+
+function restockDraftLines(){
+  return [...document.querySelectorAll('#restock-body .restock-line')];
+}
+
+function restockDraftHasContent(){
+  return Boolean(el('restock-document')?.value.trim()||state.activePurchaseOrder?.id||restockDraftLines().length||state.restockDraftProducts.size);
+}
+
+function serializeRestockDraftLine(row){
+  const unit=row.querySelector('.restock-unit');
+  return {
+    productId:row.dataset.product??null,productKey:row.dataset.productKey??null,
+    poLine:row.dataset.poLine==='true',poRemainingPurchaseQty:row.dataset.poRemainingPurchaseQty??'',poRemainingBaseQty:row.dataset.poRemainingBaseQty??'',
+    qty:row.querySelector('.restock-qty')?.value??'',unitId:unit?.value??'',unitName:unit?.selectedOptions[0]?.dataset.name??unit?.selectedOptions[0]?.textContent?.trim()??'pcs',
+    cost:row.querySelector('.restock-cost')?.value??'',batch:row.querySelector('.restock-batch')?.value??'',expiry:row.querySelector('.restock-expiry')?.value??'',
+    proposedPrices:[...row.querySelectorAll('.restock-proposed-value')].map((input)=>({groupId:input.dataset.groupId,minBaseQty:input.closest('.restock-proposed-price-row')?.querySelector('.restock-proposed-min')?.value??'1',value:input.value}))
+  };
+}
+
+function buildRestockDraft(){
+  return {
+    sourceType:el('restock-source-type')?.value??'PO',supplierId:el('restock-supplier')?.value??'',documentNo:el('restock-document')?.value.trim()??'',locationId:el('restock-location')?.value??'',
+    wizardStep:state.restockWizardStep,activePurchaseOrder:state.activePurchaseOrder?structuredClone(state.activePurchaseOrder):null,
+    lines:restockDraftLines().map(serializeRestockDraftLine),draftProducts:[...state.restockDraftProducts.entries()],updatedAt:new Date().toISOString()
+  };
+}
+
+function renderRestockDraftStatus(draft=undefined,{saveFailed=false}={}){
+  const active=draft===undefined?(restockDraftHasContent()?buildRestockDraft():null):draft,banner=el('restock-draft-banner');
+  if(!banner)return;
+  banner.classList.toggle('hidden',!active);
+  banner.classList.toggle('save-failed',Boolean(active&&saveFailed));
+  const navStatus=el('restock-nav-draft-status');
+  if(!active){if(navStatus)navStatus.textContent='Catat barang yang sudah tiba';return;}
+  const checked=(active.lines??[]).filter((line)=>String(line.qty??'').trim()!=='').length;
+  const saved=active.updatedAt?new Date(active.updatedAt).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}):'';
+  el('restock-draft-heading').textContent=saveFailed?'Draft belum dapat disimpan':'Draft penerimaan tersimpan';
+  el('restock-draft-status').textContent=saveFailed?'Penyimpanan perangkat penuh atau tidak tersedia. Jangan tutup aplikasi sebelum menyelesaikan penerimaan.':`${checked} barang diperiksa${saved?` · tersimpan ${saved}`:''}. Aman untuk membuka Kasir lalu kembali.`;
+  if(navStatus)navStatus.textContent=saveFailed?'Draft belum tersimpan':`Draft · ${checked} barang diperiksa`;
+}
+
+function saveRestockDraftNow(){
+  clearTimeout(state.restockDraftSaveTimer);state.restockDraftSaveTimer=null;
+  if(state.restockDraftRestoring)return false;
+  const key=currentRestockDraftKey();if(!key)return false;
+  const draft=buildRestockDraft(),saved=writeRestockDraft(localStorage,key,draft);
+  renderRestockDraftStatus(saved?draft:(restockDraftHasContent()?draft:null),{saveFailed:!saved&&restockDraftHasContent()});
+  return saved;
+}
+
+function scheduleRestockDraftSave(){
+  if(state.restockDraftRestoring)return;
+  clearTimeout(state.restockDraftSaveTimer);
+  state.restockDraftSaveTimer=setTimeout(saveRestockDraftNow,250);
+}
+
+function clearRestockDraft(){
+  clearTimeout(state.restockDraftSaveTimer);state.restockDraftSaveTimer=null;
+  removeRestockDraft(localStorage,currentRestockDraftKey());
+  state.restockDraftProducts.clear();
+  renderRestockDraftStatus(null);
+}
+
+function applyRestockDraftPrices(row,prices=[]){
+  for(const price of prices){
+    const input=[...row.querySelectorAll(`.restock-proposed-value[data-group-id="${CSS.escape(price.groupId)}"]`)].find((candidate)=>candidate.closest('.restock-proposed-price-row')?.querySelector('.restock-proposed-min')?.value===String(price.minBaseQty));
+    if(input)input.value=price.value;
+  }
+}
+
+async function restoreRestockDraft(){
+  const draft=readRestockDraft(localStorage,currentRestockDraftKey());
+  if(!draft){renderRestockDraftStatus(null);return false;}
+  state.restockDraftRestoring=true;
+  try{
+    state.activePurchaseOrder=draft.activePurchaseOrder??null;
+    state.restockDraftProducts=new Map(draft.draftProducts??[]);
+    el('restock-source-type').value=draft.sourceType??(state.activePurchaseOrder?'PO':'DIRECT');
+    renderRestockSourceSelector();
+    if(draft.supplierId&&[...el('restock-supplier').options].some((option)=>option.value===draft.supplierId))el('restock-supplier').value=draft.supplierId;
+    if(draft.locationId&&[...el('restock-location').options].some((option)=>option.value===draft.locationId))el('restock-location').value=draft.locationId;
+    el('restock-document').value=draft.documentNo??'';
+    for(const saved of draft.lines??[]){
+      let row=null;
+      if(saved.productKey){
+        const product=state.restockDraftProducts.get(saved.productKey);if(!product)continue;
+        appendRestockNewLine(saved.productKey,product);row=document.querySelector(`.restock-line[data-product-key="${CSS.escape(saved.productKey)}"]`);
+      }else{
+        const product=state.products.find((item)=>item.id===saved.productId);if(!product)continue;
+        const selected=product.units.find((unit)=>unit.id===saved.unitId)||product.units.find((unit)=>unit.name===saved.unitName)||product.units[0];
+        row=await appendRestockLine(saved.productId,saved.qty,Number(saved.cost||0)/Math.max(1,Number(selected?.factor??1)),selected?.name??'pcs',{poReceiving:saved.poLine,remainingPurchaseQty:saved.poRemainingPurchaseQty,remainingBaseQty:saved.poRemainingBaseQty});
+      }
+      if(!row)continue;
+      const unit=row.querySelector('.restock-unit'),savedOption=[...unit.options].find((option)=>saved.unitId&&option.value===saved.unitId)||[...unit.options].find((option)=>option.dataset.name===saved.unitName);
+      if(savedOption){unit.selectedIndex=[...unit.options].indexOf(savedOption);row.dataset.factor=savedOption.dataset.factor??row.dataset.factor;const label=row.querySelector('.restock-cost-label');if(label)label.textContent=`Modal / ${savedOption.dataset.name??saved.unitName}`;}
+      row.querySelector('.restock-qty').value=saved.qty??'';row.querySelector('.restock-cost').value=saved.cost??'';row.querySelector('.restock-batch').value=saved.batch??'';row.querySelector('.restock-expiry').value=saved.expiry??'';
+      if(!saved.productKey)await updateRestockComparison(row);
+      applyRestockDraftPrices(row,saved.proposedPrices);updateRestockLineSummary(row);syncRestockApprovalRequirement(row);
+    }
+    syncRestockVisibility();updateRestockTotal();
+    setRestockWizardStep(restockWizardSteps.includes(draft.wizardStep)?draft.wizardStep:'document',{focus:false});
+    renderRestockDraftStatus(draft);return true;
+  }finally{state.restockDraftRestoring=false;}
+}
+
+async function discardRestockDraft(){
+  const count=restockDraftLines().length;
+  if(!restockDraftHasContent())return;
+  if(!window.confirm(`Batalkan draft penerimaan${count?` berisi ${count} barang`:''}? Data pemeriksaan yang belum diposting akan dihapus.`))return;
+  clearRestockDraft();state.activePurchaseOrder=null;
+  await renderRestock({preserveDraft:false});toast('Draft penerimaan dibatalkan. Stok tidak berubah.');
+}
+
+async function changeRestockSource(){
+  const next=el('restock-source-type').value;
+  if(restockDraftHasContent()&&!window.confirm('Ganti cara penerimaan? Barang yang sudah diperiksa pada draft saat ini akan dihapus.')){
+    el('restock-source-type').value=state.activePurchaseOrder?'PO':'DIRECT';return;
+  }
+  clearRestockDraft();state.activePurchaseOrder=null;
+  await renderRestock({preserveDraft:false});
+  el('restock-source-type').value=next;renderRestockSourceSelector();
+}
+
+async function renderRestock({preserveDraft=true}={}) {
+  if(preserveDraft&&restockDraftHasContent())saveRestockDraftNow();
   el('restock-body').innerHTML = '';
   el('receive-all-po-items').classList.add('hidden');
   el('restock-supplier').innerHTML = state.suppliers.length
@@ -3877,6 +4008,7 @@ async function renderRestock() {
   syncRestockVisibility();
   renderRestockSourceSelector();
   setRestockWizardStep('document', { focus: false });
+  if(preserveDraft)await restoreRestockDraft();else renderRestockDraftStatus(null);
 }
 
 const purchaseStatus = {
@@ -3888,7 +4020,7 @@ function showPurchaseView(name,{approvalId=null}={}) {
   document.querySelectorAll('.purchase-view').forEach((view) => view.classList.toggle('hidden', view.id !== `purchase-view-${name}`));
   document.querySelectorAll('.purchase-tab').forEach((button) => button.classList.toggle('active', button.dataset.purchaseView === name));
   document.querySelectorAll('[data-purchase-view-target]').forEach((button)=>button.classList.toggle('active',button.dataset.purchaseViewTarget===name));
-  if (name === 'receipt') { setRestockWizardStep('document', { focus: false }); loadPurchaseOrders().then(renderRestockSourceSelector); }
+  if (name === 'receipt') { setRestockWizardStep(restockDraftHasContent()?state.restockWizardStep:'document', { focus: false }); renderRestockDraftStatus(); loadPurchaseOrders().then(renderRestockSourceSelector); }
   if (name === 'approvals') { state.activeRestockApprovalId=approvalId; return loadRestockApprovals(); }
 }
 
@@ -3959,6 +4091,7 @@ function setRestockWizardStep(step, { focus = true, validate = false } = {}) {
   }
   if (step === 'review') renderRestockReview();
   state.restockWizardStep = step;
+  scheduleRestockDraftSave();
   el('purchase-view-receipt').classList.toggle('restock-items-active',step==='items');
   document.querySelectorAll('[data-restock-step]').forEach((panel) => panel.classList.toggle('hidden', panel.dataset.restockStep !== step));
   document.querySelectorAll('[data-restock-step-target]').forEach((button) => {
@@ -4611,8 +4744,10 @@ async function prepareOrderReceipt(orderId) {
   const order=state.purchaseOrders.find((item)=>item.id===orderId);
   if (!order) return;
   if(order.receiving_approval)return toast('PO sedang diproses. Lanjutkan dari pengajuan penerimaan yang sudah dibuat.');
+  if(restockDraftHasContent()&&state.activePurchaseOrder?.id!==orderId&&!window.confirm('Ganti draft penerimaan yang sedang dikerjakan dengan PO ini? Data pemeriksaan pada draft saat ini akan dihapus.'))return renderRestockSourceSelector();
+  clearRestockDraft();
   state.activePurchaseOrder=order;
-  await renderRestock();
+  await renderRestock({preserveDraft:false});
   for (const item of order.items.filter((line)=>line.remaining_qty>0)) {
     const factor=Number(item.purchase_unit_factor??1),remainingBase=Number(item.remaining_qty);
     await appendRestockLine(item.product_id,'',item.unit_cost,item.purchase_unit_name??'pcs',{
@@ -4624,6 +4759,7 @@ async function prepareOrderReceipt(orderId) {
   el('receive-all-po-items').classList.remove('hidden');
   renderRestockSourceSelector();
   showPurchaseView('receipt');
+  saveRestockDraftNow();
 }
 
 async function openPurchaseOrderReceivingApproval(approvalId) {
@@ -4633,8 +4769,10 @@ async function openPurchaseOrderReceivingApproval(approvalId) {
 }
 
 async function clearActivePurchaseOrder() {
+  if(restockDraftHasContent()&&!window.confirm('Ganti sumber penerimaan? Data pemeriksaan pada draft PO ini akan dihapus.'))return;
+  clearRestockDraft();
   state.activePurchaseOrder=null;
-  await renderRestock();
+  await renderRestock({preserveDraft:false});
 }
 
 async function refreshPoSupplierSnapshots() {
@@ -4752,7 +4890,7 @@ function closeRestockLineDialog(){
 function removeRestockLine(row){
   if(state.activeRestockLine===row)closeRestockLineDialog();
   if(row.dataset.productKey)state.restockDraftProducts.delete(row.dataset.productKey);
-  row.remove();syncRestockVisibility();updateRestockTotal();
+  row.remove();syncRestockVisibility();updateRestockTotal();scheduleRestockDraftSave();
 }
 
 function appendRestockNewLine(productKey,product){
@@ -4770,7 +4908,7 @@ function appendRestockNewLine(productKey,product){
   row.querySelector('.restock-unit').addEventListener('change',()=>changeRestockUnit(row));
   row.querySelector('.restock-expiry').addEventListener('input',formatExpiryInput);
   row.querySelector('.remove-restock').addEventListener('click',()=>removeRestockLine(row));
-  el('restock-body').append(row);syncRestockVisibility();updateRestockTotal();
+  el('restock-body').append(row);syncRestockVisibility();updateRestockTotal();scheduleRestockDraftSave();
 }
 
 async function appendRestockLine(productId, qty = 1, newCost = 0, unit = 'pcs', options = {}) {
@@ -4834,7 +4972,7 @@ async function appendRestockLine(productId, qty = 1, newCost = 0, unit = 'pcs', 
   syncRestockVisibility();
   if(options.poReceiving)clearUnreceivedRestockState(row);
   else updateRestockComparison(row);
-  return row;
+  scheduleRestockDraftSave();return row;
 }
 
 function clearUnreceivedRestockState(row){
@@ -5386,9 +5524,9 @@ async function submitRestockForApproval(payload,rows){
   const purchaseOrderId=state.activePurchaseOrder?.id??null;
   const result=await request('/api/restock-approvals',{method:'POST',body:JSON.stringify({...payload,items:rows.map((row)=>({...restockRowPayload(row),purchaseOrderId})),proposedPrices})});
   toast('Pengajuan dikirim. Owner dapat memeriksa dan mengubah harga sebelum menyetujui.');
-  state.restockDraftProducts.clear();await loadRestockApprovals();showPurchaseView('approvals');
+  clearRestockDraft();await loadRestockApprovals();showPurchaseView('approvals');
   state.activeRestockApprovalId=null;
-  await renderRestock();
+  state.activePurchaseOrder=null;await renderRestock({preserveDraft:false});
   return result;
 }
 
@@ -5559,6 +5697,7 @@ async function receivePurchase() {
     const endpoint = state.activePurchaseOrder ? `/api/purchase-orders/${state.activePurchaseOrder.id}/receipts` : '/api/purchase-receipts';
     const receipt = await request(endpoint, { method: 'POST', headers: { 'idempotency-key': crypto.randomUUID() }, body: JSON.stringify(payload) });
     toast(`Penerimaan ${receipt.document_no ?? receipt.documentNo} berhasil · stok sudah bertambah`);
+    clearRestockDraft();
     if (state.session.permissions.includes('inventory.manage')) await loadInventory();
     await refreshCatalog();
     if (state.activePurchaseOrder) {
@@ -5568,7 +5707,7 @@ async function receivePurchase() {
       await loadPurchaseOrders();
       showPurchaseView('documents');
     }
-    await renderRestock();
+    await renderRestock({preserveDraft:false});
   } catch (error) {
     showRestockReceiveError(error.message);
   } finally {
@@ -5863,15 +6002,19 @@ async function switchActiveOutlet(event) {
     return toast('Tutup shift aktif sebelum berpindah outlet.');
   }
   const previous = state.activeOutletId;
+  saveRestockDraftNow();
+  state.activePurchaseOrder=null;state.restockDraftProducts.clear();el('restock-body').replaceChildren();el('restock-document').value='';el('restock-source-type').value='PO';
   state.activeOutletId = nextOutletId;
   event.target.disabled = true;
   try {
     await refreshCatalog();
+    await renderRestock({preserveDraft:false});await restoreRestockDraft();
     await loadHeldSales();
     renderLastSync();
     toast(`Outlet aktif: ${state.outlets.find((outlet) => outlet.id === state.activeOutletId)?.name ?? 'Outlet'}`);
   } catch (error) {
     state.activeOutletId = previous;
+    await renderRestock({preserveDraft:false});await restoreRestockDraft();
     renderOutletSwitcher();
     toast(error.message);
   } finally {
@@ -8126,6 +8269,8 @@ async function decidePilot(decision){
 function showPage(name) {
   const item=document.querySelector(`.feature-nav-item[data-page="${name}"]`);
   const target=item?.dataset.targetPage??name;
+  const receiptOpen=el('page-restock').classList.contains('active')&&!el('purchase-view-receipt').classList.contains('hidden');
+  if(receiptOpen&&(target!=='restock'||item?.dataset.purchaseViewTarget!=='receipt'))saveRestockDraftNow();
   document.querySelectorAll('.page').forEach((page) => page.classList.toggle('active', page.id === `page-${target}`));
   document.querySelectorAll('.feature-nav-item').forEach((button) => button.classList.toggle('active', button.dataset.page === name));
   if(item?.dataset.purchaseViewTarget)showPurchaseView(item.dataset.purchaseViewTarget);
@@ -8285,6 +8430,7 @@ el('register-owner-form').addEventListener('submit', async (event) => {
 });
 
 async function endCurrentSession(nextPortal = null) {
+  saveRestockDraftNow();
   try{if(nativePushStatus())await deactivateNativePushDevice();}catch{}
   try {
     await request('/api/logout', {
@@ -8320,6 +8466,7 @@ async function openOwnerSwitch() {
 }
 
 async function switchOwnerContext(ownerId) {
+  saveRestockDraftNow();
   const result=await request('/api/owner-contexts/switch',{
     method:'POST',body:JSON.stringify({ownerId})
   });
@@ -8638,6 +8785,9 @@ el('sync-review-list').addEventListener('click', (event) => {
   if (button) decideSyncCommand(button.closest('[data-command-id]').dataset.commandId, button.dataset.action);
 });
 el('receive-button').addEventListener('click', receivePurchase);
+el('discard-restock-draft').addEventListener('click',discardRestockDraft);
+el('purchase-view-receipt').addEventListener('input',scheduleRestockDraftSave);
+el('purchase-view-receipt').addEventListener('change',scheduleRestockDraftSave);
 el('receive-all-po-items').addEventListener('click',receiveAllPurchaseOrderItems);
 el('toggle-restock-extra-product').addEventListener('click',()=>setRestockExtraPicker(el('restock-extra-product-picker').classList.contains('hidden')));
 el('open-restock-new-product').addEventListener('click',()=>openRestockNewProduct(''));
@@ -8664,7 +8814,7 @@ el('restock-wizard-next').addEventListener('click',()=>moveRestockWizard(1));
 el('restock-document').addEventListener('keydown',(event)=>{
   if(event.key==='Enter'){event.preventDefault();setRestockWizardStep('items',{validate:true});}
 });
-el('restock-source-type').addEventListener('change',async()=>{state.activePurchaseOrder=null;await renderRestock();});
+el('restock-source-type').addEventListener('change',changeRestockSource);
 el('restock-source-po').addEventListener('change',(event)=>{if(event.currentTarget.value)prepareOrderReceipt(event.currentTarget.value);});
 document.querySelectorAll('.purchase-tab').forEach((button) => button.addEventListener('click', () => {
   showPurchaseView(button.dataset.purchaseView);
@@ -9334,6 +9484,8 @@ window.addEventListener('error',()=>reportClientTelemetry('CLIENT_ERROR','/api/c
 window.addEventListener('unhandledrejection',()=>reportClientTelemetry('CLIENT_ERROR','/api/client/runtime'));
 window.addEventListener('online', () => { el('network-dot').classList.remove('offline'); el('network-status').textContent = 'Online'; syncQueue(); });
 window.addEventListener('offline', () => { el('network-dot').classList.add('offline'); el('network-status').textContent = 'Offline'; });
+window.addEventListener('pagehide',saveRestockDraftNow);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)saveRestockDraftNow();});
 window.addEventListener('storage', (event) => {
   if (event.key === 'pos_owner_context_id') {
     state.ownerContextId = event.newValue || null;
