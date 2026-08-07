@@ -54,3 +54,6 @@ Gunakan bersama `PROJECT-HANDOFF.md`. Baca masing-masing sekali saja. Jangan men
 - APK memakai versionCode `13`, versionName `1.4.4`, package dan sertifikat permanen yang sama.
 - APK release identik di `releases/` dan `apps/web/downloads/`, SHA-256 `2D354C1E1CA0BA2501EA8AECEF5C03DC2EA78711F55EDC6A23A1734EB2A2D66C`.
 - Build Android berhasil dan seluruh 369 tes lulus. Tidak memerlukan SQL.
+- Commit implementasi dan APK: `a8e4a1d` (`fix: preserve activity on scanner reconnect`).
+- Cloudflare berhasil diterbitkan dengan Version ID `009914a4-12cb-471c-a947-51c94f39af70`.
+- URL publik `https://app.nusapos.my.id/downloads/Kasir-Nusa-POS-1.4.4.apk` telah diverifikasi: 2.830.245 byte dan SHA-256 cocok dengan APK lokal.
