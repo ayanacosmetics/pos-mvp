@@ -57,3 +57,12 @@ Gunakan bersama `PROJECT-HANDOFF.md`. Baca masing-masing sekali saja. Jangan men
 - Commit implementasi dan APK: `a8e4a1d` (`fix: preserve activity on scanner reconnect`).
 - Cloudflare berhasil diterbitkan dengan Version ID `009914a4-12cb-471c-a947-51c94f39af70`.
 - URL publik `https://app.nusapos.my.id/downloads/Kasir-Nusa-POS-1.4.4.apk` telah diverifikasi: 2.830.245 byte dan SHA-256 cocok dengan APK lokal.
+
+## Draft penerimaan aman saat staf berpindah ke Kasir
+
+- Menu Terima Barang tidak lagi kembali paksa ke langkah Dokumen; langkah, barang, jumlah, modal, batch, EXP, dan usulan harga dipertahankan.
+- Draft disimpan otomatis di perangkat dengan kunci terisolasi per user dan outlet, termasuk saat aplikasi disembunyikan, logout, atau dimuat ulang.
+- Draft tidak mengubah stok. Draft hanya dibersihkan setelah penerimaan/pengajuan berhasil, atau lewat tombol Batalkan draft dengan konfirmasi.
+- Pergantian sumber/PO yang dapat membuang pemeriksaan meminta konfirmasi. Kegagalan local storage ditampilkan sebagai peringatan dan tidak diklaim sudah tersimpan.
+- Shell PWA dinaikkan ke v205. Seluruh 373 tes lulus; dry-run Cloudflare berhasil. Tidak membutuhkan SQL atau APK baru.
+- Commit implementasi: `6b2985a`. Cloudflare Version ID: `ee02176c-be82-4600-a7d3-9f3982c01883`; domain produksi telah diverifikasi menyajikan shell v205 dan modul draft.
