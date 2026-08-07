@@ -46,3 +46,11 @@ Gunakan bersama `PROJECT-HANDOFF.md`. Baca masing-masing sekali saja. Jangan men
 - Build Android berhasil dan seluruh 368 tes lulus. Tidak memerlukan SQL.
 - Commit fitur `3f8562c fix: keep scanner on active workflow` sudah didorong ke `main`.
 - Deployment Cloudflare berhasil, Version ID `08a50f93-5499-498a-b34e-5bd264f93586`; APK publik, handler scanner restok, dan API health sudah diverifikasi.
+
+## APK Android 1.4.4 — cegah restart saat scanner tersambung
+
+- Foto perangkat membuktikan scanner bukan memicu tombol, tetapi perubahan konfigurasi HID me-restart Activity dan menampilkan ulang “Memulihkan sesi kerja”.
+- Manifest kini menangani perubahan `navigation` selain `keyboard` dan `keyboardHidden`; callback konfigurasi mempertahankan Activity/WebView serta draft restok yang sedang aktif.
+- APK memakai versionCode `13`, versionName `1.4.4`, package dan sertifikat permanen yang sama.
+- APK release identik di `releases/` dan `apps/web/downloads/`, SHA-256 `2D354C1E1CA0BA2501EA8AECEF5C03DC2EA78711F55EDC6A23A1734EB2A2D66C`.
+- Build Android berhasil dan seluruh 369 tes lulus. Tidak memerlukan SQL.
