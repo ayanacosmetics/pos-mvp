@@ -75,3 +75,11 @@ Gunakan bersama `PROJECT-HANDOFF.md`. Baca masing-masing sekali saja. Jangan men
 - Guard mencakup create/edit produk, preview/commit import, Kaspin, serta barang baru melalui persetujuan restok. `Lainnya` tetap tersedia sebagai fallback sistem.
 - Shell PWA dinaikkan ke v206. Seluruh 376 tes dan dry-run Cloudflare lulus. Tidak membutuhkan SQL atau APK baru.
 - Commit implementasi: `01e9a71`. Cloudflare Version ID: `b8a203ba-6cfc-48f7-b3b3-afdde861abd0`; domain produksi telah diverifikasi menampilkan kedua dropdown dan modul kategori kanonis.
+
+## Izin staff untuk menyimpan perubahan produk
+
+- Akar masalah: API menerima `catalog.manage`, tetapi rantai `save_product_v6 -> v5 -> v3 -> v2` berakhir pada pemeriksaan database lama yang hanya menerima role Owner/Admin.
+- Migrasi `202608070001_catalog_manage_product_permissions.sql` menyelaraskan simpan/edit dan perubahan status produk dengan izin granular `catalog.manage`.
+- Manager tanpa override memakai izin bawaan; staff dengan daftar izin khusus wajib memiliki `catalog.manage`; akun tanpa izin tetap ditolak. Hapus produk massal tetap Owner/Admin.
+- Seluruh 378 tes lulus. Commit: `57d0ed6`.
+- **Belum aktif di produksi sampai migrasi SQL dijalankan di Supabase.** Tidak memerlukan APK atau deploy Cloudflare.
