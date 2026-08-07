@@ -66,3 +66,12 @@ Gunakan bersama `PROJECT-HANDOFF.md`. Baca masing-masing sekali saja. Jangan men
 - Pergantian sumber/PO yang dapat membuang pemeriksaan meminta konfirmasi. Kegagalan local storage ditampilkan sebagai peringatan dan tidak diklaim sudah tersimpan.
 - Shell PWA dinaikkan ke v205. Seluruh 373 tes lulus; dry-run Cloudflare berhasil. Tidak membutuhkan SQL atau APK baru.
 - Commit implementasi: `6b2985a`. Cloudflare Version ID: `ee02176c-be82-4600-a7d3-9f3982c01883`; domain produksi telah diverifikasi menyajikan shell v205 dan modul draft.
+
+## Kategori kanonis pada seluruh jalur pembuatan barang
+
+- Form Tambah/Edit Produk dan Barang Baru dari Restok sekarang memakai dropdown kategori katalog, bukan input teks bebas.
+- Import Produk Baru dan Migrasi Kaspin divalidasi terhadap kategori yang sudah tersedia; template produk membawa sheet `Pilihan Kategori`.
+- Perbedaan kapital dan spasi otomatis memakai label kategori kanonis yang sudah ada. Kategori asing ditolak server sebelum produk/draft approval ditulis.
+- Guard mencakup create/edit produk, preview/commit import, Kaspin, serta barang baru melalui persetujuan restok. `Lainnya` tetap tersedia sebagai fallback sistem.
+- Shell PWA dinaikkan ke v206. Seluruh 376 tes dan dry-run Cloudflare lulus. Tidak membutuhkan SQL atau APK baru.
+- Commit implementasi: `01e9a71`. Cloudflare Version ID: `b8a203ba-6cfc-48f7-b3b3-afdde861abd0`; domain produksi telah diverifikasi menampilkan kedua dropdown dan modul kategori kanonis.
