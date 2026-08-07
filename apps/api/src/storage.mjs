@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { canonicalProductCategories, canonicalProductCategory } from '../../web/product-categories.mjs';
 
 const now = () => new Date().toISOString();
 
@@ -195,6 +196,8 @@ export class PosStore {
     if (this.db.prepare('select id from catalog_products where lower(sku)=lower(?)').get(input.sku.trim())) throw new Error('SKU sudah digunakan');
     const allBarcodes = this.catalog().flatMap((product) => product.units.map((unit) => unit.barcode).filter(Boolean));
     if (input.barcode && allBarcodes.includes(input.barcode.trim())) throw new Error('Barcode sudah digunakan produk lain');
+    const category=canonicalProductCategory(input.category,canonicalProductCategories(this.catalog()));
+    if(!category)throw new Error(`Kategori ${String(input.category??'').trim()||'-'} belum tersedia. Pilih kategori yang sudah ada pada katalog.`);
     const id = crypto.randomUUID();
     const unitId = `${id}-pcs`;
     const units = [{ id: unitId, name: input.unitName?.trim() || 'pcs', factor: 1, barcode: input.barcode?.trim() || null }];
@@ -209,7 +212,7 @@ export class PosStore {
       ...(input.tierQty > 1 && input.tierPrice > 0 ? [{ id: `${id}-tier`, customerGroupId: null, minBaseQty: Number(input.tierQty), unitPriceBase: Number(input.tierPrice) }] : [])
     ];
     this.transaction(() => {
-      this.db.prepare('insert into catalog_products values (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)').run(id, input.sku.trim(), input.name.trim(), input.category?.trim() || 'Lainnya', input.brand?.trim() || null, JSON.stringify(units), JSON.stringify(priceRules), now(), now());
+      this.db.prepare('insert into catalog_products values (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)').run(id, input.sku.trim(), input.name.trim(), category, input.brand?.trim() || null, JSON.stringify(units), JSON.stringify(priceRules), now(), now());
       for (const locationId of ['outlet-utama', 'gudang-utama']) this.db.prepare('insert into stock_balances values (?, ?, 0, 0, ?)').run(locationId, id, now());
       this.audit(actorId, 'PRODUCT_CREATED', 'product', id, { sku: input.sku.trim(), name: input.name.trim() });
     });

@@ -82,14 +82,16 @@ test('edit produk dan perubahan status memakai transaksi terproteksi',async()=>{
     if(target.includes('/rest/v1/profiles?'))return responseOf([{user_id:ids.user,tenant_id:ids.tenant,display_name:'Owner',role:'OWNER',active:true}]);
     if(target.includes('/rest/v1/outlets?'))return responseOf([{id:ids.outlet,name:'Toko',active:true}]);
     if(target.includes('/rest/v1/stock_locations?'))return responseOf([{id:ids.location,outlet_id:ids.outlet,name:'Toko',kind:'STORE'}]);
+    if(target.includes('/rest/v1/products?'))return responseOf([{id:ids.product,sku:'KOS-001',category:'Kosmetik'}]);
     if(target.includes('/rpc/')){rpcCalls.push({target,body:JSON.parse(options.body)});return responseOf({id:ids.product,name:'Lip Tint',sku:'KOS-001',active:false});}
     return responseOf({message:`Mock belum menangani ${target}`},500);
   };
   try{
-    const edited=await callApi('PUT',`products/${ids.product}`,{sku:'kos-001',name:'Lip Tint',category:'Kosmetik',retailPrice:25000,minimumStock:6,trackExpiry:true,units:[{id:ids.unit,name:'pcs',factor:1,barcode:'8991'},{name:'lusin',factor:12,barcode:'89912'}]});
+    const edited=await callApi('PUT',`products/${ids.product}`,{sku:'kos-001',name:'Lip Tint',category:' kosmetik ',retailPrice:25000,minimumStock:6,trackExpiry:true,units:[{id:ids.unit,name:'pcs',factor:1,barcode:'8991'},{name:'lusin',factor:12,barcode:'89912'}]});
     assert.equal(edited.status,200);
     assert.ok(rpcCalls[0].target.endsWith('/rpc/save_product_v6'));
     assert.equal(rpcCalls[0].body.p_product.sku,'KOS-001');
+    assert.equal(rpcCalls[0].body.p_product.category,'Kosmetik');
     assert.equal(rpcCalls[0].body.p_product.units.length,2);
     const archived=await callApi('POST',`products/${ids.product}/status`,{active:false});
     assert.equal(archived.status,200);

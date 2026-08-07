@@ -94,11 +94,18 @@ function createGuideSheet(XLSX,template,headers){
   return guide;
 }
 
-export function createTemplateWorkbook(XLSX,kind){
+export function createTemplateWorkbook(XLSX,kind,{categories=[]}={}){
   const template=workbookTemplates[kind];if(!template)throw new Error('Jenis template tidak dikenal');
-  const workbook=XLSX.utils.book_new(),sheet=XLSX.utils.aoa_to_sheet([template.headers,...template.examples]);
+  const categoryIndex=template.headers.indexOf('kategori'),choices=[...new Set(categories.map((value)=>String(value).trim()).filter(Boolean))];
+  const examples=template.examples.map((source)=>{const row=[...source];if(kind==='PRODUCTS'&&categoryIndex>=0&&choices.length)row[categoryIndex]=choices[0];return row;});
+  const workbook=XLSX.utils.book_new(),sheet=XLSX.utils.aoa_to_sheet([template.headers,...examples]);
   decorateWorkbookSheet(sheet,template,template.headers);XLSX.utils.book_append_sheet(workbook,sheet,template.sheet);
-  XLSX.utils.book_append_sheet(workbook,createGuideSheet(XLSX,template,template.headers),'Panduan');return workbook;
+  XLSX.utils.book_append_sheet(workbook,createGuideSheet(XLSX,template,template.headers),'Panduan');
+  if(kind==='PRODUCTS'&&choices.length){
+    const choiceSheet=XLSX.utils.aoa_to_sheet([['PILIHAN KATEGORI — salin persis ke kolom kategori'],...choices.map((category)=>[category])]);
+    choiceSheet['!cols']=[{wch:48}];XLSX.utils.book_append_sheet(workbook,choiceSheet,'Pilihan Kategori');
+  }
+  return workbook;
 }
 
 export function workbookMatrix(XLSX,arrayBuffer,kind){

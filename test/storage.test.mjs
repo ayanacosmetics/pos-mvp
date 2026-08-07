@@ -70,7 +70,9 @@ test('retur barang rusak tidak menambah stok jual dan tidak memulihkan HPP',()=>
 
 test('produk, pelanggan, supplier, dan promo dapat dibuat permanen', () => {
   const store = new PosStore(':memory:', products, promotionVersions);
-  const product = store.createProduct({ sku: 'NEW-001', name: 'Produk Baru', category: 'Tes', brand: 'Nusa', barcode: '990000001', retailPrice: 20000, wholesalePrice: 18000, tierQty: 12, tierPrice: 17000 }, owner.id);
+  const product = store.createProduct({ sku: 'NEW-001', name: 'Produk Baru', category: ' lip   tint ', brand: 'Nusa', barcode: '990000001', retailPrice: 20000, wholesalePrice: 18000, tierQty: 12, tierPrice: 17000 }, owner.id);
+  assert.equal(product.category,'Lip Tint');
+  assert.throws(()=>store.createProduct({sku:'NEW-002',name:'Kategori liar',category:'Kategori Baru',retailPrice:1000},owner.id),/belum tersedia/);
   assert.equal(store.catalog().some((item) => item.id === product.id), true);
   assert.equal(store.balance('outlet-utama', product.id).quantity, 0);
   assert.equal(store.createCustomer({ name: 'Toko Grosir Baru', phone: '08123', groupId: 'wholesale' }, owner.id).group_id, 'wholesale');

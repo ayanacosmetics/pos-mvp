@@ -11,6 +11,7 @@ import { barcodeModuleCount, barcodeSvg, labelSize, normalizeCode128Text } from 
 import { parseKaspinProductWorkbook, parseKaspinProductExtensionWorkbook, parseKaspinFifoWorkbooks, parseKaspinSalesWorkbooks, parseKaspinSalesWorkbookSets, parseKaspinCustomerWorkbook, parseKaspinSupplierWorkbook } from './kaspin-import.mjs';
 import { buildVariantSuggestions } from './variant-suggestions.mjs';
 import { readRestockDraft, removeRestockDraft, restockDraftStorageKey, writeRestockDraft } from './restock-draft.mjs';
+import { canonicalProductCategories, canonicalProductCategory } from './product-categories.mjs';
 
 const storedAuth = loadAuth();
 let kaspinMigrationPackage=null;
@@ -972,7 +973,7 @@ function renderProductTable() {
   });
   const active=all.filter((product)=>product.active).length,inactive=all.length-active,low=all.filter((product)=>product.active&&product.trackStock!==false&&product.minimumStock>0&&product.stockBase<=product.minimumStock).length;
   el('product-metrics').innerHTML=[['Total SKU',all.length],['Aktif dijual',active],['Nonaktif',inactive],['Stok menipis',low]].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
-  const categories=[...new Set(all.map((product)=>product.category).filter(Boolean))].sort();
+  const categories=canonicalProductCategories([...all,...state.products]);
   const brands=[...new Set(all.map((product)=>product.brand).filter(Boolean))].sort();
   el('product-category-options').innerHTML=categories.map((value)=>`<option value="${escapeHtml(value)}">`).join('');
   el('product-brand-options').innerHTML=brands.map((value)=>`<option value="${escapeHtml(value)}">`).join('');
@@ -1009,6 +1010,17 @@ function renderProductTable() {
   el('selected-product-count').textContent=`${selectedCount.toLocaleString('id-ID')} barang dipilih`;
   el('delete-selected-products').disabled=selectedCount===0;
   el('print-selected-product-labels').disabled=selectedCount===0;
+}
+
+function availableProductCategories(){
+  return canonicalProductCategories([...state.managedProducts,...state.products]);
+}
+
+function renderProductCategorySelect(selectId,selected=''){
+  const select=el(selectId),categories=availableProductCategories();if(!select)return null;
+  const canonical=canonicalProductCategory(selected||'Lainnya',categories)??categories[0];
+  select.innerHTML=categories.map((category)=>`<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
+  select.value=canonical;return canonical;
 }
 
 function selectedProductLabels(){
@@ -1494,7 +1506,7 @@ function openProductEditor(productId=null){
   el('product-dialog-eyebrow').textContent=product?'EDIT PRODUK':'PRODUK BARU';
   el('product-dialog-title').textContent=product?'Ubah produk':'Tambah produk';
   el('new-sku').value=product?.sku??'';el('new-name').value=product?.name??'';
-  el('new-category').value=product?.category??'';el('new-brand').value=product?.brand??'';
+  renderProductCategorySelect('new-category',product?.category??'Lainnya');el('new-brand').value=product?.brand??'';
   el('new-image-url').value=product?.imageUrl??'';
   state.productImageFile=null;state.productImagePreviewUrl=product?.imageUrl??'';
   renderProductPhotoPreview(state.productImagePreviewUrl);
@@ -1741,7 +1753,7 @@ function downloadImportTemplate() {
   try{
     const kind=el('import-kind').value,template=workbookTemplates[kind];
     if(!window.XLSX)throw new Error('Komponen Excel belum siap. Muat ulang aplikasi.');
-    window.XLSX.writeFile(createTemplateWorkbook(window.XLSX,kind),template.file,{compression:true});
+    window.XLSX.writeFile(createTemplateWorkbook(window.XLSX,kind,{categories:availableProductCategories()}),template.file,{compression:true});
   }catch(error){toast(error.message);}
 }
 
@@ -3577,7 +3589,7 @@ function openRestockNewProduct(seed=''){
   el('restock-new-name').value=looksBarcode?'':value;
   el('restock-new-barcode').value=looksBarcode?value:'';
   el('restock-new-sku').value='';
-  el('restock-new-category').value='Lainnya';
+  renderProductCategorySelect('restock-new-category','Lainnya');
   el('restock-new-unit').value='pcs';
   el('restock-new-min-stock').value=0;
   el('restock-new-barcode-mode').value=looksBarcode?'FACTORY':'NONE';

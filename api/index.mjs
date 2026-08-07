@@ -6,6 +6,7 @@ import { applyVoucher } from '../packages/domain/src/loyalty.mjs';
 import { calculateEmployeeCommission } from '../packages/domain/src/employee-operations.mjs';
 import { validateJournalLines } from '../packages/domain/src/ledger.mjs';
 import { evaluateSafePricePolicy, normalizeSafePricePolicy } from '../packages/domain/src/safe-price-policy.mjs';
+import { canonicalProductCategories, canonicalProductCategory } from '../apps/web/product-categories.mjs';
 
 const PERMISSIONS = {
   OWNER: ['pos.sell','purchasing.view_cost','purchasing.receive','inventory.manage','sales.return','catalog.manage','promotion.manage','report.transactions','report.view','audit.view','identity.manage_staff','identity.manage','workforce.self','workforce.manage','approval.manage','finance.owner','multioutlet.view','multioutlet.manage','pilot.manage','sale.adjust','sale.void','device.configure'],
@@ -1011,6 +1012,24 @@ function normalizeProductInput(input,id=null) {
   return normalized;
 }
 
+function requireCanonicalProductCategory(value,categoryRows){
+  const categories=canonicalProductCategories(categoryRows),canonical=canonicalProductCategory(value,categories);
+  if(!canonical)throw Object.assign(new Error(`Kategori ${String(value??'').trim()||'-'} belum tersedia. Pilih kategori yang sudah ada pada katalog.`),{status:400});
+  return canonical;
+}
+
+async function canonicalizeProductInputCategory(tenantId,input){
+  const categories=await restAll('products',`tenant_id=eq.${tenantId}&select=category`);
+  input.category=requireCanonicalProductCategory(input.category,categories);return input;
+}
+
+async function canonicalizeRestockNewProductCategories(tenantId,items){
+  if(!items.some((item)=>item?.newProduct))return items;
+  const categories=await restAll('products',`tenant_id=eq.${tenantId}&select=category`);
+  for(const item of items)if(item?.newProduct)item.newProduct={...item.newProduct,category:requireCanonicalProductCategory(item.newProduct.category,categories)};
+  return items;
+}
+
 async function assertNoSharedBarcodeConflict(tenantId,input){
   const barcodes=(input.units??[]).map((unit)=>String(unit.barcode??'').trim()).filter(Boolean);
   if(!barcodes.length)return;
@@ -2013,7 +2032,7 @@ async function previewImport(context, input) {
   const productExtension=['PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_PRICES'].includes(kind);
   const table = kind === 'PRODUCTS'||productExtension ? 'products' : kind === 'CUSTOMERS' ? 'customers' : 'suppliers';
   const codeField = kind === 'PRODUCTS'||productExtension ? 'sku' : 'code';
-  const existing = await restAll(table, `tenant_id=eq.${context.tenantId}&select=id,${codeField}`);
+  const existing = await restAll(table, `tenant_id=eq.${context.tenantId}&select=id,${codeField}${kind==='PRODUCTS'?',category':''}`);
   const existingCodes = new Set(existing.map((row) => String(row[codeField]).toUpperCase()));
   if(kind==='CUSTOMERS'){
     const groups=await rest('customer_price_groups',`tenant_id=eq.${context.tenantId}&active=eq.true&select=id,name`);
@@ -2030,6 +2049,9 @@ async function previewImport(context, input) {
     });
   }
   if (kind === 'PRODUCTS') {
+    normalized.rows.forEach((row,index)=>{
+      try{row.category=requireCanonicalProductCategory(row.category,existing);}catch(error){normalized.errors.push({row:index+2,field:'category',message:error.message});}
+    });
     const [units,familyBarcodes] = await Promise.all([
       restAll('product_units', `tenant_id=eq.${context.tenantId}&barcode=not.is.null&select=product_id,barcode`),
       restAll('product_family_barcodes',`tenant_id=eq.${context.tenantId}&select=barcode`).catch(()=>[])
@@ -3248,7 +3270,7 @@ async function routeRequest(request, response, route) {
 
   if (request.method === 'POST' && route === 'products') {
     requirePermission(session, 'catalog.manage');
-    const input = normalizeProductInput(bodyOf(request));
+    const input = await canonicalizeProductInputCategory(context.tenantId,normalizeProductInput(bodyOf(request)));
     await assertNoSharedBarcodeConflict(context.tenantId,input);
     return send(response, 201, await rpc('save_product_v6', { p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_product: input }));
   }
@@ -3275,7 +3297,7 @@ async function routeRequest(request, response, route) {
   if (request.method === 'PUT' && /^products\/[^/]+$/.test(route)) {
     requirePermission(session, 'catalog.manage');
     const productId=route.split('/')[1];
-    const input=normalizeProductInput(bodyOf(request),productId);
+    const input=await canonicalizeProductInputCategory(context.tenantId,normalizeProductInput(bodyOf(request),productId));
     await assertNoSharedBarcodeConflict(context.tenantId,input);
     return send(response,200,await rpc('save_product_v6',{p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_product:input}));
   }
@@ -5064,7 +5086,7 @@ async function routeRequest(request, response, route) {
   if (request.method === 'POST' && route === 'restock-approvals') {
     requirePermission(session, 'purchasing.receive');
     const input=bodyOf(request);requireLocationAccess(context,input.locationId);
-    const receiptItems=requirePositiveReceiptItems(input.items);
+    const receiptItems=await canonicalizeRestockNewProductCategories(context.tenantId,requirePositiveReceiptItems(input.items));
     const purchaseOrderId=receiptItems.find?.((item)=>item?.purchaseOrderId)?.purchaseOrderId??null;
     if(purchaseOrderId){
       const purchaseOrder=(await loadPurchaseOrders(context.tenantId,purchaseOrderId,context.locationIds))[0];

@@ -28,6 +28,15 @@ test('template barang adalah workbook sederhana dengan SKU opsional dan panduan'
   assert.match(workbook.Sheets.Barang.A1.c[0].t,/Opsional untuk baru \/ wajib saat edit/);
 });
 
+test('template import produk membawa daftar kategori katalog yang harus dipilih',async()=>{
+  const XLSX=await sheetJs(),workbook=createTemplateWorkbook(XLSX,'PRODUCTS',{categories:['Bedak','Lip Tint','Lainnya']});
+  assert.deepEqual([...workbook.SheetNames],['Barang','Panduan','Pilihan Kategori']);
+  const choices=XLSX.utils.sheet_to_json(workbook.Sheets['Pilihan Kategori'],{header:1,defval:''});
+  assert.deepEqual(Array.from(choices.slice(1).map((row)=>row[0])),['Bedak','Lip Tint','Lainnya']);
+  const rows=XLSX.utils.sheet_to_json(workbook.Sheets.Barang,{header:1,defval:''}),categoryIndex=rows[0].indexOf('kategori');
+  assert.equal(rows[1][categoryIndex],'Bedak');
+});
+
 test('multi satuan, varian, dan harga pelanggan memakai file terpisah serta lolos roundtrip',async()=>{
   const XLSX=await sheetJs();
   for(const kind of ['PRODUCT_FAMILIES','PRODUCT_UNITS','PRODUCT_VARIANTS','PRODUCT_OPTIONS','PRODUCT_PRICES']){
