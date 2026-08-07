@@ -82,4 +82,4 @@ Gunakan bersama `PROJECT-HANDOFF.md`. Baca masing-masing sekali saja. Jangan men
 - Migrasi `202608070001_catalog_manage_product_permissions.sql` menyelaraskan simpan/edit dan perubahan status produk dengan izin granular `catalog.manage`.
 - Manager tanpa override memakai izin bawaan; staff dengan daftar izin khusus wajib memiliki `catalog.manage`; akun tanpa izin tetap ditolak. Hapus produk massal tetap Owner/Admin.
 - Seluruh 378 tes lulus. Commit: `57d0ed6`.
-- **Belum aktif di produksi sampai migrasi SQL dijalankan di Supabase.** Tidak memerlukan APK atau deploy Cloudflare.
+- Migrasi SQL telah berhasil dijalankan di Supabase pada 2026-08-07; perbaikan aktif di produksi. Tidak memerlukan APK atau deploy Cloudflare.
