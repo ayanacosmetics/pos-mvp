@@ -552,9 +552,10 @@ public final class MainActivity extends Activity {
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (event.getAction() != KeyEvent.ACTION_DOWN || !isExternalScannerEvent(event)) {
+        if (!isExternalScannerEvent(event)) {
             return super.dispatchKeyEvent(event);
         }
+        if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
         long now = System.currentTimeMillis();
         if (now - scannerLastKeyAt > 250) {
             scannerBuffer.setLength(0);
@@ -569,7 +570,7 @@ public final class MainActivity extends Activity {
                 dispatchBarcode(barcode);
                 return true;
             }
-            return super.dispatchKeyEvent(event);
+            return true;
         }
         if (event.getKeyCode() == KeyEvent.KEYCODE_DEL) {
             if (scannerBuffer.length() > 0) scannerBuffer.deleteCharAt(scannerBuffer.length() - 1);
@@ -580,7 +581,7 @@ public final class MainActivity extends Activity {
             scannerBuffer.append((char) unicode);
             return true;
         }
-        return super.dispatchKeyEvent(event);
+        return true;
     }
 
     private void dispatchBarcode(String barcode) {

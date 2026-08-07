@@ -36,3 +36,11 @@ Gunakan bersama `PROJECT-HANDOFF.md`. Baca masing-masing sekali saja. Jangan men
 - Tidak memerlukan SQL.
 - Seluruh 367 tes lulus; commit fitur `6c0d3c2 fix: accept canonical WebView location origin` sudah didorong ke `main`.
 - Deployment Cloudflare berhasil, Version ID `c2c3bd47-5b5a-4dd0-be53-c99198e801c4`; URL publik APK dan API health sudah diverifikasi.
+
+## APK Android 1.4.3 — scanner tetap di halaman aktif
+
+- Event HID non-barcode saat scanner tersambung ulang, termasuk Enter kosong dan key-up, dikonsumsi APK agar tidak mengaktifkan tombol/menu WebView.
+- Barcode valid diarahkan menurut halaman aktif: Kasir, draft PO, atau langkah Barang pada penerimaan/restok; handler scanner tidak memanggil navigasi.
+- APK memakai versionCode `12`, versionName `1.4.3`, package dan sertifikat permanen yang sama.
+- APK release identik di `releases/` dan `apps/web/downloads/`, SHA-256 `28F7587A121207582DA94E0E55464054932FF5524477FD6EA55B115D02A7F931`.
+- Build Android berhasil dan seluruh 368 tes lulus. Tidak memerlukan SQL.

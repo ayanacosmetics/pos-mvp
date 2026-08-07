@@ -69,7 +69,7 @@ test('pemilih barang tambahan ringkas dan dapat membuat draft produk tanpa scan'
   assert.match(app, /SKU atau barcode sudah dipakai/);
   assert.match(app, /appendRestockNewLine\(productKey,payload\)/);
   assert.match(app, /function generateInternalBarcode/);
-  assert.match(app, /barcodeCameraTarget==='restock'[\s\S]*openRestockNewProduct\(value\)/);
+  assert.match(app, /target==='restock'[\s\S]*openRestockNewProduct\(value\)/);
 });
 
 test('desktop membatasi daftar di panel dan mobile mempertahankan navigasi lanjut', () => {

@@ -29,8 +29,8 @@ test('katalog masa depan memisahkan etalase, barcode bersama, opsi, dan SKU jual
 
 test('barcode SKU selalu dicari sebelum barcode bersama dan pemindaian bersama meminta pilihan',async()=>{
   const [app,api]=await Promise.all([read('apps/web/app.js'),read('api/index.mjs')]);
-  const camera=app.slice(app.indexOf('async function handleCameraBarcode'),app.indexOf('function stopBarcodeCamera'));
-  assert.ok(camera.indexOf('barcodeMatch(value)')<camera.indexOf('sharedBarcodeProducts(value)'));
-  assert.match(camera,/openVariantPicker\(familyMatches,\{target:barcodeCameraTarget,sharedBarcode:true\}\)/);
+  const scanner=app.slice(app.indexOf('async function handleBarcodeForTarget'),app.indexOf('function stopBarcodeCamera'));
+  assert.ok(scanner.indexOf('barcodeMatch(value)')<scanner.indexOf('sharedBarcodeProducts(value)'));
+  assert.match(scanner,/openVariantPicker\(familyMatches,\{target,sharedBarcode:true\}\)/);
   assert.match(api,/Barcode .* adalah barcode bersama etalase/);
 });

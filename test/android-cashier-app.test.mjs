@@ -31,8 +31,8 @@ const androidIcon = await readFile(
 const pwaIcon = await readFile(new URL('../apps/web/icon-512.svg', import.meta.url), 'utf8');
 const releaseApkUrl = new URL('../releases/Kasir-Nusa-POS-1.3.0-uat.apk', import.meta.url);
 const publicApkUrl = new URL('../apps/web/downloads/Kasir-Nusa-POS-1.3.0-uat.apk', import.meta.url);
-const finalReleaseApkUrl = new URL('../releases/Kasir-Nusa-POS-1.4.2.apk', import.meta.url);
-const publicFinalApkUrl = new URL('../apps/web/downloads/Kasir-Nusa-POS-1.4.2.apk', import.meta.url);
+const finalReleaseApkUrl = new URL('../releases/Kasir-Nusa-POS-1.4.3.apk', import.meta.url);
+const publicFinalApkUrl = new URL('../apps/web/downloads/Kasir-Nusa-POS-1.4.3.apk', import.meta.url);
 const vercelConfig = await readFile(new URL('../vercel.json', import.meta.url), 'utf8');
 
 test('Android cashier app locks its WebView to the production POS and blocks unsafe file access', () => {
@@ -86,6 +86,17 @@ test('Bluetooth HID scanner input is forwarded to the active POS page', () => {
   assert.match(webApp, /handleNativeScannerBarcode/);
 });
 
+test('scanner HID tidak memicu navigasi saat tersambung ulang dan mengikuti halaman kerja aktif', () => {
+  const dispatch = activity.match(/public boolean dispatchKeyEvent\(KeyEvent event\)[\s\S]*?private void dispatchBarcode/)?.[0] ?? '';
+  assert.match(dispatch, /if \(event\.getAction\(\) != KeyEvent\.ACTION_DOWN\) return true/);
+  assert.equal((dispatch.match(/super\.dispatchKeyEvent\(event\)/g) ?? []).length, 1);
+  assert.match(dispatch, /barcode\.length\(\) >= 3[\s\S]*dispatchBarcode\(barcode\)[\s\S]*return true/);
+  assert.match(webApp, /state\.restockWizardStep==='items'\)target='restock'/);
+  assert.match(webApp, /purchase-view-order[\s\S]*target='po'/);
+  assert.match(webApp, /handleBarcodeForTarget\(barcode,target\)/);
+  assert.doesNotMatch(webApp.match(/async function handleNativeScannerBarcode[\s\S]*?\n\}/)?.[0] ?? '', /showPage\(/);
+});
+
 test('scanner dipasangkan dari Bluetooth Android dan aplikasi tidak mengambil alih koneksi SPP', () => {
   assert.doesNotMatch(manifest, /android\.software\.companion_device_setup/);
   assert.doesNotMatch(activity, /CompanionDeviceManager|AssociationRequest|connectScannerSocket/);
@@ -96,8 +107,8 @@ test('scanner dipasangkan dari Bluetooth Android dan aplikasi tidak mengambil al
 });
 
 test('APK pembaruan mempertahankan printer SPP tetapi scanner hanya memakai HID', () => {
-  assert.match(androidBuild, /versionCode 11/);
-  assert.match(androidBuild, /versionName "1\.4\.2"/);
+  assert.match(androidBuild, /versionCode 12/);
+  assert.match(androidBuild, /versionName "1\.4\.3"/);
   assert.doesNotMatch(androidBuild, /release\s*\{[\s\S]*signingConfig signingConfigs\.debug/);
   assert.match(androidBuild, /KASIR_NUSA_KEYSTORE_FILE/);
   assert.match(androidBuild, /KASIR_NUSA_KEYSTORE_PASSWORD/);
@@ -124,7 +135,7 @@ test('APK UAT v1.3.0 tersedia sebagai unduhan yang identik dengan hasil build', 
   assert.match(vercelConfig, /attachment; filename=Kasir-Nusa-POS-1\.3\.0-uat\.apk/);
 });
 
-test('APK final v1.4.2 dengan perbaikan origin lokasi tersedia sebagai pembaruan resmi yang identik', async () => {
+test('APK final v1.4.3 menjaga halaman aktif saat scanner tersambung ulang', async () => {
   const [finalReleaseApk, publicFinalApk, releaseApk] = await Promise.all([
     readFile(finalReleaseApkUrl),
     readFile(publicFinalApkUrl),
@@ -132,8 +143,8 @@ test('APK final v1.4.2 dengan perbaikan origin lokasi tersedia sebagai pembaruan
   ]);
   assert.deepEqual(publicFinalApk, finalReleaseApk);
   assert.notDeepEqual(finalReleaseApk, releaseApk);
-  assert.match(vercelConfig, /\/downloads\/Kasir-Nusa-POS-1\.4\.2\.apk/);
-  assert.match(vercelConfig, /attachment; filename=Kasir-Nusa-POS-1\.4\.2\.apk/);
+  assert.match(vercelConfig, /\/downloads\/Kasir-Nusa-POS-1\.4\.3\.apk/);
+  assert.match(vercelConfig, /attachment; filename=Kasir-Nusa-POS-1\.4\.3\.apk/);
 });
 
 test('APK dan PWA memakai nama serta identitas visual Kasir Nusa POS yang konsisten', () => {

@@ -3672,21 +3672,25 @@ function sharedBarcodeProducts(value){
   return state.products.filter((product)=>(product.familyId||product.familyCode)===familyKey);
 }
 
-async function handleCameraBarcode(value) {
+async function handleBarcodeForTarget(value,target) {
   const exact = barcodeMatch(value);
   const familyMatches=exact?[]:sharedBarcodeProducts(value);
-  if(familyMatches.length)return openVariantPicker(familyMatches,{target:barcodeCameraTarget,sharedBarcode:true});
-  if (!exact && barcodeCameraTarget === 'pos' && await tryScannedVoucher(value)) return;
-  if(!exact&&barcodeCameraTarget==='restock'&&state.session.permissions.includes('catalog.manage')&&['OWNER','ADMIN'].includes(state.session.user.role))return openRestockNewProduct(value);
+  if(familyMatches.length)return openVariantPicker(familyMatches,{target,sharedBarcode:true});
+  if (!exact && target === 'pos' && await tryScannedVoucher(value)) return;
+  if(!exact&&target==='restock'&&state.session.permissions.includes('catalog.manage')&&['OWNER','ADMIN'].includes(state.session.user.role))return openRestockNewProduct(value);
   if (!exact) return toast(`Barcode ${value} belum terdaftar pada produk.`);
-  if (barcodeCameraTarget === 'pos') {
+  if (target === 'pos') {
     await addScannedProduct(exact.product, exact.unit);
     el('product-search').value = '';
     return;
   }
-  if (['po', 'restock'].includes(barcodeCameraTarget)) {
-    await choosePurchaseProduct(barcodeCameraTarget, exact.product.id, exact.unit.id);
+  if (['po', 'restock'].includes(target)) {
+    await choosePurchaseProduct(target, exact.product.id, exact.unit.id);
   }
+}
+
+async function handleCameraBarcode(value) {
+  return handleBarcodeForTarget(value,barcodeCameraTarget);
 }
 
 function stopBarcodeCamera() {
@@ -3767,14 +3771,12 @@ async function startNativeBarcodeDetection(video) {
 async function handleNativeScannerBarcode(value) {
   const barcode = String(value ?? '').trim();
   if (!barcode) return;
-  if (!el('page-pos').classList.contains('active')) return toast('Buka halaman Kasir sebelum memindai barang.');
-  const exact = barcodeMatch(barcode);
-  const familyMatches=exact?[]:sharedBarcodeProducts(barcode);
-  if(familyMatches.length)return openVariantPicker(familyMatches,{target:'pos',sharedBarcode:true});
-  if (!exact && await tryScannedVoucher(barcode)) return;
-  if (!exact) return toast(`Barcode ${barcode} belum terdaftar pada produk.`);
-  await addScannedProduct(exact.product, exact.unit);
-  el('product-search').value = '';
+  let target=null;
+  if(el('page-pos').classList.contains('active'))target='pos';
+  else if(el('page-restock').classList.contains('active')&&!el('purchase-view-receipt').classList.contains('hidden')&&state.restockWizardStep==='items')target='restock';
+  else if(el('page-restock').classList.contains('active')&&!el('purchase-view-order').classList.contains('hidden'))target='po';
+  if(!target)return toast('Buka halaman Kasir, draft PO, atau langkah Barang pada penerimaan sebelum memindai.');
+  await handleBarcodeForTarget(barcode,target);
 }
 
 async function startZxingBarcodeDetection(video) {
