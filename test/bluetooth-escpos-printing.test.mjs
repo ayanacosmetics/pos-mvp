@@ -31,17 +31,18 @@ test('struk ESC/POS berisi data pelanggan tanpa membocorkan penyesuaian harga in
   assert.doesNotMatch(text, /RAHASIA|penyesuaian|modal/i);
 });
 
-test('struk ESC/POS mencantumkan kode dan potongan promo pada produk terkait', () => {
+test('struk ESC/POS mencantumkan nilai diskon produk tanpa identitas internal', () => {
   const bytes = buildEscPosReceipt({
     receiptNo:'UTM-000126',occurredAt:'2026-08-08T10:00:00.000Z',cashier:'Kasir',
     quote:{lines:[{
       productName:'Lip Tint Rose',qty:2,unitName:'pcs',gross:50000,discount:10000,total:40000,
-      promotions:[{id:'promo-1',code:'LIP20',version:1,discount:10000,reason:'Diskon produk'}]
+      promotions:[{id:'promo-1',code:'LIP20',name:'Diskon Lip Tint',version:1,discount:10000,reason:'Diskon produk'}]
     }],subtotal:50000,discountTotal:10000,grandTotal:40000}
   },[],{paperWidth:58},{business:{name:'Ayana Cosmetics'},outlet:{name:'Toko Utama'}});
   const text=new TextDecoder().decode(bytes);
-  assert.match(text,/Promo LIP20: -Rp 10\.000/);
-  assert.match(text,/Promo & diskon\s+-Rp 10\.000/);
+  assert.match(text,/Diskon: -Rp 10\.000/);
+  assert.doesNotMatch(text,/LIP20|Diskon Lip Tint/);
+  assert.match(text,/ANDA HEMAT\s+Rp 10\.000/);
 });
 
 test('cetak ulang ESC/POS menandai barang dan total yang sudah diretur', () => {

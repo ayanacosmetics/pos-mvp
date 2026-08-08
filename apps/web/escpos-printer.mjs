@@ -175,20 +175,20 @@ export function buildEscPosReceipt(receipt, payments = [], settings = {}, contex
     if (layout.showPriceType&&priceLabel) bytes.push(...lineBytes(priceLabel));
     bytes.push(...lineBytes(columns(`${line.qty} ${line.unitName} x ${rupiah(line.customerUnitPrice)}`, rupiah(line.total), width)));
     for(const promotion of line.customerPromotions??[]){
-      const label=`  Promo ${promotion.code}: -${rupiah(Math.abs(Number(promotion.discount)))}`;
+      const label=`  Diskon: -${rupiah(Math.abs(Number(promotion.discount)))}`;
       for(const row of wrap(label,width))bytes.push(...lineBytes(row));
     }
     if(Number(line.returnedQty)>0)bytes.push(...lineBytes(`  Diretur ${Number(line.returnedQty).toLocaleString('id-ID')} ${line.unitName}: -${rupiah(line.returnedTotal)}`));
   }
   bytes.push(...lineBytes(separator));
   bytes.push(...lineBytes(columns('Subtotal', rupiah(quote.subtotal), width)));
-  if (Math.abs(Number(quote.discountTotal)) > 0.01) bytes.push(...lineBytes(columns('Promo & diskon', `-${rupiah(Math.abs(quote.discountTotal))}`, width)));
   const returnTotal=Number(receipt.returnTotal??0);
   if(returnTotal){
     bytes.push(...lineBytes(columns('TOTAL AWAL',rupiah(quote.grandTotal),width)));
     bytes.push(...lineBytes(columns('RETUR / REFUND',`-${rupiah(returnTotal)}`,width)));
     bytes.push(ESC,0x45,0x01,...lineBytes(columns('TOTAL SETELAH RETUR',rupiah(receipt.netTotal??Math.max(0,quote.grandTotal-returnTotal)),width)),ESC,0x45,0x00);
   }else bytes.push(ESC, 0x45, 0x01, ...lineBytes(columns('TOTAL', rupiah(quote.grandTotal), width)), ESC, 0x45, 0x00);
+  if (Math.abs(Number(quote.discountTotal)) > 0.01) bytes.push(ESC,0x45,0x01,...lineBytes(columns('ANDA HEMAT',rupiah(Math.abs(quote.discountTotal)),width)),ESC,0x45,0x00);
   if(layout.showPaymentDetail)for (const payment of payments) bytes.push(...lineBytes(columns(receiptPaymentLabel(payment.method), rupiah(payment.amount), width)));
   if(layout.showPaymentDetail&&paymentSummary.hasCash){
     bytes.push(...lineBytes(columns('Uang diterima',rupiah(paymentSummary.cashReceived),width)));

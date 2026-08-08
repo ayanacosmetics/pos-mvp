@@ -16,6 +16,15 @@ test('halaman promo memisahkan dashboard dari editor empat langkah',()=>{
   assert.match(app,/function showPromotionWorkspace/);assert.match(app,/function showPromoEditorTab/);
 });
 
+test('kode promo menjadi identitas internal otomatis dan bukan voucher kasir',()=>{
+  assert.match(html,/Kode internal \(otomatis\)/);
+  assert.match(html,/bukan kode voucher pelanggan/i);
+  assert.match(html,/Promo kasir diterapkan otomatis tanpa memasukkan voucher/);
+  assert.match(app,/function generatedPromotionCode/);
+  assert.match(app,/function syncPromotionCodeFromName/);
+  assert.doesNotMatch(app,/Kode promo wajib diisi/);
+});
+
 test('sasaran promo memakai kategori katalog dan pencarian multi-produk',()=>{
   assert.match(html,/id="promo-category"[^>]*><option value="">Pilih kategori/);
   assert.match(html,/id="promo-target-product-search"[^>]+nama, SKU, atau barcode/i);

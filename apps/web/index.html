@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=208">
+  <link rel="stylesheet" href="/styles.css?v=209">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -1015,7 +1015,7 @@
           </nav>
 
           <div class="promo-editor-body">
-            <section class="promo-editor-panel" data-promo-panel="identity"><div class="promo-panel-heading"><div><p class="eyebrow">IDENTITAS</p><h3>Promo apa yang dibuat?</h3></div><span class="promo-step-hint">Kode yang sama akan membuat versi baru</span></div><div class="form-grid compact"><label>Kode promo<input id="promo-code" maxlength="30" required placeholder="GROSIR5"><small>Huruf, angka, garis, atau garis bawah.</small></label><label>Nama promo<input id="promo-name" required maxlength="120" placeholder="Diskon grosir Lip Tint"></label><label>Jenis promo<select id="promo-type"><option value="PERCENT_ITEM">Diskon % per barang</option><option value="FIXED_ITEM">Potongan rupiah per pcs</option><option value="FIXED_ORDER">Potongan rupiah total belanja</option><option value="SPECIAL_PRICE">Harga khusus per pcs</option><option value="PERCENT_ORDER">Diskon % total belanja</option><option value="BUY_X_GET_Y">Beli X gratis Y</option><option value="BUNDLE_FIXED">Paket bundling · harga khusus</option></select></label></div><div class="promo-type-explainer"><strong id="promo-type-title">Diskon persentase barang</strong><p id="promo-type-help">Potongan dihitung dari harga barang yang memenuhi sasaran dan syarat.</p></div></section>
+            <section class="promo-editor-panel" data-promo-panel="identity"><div class="promo-panel-heading"><div><p class="eyebrow">IDENTITAS</p><h3>Promo apa yang dibuat?</h3></div><span class="promo-step-hint">Promo kasir diterapkan otomatis tanpa memasukkan voucher</span></div><div class="form-grid compact"><label>Nama promo<input id="promo-name" required maxlength="120" placeholder="Diskon grosir Lip Tint"><small>Nama ini membantu Anda mengenali program promo.</small></label><label>Kode internal (otomatis)<input id="promo-code" maxlength="30" placeholder="Dibuat dari nama promo"><small>Dibuat otomatis untuk laporan dan audit; bukan kode voucher pelanggan. Dapat diedit bila diperlukan.</small></label><label>Jenis promo<select id="promo-type"><option value="PERCENT_ITEM">Diskon % per barang</option><option value="FIXED_ITEM">Potongan rupiah per pcs</option><option value="FIXED_ORDER">Potongan rupiah total belanja</option><option value="SPECIAL_PRICE">Harga khusus per pcs</option><option value="PERCENT_ORDER">Diskon % total belanja</option><option value="BUY_X_GET_Y">Beli X gratis Y</option><option value="BUNDLE_FIXED">Paket bundling · harga khusus</option></select></label></div><div class="promo-type-explainer"><strong id="promo-type-title">Diskon persentase barang</strong><p id="promo-type-help">Potongan dihitung dari harga barang yang memenuhi sasaran dan syarat.</p></div></section>
 
             <section class="promo-editor-panel hidden" data-promo-panel="target"><div class="promo-panel-heading"><div><p class="eyebrow">SASARAN</p><h3>Siapa dan barang apa yang menerima promo?</h3></div></div><div class="form-grid compact">
               <label>Sasaran barang<select id="promo-target-type"><option value="ALL">Semua barang</option><option value="PRODUCT">Produk tertentu</option><option value="CATEGORY">Kategori tertentu</option><option value="BRAND">Merek tertentu</option></select></label>
@@ -1192,6 +1192,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=208"></script>
+  <script type="module" src="/app.js?v=209"></script>
 </body>
 </html>
