@@ -83,3 +83,10 @@ Gunakan bersama `PROJECT-HANDOFF.md`. Baca masing-masing sekali saja. Jangan men
 - Manager tanpa override memakai izin bawaan; staff dengan daftar izin khusus wajib memiliki `catalog.manage`; akun tanpa izin tetap ditolak. Hapus produk massal tetap Owner/Admin.
 - Seluruh 378 tes lulus. Commit: `57d0ed6`.
 - Migrasi SQL telah berhasil dijalankan di Supabase pada 2026-08-07; perbaikan aktif di produksi. Tidak memerlukan APK atau deploy Cloudflare.
+
+## Audit izin granular lintas role (2026-08-08)
+
+- Ditemukan pola lama pemeriksaan jabatan tetap pada fungsi database meskipun UI/API sudah memakai `custom_permissions`; laporan awal terjadi pada `sale.adjust`.
+- Migrasi `202608080001_align_granular_permissions.sql` menambahkan satu pemeriksa izin efektif yang mengikuti API dan menyelaraskan jalur diskon/harga manual, retur penjualan, promo, laporan, persetujuan, jadwal staf, transfer antar-outlet, pembelian/restok, pembayaran supplier/pelanggan, serta void penjualan.
+- Hak Owner yang sengaja sensitif tetap tidak diperluas: hapus produk massal, impor penuh, reset/restore data, keuangan Owner, jurnal manual, dan persetujuan akhir PO bernilai besar.
+- Pengujian penuh: 381 lulus. Migrasi SQL ini masih harus dijalankan di Supabase agar aktif di produksi; tidak memerlukan APK atau deploy Cloudflare.
