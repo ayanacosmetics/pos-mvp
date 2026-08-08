@@ -31,6 +31,19 @@ test('struk ESC/POS berisi data pelanggan tanpa membocorkan penyesuaian harga in
   assert.doesNotMatch(text, /RAHASIA|penyesuaian|modal/i);
 });
 
+test('struk ESC/POS mencantumkan kode dan potongan promo pada produk terkait', () => {
+  const bytes = buildEscPosReceipt({
+    receiptNo:'UTM-000126',occurredAt:'2026-08-08T10:00:00.000Z',cashier:'Kasir',
+    quote:{lines:[{
+      productName:'Lip Tint Rose',qty:2,unitName:'pcs',gross:50000,discount:10000,total:40000,
+      promotions:[{id:'promo-1',code:'LIP20',version:1,discount:10000,reason:'Diskon produk'}]
+    }],subtotal:50000,discountTotal:10000,grandTotal:40000}
+  },[],{paperWidth:58},{business:{name:'Ayana Cosmetics'},outlet:{name:'Toko Utama'}});
+  const text=new TextDecoder().decode(bytes);
+  assert.match(text,/Promo LIP20: -Rp 10\.000/);
+  assert.match(text,/Promo & diskon\s+-Rp 10\.000/);
+});
+
 test('cetak ulang ESC/POS menandai barang dan total yang sudah diretur', () => {
   const bytes=buildEscPosReceipt({
     receiptNo:'UTM-000124',occurredAt:'2026-07-28T10:00:00.000Z',cashier:'Kasir',
@@ -68,6 +81,8 @@ test('UI printer Bluetooth Classic menyediakan koneksi, tes, status, dan fallbac
     assert.match(html, new RegExp(`id="${id}"`));
   }
   assert.match(script, /printReceiptDirect/);
+  assert.match(script, /receipt-line-promotion/);
+  assert.match(script, /receiptPromotionLabel/);
   assert.match(script, /Struk tetap tersimpan dan dapat dicetak ulang/);
   assert.match(printer, /navigator\.serial\.requestPort\(\)/);
   assert.match(printer, /activePort\.open\(\{ baudRate: 9600 \}\)/);

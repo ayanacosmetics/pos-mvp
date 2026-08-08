@@ -106,6 +106,8 @@ test('promo pelanggan tidak digabung dengan penyesuaian harga internal', () => {
   assert.equal(receipt.discountTotal,10000);
   assert.equal(receipt.grandTotal,80000);
   assert.equal(receipt.internalPriceAdjustment,10000);
+  assert.deepEqual(receipt.lines[0].customerPromotions,[{code:'PROMO10',discount:10000,reason:''}]);
+  assert.equal(receipt.lines[0].customerPromotionDiscount,10000);
 });
 
 test('sidik jari berubah ketika jumlah, kelompok pelanggan, atau aturan berubah', () => {

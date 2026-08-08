@@ -10,9 +10,18 @@ export function customerReceiptView(quote = {}) {
         .reduce((sum, promotion) => roundMoney(sum + Number(promotion.discount ?? 0)), 0)
       : 0;
     internalPriceAdjustment = roundMoney(internalPriceAdjustment + lineInternal);
+    const customerPromotions = (line.promotions ?? [])
+      .filter((promotion) => !promotion.manual && Number(promotion.discount ?? 0) > 0)
+      .map((promotion) => ({
+        code: String(promotion.code ?? promotion.name ?? 'PROMO'),
+        discount: roundMoney(Number(promotion.discount)),
+        reason: String(promotion.reason ?? '')
+      }));
     return {
       ...line,
-      customerUnitPrice: roundMoney((Number(line.gross) - lineInternal) / Number(line.qty || 1))
+      customerUnitPrice: roundMoney((Number(line.gross) - lineInternal) / Number(line.qty || 1)),
+      customerPromotions,
+      customerPromotionDiscount: roundMoney(customerPromotions.reduce((sum, promotion) => sum + promotion.discount, 0))
     };
   });
   return {

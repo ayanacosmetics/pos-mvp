@@ -174,6 +174,10 @@ export function buildEscPosReceipt(receipt, payments = [], settings = {}, contex
     for (const row of wrap(line.productName, width)) bytes.push(...lineBytes(row));
     if (layout.showPriceType&&priceLabel) bytes.push(...lineBytes(priceLabel));
     bytes.push(...lineBytes(columns(`${line.qty} ${line.unitName} x ${rupiah(line.customerUnitPrice)}`, rupiah(line.total), width)));
+    for(const promotion of line.customerPromotions??[]){
+      const label=`  Promo ${promotion.code}: -${rupiah(Math.abs(Number(promotion.discount)))}`;
+      for(const row of wrap(label,width))bytes.push(...lineBytes(row));
+    }
     if(Number(line.returnedQty)>0)bytes.push(...lineBytes(`  Diretur ${Number(line.returnedQty).toLocaleString('id-ID')} ${line.unitName}: -${rupiah(line.returnedTotal)}`));
   }
   bytes.push(...lineBytes(separator));
