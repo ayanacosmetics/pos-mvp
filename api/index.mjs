@@ -1146,6 +1146,36 @@ function businessPayload(row = {}) {
   };
 }
 
+async function validatedPromotionInput(context,input={}){
+  const products=await loadCatalog(context.tenantId,context.storeLocation?.id,context.outlet?.id),productIds=new Set(products.map((product)=>product.id));
+  const condition={...(input.condition??{})},reward={...(input.reward??{})};
+  const uniqueIds=(values)=>[...new Set((Array.isArray(values)?values:[]).map(String).filter(Boolean))];
+  condition.productIds=uniqueIds(condition.productIds);
+  if(condition.productIds.some((id)=>!productIds.has(id)))throw Object.assign(new Error('Ada produk sasaran promo yang tidak ditemukan atau sudah tidak aktif'),{status:400});
+  if(Array.isArray(condition.categories)&&condition.categories.length){
+    const canonical=canonicalProductCategory(condition.categories[0],products);
+    if(!canonical)throw Object.assign(new Error('Kategori sasaran tidak tersedia pada katalog produk'),{status:400});
+    condition.categories=[canonical];
+  }
+  if(Array.isArray(condition.brands)&&condition.brands.length){
+    const brands=[...new Map(products.map((product)=>String(product.brand??'').trim()).filter(Boolean).map((brand)=>[brand.toLocaleLowerCase('id'),brand])).values()];
+    const selected=brands.find((brand)=>brand.toLocaleLowerCase('id')===String(condition.brands[0]).trim().toLocaleLowerCase('id'));
+    if(!selected)throw Object.assign(new Error('Merek sasaran tidak tersedia pada katalog produk'),{status:400});condition.brands=[selected];
+  }
+  if(Array.isArray(condition.bundle)){
+    condition.bundle=condition.bundle.map((item)=>({productId:String(item?.productId??''),qty:Number(item?.qty)}));
+    if(condition.bundle.some((item)=>!productIds.has(item.productId)||!(item.qty>0)))throw Object.assign(new Error('Produk atau jumlah paket bundling tidak valid'),{status:400});
+  }
+  reward.productIds=uniqueIds(reward.productIds);
+  if(reward.productIds.some((id)=>!productIds.has(id)))throw Object.assign(new Error('Produk hadiah tidak ditemukan atau sudah tidak aktif'),{status:400});
+  const startsAt=new Date(input.startsAt),endsAt=new Date(input.endsAt);
+  if(!Number.isFinite(startsAt.getTime())||!Number.isFinite(endsAt.getTime())||endsAt<=startsAt)throw Object.assign(new Error('Periode promo tidak valid'),{status:400});
+  const days=uniqueIds(condition.schedule?.daysOfWeek).map(Number);
+  if(days.some((day)=>!Number.isInteger(day)||day<0||day>6)||!days.length)throw Object.assign(new Error('Hari berlaku promo tidak valid'),{status:400});
+  condition.schedule={...(condition.schedule??{}),daysOfWeek:days};
+  return {...input,code:String(input.code??'').trim().toUpperCase(),name:String(input.name??'').trim(),condition,reward,startsAt:startsAt.toISOString(),endsAt:endsAt.toISOString()};
+}
+
 function normalizeReceiptLayout(input = {}) {
   const choice=(value,allowed,fallback)=>allowed.includes(value)?value:fallback;
   const boolean=(key,fallback=true)=>input[key]===undefined?fallback:Boolean(input[key]);
@@ -3637,7 +3667,7 @@ async function routeRequest(request, response, route) {
 
   if (request.method === 'POST' && route === 'promotions/publish') {
     requirePermission(session, 'promotion.manage');
-    const input = bodyOf(request);
+    const input = await validatedPromotionInput(context,bodyOf(request));
     return send(response, 201, { ...(await rpc('publish_promotion_v2', { p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_rule: input })), code: input.code, name: input.name });
   }
 

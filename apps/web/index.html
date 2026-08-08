@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=206">
+  <link rel="stylesheet" href="/styles.css?v=207">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -999,39 +999,49 @@
         </form>
       </div></section>
 
-      <section id="page-promotions" class="page"><div class="content-width">
-        <div class="page-title"><div><p class="eyebrow">MESIN PROMO 2.0</p><h1>Promo terjadwal dan konsisten</h1><p class="muted">Satu aturan yang sama dipakai POS online, offline, Android PWA, dan Windows PWA.</p></div><span id="promo-version" class="pill success">Aturan aktif</span></div>
-        <div class="promo-advanced-layout">
-          <form id="promotion-form" class="surface promo-advanced-editor">
-            <section class="promo-editor-section"><p class="eyebrow">IDENTITAS PROMO</p><div class="form-grid compact"><label>Kode promo<input id="promo-code" maxlength="30" required placeholder="GROSIR5"></label><label>Nama promo<input id="promo-name" required placeholder="Diskon grosir Lip Tint"></label><label>Jenis promo<select id="promo-type"><option value="PERCENT_ITEM">Diskon % barang</option><option value="FIXED_ITEM">Potongan rupiah / pcs</option><option value="FIXED_ORDER">Potongan rupiah total belanja</option><option value="SPECIAL_PRICE">Harga khusus / pcs</option><option value="PERCENT_ORDER">Diskon % total belanja</option><option value="BUY_X_GET_Y">Beli X gratis Y</option><option value="BUNDLE_FIXED">Paket bundling</option></select></label></div></section>
-            <section class="promo-editor-section"><p class="eyebrow">SASARAN & SYARAT</p><div class="form-grid compact">
-              <label>Sasaran<select id="promo-target-type"><option value="ALL">Semua barang</option><option value="PRODUCT">Produk tertentu</option><option value="CATEGORY">Kategori</option><option value="BRAND">Merek</option></select></label>
-              <label id="promo-target-product-wrap" class="hidden">Produk<select id="promo-target-product"></select></label>
-              <label id="promo-target-category-wrap" class="hidden">Kategori<input id="promo-category" list="product-category-options"></label>
-              <label id="promo-target-brand-wrap" class="hidden">Merek<input id="promo-brand" list="product-brand-options"></label>
+      <section id="page-promotions" class="page"><div class="content-width promo-workspace">
+        <div class="page-title promo-page-title"><div><p class="eyebrow">PUSAT PROMO</p><h1 id="promo-page-heading">Program penjualan</h1><p id="promo-page-subtitle" class="muted">Kelola promo aktif, jadwal mendatang, dan hasil pemakaiannya dari satu tempat.</p></div><div class="promo-title-actions"><span id="promo-version" class="pill success">Memuat aturan</span><button id="new-promotion" class="button primary" type="button">+ Buat promo</button></div></div>
+
+        <section id="promo-dashboard">
+          <div id="promo-metrics" class="promo-metrics"><div><small>Aktif sekarang</small><strong>0</strong></div><div><small>Terjadwal</small><strong>0</strong></div><div><small>Total penggunaan</small><strong>0</strong></div><div><small>Nilai diskon</small><strong>Rp0</strong></div></div>
+          <div class="surface promo-directory-toolbar"><label class="promo-search-field"><span>Cari promo</span><input id="promo-search" type="search" placeholder="Ketik kode atau nama promo"></label><label><span>Status</span><select id="promo-status-filter"><option value="ACTIVE">Aktif sekarang</option><option value="SCHEDULED">Terjadwal</option><option value="EXPIRED">Berakhir</option><option value="RETIRED">Dihentikan</option><option value="ALL">Semua status</option></select></label></div>
+          <div id="promotion-list" class="promo-card-grid"></div>
+        </section>
+
+        <form id="promotion-form" class="surface promo-professional-editor hidden">
+          <div class="promo-editor-heading"><button id="close-promotion-editor" class="button secondary" type="button">&larr; Daftar promo</button><div><p class="eyebrow">EDITOR PROMO</p><h2 id="promo-editor-title">Buat program baru</h2><p class="muted">Aturan baru tidak memengaruhi transaksi sebelum dipublikasikan.</p></div></div>
+          <nav class="promo-editor-tabs" aria-label="Bagian editor promo">
+            <button type="button" class="active" data-promo-tab="identity"><span>1</span>Dasar</button><button type="button" data-promo-tab="target"><span>2</span>Sasaran & manfaat</button><button type="button" data-promo-tab="schedule"><span>3</span>Jadwal & kontrol</button><button type="button" data-promo-tab="preview"><span>4</span>Periksa & uji</button>
+          </nav>
+
+          <div class="promo-editor-body">
+            <section class="promo-editor-panel" data-promo-panel="identity"><div class="promo-panel-heading"><div><p class="eyebrow">IDENTITAS</p><h3>Promo apa yang dibuat?</h3></div><span class="promo-step-hint">Kode yang sama akan membuat versi baru</span></div><div class="form-grid compact"><label>Kode promo<input id="promo-code" maxlength="30" required placeholder="GROSIR5"><small>Huruf, angka, garis, atau garis bawah.</small></label><label>Nama promo<input id="promo-name" required maxlength="120" placeholder="Diskon grosir Lip Tint"></label><label>Jenis promo<select id="promo-type"><option value="PERCENT_ITEM">Diskon % per barang</option><option value="FIXED_ITEM">Potongan rupiah per pcs</option><option value="FIXED_ORDER">Potongan rupiah total belanja</option><option value="SPECIAL_PRICE">Harga khusus per pcs</option><option value="PERCENT_ORDER">Diskon % total belanja</option><option value="BUY_X_GET_Y">Beli X gratis Y</option><option value="BUNDLE_FIXED">Paket bundling · harga khusus</option></select></label></div><div class="promo-type-explainer"><strong id="promo-type-title">Diskon persentase barang</strong><p id="promo-type-help">Potongan dihitung dari harga barang yang memenuhi sasaran dan syarat.</p></div></section>
+
+            <section class="promo-editor-panel hidden" data-promo-panel="target"><div class="promo-panel-heading"><div><p class="eyebrow">SASARAN</p><h3>Siapa dan barang apa yang menerima promo?</h3></div></div><div class="form-grid compact">
+              <label>Sasaran barang<select id="promo-target-type"><option value="ALL">Semua barang</option><option value="PRODUCT">Produk tertentu</option><option value="CATEGORY">Kategori tertentu</option><option value="BRAND">Merek tertentu</option></select></label>
+              <div id="promo-target-product-wrap" class="promo-field-wide hidden"><label>Cari produk<input id="promo-target-product-search" type="search" autocomplete="off" placeholder="Ketik nama, SKU, atau barcode"><input id="promo-target-product" type="hidden"></label><div id="promo-target-product-results" class="promo-product-results hidden"></div><div id="promo-target-product-selected" class="promo-selected-products"></div></div>
+              <label id="promo-target-category-wrap" class="hidden">Kategori<select id="promo-category"><option value="">Pilih kategori</option></select><small>Daftar diambil dari kategori produk yang sudah tersedia.</small></label>
+              <label id="promo-target-brand-wrap" class="hidden">Merek<select id="promo-brand"><option value="">Pilih merek</option></select></label>
               <label>Tipe pelanggan<select id="promo-customer-group"><option value="ANY">Semua pelanggan</option><option value="retail">Umum</option></select></label>
-              <label>Minimal jumlah dasar<input id="promo-min-qty" type="number" min="0" value="1"></label>
-              <label>Minimal total belanja<input id="promo-min-basket" type="number" min="0" value="0"></label>
-            </div></section>
-            <section id="promo-value-section" class="promo-editor-section"><p class="eyebrow">MANFAAT PROMO</p><div class="form-grid compact">
-              <label id="promo-value-wrap">Nilai promo<input id="promo-value" type="number" min="0" value="5"></label>
-              <label id="promo-max-wrap">Maksimum diskon<input id="promo-max" type="number" min="0" value="100000"></label>
-              <label id="promo-buy-wrap" class="hidden">Jumlah beli<input id="promo-buy-qty" type="number" min="1" value="2"></label>
-              <label id="promo-free-wrap" class="hidden">Jumlah gratis<input id="promo-free-qty" type="number" min="1" value="1"></label>
+              <label>Minimal jumlah dasar<input id="promo-min-qty" type="number" min="0" step="1" value="1"><small>0 berarti tanpa minimal jumlah.</small></label>
+              <label>Minimal total belanja<input id="promo-min-basket" type="number" min="0" step="any" value="0"><small>0 berarti tanpa minimal belanja.</small></label>
+            </div><div class="promo-benefit-block"><div class="promo-panel-heading"><div><p class="eyebrow">MANFAAT</p><h3>Apa yang pelanggan dapatkan?</h3></div></div><div class="form-grid compact">
+              <label id="promo-value-wrap">Nilai promo<input id="promo-value" type="number" min="0.01" step="any" value="5"></label>
+              <label id="promo-max-wrap">Maksimum diskon<input id="promo-max" type="number" min="0" step="any" value="100000"><small>Kosongkan jika tidak dibatasi.</small></label>
+              <label id="promo-buy-wrap" class="hidden">Jumlah beli<input id="promo-buy-qty" type="number" min="1" step="1" value="2"></label>
+              <label id="promo-free-wrap" class="hidden">Jumlah gratis<input id="promo-free-qty" type="number" min="1" step="1" value="1"></label>
               <label id="promo-reward-product-wrap" class="hidden">Produk gratis<select id="promo-reward-product"><option value="">Produk yang sama</option></select></label>
-              <label id="promo-repeat-wrap" class="hidden">Perulangan<select id="promo-repeat-mode"><option value="ONCE">Berlaku sekali</option><option value="MULTIPLE">Berlaku kelipatan syarat</option></select></label>
-              <label id="promo-repeat-cap-wrap" class="hidden">Maksimal kelipatan<input id="promo-repeat-cap" type="number" min="1" placeholder="Tanpa batas"></label>
-            </div>
-            <div id="promo-bundle-fields" class="promo-bundle-fields hidden"><label>Produk paket 1<select id="promo-bundle-product-a"></select></label><label>Qty<input id="promo-bundle-qty-a" type="number" min="1" value="1"></label><label>Produk paket 2<select id="promo-bundle-product-b"></select></label><label>Qty<input id="promo-bundle-qty-b" type="number" min="1" value="1"></label></div></section>
-            <section class="promo-editor-section"><p class="eyebrow">JADWAL</p><div class="form-grid compact"><label>Mulai<input id="promo-starts" type="datetime-local" required></label><label>Berakhir<input id="promo-ends" type="datetime-local" required></label><label>Jam mulai<input id="promo-time-start" type="time"></label><label>Jam selesai<input id="promo-time-end" type="time"></label></div><div id="promo-days" class="promo-day-options"><label><input type="checkbox" value="1" checked>Sen</label><label><input type="checkbox" value="2" checked>Sel</label><label><input type="checkbox" value="3" checked>Rab</label><label><input type="checkbox" value="4" checked>Kam</label><label><input type="checkbox" value="5" checked>Jum</label><label><input type="checkbox" value="6" checked>Sab</label><label><input type="checkbox" value="0" checked>Min</label></div></section>
-            <section class="promo-editor-section"><p class="eyebrow">KONTROL</p><div class="form-grid compact"><label>Prioritas<input id="promo-priority" type="number" min="1" max="999" value="50"></label><label>Batas pemakaian total<input id="promo-limit-total" type="number" min="1" placeholder="Tanpa batas"></label><label>Batas per pelanggan<input id="promo-limit-customer" type="number" min="1" placeholder="Tanpa batas"></label></div><label class="switch-row"><input id="promo-stackable" type="checkbox"><span><strong>Boleh digabung dengan promo lain</strong><small>Jika mati, promo prioritas tertinggi mengunci barang terkait.</small></span></label></section>
-            <div class="rule-block"><span>RINGKASAN ATURAN</span><p id="promo-summary">Lengkapi aturan promo.</p></div>
-            <div class="promo-simulation-bar"><label>Uji pada produk<select id="promo-simulation-product"></select></label><label>Jumlah pcs<input id="promo-simulation-qty" type="number" min="1" value="3"></label><button id="simulate-promo" class="button secondary" type="button">Simulasikan</button></div>
-            <div id="promo-result" class="promo-result"></div><p id="promotion-error" class="error"></p>
-            <button id="publish-promo" class="button primary full" type="submit">Publikasikan aturan baru</button>
-          </form>
-          <div class="surface promo-rule-directory"><div class="settings-section-head"><div><p class="eyebrow">VERSI PROMO</p><h2>Aturan diterbitkan</h2></div><select id="promo-status-filter"><option value="ACTIVE">Aktif & terjadwal</option><option value="ALL">Semua versi</option><option value="RETIRED">Dihentikan</option></select></div><div id="promotion-list"></div></div>
-        </div>
+              <label id="promo-repeat-wrap" class="hidden">Perulangan<select id="promo-repeat-mode"><option value="ONCE">Berlaku sekali</option><option value="MULTIPLE">Berlaku kelipatan syarat (setiap syarat terpenuhi)</option></select></label>
+              <label id="promo-repeat-cap-wrap" class="hidden">Maksimal kelipatan<input id="promo-repeat-cap" type="number" min="1" step="1" placeholder="Tanpa batas"></label>
+            </div><div id="promo-bundle-fields" class="promo-bundle-fields hidden"><label>Produk paket 1<select id="promo-bundle-product-a"></select></label><label>Qty<input id="promo-bundle-qty-a" type="number" min="1" value="1"></label><label>Produk paket 2<select id="promo-bundle-product-b"></select></label><label>Qty<input id="promo-bundle-qty-b" type="number" min="1" value="1"></label></div></div></section>
+
+            <section class="promo-editor-panel hidden" data-promo-panel="schedule"><div class="promo-panel-heading"><div><p class="eyebrow">PERIODE</p><h3>Kapan promo berlaku?</h3></div></div><div class="form-grid compact"><label>Mulai<input id="promo-starts" type="datetime-local" required></label><label id="promo-ends-wrap">Berakhir<input id="promo-ends" type="datetime-local" required></label><label class="switch-row promo-no-end"><input id="promo-no-end" type="checkbox"><span><strong>Tanpa tanggal berakhir</strong><small>Promo aktif terus sampai dihentikan manual.</small></span></label></div><div class="promo-schedule-detail"><div><strong>Hari dan jam berlaku</strong><small>Kosongkan jam untuk berlaku sepanjang hari.</small></div><div class="form-grid compact"><label>Jam mulai<input id="promo-time-start" type="time"></label><label>Jam selesai<input id="promo-time-end" type="time"></label></div><div id="promo-days" class="promo-day-options"><label><input type="checkbox" value="1" checked>Sen</label><label><input type="checkbox" value="2" checked>Sel</label><label><input type="checkbox" value="3" checked>Rab</label><label><input type="checkbox" value="4" checked>Kam</label><label><input type="checkbox" value="5" checked>Jum</label><label><input type="checkbox" value="6" checked>Sab</label><label><input type="checkbox" value="0" checked>Min</label></div></div><div class="promo-control-block"><div class="promo-panel-heading"><div><p class="eyebrow">KONTROL</p><h3>Batas dan urutan penerapan</h3></div></div><div class="form-grid compact"><label>Prioritas<input id="promo-priority" type="number" min="1" max="999" value="50"><small>Angka lebih besar diproses lebih dahulu.</small></label><label>Batas pemakaian total<input id="promo-limit-total" type="number" min="1" step="1" placeholder="Tanpa batas"></label><label>Batas per pelanggan<input id="promo-limit-customer" type="number" min="1" step="1" placeholder="Tanpa batas"></label></div><label class="switch-row"><input id="promo-stackable" type="checkbox"><span><strong>Boleh digabung dengan promo lain</strong><small>Jika mati, promo prioritas tertinggi mengunci barang terkait.</small></span></label></div></section>
+
+            <section class="promo-editor-panel hidden" data-promo-panel="preview"><div class="promo-preview-layout"><div><p class="eyebrow">RINGKASAN ATURAN</p><div class="promo-rule-summary"><strong id="promo-summary-title">Promo belum lengkap</strong><p id="promo-summary">Lengkapi aturan promo.</p><div id="promo-summary-badges" class="promo-summary-badges"></div></div></div><div><p class="eyebrow">SIMULASI</p><div class="promo-simulation-card"><label>Uji pada produk<select id="promo-simulation-product"></select></label><label>Jumlah pcs<input id="promo-simulation-qty" type="number" min="1" value="3"></label><button id="simulate-promo" class="button secondary full" type="button">Jalankan simulasi</button><div id="promo-result" class="promo-result"><small>Simulasi tidak menyimpan transaksi atau mengubah stok.</small></div></div></div></div></section>
+          </div>
+          <p id="promotion-error" class="error promo-editor-error"></p>
+          <div class="promo-editor-footer"><div><button id="promo-tab-previous" class="button secondary hidden" type="button">Sebelumnya</button><button id="promo-tab-next" class="button secondary" type="button">Lanjut: Sasaran</button></div><button id="publish-promo" class="button primary" type="submit">Publikasikan promo</button></div>
+        </form>
       </div></section>
 
       <section id="page-loyalty" class="page"><div class="content-width">
@@ -1182,6 +1192,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=206"></script>
+  <script type="module" src="/app.js?v=207"></script>
 </body>
 </html>

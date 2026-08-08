@@ -2024,6 +2024,11 @@ async function loadBackupHistory() {
   } catch (error) { el('backup-history-list').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`; }
 }
 
+const promoTargetProductIds=new Set();
+const promoEditorTabs=['identity','target','schedule','preview'];
+let promoEditorTab='identity';
+const PROMO_NO_END='9999-12-31T15:59:59.999Z';
+
 function promoPayload() {
   const type=el('promo-type').value,targetType=el('promo-target-type').value;
   const condition={
@@ -2031,7 +2036,7 @@ function promoPayload() {
     customerGroupIds:el('promo-customer-group').value==='ANY'?[]:[el('promo-customer-group').value],
     schedule:{daysOfWeek:[...el('promo-days').querySelectorAll('input:checked')].map((input)=>Number(input.value)),timeStart:el('promo-time-start').value||null,timeEnd:el('promo-time-end').value||null,timeZone:state.outlets.find((outlet)=>outlet.id===state.activeOutletId)?.timezone??'Asia/Makassar'}
   };
-  if(targetType==='PRODUCT')condition.productIds=[el('promo-target-product').value];
+  if(targetType==='PRODUCT')condition.productIds=[...promoTargetProductIds];
   if(targetType==='CATEGORY')condition.categories=[el('promo-category').value.trim()];
   if(targetType==='BRAND')condition.brands=[el('promo-brand').value.trim()];
   if(type==='BUNDLE_FIXED')condition.bundle=[
@@ -2049,9 +2054,18 @@ function promoPayload() {
     reward.buyQty=Number(el('promo-buy-qty').value);reward.freeQty=Number(el('promo-free-qty').value);
     if(el('promo-reward-product').value)reward.productIds=[el('promo-reward-product').value];
   }
+  const startsAt=new Date(el('promo-starts').value);
+  if(!Number.isFinite(startsAt.getTime()))throw new Error('Tanggal mulai promo wajib diisi.');
+  const endsAt=el('promo-no-end').checked?PROMO_NO_END:new Date(el('promo-ends').value).toISOString();
+  if(targetType==='PRODUCT'&&!condition.productIds.length)throw new Error('Pilih minimal satu produk sasaran.');
+  if(targetType==='CATEGORY'&&!condition.categories[0])throw new Error('Pilih kategori sasaran.');
+  if(targetType==='BRAND'&&!condition.brands[0])throw new Error('Pilih merek sasaran.');
+  if(!condition.schedule.daysOfWeek.length)throw new Error('Pilih minimal satu hari berlaku.');
+  const code=el('promo-code').value.trim().toUpperCase(),name=el('promo-name').value.trim();
+  if(!code)throw new Error('Kode promo wajib diisi.');if(!name)throw new Error('Nama promo wajib diisi.');
   return {
-    code:el('promo-code').value.trim().toUpperCase(),name:el('promo-name').value.trim(),condition,reward,
-    startsAt:new Date(el('promo-starts').value).toISOString(),endsAt:new Date(el('promo-ends').value).toISOString(),
+    code,name,condition,reward,
+    startsAt:startsAt.toISOString(),endsAt,
     priority:Number(el('promo-priority').value),stackable:el('promo-stackable').checked,
     usageLimitTotal:el('promo-limit-total').value?Number(el('promo-limit-total').value):null,
     usageLimitPerCustomer:el('promo-limit-customer').value?Number(el('promo-limit-customer').value):null
@@ -2060,25 +2074,41 @@ function promoPayload() {
 
 function updatePromoSummary() {
   let promo;
-  try{promo=promoPayload();}catch{return el('promo-summary').textContent='Lengkapi jadwal dan aturan untuk melihat ringkasan.';}
+  try{promo=promoPayload();}catch(error){el('promo-summary-title').textContent='Promo belum lengkap';el('promo-summary').textContent=error.message;el('promo-summary-badges').innerHTML='';return;}
   const repeatLabel=promo.reward.repeatMode==='MULTIPLE'?`berlaku kelipatan${promo.reward.repeatCap?` maksimal ${promo.reward.repeatCap} kali`:''}`:'berlaku sekali';
   const typeLabels={PERCENT_ITEM:`Diskon ${promo.reward.value}% per barang`,FIXED_ITEM:`Potongan ${money.format(promo.reward.value)} per pcs`,FIXED_ORDER:`Potongan ${money.format(promo.reward.value)} total belanja, ${repeatLabel}`,SPECIAL_PRICE:`Harga khusus ${money.format(promo.reward.value)} per pcs`,PERCENT_ORDER:`Diskon ${promo.reward.value}% total belanja`,BUY_X_GET_Y:`Beli ${promo.reward.buyQty} gratis ${promo.reward.freeQty}`,BUNDLE_FIXED:`Paket seharga ${money.format(promo.reward.value)}`};
-  const target=promo.condition.productIds?.length?'produk tertentu':promo.condition.categories?.[0]?`kategori ${promo.condition.categories[0]}`:promo.condition.brands?.[0]?`merek ${promo.condition.brands[0]}`:'semua barang';
+  const target=promo.condition.productIds?.length?`${promo.condition.productIds.length} produk terpilih`:promo.condition.categories?.[0]?`kategori ${promo.condition.categories[0]}`:promo.condition.brands?.[0]?`merek ${promo.condition.brands[0]}`:'semua barang';
   const group=promo.condition.customerGroupIds?.[0]?(promo.condition.customerGroupIds[0]==='wholesale'?'pelanggan grosir/member':'pelanggan eceran'):'semua pelanggan';
-  el('promo-summary').textContent=`${typeLabels[promo.reward.type]} untuk ${target}, minimal ${promo.condition.minBaseQty||0} pcs dan ${group}. Prioritas ${promo.priority}${promo.stackable?', boleh digabung':', tidak digabung'}.`;
+  el('promo-summary-title').textContent=`${promo.code||'PROMO'} · ${promo.name||'Tanpa nama'}`;
+  el('promo-summary').textContent=`${typeLabels[promo.reward.type]} untuk ${target}, minimal ${promo.condition.minBaseQty||0} pcs dan ${group}.`;
+  el('promo-summary-badges').innerHTML=`<span>${el('promo-no-end').checked?'Tanpa tanggal berakhir':`Hingga ${new Date(promo.endsAt).toLocaleDateString('id-ID')}`}</span><span>Prioritas ${promo.priority}</span><span>${promo.stackable?'Dapat digabung':'Tidak digabung'}</span>`;
+}
+
+function promoLifecycle(promo,now=Date.now()){
+  if(promo.status==='RETIRED')return 'RETIRED';
+  const starts=new Date(promo.startsAt).getTime(),ends=promo.endsAt?new Date(promo.endsAt).getTime():Infinity;
+  if(starts>now)return 'SCHEDULED';if(ends<now)return 'EXPIRED';return promo.status==='PUBLISHED'?'ACTIVE':'RETIRED';
+}
+
+function promoPeriodLabel(promo){
+  const starts=new Date(promo.startsAt).toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'}),noEnd=!promo.endsAt||new Date(promo.endsAt).getUTCFullYear()>=9999;
+  return noEnd?`Mulai ${starts} · tanpa batas waktu`:`${starts} – ${new Date(promo.endsAt).toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'})}`;
 }
 
 function renderPromotionList() {
   const source=state.promotionVersions.length?state.promotionVersions:state.promotions;
-  const filter=el('promo-status-filter')?.value??'ACTIVE',now=Date.now();
-  const rows=source.filter((promo)=>filter==='ALL'||(filter==='RETIRED'?promo.status==='RETIRED':promo.status==='PUBLISHED'&&new Date(promo.endsAt).getTime()>=now));
+  const filter=el('promo-status-filter')?.value??'ACTIVE',query=el('promo-search')?.value.trim().toLocaleLowerCase('id')??'',now=Date.now();
+  const rows=source.filter((promo)=>(filter==='ALL'||promoLifecycle(promo,now)===filter)&&(!query||`${promo.code} ${promo.name}`.toLocaleLowerCase('id').includes(query)));
   const typeLabels={PERCENT_ITEM:'Diskon barang',FIXED_ITEM:'Potongan per pcs',FIXED_ORDER:'Potongan total',SPECIAL_PRICE:'Harga khusus',PERCENT_ORDER:'Diskon belanja',BUY_X_GET_Y:'Beli gratis',BUNDLE_FIXED:'Bundling'};
   el('promotion-list').innerHTML=rows.map((promo)=>{
-    const active=promo.status==='PUBLISHED'&&new Date(promo.startsAt).getTime()<=now&&new Date(promo.endsAt).getTime()>=now;
+    const active=promoLifecycle(promo,now)==='ACTIVE';
     const usage=promo.usageLimitTotal?`${promo.usageCount??0}/${promo.usageLimitTotal} kali`:`${promo.usageCount??0} kali`;
     return `<article class="promo-rule-card" data-promo-id="${escapeHtml(promo.id)}"><div class="promo-rule-head"><div><strong>${escapeHtml(promo.code)} · ${escapeHtml(promo.name)}</strong><small>v${promo.version} · ${escapeHtml(typeLabels[promo.reward?.type]??promo.reward?.type??'Promo')}</small></div><span class="status-badge ${active?'approved':promo.status==='RETIRED'?'inactive':'submitted'}">${active?'AKTIF':promo.status==='RETIRED'?'DIHENTIKAN':'TERJADWAL'}</span></div><div class="promo-rule-meta"><span>${new Date(promo.startsAt).toLocaleString('id-ID')}<br>hingga ${new Date(promo.endsAt).toLocaleString('id-ID')}</span><span>Prioritas ${promo.priority}<br>${promo.stackable?'Boleh digabung':'Tidak digabung'}</span><span>Dipakai ${usage}<br>Diskon ${money.format(promo.discountGiven??0)}</span></div>${promo.status==='PUBLISHED'?'<div class="voucher-actions"><button class="button secondary edit-promotion" type="button">Edit</button><button class="button danger-button delete-promotion" type="button">Hapus</button></div>':''}</article>`;
-  }).join('')||'<div class="empty-state compact">Belum ada versi promo pada filter ini.</div>';
-  const activeCount=source.filter((promo)=>promo.status==='PUBLISHED'&&new Date(promo.startsAt).getTime()<=now&&new Date(promo.endsAt).getTime()>=now).length;
+  }).join('')||'<div class="surface empty-state compact">Tidak ada promo yang cocok dengan pencarian atau filter.</div>';
+  rows.forEach((promo)=>{const card=el('promotion-list').querySelector(`[data-promo-id="${CSS.escape(promo.id)}"]`),lifecycle=promoLifecycle(promo,now),labels={ACTIVE:'AKTIF',SCHEDULED:'TERJADWAL',EXPIRED:'BERAKHIR',RETIRED:'DIHENTIKAN'};if(card){const period=card.querySelector('.promo-rule-meta span');if(period)period.textContent=promoPeriodLabel(promo);const badge=card.querySelector('.status-badge');if(badge){badge.textContent=labels[lifecycle];badge.className=`status-badge ${lifecycle==='ACTIVE'?'approved':lifecycle==='SCHEDULED'?'submitted':'inactive'}`;}}});
+  const activeCount=source.filter((promo)=>promoLifecycle(promo,now)==='ACTIVE').length,scheduledCount=source.filter((promo)=>promoLifecycle(promo,now)==='SCHEDULED').length;
+  const usageCount=source.reduce((sum,promo)=>sum+Number(promo.usageCount??0),0),discountGiven=source.reduce((sum,promo)=>sum+Number(promo.discountGiven??0),0);
+  el('promo-metrics').innerHTML=`<div><small>Aktif sekarang</small><strong>${activeCount}</strong></div><div><small>Terjadwal</small><strong>${scheduledCount}</strong></div><div><small>Total penggunaan</small><strong>${usageCount.toLocaleString('id-ID')}</strong></div><div><small>Nilai diskon</small><strong>${money.format(discountGiven)}</strong></div>`;
   el('promo-version').textContent=activeCount?`${activeCount} aturan aktif`:'Belum ada aturan aktif';
 }
 
@@ -2088,11 +2118,52 @@ function localDateTimeValue(date){
 
 function renderPromotionEditorOptions(){
   const options=state.products.map((product)=>`<option value="${escapeHtml(product.id)}">${escapeHtml(product.name)} · ${escapeHtml(product.sku)}</option>`).join('');
-  ['promo-target-product','promo-bundle-product-a','promo-bundle-product-b','promo-simulation-product'].forEach((id)=>{const selected=el(id)?.value;if(el(id)){el(id).innerHTML=options;if(state.products.some((product)=>product.id===selected))el(id).value=selected;}});
+  ['promo-bundle-product-a','promo-bundle-product-b','promo-simulation-product'].forEach((id)=>{const selected=el(id)?.value;if(el(id)){el(id).innerHTML=options;if(state.products.some((product)=>product.id===selected))el(id).value=selected;}});
   const rewardSelected=el('promo-reward-product')?.value;
   if(el('promo-reward-product')){el('promo-reward-product').innerHTML='<option value="">Produk yang sama</option>'+options;if(state.products.some((product)=>product.id===rewardSelected))el('promo-reward-product').value=rewardSelected;}
+  const categories=[...new Map(state.products.map((product)=>[String(product.category??'Lainnya').trim().toLocaleLowerCase('id'),String(product.category??'Lainnya').trim()||'Lainnya'])).values()].sort((a,b)=>a.localeCompare(b,'id'));
+  const brands=[...new Map(state.products.map((product)=>String(product.brand??'').trim()).filter(Boolean).map((brand)=>[brand.toLocaleLowerCase('id'),brand])).values()].sort((a,b)=>a.localeCompare(b,'id'));
+  const categorySelected=el('promo-category').value,brandSelected=el('promo-brand').value;
+  el('promo-category').innerHTML='<option value="">Pilih kategori</option>'+categories.map((category)=>`<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
+  el('promo-brand').innerHTML='<option value="">Pilih merek</option>'+brands.map((brand)=>`<option value="${escapeHtml(brand)}">${escapeHtml(brand)}</option>`).join('');
+  if(categories.includes(categorySelected))el('promo-category').value=categorySelected;if(brands.includes(brandSelected))el('promo-brand').value=brandSelected;
   if(!el('promo-starts').value){const start=new Date(),end=new Date(Date.now()+30*86400000);el('promo-starts').value=localDateTimeValue(start);el('promo-ends').value=localDateTimeValue(end);}
+  renderPromoTargetProducts();
   syncPromotionForm();
+}
+
+function renderPromoTargetProducts(){
+  const selected=[...promoTargetProductIds].map((id)=>state.products.find((product)=>product.id===id)).filter(Boolean);
+  el('promo-target-product').value=selected[0]?.id??'';
+  el('promo-target-product-selected').innerHTML=selected.map((product)=>`<span>${escapeHtml(product.name)} <small>${escapeHtml(product.sku)}</small><button type="button" data-remove-promo-product="${escapeHtml(product.id)}" aria-label="Hapus ${escapeHtml(product.name)}">×</button></span>`).join('')||'<small>Belum ada produk dipilih.</small>';
+  const query=el('promo-target-product-search').value.trim().toLocaleLowerCase('id');
+  const results=query?state.products.filter((product)=>!promoTargetProductIds.has(product.id)&&`${product.name} ${product.sku} ${(product.units??[]).map((unit)=>unit.barcode??'').join(' ')}`.toLocaleLowerCase('id').includes(query)).slice(0,12):[];
+  el('promo-target-product-results').classList.toggle('hidden',!results.length);
+  el('promo-target-product-results').innerHTML=results.map((product)=>`<button type="button" data-add-promo-product="${escapeHtml(product.id)}"><span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)} · ${escapeHtml(product.category??'Lainnya')}</small></span><b>+</b></button>`).join('');
+  updatePromoSummary();
+}
+
+function showPromoEditorTab(tab){
+  promoEditorTab=promoEditorTabs.includes(tab)?tab:'identity';
+  document.querySelectorAll('[data-promo-panel]').forEach((panel)=>panel.classList.toggle('hidden',panel.dataset.promoPanel!==promoEditorTab));
+  document.querySelectorAll('[data-promo-tab]').forEach((button)=>{const active=button.dataset.promoTab===promoEditorTab;button.classList.toggle('active',active);button.setAttribute('aria-current',active?'step':'false');});
+  const index=promoEditorTabs.indexOf(promoEditorTab);el('promo-tab-previous').classList.toggle('hidden',index===0);el('promo-tab-next').classList.toggle('hidden',index===promoEditorTabs.length-1);
+  el('promo-tab-next').textContent=`Lanjut: ${['Dasar','Sasaran','Jadwal','Periksa'][index+1]??''}`;
+  if(promoEditorTab==='preview')updatePromoSummary();
+}
+
+function showPromotionWorkspace(editor=false){
+  el('promo-dashboard').classList.toggle('hidden',editor);el('promotion-form').classList.toggle('hidden',!editor);el('new-promotion').classList.toggle('hidden',editor);
+  el('promo-page-heading').textContent=editor?(el('promotion-form').dataset.editingPromoId?'Edit promo':'Buat promo baru'):'Program penjualan';
+  el('promo-page-subtitle').textContent=editor?'Susun aturan bertahap, periksa ringkasan, lalu publikasikan.':'Kelola promo aktif, jadwal mendatang, dan hasil pemakaiannya dari satu tempat.';
+  if(editor)showPromoEditorTab(promoEditorTab);else renderPromotionList();
+}
+
+function resetPromotionEditor(){
+  const form=el('promotion-form');form.reset();form.dataset.editingPromoId='';promoTargetProductIds.clear();promoEditorTab='identity';
+  el('promo-min-qty').value=1;el('promo-min-basket').value=0;el('promo-value').value=5;el('promo-max').value=100000;el('promo-buy-qty').value=2;el('promo-free-qty').value=1;el('promo-priority').value=50;el('promo-repeat-mode').value='ONCE';el('promo-simulation-qty').value=3;
+  const start=new Date(),end=new Date(Date.now()+30*86400000);el('promo-starts').value=localDateTimeValue(start);el('promo-ends').value=localDateTimeValue(end);el('promo-target-product-search').value='';el('promo-result').innerHTML='<small>Simulasi tidak menyimpan transaksi atau mengubah stok.</small>';el('promotion-error').textContent='';
+  el('promo-days').querySelectorAll('input').forEach((input)=>{input.checked=true;});el('publish-promo').textContent='Publikasikan promo';el('promo-editor-title').textContent='Buat program baru';renderPromotionEditorOptions();showPromotionWorkspace(true);
 }
 
 function syncPromotionForm(){
@@ -2108,7 +2179,13 @@ function syncPromotionForm(){
   el('promo-repeat-cap-wrap').classList.toggle('hidden',type!=='FIXED_ORDER'||el('promo-repeat-mode').value!=='MULTIPLE');
   const valueLabels={PERCENT_ITEM:'Diskon persen',FIXED_ITEM:'Potongan / pcs',FIXED_ORDER:'Potongan total belanja',SPECIAL_PRICE:'Harga khusus / pcs',PERCENT_ORDER:'Diskon persen',BUNDLE_FIXED:'Harga paket'};
   el('promo-value-wrap').firstChild.textContent=valueLabels[type]??'Nilai promo';
+  const descriptions={PERCENT_ITEM:['Diskon persentase barang','Potongan dihitung pada setiap barang yang memenuhi sasaran dan syarat.'],FIXED_ITEM:['Potongan nominal per pcs','Nilai tetap dikurangi untuk setiap satuan dasar yang memenuhi syarat.'],FIXED_ORDER:['Potongan total belanja','Potongan nominal dibagikan secara proporsional ke barang yang memenuhi syarat.'],SPECIAL_PRICE:['Harga jual khusus','Harga satuan dasar diganti sementara selama promo berlaku.'],PERCENT_ORDER:['Diskon persentase belanja','Persentase diskon diterapkan pada total barang yang memenuhi sasaran.'],BUY_X_GET_Y:['Beli X gratis Y','Pelanggan memperoleh barang gratis setelah jumlah pembelian terpenuhi.'],BUNDLE_FIXED:['Harga paket bundling','Dua produk atau lebih dijual sebagai satu paket dengan harga khusus.']};
+  const description=descriptions[type]??['Jenis promo','Atur manfaat promo.'];el('promo-type-title').textContent=description[0];el('promo-type-help').textContent=description[1];
   updatePromoSummary();
+}
+
+function syncPromoNoEnd(){
+  const noEnd=el('promo-no-end').checked;el('promo-ends-wrap').classList.toggle('hidden',noEnd);el('promo-ends').required=false;updatePromoSummary();
 }
 
 async function loadPromotionManagement(){
@@ -2566,9 +2643,10 @@ async function publishReceiptVoucherCampaign(event){
 function editPromotion(versionId){
   const promo=state.promotionVersions.find((item)=>item.id===versionId);if(!promo)return;
   const condition=promo.condition??{},reward=promo.reward??{},schedule=condition.schedule??{};
+  promoTargetProductIds.clear();(condition.productIds??[]).forEach((id)=>promoTargetProductIds.add(id));promoEditorTab='identity';
   el('promotion-form').dataset.editingPromoId=versionId;el('promo-code').value=promo.code;el('promo-name').value=promo.name;
   el('promo-type').value=reward.type;el('promo-target-type').value=condition.productIds?.length?'PRODUCT':condition.categories?.length?'CATEGORY':condition.brands?.length?'BRAND':'ALL';
-  el('promo-target-product').value=condition.productIds?.[0]??'';el('promo-category').value=condition.categories?.[0]??'';el('promo-brand').value=condition.brands?.[0]??'';
+  el('promo-category').value=condition.categories?.[0]??'';el('promo-brand').value=condition.brands?.[0]??'';
   el('promo-customer-group').value=condition.customerGroupIds?.[0]??'ANY';el('promo-min-qty').value=Number(condition.minBaseQty??0);
   el('promo-min-basket').value=Number(condition.minBasketSubtotal??0);el('promo-value').value=Number(reward.value??0);
   el('promo-max').value=reward.maxDiscount===Number.MAX_SAFE_INTEGER?'':reward.maxDiscount??'';
@@ -2576,12 +2654,12 @@ function editPromotion(versionId){
   el('promo-reward-product').value=reward.productIds?.[0]??'';el('promo-repeat-mode').value=reward.repeatMode??'ONCE';el('promo-repeat-cap').value=reward.repeatCap??'';
   el('promo-bundle-product-a').value=condition.bundle?.[0]?.productId??'';el('promo-bundle-qty-a').value=Number(condition.bundle?.[0]?.qty??1);
   el('promo-bundle-product-b').value=condition.bundle?.[1]?.productId??'';el('promo-bundle-qty-b').value=Number(condition.bundle?.[1]?.qty??1);
-  el('promo-starts').value=localDateTimeValue(new Date(promo.startsAt));el('promo-ends').value=localDateTimeValue(new Date(promo.endsAt));
+  const noEnd=!promo.endsAt||new Date(promo.endsAt).getUTCFullYear()>=9999;el('promo-starts').value=localDateTimeValue(new Date(promo.startsAt));el('promo-no-end').checked=noEnd;if(!noEnd)el('promo-ends').value=localDateTimeValue(new Date(promo.endsAt));
   el('promo-time-start').value=schedule.timeStart??'';el('promo-time-end').value=schedule.timeEnd??'';
   const days=new Set(schedule.daysOfWeek??[0,1,2,3,4,5,6]);el('promo-days').querySelectorAll('input').forEach((input)=>{input.checked=days.has(Number(input.value));});
   el('promo-priority').value=Number(promo.priority??50);el('promo-limit-total').value=promo.usageLimitTotal??'';
   el('promo-limit-customer').value=promo.usageLimitPerCustomer??'';el('promo-stackable').checked=Boolean(promo.stackable);
-  el('publish-promo').textContent='Simpan perubahan sebagai versi baru';syncPromotionForm();updatePromoSummary();
+  el('publish-promo').textContent='Simpan sebagai versi baru';el('promo-editor-title').textContent=`Edit ${promo.code}`;renderPromotionEditorOptions();syncPromoNoEnd();syncPromotionForm();renderPromoTargetProducts();showPromotionWorkspace(true);
   el('promotion-form').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
@@ -2591,13 +2669,13 @@ async function publishPromotion(event) {
   try {
     const promo = await request('/api/promotions/publish', { method: 'POST', body: JSON.stringify(promoPayload()) });
     toast(`${promo.code} versi ${promo.version} diterbitkan`);form.dataset.editingPromoId='';
-    el('publish-promo').textContent='Publikasikan aturan baru';await refreshCatalog();await loadPromotionManagement();
+    el('publish-promo').textContent='Publikasikan promo';await refreshCatalog();await loadPromotionManagement();showPromotionWorkspace(false);
   } catch (error) { el('promotion-error').textContent=error.message; }
   finally{button.disabled=false;}
 }
 
 async function simulatePromotion() {
-  const promo=promoPayload(),type=promo.reward.type;
+  let promo;try{promo=promoPayload();}catch(error){el('promotion-error').textContent=error.message;return;}const type=promo.reward.type;
   const productId=promo.condition.productIds?.[0]??el('promo-simulation-product').value;
   const product=state.products.find((item)=>item.id===productId);if(!product)return toast('Pilih produk untuk simulasi.');
   let lines=[{productId:product.id,unitId:product.units.find((unit)=>unit.factor===1)?.id??product.units[0].id,qty:Number(el('promo-simulation-qty').value)}];
@@ -3870,6 +3948,13 @@ function restockDraftHasContent(){
 
 function serializeRestockDraftLine(row){
   const unit=row.querySelector('.restock-unit');
+  const startsAt=new Date(el('promo-starts').value);
+  if(!Number.isFinite(startsAt.getTime()))throw new Error('Tanggal mulai promo wajib diisi.');
+  const endsAt=el('promo-no-end').checked?PROMO_NO_END:new Date(el('promo-ends').value).toISOString();
+  if(targetType==='PRODUCT'&&!condition.productIds.length)throw new Error('Pilih minimal satu produk sasaran.');
+  if(targetType==='CATEGORY'&&!condition.categories[0])throw new Error('Pilih kategori sasaran.');
+  if(targetType==='BRAND'&&!condition.brands[0])throw new Error('Pilih merek sasaran.');
+  if(!condition.schedule.daysOfWeek.length)throw new Error('Pilih minimal satu hari berlaku.');
   return {
     productId:row.dataset.product??null,productKey:row.dataset.productKey??null,
     poLine:row.dataset.poLine==='true',poRemainingPurchaseQty:row.dataset.poRemainingPurchaseQty??'',poRemainingBaseQty:row.dataset.poRemainingBaseQty??'',
@@ -9429,6 +9514,12 @@ el('close-supplier-statement').addEventListener('click',()=>el('supplier-stateme
 el('supplier-payment-form').addEventListener('submit',recordSupplierPayment);
 el('supplier-payment-method').addEventListener('change',()=>el('supplier-payment-reference-wrap').classList.toggle('hidden',el('supplier-payment-method').value==='CASH'));
 el('promotion-form').addEventListener('submit', publishPromotion);
+['promo-code','promo-name','promo-starts','promo-ends'].forEach((id)=>{el(id).required=false;});
+el('new-promotion').addEventListener('click',resetPromotionEditor);
+el('close-promotion-editor').addEventListener('click',()=>showPromotionWorkspace(false));
+document.querySelectorAll('[data-promo-tab]').forEach((button)=>button.addEventListener('click',()=>showPromoEditorTab(button.dataset.promoTab)));
+el('promo-tab-previous').addEventListener('click',()=>showPromoEditorTab(promoEditorTabs[Math.max(0,promoEditorTabs.indexOf(promoEditorTab)-1)]));
+el('promo-tab-next').addEventListener('click',()=>showPromoEditorTab(promoEditorTabs[Math.min(promoEditorTabs.length-1,promoEditorTabs.indexOf(promoEditorTab)+1)]));
 el('loyalty-settings-form').addEventListener('submit',saveLoyaltySettings);
 document.querySelectorAll('[data-loyalty-view]').forEach((button)=>button.addEventListener('click',()=>showLoyaltyView(button.dataset.loyaltyView)));
 el('open-voucher-form').addEventListener('click',()=>openVoucherForm());
@@ -9443,10 +9534,15 @@ el('simulate-promo').addEventListener('click', simulatePromotion);
 el('promo-type').addEventListener('change',syncPromotionForm);
 el('promo-target-type').addEventListener('change',syncPromotionForm);
 el('promo-repeat-mode').addEventListener('change',syncPromotionForm);
+el('promo-no-end').addEventListener('change',syncPromoNoEnd);
+el('promo-target-product-search').addEventListener('input',renderPromoTargetProducts);
+el('promo-target-product-results').addEventListener('click',(event)=>{const button=event.target.closest('[data-add-promo-product]');if(!button)return;promoTargetProductIds.add(button.dataset.addPromoProduct);el('promo-target-product-search').value='';renderPromoTargetProducts();});
+el('promo-target-product-selected').addEventListener('click',(event)=>{const button=event.target.closest('[data-remove-promo-product]');if(!button)return;promoTargetProductIds.delete(button.dataset.removePromoProduct);renderPromoTargetProducts();});
 ['promo-code','promo-name','promo-category','promo-brand','promo-min-qty','promo-min-basket','promo-value','promo-max','promo-buy-qty','promo-free-qty','promo-repeat-cap','promo-priority','promo-limit-total','promo-limit-customer','promo-starts','promo-ends','promo-time-start','promo-time-end'].forEach((id)=>el(id).addEventListener('input',updatePromoSummary));
 ['promo-target-product','promo-customer-group','promo-reward-product','promo-bundle-product-a','promo-bundle-product-b','promo-stackable'].forEach((id)=>el(id).addEventListener('change',updatePromoSummary));
 el('promo-days').addEventListener('change',updatePromoSummary);
 el('promo-status-filter').addEventListener('change',renderPromotionList);
+el('promo-search').addEventListener('input',renderPromotionList);
 el('promotion-list').addEventListener('click',(event)=>{const card=event.target.closest('[data-promo-id]');if(!card)return;if(event.target.closest('.edit-promotion'))editPromotion(card.dataset.promoId);if(event.target.closest('.delete-promotion'))deletePromotion(card.dataset.promoId);});
 el('open-shift').addEventListener('click', openShift);
 el('cash-movement').addEventListener('click', addCashMovement);
