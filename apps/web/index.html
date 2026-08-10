@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=209">
+  <link rel="stylesheet" href="/styles.css?v=210">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -218,7 +218,7 @@
           <div class="catalog-pane">
             <div class="page-title"><div><p id="top-shift" class="eyebrow">SHIFT BELUM DIBUKA</p><h1>Kasir</h1></div><div class="pos-heading-actions"><button id="open-shortcuts" class="button secondary compact-button" type="button" title="Shortcut keyboard">⌨</button><button id="sync-button" class="button secondary">Sinkronkan <span id="queue-count">0</span></button></div></div>
             <div class="search-row">
-              <div class="product-search-wrap"><div class="product-search-control"><input id="product-search" placeholder="Scan barcode atau cari nama produk"><button id="open-pos-customer" class="button secondary scan-icon-button pos-member-button" type="button" aria-label="Pilih atau tambah pelanggan" title="Pelanggan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 20v-1.5A3.5 3.5 0 0 0 10.5 15h-5A3.5 3.5 0 0 0 2 18.5V20M8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM18 8v8M14 12h8"/></svg><span id="pos-member-label" class="sr-only">Member</span><small id="pos-member-status" class="sr-only">Pelanggan umum</small></button><button id="scan-camera-pos" class="button secondary scan-icon-button camera-scan-button" type="button" aria-label="Scan barcode dengan kamera" title="Scan dengan kamera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5 10 3.5h4l1.5 2H19A2.5 2.5 0 0 1 21.5 8v9A2.5 2.5 0 0 1 19 19.5H5A2.5 2.5 0 0 1 2.5 17V8A2.5 2.5 0 0 1 5 5.5h3.5Z"/><circle cx="12" cy="12.5" r="4"/></svg></button></div></div>
+              <div class="product-search-wrap"><div class="product-search-control"><input id="product-search" placeholder="Scan barcode atau cari nama produk"><button id="open-pos-customer" class="button secondary scan-icon-button pos-member-button" type="button" aria-label="Pilih atau tambah pelanggan" title="Pelanggan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 20v-1.5A3.5 3.5 0 0 0 10.5 15h-5A3.5 3.5 0 0 0 2 18.5V20M8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM18 8v8M14 12h8"/></svg><span id="pos-member-label" class="sr-only">Member</span><small id="pos-member-status" class="sr-only">Pelanggan umum</small></button><button id="scan-camera-pos" class="button secondary scan-icon-button camera-scan-button" type="button" aria-label="Scan barcode dengan kamera" title="Scan dengan kamera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5 10 3.5h4l1.5 2H19A2.5 2.5 0 0 1 21.5 8v9A2.5 2.5 0 0 1 19 19.5H5A2.5 2.5 0 0 1 2.5 17V8A2.5 2.5 0 0 1 5 5.5h3.5Z"/><circle cx="12" cy="12.5" r="4"/></svg></button><button id="open-quick-product" class="button secondary quick-product-button" type="button" aria-label="Tambah barang belum terdaftar" title="Barang belum terdaftar"><span aria-hidden="true">+</span><b>Barang baru</b></button></div></div>
               <select id="customer-select" class="hidden" aria-hidden="true"><option value="">Pelanggan umum</option></select>
               <select id="customer-group" class="hidden"><option value="retail">Umum</option></select>
             </div>
@@ -405,7 +405,7 @@
         <div class="page-title"><div><p class="eyebrow">MASTER KATALOG</p><h1>Produk dan varian</h1><p class="muted">Kelola SKU, barcode, satuan, harga, batas stok, dan status jual.</p></div><div class="page-title-actions product-page-actions"><button id="open-kaspin-migration" class="button secondary migration-button">Migrasi Kasir Pintar</button><button id="open-variant-suggestions" class="button secondary">Susun etalase</button><button id="open-import-products" class="button secondary">Import produk baru</button><button id="open-export-products" class="button secondary">Export / edit produk</button><button id="open-product-data-types" class="button secondary">Tipe produk</button><button id="open-price-policy" class="button secondary">Aturan harga massal</button><button id="open-product-dialog" class="button primary">Tambah produk</button></div></div>
         <div id="product-metrics" class="product-metrics"></div>
         <div class="surface product-directory">
-          <div class="product-directory-head"><div><p class="eyebrow">DIREKTORI PRODUK</p><h2>Semua barang</h2></div><div class="product-filters"><input id="product-admin-search" type="search" placeholder="Cari SKU, produk, merek, atau barcode"><select id="product-admin-status"><option value="ACTIVE">Produk aktif</option><option value="ALL">Semua status</option><option value="INACTIVE">Produk nonaktif</option><option value="LOW_STOCK">Stok menipis</option></select></div></div>
+          <div class="product-directory-head"><div><p class="eyebrow">DIREKTORI PRODUK</p><h2>Semua barang</h2></div><div class="product-filters"><input id="product-admin-search" type="search" placeholder="Cari SKU, produk, merek, atau barcode"><select id="product-admin-status"><option value="ACTIVE">Produk aktif</option><option value="NEEDS_REVIEW">Perlu dilengkapi</option><option value="ALL">Semua status</option><option value="INACTIVE">Produk nonaktif</option><option value="LOW_STOCK">Stok menipis</option></select></div></div>
           <div id="product-selection-toolbar" class="product-selection-toolbar"><span><strong id="selected-product-count">0 barang dipilih</strong><small>Pilih beberapa barang untuk dikelola sekaligus.</small></span><div class="button-row"><button id="print-selected-product-labels" class="button secondary" type="button" disabled>Cetak label</button><button id="delete-selected-products" class="button danger-button" type="button" disabled>Hapus barang</button></div></div>
           <div id="product-table" class="table-wrap"><div class="empty-state compact">Memuat master produk…</div></div>
         </div>
@@ -1135,6 +1135,12 @@
     <section class="product-editor-section"><p class="eyebrow">HARGA JUAL</p><div id="product-price-tiers" class="product-price-tiers"></div><small>Setiap tipe dimulai dari minimal 1 pcs. Tambahkan tingkat 3, 6, 12, atau jumlah lain bila harganya berubah. Harga tipe pelanggan yang kosong akan memakai harga Umum.</small></section>
     <p id="product-error" class="error"></p><div class="button-row"><button id="cancel-product" type="button" class="button secondary">Batal</button><button id="save-product-button" type="submit" class="button primary">Simpan produk</button></div>
   </form></dialog>
+  <dialog id="quick-product-dialog"><form id="quick-product-form" class="dialog-card quick-product-dialog">
+    <div class="comparison-heading"><div><p class="eyebrow">BARANG BELUM TERDAFTAR</p><h2>Jual dan catat barang</h2><p class="muted">Barang disimpan permanen sebagai “Perlu dilengkapi” agar struk, retur, dan laporan tetap dapat ditelusuri.</p></div><button id="close-quick-product" class="icon-button" type="button" aria-label="Tutup">×</button></div>
+    <div class="quick-product-note"><strong>Tidak mengubah stok untuk transaksi ini</strong><small>Owner atau staff berizin Produk &amp; harga perlu melengkapi kategori, modal, dan stok setelah transaksi.</small></div>
+    <div class="form-grid compact"><label>Nama barang<input id="quick-product-name" maxlength="160" required autocomplete="off" placeholder="Contoh: Lip Tint Rose"></label><label>Harga jual / pcs<input id="quick-product-price" type="number" min="1" max="1000000000000" step="any" required inputmode="decimal"></label><label class="quick-product-barcode">Barcode <small>Opsional</small><input id="quick-product-barcode" maxlength="80" autocomplete="off" inputmode="numeric" placeholder="Scan atau ketik jika tersedia"></label></div>
+    <p id="quick-product-error" class="error" role="alert"></p><div class="button-row"><button id="cancel-quick-product" class="button secondary" type="button">Batal</button><button id="save-quick-product" class="button primary" type="submit">Simpan &amp; masukkan keranjang</button></div>
+  </form></dialog>
   <dialog id="restock-line-dialog"><div class="dialog-card restock-line-dialog">
     <div class="comparison-heading"><div><p class="eyebrow">DETAIL BARANG DATANG</p><h2 id="restock-line-dialog-title">Isi detail barang</h2><p id="restock-line-dialog-subtitle" class="muted"></p></div><button id="close-restock-line-dialog" class="icon-button" type="button" aria-label="Tutup detail barang">×</button></div>
     <div id="restock-line-dialog-body" class="restock-line-dialog-body"></div>
@@ -1192,6 +1198,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=209"></script>
+  <script type="module" src="/app.js?v=210"></script>
 </body>
 </html>

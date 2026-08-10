@@ -3298,6 +3298,24 @@ async function routeRequest(request, response, route) {
     return send(response,201,{imageUrl});
   }
 
+  if(request.method==='POST'&&route==='products/quick'){
+    requirePermission(session,'pos.sell');
+    const input=bodyOf(request);
+    const product=await rpc('create_quick_sale_product_v1',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,
+      p_name:String(input.name??'').trim(),p_retail_price:Number(input.retailPrice),
+      p_barcode:String(input.barcode??'').trim()||null
+    });
+    queueTenantOwnerNotification(context.tenantId,{
+      type:'QUICK_PRODUCT_CREATED',severity:'WARNING',title:'Barang kasir perlu dilengkapi',
+      message:`${session.profile.display_name} menambahkan ${product.name} saat transaksi. Lengkapi kategori, modal, dan stoknya.`,
+      entityType:'product',entityId:product.id,actionPage:'products',
+      data:{productId:product.id,sku:product.sku,outletId:context.outlet?.id??null,createdBy:session.authUser.id},
+      dedupeKey:`quick-product:${product.id}`
+    },request.waitUntil);
+    return send(response,201,product);
+  }
+
   if (request.method === 'POST' && route === 'products') {
     requirePermission(session, 'catalog.manage');
     const input = await canonicalizeProductInputCategory(context.tenantId,normalizeProductInput(bodyOf(request)));

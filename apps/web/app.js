@@ -968,11 +968,11 @@ function renderProductTable() {
   for(const productId of state.selectedProductIds)if(!availableIds.has(productId))state.selectedProductIds.delete(productId);
   const list=all.filter((product)=>{
     const matches=!query||`${product.sku} ${product.name} ${product.brand??''} ${product.category} ${product.variantGroup??''} ${product.variantName??''} ${product.units.map((unit)=>unit.barcode??'').join(' ')}`.toLowerCase().includes(query);
-    const statusMatch=status==='ALL'||(status==='ACTIVE'&&product.active)||(status==='INACTIVE'&&!product.active)||(status==='LOW_STOCK'&&product.active&&product.trackStock!==false&&product.minimumStock>0&&product.stockBase<=product.minimumStock);
+    const statusMatch=status==='ALL'||(status==='ACTIVE'&&product.active)||(status==='INACTIVE'&&!product.active)||(status==='NEEDS_REVIEW'&&product.active&&product.category==='Perlu dilengkapi')||(status==='LOW_STOCK'&&product.active&&product.trackStock!==false&&product.minimumStock>0&&product.stockBase<=product.minimumStock);
     return matches&&statusMatch;
   });
-  const active=all.filter((product)=>product.active).length,inactive=all.length-active,low=all.filter((product)=>product.active&&product.trackStock!==false&&product.minimumStock>0&&product.stockBase<=product.minimumStock).length;
-  el('product-metrics').innerHTML=[['Total SKU',all.length],['Aktif dijual',active],['Nonaktif',inactive],['Stok menipis',low]].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
+  const active=all.filter((product)=>product.active).length,needsReview=all.filter((product)=>product.active&&product.category==='Perlu dilengkapi').length,low=all.filter((product)=>product.active&&product.trackStock!==false&&product.minimumStock>0&&product.stockBase<=product.minimumStock).length;
+  el('product-metrics').innerHTML=[['Total SKU',all.length],['Aktif dijual',active],['Perlu dilengkapi',needsReview],['Stok menipis',low]].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
   const categories=canonicalProductCategories([...all,...state.products]);
   const brands=[...new Set(all.map((product)=>product.brand).filter(Boolean))].sort();
   el('product-category-options').innerHTML=categories.map((value)=>`<option value="${escapeHtml(value)}">`).join('');
@@ -1413,6 +1413,36 @@ function resetPosCustomer() {
   el('customer-search-results').classList.add('hidden');
   syncCustomerSearchLabel();
   state.voucherCode='';el('voucher-code').value='';
+}
+
+function openQuickProduct(){
+  const form=el('quick-product-form');form.reset();el('quick-product-error').textContent='';
+  const query=el('product-search').value.trim();
+  if(/^\d{6,80}$/.test(query))el('quick-product-barcode').value=query;
+  else el('quick-product-name').value=query;
+  el('quick-product-dialog').showModal();
+  requestAnimationFrame(()=>el(el('quick-product-name').value?'quick-product-price':'quick-product-name').focus());
+}
+
+async function saveQuickProduct(event){
+  event.preventDefault();
+  const button=el('save-quick-product');el('quick-product-error').textContent='';
+  if(!navigator.onLine)return el('quick-product-error').textContent='Barang baru hanya dapat dibuat saat perangkat online.';
+  button.disabled=true;button.textContent='Menyimpan...';
+  try{
+    const product=await request('/api/products/quick',{method:'POST',body:JSON.stringify({
+      name:el('quick-product-name').value.trim(),retailPrice:Number(el('quick-product-price').value),
+      barcode:el('quick-product-barcode').value.trim()
+    })});
+    await refreshCatalog();
+    const catalogProduct=state.products.find((item)=>item.id===product.id);
+    const unit=catalogProduct?.units.find((item)=>item.id===product.unitId)??catalogProduct?.units[0];
+    if(!catalogProduct||!unit)throw new Error('Barang tersimpan tetapi katalog belum diperbarui. Tekan Sinkronkan lalu cari barangnya.');
+    el('quick-product-dialog').close();el('product-search').value='';renderProducts();
+    await addToCart(catalogProduct.id,unit.id);
+    toast(`${catalogProduct.name} dicatat sebagai barang yang perlu dilengkapi.`);
+  }catch(error){el('quick-product-error').textContent=error.message;}
+  finally{button.disabled=false;button.textContent='Simpan & masukkan keranjang';}
 }
 
 async function loadCustomerAging(){
@@ -8747,6 +8777,10 @@ el('product-grid').addEventListener('click',(event)=>{
 });
 window.addEventListener('resize',renderVisiblePosProducts,{passive:true});
 el('scan-camera-pos').addEventListener('click', () => openBarcodeCamera('pos'));
+el('open-quick-product').addEventListener('click',openQuickProduct);
+el('quick-product-form').addEventListener('submit',saveQuickProduct);
+el('close-quick-product').addEventListener('click',()=>el('quick-product-dialog').close());
+el('cancel-quick-product').addEventListener('click',()=>el('quick-product-dialog').close());
 el('close-barcode-camera').addEventListener('click', stopBarcodeCamera);
 el('cancel-barcode-camera').addEventListener('click', stopBarcodeCamera);
 el('barcode-camera-dialog').addEventListener('close', stopBarcodeCamera);
