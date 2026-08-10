@@ -214,26 +214,26 @@ textarea{font:inherit;width:100%;resize:vertical;border:1px solid var(--line);bo
 @media(max-width:760px){
   #purchase-view-documents .purchase-metrics{
     display:grid;
-    grid-template-columns:repeat(2,minmax(0,1fr));
+    grid-template-columns:repeat(5,minmax(0,1fr));
+    gap:1px;
     overflow:hidden;
     scroll-snap-type:none;
+    background:var(--line);
   }
   #purchase-view-documents .purchase-metrics .metric{
     min-width:0;
-    min-height:58px;
-    padding:9px 11px;
+    min-height:44px;
+    padding:6px;
     border:0;
-    border-bottom:1px solid var(--line);
     border-radius:0;
   }
-  #purchase-view-documents .purchase-metrics .metric:nth-child(odd):not(:last-child){border-right:1px solid var(--line)}
   #purchase-view-documents .purchase-metrics .metric:last-child{
-    grid-column:1/-1;
+    grid-column:auto;
     border:0;
     border-radius:0;
   }
-  #purchase-view-documents .purchase-metrics .metric span{margin-bottom:4px;line-height:1.25;white-space:normal}
-  #purchase-view-documents .purchase-metrics .metric strong{font-size:18px}
+  #purchase-view-documents .purchase-metrics .metric span{margin-bottom:2px;font-size:7px;line-height:1.15;white-space:normal}
+  #purchase-view-documents .purchase-metrics .metric strong{font-size:14px}
 }
 
 /* Compact restock proposal and approval flow */
@@ -1659,19 +1659,25 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
 #purchase-view-documents .purchase-metrics{flex:0 0 auto}
 #purchase-view-documents .purchase-documents{display:flex;min-height:0;flex:1;flex-direction:column}
 #purchase-view-documents .document-toolbar{flex:0 0 auto}
-#purchase-order-list{min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+#purchase-order-list{display:grid;min-height:0;padding:8px;flex:1;align-content:start;gap:8px;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;background:#f1f3f3}
+#purchase-order-list>.purchase-document{border:1px solid #c8cfcf;border-radius:11px;background:#fff;box-shadow:0 2px 5px rgba(24,40,42,.05)}
+#purchase-order-list>.purchase-document:last-child{border-bottom:1px solid #c8cfcf}
+#purchase-order-list>.purchase-document:hover,#purchase-order-list>.purchase-document:focus-visible{background:#fff;outline:1px solid #aab4b4;box-shadow:0 2px 5px rgba(24,40,42,.08)}
 #purchase-view-detail{overflow:hidden}
 .purchase-order-detail-page{display:flex;height:100%;min-height:0;flex-direction:column}
 .purchase-order-detail-head{flex:0 0 auto}
 #purchase-order-detail-content{display:flex;min-height:0;flex:1;flex-direction:column;overflow:hidden}
 .purchase-order-detail-summary,.purchase-order-detail-note,.purchase-order-detail-totals,.purchase-order-detail-actions{flex:0 0 auto}
-.purchase-order-detail-lines{min-height:100px;flex:1;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.purchase-order-detail-lines{display:grid;min-height:100px;padding:8px 12px;flex:1;align-content:start;gap:7px;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;background:#f1f3f3}
+.purchase-order-detail-lines>.purchase-order-detail-line{padding:10px 11px;border:1px solid #c8cfcf;border-left:4px solid #aab4b4;border-radius:10px;background:#fff;box-shadow:0 1px 4px rgba(24,40,42,.05)}
+.purchase-order-detail-lines>.purchase-order-detail-line:last-child{border-bottom:1px solid #c8cfcf}
 
 @media(max-width:760px){
   .purchase-documents-active .content-width,.purchase-detail-active .content-width{height:calc(100dvh - 56px);padding-bottom:8px}
   .purchase-documents-active .restock-page-title,.purchase-detail-active .restock-page-title{margin-bottom:6px;padding-bottom:5px}
   #purchase-view-documents .purchase-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;margin-bottom:6px;overflow:hidden;background:var(--line)}
   #purchase-view-documents .purchase-metrics .metric{min-width:0;min-height:44px;padding:6px;border:0;border-radius:0}
+  #purchase-view-documents .purchase-metrics .metric:last-child{grid-column:auto}
   #purchase-view-documents .purchase-metrics .metric span{margin-bottom:2px;font-size:7px;line-height:1.15}
   #purchase-view-documents .purchase-metrics .metric strong{font-size:14px}
   #purchase-view-documents .document-toolbar{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;padding:8px}
@@ -1683,7 +1689,10 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
   #purchase-view-documents .purchase-refresh-icon{width:36px;height:36px;min-height:36px;padding:0}
   .purchase-order-detail-head{padding:8px 10px}.purchase-order-detail-head .eyebrow{display:none}.purchase-order-detail-head h2{font-size:16px}.purchase-order-detail-head p{font-size:8px}
   .purchase-order-detail-summary>div{gap:1px;padding:7px 9px}.purchase-order-detail-summary span{font-size:8px}.purchase-order-detail-summary strong{font-size:10px}.purchase-order-detail-summary small{font-size:8px}
-  .purchase-order-detail-lines{padding:3px 10px}
+  #purchase-order-list{padding:6px;gap:7px}
+  #purchase-order-list>.purchase-document{border-color:#c0c8c8;border-left:4px solid #aab4b4;border-radius:10px}
+  .purchase-order-detail-lines{padding:6px;gap:6px}
+  .purchase-order-detail-lines>.purchase-order-detail-line{padding:8px 9px}
   .purchase-order-detail-note{margin:3px 10px;padding:7px 9px}.purchase-order-detail-note p{font-size:9px}
   .purchase-order-detail-totals{margin-top:3px}.purchase-order-detail-totals>div{padding:6px 8px}.purchase-order-detail-totals span{font-size:7px}.purchase-order-detail-totals strong{font-size:10px}.purchase-order-detail-totals .grand strong{font-size:14px}
   .purchase-order-detail-actions{position:static;gap:5px;padding:7px 10px max(8px,env(safe-area-inset-bottom));box-shadow:none}.purchase-order-detail-actions .button{min-height:34px;padding:6px 8px;font-size:9px}

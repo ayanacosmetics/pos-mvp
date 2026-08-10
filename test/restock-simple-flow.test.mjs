@@ -114,9 +114,14 @@ test('daftar PO ringkas membuka halaman detail penuh yang aman', () => {
   assert.match(css, /\.purchase-order-detail-page/);
   assert.match(html,/purchase-refresh-icon[\s\S]*aria-label="Muat ulang pesanan supplier"/);
   assert.match(app,/purchase-documents-active[\s\S]*purchase-detail-active/);
-  assert.match(css,/#purchase-order-list\{min-height:0;flex:1;overflow-y:auto/);
+  assert.match(css,/#purchase-order-list\{display:grid;min-height:0[\s\S]*?flex:1[\s\S]*?overflow-y:auto/);
   assert.match(css,/#purchase-order-detail-content\{display:flex;min-height:0;flex:1/);
-  assert.match(css,/\.purchase-order-detail-lines\{min-height:100px;flex:1;overflow-y:auto/);
-  assert.match(css, /#purchase-view-documents \.purchase-metrics\{\s*display:grid;\s*grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\s*overflow:hidden/);
-  assert.match(css, /#purchase-view-documents \.purchase-metrics \.metric:last-child\{\s*grid-column:1\/-1/);
+  assert.match(css,/\.purchase-order-detail-lines\{display:grid;min-height:100px[\s\S]*?flex:1[\s\S]*?overflow-y:auto/);
+  assert.match(css,/#purchase-view-documents \.purchase-metrics \.metric:last-child\{grid-column:auto\}/);
+  assert.match(css,/#purchase-order-list>\.purchase-document\{border:1px solid/);
+  assert.match(css,/\.purchase-order-detail-lines>\.purchase-order-detail-line\{padding:10px 11px;border:1px solid/);
+  assert.match(css, /#purchase-view-documents \.purchase-metrics\{\s*display:grid;\s*grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+  assert.doesNotMatch(css, /#purchase-view-documents \.purchase-metrics \.metric:last-child\{\s*grid-column:1\/-1/);
+  assert.match(css,/#purchase-order-list\{[^}]*background:#f1f3f3\}/);
+  assert.match(css,/\.purchase-order-detail-lines>\.purchase-order-detail-line\{[^}]*border-left:4px solid #aab4b4/);
 });
