@@ -4702,15 +4702,18 @@ function purchaseOrderDetailActions(order) {
   const pausedDraft=restockDraftForOrder(order.id);
   const sharedDraft=sharedRestockDraftForOrder(order.id);
   const lockedByOther=sharedDraft?.claimedBy&&new Date(sharedDraft.claimExpiresAt)>new Date()&&sharedDraft.claimedBy!==state.session.user.id;
-  return [
-    order.status!=='CANCELLED'?`<button class="button secondary po-print" data-id="${escapeHtml(order.id)}">Cetak / bagikan</button>`:'',
-    ['SUBMITTED','APPROVED','PARTIALLY_RECEIVED'].includes(order.status)?`<button class="button secondary po-whatsapp" data-id="${escapeHtml(order.id)}">WhatsApp supplier</button>`:'',
+  const utilityActions=[
+    order.status!=='CANCELLED'?`<button class="button secondary purchase-order-icon-action po-print" data-id="${escapeHtml(order.id)}" type="button" aria-label="Cetak atau bagikan PO" title="Cetak / bagikan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M7 13h10v8H7z"/></svg></button>`:'',
+    ['SUBMITTED','APPROVED','PARTIALLY_RECEIVED'].includes(order.status)?`<button class="button secondary purchase-order-icon-action po-whatsapp" data-id="${escapeHtml(order.id)}" type="button" aria-label="Kirim PO ke WhatsApp supplier" title="WhatsApp supplier"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a8 8 0 0 1-11.8 7L4 20l1.5-4.1A8 8 0 1 1 20 11.5Z"/><path d="M9 8.5c.4 2.7 1.8 4.1 4.5 4.5l1-1.2 2 .9c.2.1.3.3.2.6-.4 1.2-1.4 1.8-2.7 1.6-3.4-.6-5.9-3.1-6.5-6.5-.2-1.3.4-2.3 1.6-2.7.3-.1.5 0 .6.2l.9 2-1.6 1Z"/></svg></button>`:''
+  ].join('');
+  const workflowActions=[
     order.status==='DRAFT'?`<button class="button secondary po-open" data-id="${escapeHtml(order.id)}">Ubah draft</button><button class="button primary po-action" data-id="${escapeHtml(order.id)}" data-action="submit">Siapkan pesanan</button>`:'',
     order.status==='SUBMITTED'&&canApprove?`<button class="button primary po-action" data-id="${escapeHtml(order.id)}" data-action="approve">Setujui</button>`:'',
     pausedDraft?(lockedByOther?`<button class="button secondary" disabled>Sedang diperiksa ${escapeHtml(sharedDraft.claimedByName??'staff lain')}</button>`:`<button class="button primary po-resume-receipt" data-id="${escapeHtml(order.id)}">Lanjutkan pemeriksaan</button>`):['APPROVED','PARTIALLY_RECEIVED'].includes(order.status)&&!receivingApproval?`<button class="button primary po-receive" data-id="${escapeHtml(order.id)}">Terima barang</button>`:'',
     canOpenApproval?`<button class="button secondary po-open-receiving-approval" data-id="${escapeHtml(receivingApproval.id)}">Lihat proses penerimaan</button>`:'',
     !['RECEIVED','CANCELLED','PARTIALLY_RECEIVED'].includes(order.status)&&canApprove?`<button class="button danger po-action" data-id="${escapeHtml(order.id)}" data-action="cancel">Batalkan PO</button>`:''
   ].join('');
+  return `<div class="purchase-order-utility-actions">${utilityActions}</div><div class="purchase-order-workflow-actions">${workflowActions}</div>`;
 }
 
 function bindPurchaseOrderDetailActions(root) {

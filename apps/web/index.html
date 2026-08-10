@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=216">
+  <link rel="stylesheet" href="/styles.css?v=217">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -307,8 +307,7 @@
             <div class="surface purchase-order-detail-page">
               <header class="purchase-order-detail-head">
                 <button id="back-purchase-order-detail" class="button secondary" type="button">← Daftar PO</button>
-                <div><p class="eyebrow">DETAIL PESANAN SUPPLIER</p><h2 id="purchase-order-detail-title">Purchase Order</h2><p id="purchase-order-detail-subtitle" class="muted"></p></div>
-                <span id="purchase-order-detail-status" class="status-badge draft">DRAFT</span>
+                <div class="purchase-order-detail-heading"><div class="purchase-order-detail-title-row"><h2 id="purchase-order-detail-title">Purchase Order</h2><span id="purchase-order-detail-status" class="status-badge draft">DRAFT</span></div><p id="purchase-order-detail-subtitle" class="muted"></p></div>
               </header>
               <div id="purchase-order-detail-content"></div>
             </div>
@@ -1201,6 +1200,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=218"></script>
+  <script type="module" src="/app.js?v=219"></script>
 </body>
 </html>

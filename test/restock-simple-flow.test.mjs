@@ -86,8 +86,8 @@ test('surat pesanan dapat dicetak atau dibagikan sebagai PDF ke supplier', () =>
   assert.match(app, /files:\[file\]/);
   assert.match(app, /https:\/\/wa\.me\/\$\{phone\}/);
   assert.match(app, /Nomor WhatsApp supplier belum diisi/);
-  assert.match(app, /class="button secondary po-print"/);
-  assert.match(app, /class="button secondary po-whatsapp"/);
+  assert.match(app, /class="button secondary purchase-order-icon-action po-print"/);
+  assert.match(app, /class="button secondary purchase-order-icon-action po-whatsapp"/);
   assert.match(app, /Tambahan barang baru yang belum tercatat di Nusa/);
   assert.match(app, /function openPurchaseOrderWhatsApp/);
 });
@@ -110,6 +110,9 @@ test('daftar PO ringkas membuka halaman detail penuh yang aman', () => {
   assert.match(app, /role="button" tabindex="0"/);
   assert.match(app, /purchase-order-detail-line/);
   assert.match(app, /function purchaseOrderDetailActions/);
+  assert.match(app,/purchase-order-icon-action po-print[\s\S]*aria-label="Cetak atau bagikan PO"/);
+  assert.match(app,/purchase-order-icon-action po-whatsapp[\s\S]*aria-label="Kirim PO ke WhatsApp supplier"/);
+  assert.match(app,/purchase-order-utility-actions[\s\S]*purchase-order-workflow-actions/);
   assert.match(css, /\.purchase-metrics\{\s*grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
   assert.match(css, /\.purchase-order-detail-page/);
   assert.match(html,/purchase-refresh-icon[\s\S]*aria-label="Muat ulang pesanan supplier"/);
@@ -124,4 +127,9 @@ test('daftar PO ringkas membuka halaman detail penuh yang aman', () => {
   assert.doesNotMatch(css, /#purchase-view-documents \.purchase-metrics \.metric:last-child\{\s*grid-column:1\/-1/);
   assert.match(css,/#purchase-order-list\{[^}]*background:#f1f3f3\}/);
   assert.match(css,/\.purchase-order-detail-lines>\.purchase-order-detail-line\{[^}]*border-left:4px solid #aab4b4/);
+  assert.match(html,/purchase-order-detail-title-row[\s\S]*purchase-order-detail-title[\s\S]*purchase-order-detail-status/);
+  assert.match(css,/\.purchase-order-detail-summary\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)\}/);
+  assert.match(css,/\.purchase-order-detail-lines>\.purchase-order-detail-line\{grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+  assert.match(css,/\.purchase-order-detail-totals\{display:grid;grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+  assert.match(css,/\.purchase-order-detail-actions\{position:static;grid-template-columns:auto minmax\(0,1fr\)/);
 });
