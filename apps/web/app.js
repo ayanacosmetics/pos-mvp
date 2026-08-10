@@ -4071,6 +4071,20 @@ function sharedRestockDraftForOrder(orderId){
   return state.purchaseOrders.find((order)=>order.id===orderId)?.receipt_draft??null;
 }
 
+async function migrateLocalRestockDraftToShared(){
+  const draft=storedRestockDraft(),orderId=draft?.activePurchaseOrder?.id;
+  if(!orderId||sharedRestockDraftForOrder(orderId)||!state.purchaseOrders.some((order)=>order.id===orderId))return false;
+  const clientToken=sharedRestockClaimToken(orderId);
+  await request(`/api/purchase-orders/${orderId}/receipt-draft/claim`,{
+    method:'POST',body:JSON.stringify({clientToken,payload:draft})
+  });
+  await request(`/api/purchase-orders/${orderId}/receipt-draft`,{
+    method:'PUT',body:JSON.stringify({clientToken,payload:draft,release:true})
+  });
+  localStorage.removeItem(`pos_restock_claim_token:${orderId}`);
+  return true;
+}
+
 function restockDraftForOrder(orderId){
   const shared=sharedRestockDraftForOrder(orderId);
   if(shared?.payload?.activePurchaseOrder?.id===orderId)return shared.payload;
@@ -4608,8 +4622,12 @@ async function createPlanningDraft() {
 
 async function loadPurchaseOrders() {
   try {
-    const data = await request('/api/purchase-orders');
+    let data = await request('/api/purchase-orders');
     state.purchaseOrders = data.orders;
+    if(await migrateLocalRestockDraftToShared()){
+      data=await request('/api/purchase-orders');
+      state.purchaseOrders=data.orders;
+    }
     renderPurchaseOrders();
     renderRestockSourceSelector();
   } catch (error) {

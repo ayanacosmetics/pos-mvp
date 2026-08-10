@@ -5007,10 +5007,10 @@ async function routeRequest(request, response, route) {
   if (request.method === 'GET' && route === 'purchase-orders') {
     requireAnyPermission(session, ['purchasing.view_cost','purchasing.receive']);
     const orders=await loadPurchaseOrders(context.tenantId,null,context.locationIds);
-    let drafts=[];
-    try{
-      drafts=await rest('purchase_receipt_drafts',`tenant_id=eq.${context.tenantId}&location_id=${inFilter(context.locationIds)}&select=*&order=updated_at.desc`);
-    }catch(error){console.warn('Shared purchase receipt drafts unavailable',error.message);}
+    const drafts=orders.length?await rest(
+      'purchase_receipt_drafts',
+      `tenant_id=eq.${encodeURIComponent(context.tenantId)}&purchase_order_id=${inFilter(orders.map((order)=>order.id))}&select=*&order=updated_at.desc`
+    ):[];
     const actorIds=[...new Set(drafts.flatMap((draft)=>[draft.claimed_by,draft.updated_by]).filter(Boolean))];
     const actors=actorIds.length?await rest('profiles',`tenant_id=eq.${context.tenantId}&user_id=${inFilter(actorIds)}&select=user_id,display_name`):[];
     const actorName=(id)=>actors.find((actor)=>actor.user_id===id)?.display_name??'Staff';

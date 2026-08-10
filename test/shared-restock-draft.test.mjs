@@ -16,4 +16,12 @@ test('draft penerimaan PO dibagikan dan dikunci atomik di database', async()=>{
   assert.match(api,/claim_purchase_receipt_draft_v1/);
   assert.match(api,/validate_purchase_receipt_draft_lock_v1[\s\S]*receive_purchase_order/);
   assert.match(api,/purchase_receipt_drafts[\s\S]*method:'DELETE'/);
+  assert.match(api,/purchase_order_id=\$\{inFilter\(orders\.map\(\(order\)=>order\.id\)\)\}/);
+});
+
+test('draft lokal lama otomatis dipindahkan menjadi draft bersama',async()=>{
+  const app=await readFile(new URL('../apps/web/app.js',import.meta.url),'utf8');
+  assert.match(app,/migrateLocalRestockDraftToShared/);
+  assert.match(app,/receipt-draft\/claim[\s\S]*release:true/);
+  assert.match(app,/if\(await migrateLocalRestockDraftToShared\(\)\)[\s\S]*request\('\/api\/purchase-orders'\)/);
 });
