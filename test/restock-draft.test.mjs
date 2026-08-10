@@ -67,6 +67,7 @@ test('halaman penerimaan mempertahankan langkah, autosave saat pindah ke Kasir, 
   assert.match(app, /PEMERIKSAAN DIJEDA[\s\S]*Lanjutkan pemeriksaan/);
   assert.match(app, /async function resumeOrderReceipt[\s\S]*restoreRestockDraft/);
   assert.match(app, /restockDraftResumeStep[\s\S]*hasInspection[\s\S]*'items':'document'/);
+  assert.match(app, /activePurchaseOrder\?\.id&&saved==='document'\)return 'items'/);
   assert.match(app, /claimSharedRestockDraft[\s\S]*receipt-draft\/claim/);
   assert.match(app, /saveSharedRestockDraft[\s\S]*release/);
   assert.match(app, /SEDANG DIPERIKSA[\s\S]*Terkunci/);

@@ -4073,7 +4073,18 @@ function sharedRestockDraftForOrder(orderId){
 
 async function migrateLocalRestockDraftToShared(){
   const draft=storedRestockDraft(),orderId=draft?.activePurchaseOrder?.id;
-  if(!orderId||sharedRestockDraftForOrder(orderId)||!state.purchaseOrders.some((order)=>order.id===orderId))return false;
+  if(!orderId||!state.purchaseOrders.some((order)=>order.id===orderId))return false;
+  const shared=sharedRestockDraftForOrder(orderId),sharedPayload=shared?.payload;
+  if(shared){
+    const claimActive=shared.claimedBy&&new Date(shared.claimExpiresAt)>new Date();
+    if(claimActive&&shared.claimedBy!==state.session.user.id)return false;
+    const inspected=(value)=>(value?.lines??[]).filter((line)=>line.verificationMethod||String(line.qty??'').trim()!=='').length;
+    const localInspected=inspected(draft),sharedInspected=inspected(sharedPayload);
+    const localDocument=String(draft.documentNo??'').trim(),sharedDocument=String(sharedPayload?.documentNo??'').trim();
+    const localUpdated=Date.parse(draft.updatedAt??'')||0,sharedUpdated=Date.parse(sharedPayload?.updatedAt??shared.updatedAt??'')||0;
+    const localIsRicher=localInspected>sharedInspected||(!sharedDocument&&Boolean(localDocument))||(localInspected===sharedInspected&&localUpdated>sharedUpdated);
+    if(!localIsRicher)return false;
+  }
   const clientToken=sharedRestockClaimToken(orderId);
   await request(`/api/purchase-orders/${orderId}/receipt-draft/claim`,{
     method:'POST',body:JSON.stringify({clientToken,payload:draft})
@@ -4189,6 +4200,7 @@ function applyRestockDraftPrices(row,prices=[]){
 
 function restockDraftResumeStep(draft){
   const saved=restockWizardSteps.includes(draft?.wizardStep)?draft.wizardStep:'document';
+  if(draft?.activePurchaseOrder?.id&&saved==='document')return 'items';
   if(saved!=='document')return saved;
   const hasInspection=(draft?.lines??[]).some((line)=>line.verificationMethod||String(line.qty??'').trim()!=='');
   return hasInspection||String(draft?.documentNo??'').trim()?'items':'document';
