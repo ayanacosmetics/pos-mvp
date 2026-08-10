@@ -4187,6 +4187,13 @@ function applyRestockDraftPrices(row,prices=[]){
   }
 }
 
+function restockDraftResumeStep(draft){
+  const saved=restockWizardSteps.includes(draft?.wizardStep)?draft.wizardStep:'document';
+  if(saved!=='document')return saved;
+  const hasInspection=(draft?.lines??[]).some((line)=>line.verificationMethod||String(line.qty??'').trim()!=='');
+  return hasInspection||String(draft?.documentNo??'').trim()?'items':'document';
+}
+
 async function restoreRestockDraft(){
   const draft=readRestockDraft(localStorage,currentRestockDraftKey());
   if(!draft){renderRestockDraftStatus(null);return false;}
@@ -4217,7 +4224,7 @@ async function restoreRestockDraft(){
       applyRestockDraftPrices(row,saved.proposedPrices);updateRestockLineSummary(row);syncRestockApprovalRequirement(row);
     }
     syncRestockVisibility();updateRestockTotal();
-    setRestockWizardStep(restockWizardSteps.includes(draft.wizardStep)?draft.wizardStep:'document',{focus:false});
+    setRestockWizardStep(restockDraftResumeStep(draft),{focus:false});
     renderRestockDraftStatus(draft);return true;
   }finally{state.restockDraftRestoring=false;}
 }
