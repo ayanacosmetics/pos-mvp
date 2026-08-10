@@ -83,6 +83,16 @@ test('pemilih barang tambahan ringkas dan dapat membuat draft produk tanpa scan'
   assert.match(app, /target==='restock'[\s\S]*openRestockNewProduct\(value\)/);
 });
 
+test('pencarian penerimaan tidak menggandakan katalog sebelum staf mengetik', () => {
+  assert.match(app, /kind==='restock'&&!normalized/);
+  assert.match(app, /container\.classList\.add\('hidden'\)/);
+  assert.match(app, /state\.activePurchaseOrder\?'Cari barang PO, SKU, atau scan barcode':'Cari barang katalog, SKU, atau scan barcode'/);
+  assert.match(app, /function contextualPurchaseProducts/);
+  assert.match(app, /Number\(!poIds\.has\(a\.id\)\)-Number\(!poIds\.has\(b\.id\)\)/);
+  assert.match(css, /grid-auto-columns:40px/);
+  assert.match(css, /#restock-extra-product-picker \.purchase-product-results\{max-height:220px\}/);
+});
+
 test('desktop membatasi daftar di panel dan mobile mempertahankan navigasi lanjut', () => {
   assert.match(css, /\.restock-wizard-panel\{min-height:/);
   assert.match(css, /\.restock-wizard-panel \.restock-list\{[\s\S]*max-height:calc\(100dvh - 420px\)/);

@@ -3691,16 +3691,23 @@ function sortedPurchaseProducts(query = '') {
     .slice(0, 60);
 }
 
+function contextualPurchaseProducts(kind,query=''){
+  const products=sortedPurchaseProducts(query);
+  if(kind!=='restock'||!state.activePurchaseOrder)return products;
+  const poIds=new Set((state.activePurchaseOrder.items??[]).filter((line)=>Number(line.remaining_qty)>0).map((line)=>line.product_id));
+  return products.sort((a,b)=>Number(!poIds.has(a.id))-Number(!poIds.has(b.id)));
+}
+
 function renderPurchaseProductResults(kind, query = '') {
   const container = el(`${kind}-product-results`);
-  let products = sortedPurchaseProducts(query);
-  if(kind==='restock'&&state.activePurchaseOrder&&!String(query).trim()){
-    const poIds=new Set((state.activePurchaseOrder.items??[]).filter((line)=>Number(line.remaining_qty)>0).map((line)=>line.product_id));
-    products=state.products.filter((product)=>poIds.has(product.id)).sort((a,b)=>{
-      const aRow=document.querySelector(`.restock-line[data-product="${CSS.escape(a.id)}"]`),bRow=document.querySelector(`.restock-line[data-product="${CSS.escape(b.id)}"]`);
-      return Number(Boolean(aRow?.dataset.verificationMethod))-Number(Boolean(bRow?.dataset.verificationMethod))||a.name.localeCompare(b.name,'id');
-    });
+  const normalized=String(query).trim();
+  if(kind==='restock'&&!normalized){
+    container.replaceChildren();
+    container.classList.add('hidden');
+    return;
   }
+  container.classList.remove('hidden');
+  const products=contextualPurchaseProducts(kind,normalized);
   const canCreate=kind==='restock'&&state.session.permissions.includes('purchasing.receive');
   container.innerHTML = products.map((product) => {
     const stock = Number(product.stockBase ?? 0);
@@ -3751,7 +3758,7 @@ async function handlePurchaseProductEnter(kind, event) {
   const value = event.currentTarget.value.trim();
   const exact = state.products.flatMap((product) => product.units.map((unit) => ({ product, unit }))).find(({ unit }) => unit.barcode === value);
   if (exact) return choosePurchaseProduct(kind, exact.product.id, exact.unit.id);
-  const first = sortedPurchaseProducts(value)[0];
+  const first = contextualPurchaseProducts(kind,value)[0];
   if (first) return choosePurchaseProduct(kind, first.id);
   if(kind==='restock'&&state.session.permissions.includes('purchasing.receive'))return openRestockNewProduct(value);
   toast('Barang tidak ditemukan.');
@@ -3763,8 +3770,11 @@ function setRestockExtraPicker(open){
   const label=el('toggle-restock-extra-product').querySelector('span');
   if(label)label.textContent=open?'Tutup pencarian':'Cari tanpa barcode';
   if(open){
-    renderPurchaseProductResults('restock',el('restock-product-search').value);
-    el('restock-product-search').focus();
+    const input=el('restock-product-search');
+    input.value='';
+    input.placeholder=state.activePurchaseOrder?'Cari barang PO, SKU, atau scan barcode':'Cari barang katalog, SKU, atau scan barcode';
+    renderPurchaseProductResults('restock','');
+    input.focus();
   }
 }
 
@@ -3856,6 +3866,7 @@ function saveRestockNewProduct(event){
 function activatePurchaseScanner(kind) {
   const input = el(`${kind}-product-search`);
   input.value = '';
+  renderPurchaseProductResults(kind,'');
   input.placeholder = 'Scanner siap · scan barcode sekarang';
   input.focus();
   toast(kind==='restock'?'Scanner siap. Barang PO yang cocok akan langsung dibuka untuk diperiksa.':'Scanner siap. Scan barcode lalu barang akan ditambahkan.');

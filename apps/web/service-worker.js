@@ -1,4 +1,4 @@
-const CACHE = 'nusa-pos-shell-v229';
+const CACHE = 'nusa-pos-shell-v230';
 // Only cache the critical shell during an update. Large spreadsheet/scanner
 // assets are cached by the fetch handler when used, so an update cannot
 // compete with login and catalog recovery on a shop device.

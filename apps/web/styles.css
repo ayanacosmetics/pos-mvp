@@ -1990,3 +1990,43 @@ th,td{padding:9px 10px}
   }
   #page-pos #product-grid{align-content:start}
 }
+
+/* Precise receiving controls and a search panel that stays compact until used. */
+.restock-items-heading .restock-item-actions{align-items:center;flex-wrap:nowrap}
+.restock-items-heading .restock-icon-action{box-sizing:border-box;min-height:40px}
+#restock-extra-product-picker{margin-bottom:8px;padding:9px;border-radius:11px;background:#f7f9f8}
+#restock-extra-product-picker .purchase-product-search>*{box-sizing:border-box;min-height:40px}
+#restock-extra-product-picker .purchase-product-results{margin-top:8px}
+#restock-extra-product-picker .purchase-product-option{padding:9px 10px;border-radius:10px}
+@media(max-width:700px){
+  .restock-items-heading .restock-item-actions{
+    display:grid;
+    grid-auto-columns:40px;
+    grid-auto-flow:column;
+    align-items:center;
+    justify-content:end;
+    gap:6px;
+  }
+  .restock-items-heading .restock-item-actions .restock-icon-action{
+    box-sizing:border-box;
+    width:40px!important;
+    min-width:40px!important;
+    max-width:40px;
+    height:40px;
+    min-height:40px!important;
+    margin:0!important;
+    padding:0!important;
+    border-radius:10px;
+  }
+  .restock-items-heading .restock-icon-action svg{width:19px;height:19px}
+  #restock-extra-product-picker{padding:8px}
+  #restock-extra-product-picker .purchase-product-search{gap:6px}
+  #restock-extra-product-picker .purchase-product-search input,
+  #restock-extra-product-picker .purchase-product-search .button{height:40px;min-height:40px}
+  #restock-extra-product-picker .purchase-product-results{max-height:220px}
+  #restock-extra-product-picker .purchase-product-option{gap:7px;padding:8px 9px}
+  #restock-extra-product-picker .purchase-product-option strong{font-size:11px}
+  #restock-extra-product-picker .purchase-product-option small,
+  #restock-extra-product-picker .purchase-product-stock{font-size:8px}
+  #restock-extra-product-picker .purchase-product-option .button{min-height:34px;padding:6px 9px;font-size:9px}
+}
