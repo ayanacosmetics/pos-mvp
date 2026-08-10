@@ -8,10 +8,10 @@ const worker = await readFile(new URL('../apps/web/service-worker.js', import.me
 
 test('Nusa Commerce memakai identitas rilis dan aset shell terbaru', () => {
   assert.match(html, /Migrasi lengkap Kaspin .* v2\.17\.1/);
-  assert.match(html, /styles\.css\?v=213/);
+  assert.match(html, /styles\.css\?v=214/);
   assert.match(html, /app\.js\?v=217/);
-  assert.match(worker, /nusa-pos-shell-v223/);
-  assert.match(worker, /styles\.css\?v=213/);
+  assert.match(worker, /nusa-pos-shell-v224/);
+  assert.match(worker, /styles\.css\?v=214/);
   assert.match(worker, /app\.js\?v=217/);
   assert.match(worker, /variant-suggestions\.mjs/);
 });
@@ -42,4 +42,11 @@ test('sistem desain mencakup shell, data, POS, fokus, dan gerak terbatas', () =>
   assert.match(css, /\.pos-layout\{height:calc\(100dvh - 72px\)/);
   assert.match(css, /@media\(prefers-reduced-motion:reduce\)/);
   assert.match(css, /\.product-grid\{display:grid;grid-template-columns:minmax\(0,1fr\)!important/);
+});
+
+test('ruang kerja operasional memakai header dan jarak global yang padat',()=>{
+  assert.match(css,/Compact application workspace/);
+  assert.match(css,/\.content-width\{padding:22px/);
+  assert.match(css,/@media\(max-width:760px\)[\s\S]*\.topbar\{height:56px/);
+  assert.match(css,/\.restock-wizard-steps\{display:grid;grid-template-columns:repeat\(4/);
 });
