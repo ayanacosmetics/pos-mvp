@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=220">
+  <link rel="stylesheet" href="/styles.css?v=221">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -277,7 +277,7 @@
             <div id="restock-planning-metrics" class="purchase-metrics"></div>
             <div class="planning-layout">
               <div class="surface planning-workspace">
-                <div class="document-toolbar planning-toolbar"><div><p class="eyebrow">LANGKAH 1</p><h2>Pilih barang untuk dipesan</h2><small>Produk otomatis diurutkan dari stok paling sedikit.</small></div><div><select id="planning-location" aria-label="Lokasi rencana restok"></select><select id="planning-supplier-filter" aria-label="Filter supplier"><option value="">Semua supplier</option></select><button id="refresh-restock-planning" class="button secondary" type="button">Muat ulang</button></div></div>
+                <div class="document-toolbar planning-toolbar"><div><p class="eyebrow">LANGKAH 1</p><h2>Pilih barang untuk dipesan</h2><small>Produk otomatis diurutkan dari stok paling sedikit.</small></div><div><select id="planning-location" aria-label="Lokasi rencana restok"></select><select id="planning-supplier-filter" aria-label="Filter supplier"><option value="">Semua supplier</option></select><button id="refresh-restock-planning" class="button secondary planning-refresh-icon" type="button" aria-label="Muat ulang rekomendasi restok" title="Muat ulang"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5"/><path d="M6.1 9A7 7 0 0 1 18 6l2 5M17.9 15A7 7 0 0 1 6 18l-2-5"/></svg></button></div></div>
                 <details class="planning-settings planning-advanced">
                   <summary>Pengaturan lanjutan</summary>
                   <form id="purchase-planning-settings-form">
@@ -288,8 +288,8 @@
                     <p id="planning-settings-note" class="muted"></p>
                   </form>
                 </details>
-                <div class="planning-list-tools"><label class="planning-search"><span class="sr-only">Cari barang</span><input id="planning-product-search" type="search" autocomplete="off" placeholder="Cari nama atau SKU"></label><label class="planning-needed-filter"><input id="planning-needed-only" type="checkbox"> Hanya barang yang disarankan sistem</label></div>
-                <div class="planning-draft-actions"><span><strong id="planning-selected-count">0 barang dipilih</strong><small>Tekan barang untuk mengisi jumlah, lalu pilih supplier tujuan.</small></span><label>Supplier tujuan<select id="planning-order-supplier" aria-label="Supplier tujuan pesanan"><option value="">Pilih supplier</option></select></label><button id="create-planning-draft" class="button primary" type="button" disabled>Buat pesanan supplier</button></div>
+                <div class="planning-list-tools"><label class="planning-search"><span class="sr-only">Cari barang</span><input id="planning-product-search" type="search" autocomplete="off" placeholder="Cari nama atau SKU"></label><label class="planning-needed-filter"><input id="planning-needed-only" type="checkbox"> Hanya yang disarankan</label></div>
+                <div class="planning-draft-actions"><span><strong id="planning-selected-count">0 barang dipilih</strong><small>Tekan barang untuk mengisi jumlah, lalu pilih supplier tujuan.</small></span><label>Supplier tujuan<select id="planning-order-supplier" aria-label="Supplier tujuan pesanan"><option value="">Pilih supplier</option></select></label><button id="create-planning-draft" class="button primary" type="button" disabled>Buat pesanan</button></div>
                 <div id="restock-planning-list"><div class="empty-state compact">Memuat rekomendasi restok...</div></div>
               </div>
             </div>
@@ -1200,6 +1200,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=222"></script>
+  <script type="module" src="/app.js?v=223"></script>
 </body>
 </html>

@@ -4334,6 +4334,7 @@ function showPurchaseView(name,{approvalId=null}={}) {
     return;
   }
   document.querySelectorAll('.purchase-view').forEach((view) => view.classList.toggle('hidden', view.id !== `purchase-view-${name}`));
+  el('page-restock').classList.toggle('purchase-planning-active',name==='planning');
   el('page-restock').classList.toggle('purchase-documents-active',name==='documents');
   el('page-restock').classList.toggle('purchase-detail-active',name==='detail');
   document.querySelectorAll('.purchase-tab').forEach((button) => button.classList.toggle('active', button.dataset.purchaseView === name));
@@ -4493,7 +4494,7 @@ function renderRestockPlanning() {
     const selection=planningSelectionOf(item.productId);
     return `<button class="planning-compact-row ${selection?'selected':''}" data-product-id="${escapeHtml(item.productId)}" type="button">
       ${productThumbnail(product ?? {name:item.productName})}
-      <span class="planning-compact-product"><strong>${escapeHtml(item.productName)}</strong><small>${escapeHtml(item.sku)}</small></span>
+      <span class="planning-compact-product"><strong>${escapeHtml(item.productName)}</strong><small>${escapeHtml(item.sku)}<span class="planning-mobile-stock"> · stok ${Number(item.stock).toLocaleString('id-ID')} pcs</span></small></span>
       <span class="planning-compact-fact"><small>Harga jual</small><strong>${money.format(price)}</strong></span>
       <span class="planning-compact-fact"><small>Stok</small><strong>${Number(item.stock).toLocaleString('id-ID')} pcs</strong></span>
       <span class="planning-compact-choice">${selection?`<small>Dipilih${selection.factor>1?` · ${Number(selection.qty*selection.factor).toLocaleString('id-ID')} pcs`:''}</small><strong>${Number(selection.qty).toLocaleString('id-ID')} ${escapeHtml(selection.unitName)}</strong>`:`<span class="status-badge ${urgencyClass}">${urgencyLabel}</span><strong>Pilih</strong>`}</span>
@@ -4653,7 +4654,7 @@ async function createPlanningDraft() {
     await Promise.all([loadPurchaseOrders(),loadRestockPlanning()]);
     showPurchaseView('documents');
   }catch(error){toast(error.message);}
-  finally{button.textContent='Buat pesanan supplier';syncPlanningSelection();}
+  finally{button.textContent='Buat pesanan';syncPlanningSelection();}
 }
 
 async function loadPurchaseOrders() {

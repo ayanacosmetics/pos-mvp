@@ -2054,3 +2054,121 @@ th,td{padding:9px 10px}
   .sidebar-footer{padding-right:0;padding-left:0}
   .sidebar-footer .logout-button{width:100%;padding-right:3px;padding-left:3px;font-size:9px}
 }
+
+/* Dense Restock > Pilih barang workspace across laptop, tablet, and phone. */
+.purchase-planning-active .content-width{display:flex;height:calc(100dvh - 62px);min-height:0;padding-top:9px;padding-bottom:8px;flex-direction:column;overflow:hidden}
+.purchase-planning-active .restock-page-title{flex:0 0 auto;margin-bottom:5px!important;padding-bottom:5px!important}
+.purchase-planning-active .restock-page-title .eyebrow,.purchase-planning-active .restock-page-title .muted{display:none}
+.purchase-planning-active .restock-page-title h1{font-size:21px!important}
+.purchase-planning-active .restock-page-title .pill{padding:5px 8px;font-size:8px}
+#purchase-view-planning{display:flex;min-height:0;flex:1;flex-direction:column}
+#purchase-view-planning.hidden{display:none}
+#purchase-view-planning #restock-planning-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));flex:0 0 auto;gap:1px;margin-bottom:6px;overflow:hidden;border:1px solid var(--line);border-radius:9px;background:var(--line)}
+#purchase-view-planning #restock-planning-metrics .metric{min-height:46px;padding:6px 9px;border:0;border-radius:0;background:#fff}
+#purchase-view-planning #restock-planning-metrics .metric span{margin-bottom:1px;font-size:8px}
+#purchase-view-planning #restock-planning-metrics .metric strong{font-size:15px}
+#purchase-view-planning .planning-layout{min-height:0;flex:1}
+#purchase-view-planning .planning-workspace{display:flex;height:100%;min-height:0;flex-direction:column}
+#purchase-view-planning .planning-toolbar{display:grid;grid-template-columns:minmax(190px,.8fr) minmax(390px,1.2fr);align-items:center;gap:10px;padding:7px 10px}
+#purchase-view-planning .planning-toolbar>div:first-child{min-width:0}
+#purchase-view-planning .planning-toolbar .eyebrow,#purchase-view-planning .planning-toolbar>div:first-child small{display:none}
+#purchase-view-planning .planning-toolbar h2{overflow:hidden;margin:0;font-size:16px;text-overflow:ellipsis;white-space:nowrap}
+#purchase-view-planning .planning-toolbar>div:last-child{display:grid;grid-template-columns:minmax(120px,1fr) minmax(120px,1fr) 38px;gap:6px;width:100%}
+#purchase-view-planning .planning-toolbar select{height:38px;min-height:38px;padding:7px 9px;font-size:11px}
+#purchase-view-planning .planning-toolbar .planning-refresh-icon{display:grid;width:38px;min-width:38px;height:38px;min-height:38px;padding:0;place-items:center}
+.planning-refresh-icon svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#purchase-view-planning .planning-advanced{flex:0 0 auto}
+#purchase-view-planning .planning-advanced>summary{padding:7px 11px;font-size:9px}
+#purchase-view-planning .planning-advanced form{gap:7px;padding:9px 11px}
+#purchase-view-planning .planning-advanced form h2{font-size:14px}
+#purchase-view-planning .planning-advanced form label{gap:3px;font-size:9px}
+#purchase-view-planning .planning-advanced form input{min-height:36px;padding:7px 8px;font-size:11px}
+#purchase-view-planning .planning-advanced form label small{display:none}
+#purchase-view-planning .planning-advanced form .button{min-height:36px;padding:7px 10px;font-size:10px}
+#purchase-view-planning .planning-list-tools{display:grid;grid-template-columns:minmax(200px,440px) auto;align-items:center;flex:0 0 auto;gap:10px;padding:6px 10px}
+#purchase-view-planning .planning-search input{height:38px;min-height:38px;padding:7px 10px;font-size:11px}
+#purchase-view-planning .planning-needed-filter{gap:6px;white-space:nowrap;font-size:10px}
+#purchase-view-planning .planning-needed-filter input{width:16px;height:16px}
+#purchase-view-planning .planning-draft-actions{display:grid;grid-template-columns:minmax(120px,1fr) minmax(180px,240px) auto;align-items:center;flex:0 0 auto;gap:8px;padding:7px 10px;box-shadow:none}
+#purchase-view-planning .planning-draft-actions>span{gap:1px}
+#purchase-view-planning .planning-draft-actions>span strong{font-size:11px}
+#purchase-view-planning .planning-draft-actions>span small{overflow:hidden;font-size:8px;text-overflow:ellipsis;white-space:nowrap}
+#purchase-view-planning .planning-draft-actions>label{gap:2px;font-size:8px}
+#purchase-view-planning .planning-draft-actions>label select{height:36px;min-height:36px;padding:6px 8px;font-size:10px}
+#purchase-view-planning .planning-draft-actions>.button{min-height:36px;padding:7px 10px;font-size:10px;white-space:nowrap}
+#purchase-view-planning #restock-planning-list{min-height:120px;max-height:none;flex:1;overflow-y:auto;overscroll-behavior:contain;scrollbar-color:#b7c5c2 transparent}
+#purchase-view-planning .planning-compact-row{grid-template-columns:42px minmax(150px,1fr) 100px 78px 112px 13px;gap:8px;min-height:56px;padding:6px 10px}
+#purchase-view-planning .planning-compact-row .product-thumb{width:42px;height:42px;border-radius:8px;font-size:15px}
+#purchase-view-planning .planning-compact-product,#purchase-view-planning .planning-compact-fact,#purchase-view-planning .planning-compact-choice{gap:1px}
+#purchase-view-planning .planning-compact-product strong{font-size:11px}
+#purchase-view-planning .planning-compact-product small,#purchase-view-planning .planning-compact-fact small,#purchase-view-planning .planning-compact-choice small{font-size:8px}
+#purchase-view-planning .planning-compact-fact strong,#purchase-view-planning .planning-compact-choice strong{font-size:10px}
+#purchase-view-planning .planning-compact-choice .status-badge{margin:0;padding:3px 6px;font-size:7px}
+.planning-mobile-stock{display:none}
+#planning-item-dialog .planning-item-dialog{width:min(520px,94vw);padding:18px}
+#planning-item-dialog .comparison-heading{margin-bottom:6px}
+#planning-item-dialog .comparison-heading h2{overflow:hidden;margin-bottom:2px;font-size:20px;text-overflow:ellipsis;white-space:nowrap}
+#planning-item-dialog .planning-item-summary{gap:7px;margin:5px 0 10px}
+#planning-item-dialog .planning-item-summary>div{gap:2px;padding:8px 10px;border-radius:9px}
+#planning-item-dialog .planning-item-summary span{font-size:9px}
+#planning-item-dialog .planning-item-summary strong{font-size:13px}
+#planning-item-dialog .planning-item-order-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+#planning-item-dialog .planning-item-order-grid label{gap:3px;font-size:9px}
+#planning-item-dialog .planning-item-order-grid input,#planning-item-dialog .planning-item-order-grid select{min-height:38px;padding:7px 8px;font-size:12px}
+#planning-item-dialog .planning-item-quantity input{font-size:15px}
+#planning-item-dialog .planning-item-conversion{margin:4px 0 7px;font-size:9px}
+#planning-item-dialog .planning-item-suggestion{margin-top:7px;padding:8px 10px;font-size:10px}
+#planning-item-dialog .planning-item-tools{gap:10px;margin:7px 0;font-size:9px}
+#planning-item-dialog .error{min-height:16px;margin:0;font-size:9px}
+#planning-item-dialog .button-row{gap:6px;margin-top:8px}
+#planning-item-dialog .button-row .button{min-height:38px;padding:7px 9px;font-size:10px}
+@media(max-width:1000px) and (min-width:701px){
+  #purchase-view-planning .planning-toolbar{grid-template-columns:minmax(170px,.7fr) minmax(360px,1.3fr)}
+  #purchase-view-planning .planning-compact-row{grid-template-columns:40px minmax(130px,1fr) 88px 68px 104px 12px;gap:6px;padding-inline:8px}
+  #purchase-view-planning .planning-compact-row .product-thumb{width:40px;height:40px}
+}
+@media(max-width:700px){
+  .purchase-planning-active .content-width{height:calc(100dvh - 56px);padding-top:5px;padding-bottom:5px}
+  .purchase-planning-active .restock-page-title{margin-bottom:3px!important;padding-bottom:3px!important}
+  .purchase-planning-active .restock-page-title h1{font-size:18px!important}
+  .purchase-planning-active .restock-page-title .pill{display:none}
+  #purchase-view-planning #restock-planning-metrics{margin-bottom:4px}
+  #purchase-view-planning #restock-planning-metrics .metric{min-width:0;min-height:40px;padding:4px 5px}
+  #purchase-view-planning #restock-planning-metrics .metric span{overflow:hidden;font-size:6px;line-height:1.1;text-overflow:ellipsis;white-space:nowrap}
+  #purchase-view-planning #restock-planning-metrics .metric strong{font-size:12px}
+  #purchase-view-planning .planning-toolbar{grid-template-columns:1fr;gap:5px;padding:6px 8px}
+  #purchase-view-planning .planning-toolbar h2{font-size:13px}
+  #purchase-view-planning .planning-toolbar>div:last-child{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 36px;gap:5px}
+  #purchase-view-planning .planning-toolbar select,#purchase-view-planning .planning-toolbar .planning-refresh-icon{height:36px;min-height:36px;font-size:9px}
+  #purchase-view-planning .planning-toolbar .planning-refresh-icon{width:36px;min-width:36px}
+  #purchase-view-planning .planning-advanced>summary{padding:6px 8px;font-size:8px}
+  #purchase-view-planning .planning-advanced form{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:7px 8px}
+  #purchase-view-planning .planning-advanced form>div,#purchase-view-planning .planning-advanced form>.muted{grid-column:1/-1!important}
+  #purchase-view-planning .planning-advanced form .button{grid-column:1/-1!important}
+  #purchase-view-planning .planning-list-tools{grid-template-columns:minmax(0,1fr) auto;gap:6px;padding:5px 8px}
+  #purchase-view-planning .planning-search input{height:35px;min-height:35px;padding:6px 8px;font-size:10px}
+  #purchase-view-planning .planning-needed-filter{font-size:8px}
+  #purchase-view-planning .planning-needed-filter input{width:14px;height:14px}
+  #purchase-view-planning .planning-draft-actions{grid-template-columns:minmax(70px,.65fr) minmax(105px,1fr) auto;gap:5px;padding:5px 8px}
+  #purchase-view-planning .planning-draft-actions>span{grid-column:auto;min-width:0}
+  #purchase-view-planning .planning-draft-actions>span strong{display:block;overflow:hidden;font-size:8px;text-overflow:ellipsis;white-space:nowrap}
+  #purchase-view-planning .planning-draft-actions>span small{display:none}
+  #purchase-view-planning .planning-draft-actions>label{grid-column:auto;min-width:0;font-size:0}
+  #purchase-view-planning .planning-draft-actions>label select{width:100%;height:34px;min-height:34px;padding:5px 6px;font-size:9px}
+  #purchase-view-planning .planning-draft-actions>.button{grid-column:auto;width:auto;min-height:34px;padding:6px 8px;font-size:8px}
+  #purchase-view-planning #restock-planning-list{min-height:100px;max-height:none;padding-bottom:max(6px,env(safe-area-inset-bottom))}
+  #purchase-view-planning .planning-compact-row{grid-template-columns:40px minmax(0,1fr) auto 11px;grid-template-areas:"thumb product choice arrow";gap:6px;min-height:54px;padding:5px 7px}
+  #purchase-view-planning .planning-compact-row .product-thumb{grid-area:thumb;width:40px;height:40px}
+  #purchase-view-planning .planning-compact-product{grid-area:product}
+  #purchase-view-planning .planning-compact-product strong{display:block;overflow:hidden;font-size:10px;line-height:1.2;text-overflow:ellipsis;white-space:nowrap}
+  #purchase-view-planning .planning-compact-product small{font-size:7px}
+  #purchase-view-planning .planning-mobile-stock{display:inline}
+  #purchase-view-planning .planning-compact-fact{display:none}
+  #purchase-view-planning .planning-compact-choice{grid-area:choice;display:grid;justify-items:end;gap:1px}
+  #purchase-view-planning .planning-compact-row:not(.selected) .planning-compact-choice>strong{display:none}
+  #purchase-view-planning .planning-compact-arrow{grid-area:arrow;font-size:17px}
+  #planning-item-dialog .planning-item-dialog{padding:14px 12px}
+  #planning-item-dialog .planning-item-order-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #planning-item-dialog .button-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+  #planning-item-dialog .button-row .button{width:100%;padding-inline:5px;font-size:9px}
+}

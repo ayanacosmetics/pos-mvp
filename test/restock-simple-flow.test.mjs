@@ -55,7 +55,7 @@ test('pilihan tersimpan ketika daftar dirender ulang', () => {
 });
 
 test('satu tombol membuat pesanan supplier dan mengajukannya untuk diproses', () => {
-  assert.match(html, /id="create-planning-draft"[\s\S]*Buat pesanan supplier/);
+  assert.match(html, /id="create-planning-draft"[\s\S]*Buat pesanan/);
   assert.match(html, /id="planning-order-supplier"/);
   assert.match(app, /purchase-orders\/\$\{result\.id\}\/submit/);
   assert.match(app, /baseQty:item\.qty\*item\.factor/);
@@ -64,6 +64,18 @@ test('satu tombol membuat pesanan supplier dan mengajukannya untuk diproses', ()
   assert.match(api, /purchaseUnitFactor:Number\(item\.purchaseUnitFactor\?\?1\)/);
   assert.match(app, /Pilih supplier tujuan pesanan/);
   assert.match(app, /supplierId,locationId/);
+});
+
+test('halaman pilih barang padat dan responsif pada laptop tablet serta mobile',()=>{
+  assert.match(app,/classList\.toggle\('purchase-planning-active',name==='planning'\)/);
+  assert.match(html,/class="button secondary planning-refresh-icon"[\s\S]*aria-label="Muat ulang rekomendasi restok"/);
+  assert.match(app,/class="planning-mobile-stock"/);
+  assert.match(css,/\.purchase-planning-active \.content-width\{display:flex;height:calc\(100dvh - 62px\)/);
+  assert.match(css,/#purchase-view-planning #restock-planning-list\{[^}]*max-height:none;flex:1;overflow-y:auto/);
+  assert.match(css,/#purchase-view-planning \.planning-compact-row\{grid-template-columns:42px[^}]*min-height:56px/);
+  assert.match(css,/@media\(max-width:1000px\) and \(min-width:701px\)/);
+  assert.match(css,/@media\(max-width:700px\)[\s\S]*grid-template-areas:"thumb product choice arrow"/);
+  assert.match(css,/#planning-item-dialog \.planning-item-order-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 });
 
 test('kontrol pesanan berada di atas daftar dan hanya daftar barang yang menggulir', () => {
