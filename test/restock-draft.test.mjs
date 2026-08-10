@@ -62,7 +62,9 @@ test('halaman penerimaan mempertahankan langkah, autosave saat pindah ke Kasir, 
   assert.match(html, /id="restock-draft-banner"[\s\S]*id="discard-restock-draft"/);
   assert.match(html, /id="pause-restock-receipt"/);
   assert.match(html, /id="pause-restock-line-dialog"/);
-  assert.match(html, /id="pause-restock-receipt"[^>]+href="\/\?restock-paused=1"/);
-  assert.match(html, /id="pause-restock-line-dialog"[^>]+href="\/\?restock-paused=1"/);
+  assert.match(html, /id="pause-restock-receipt"[^>]+type="button"/);
+  assert.match(html, /id="pause-restock-line-dialog"[^>]+type="button"/);
+  assert.match(app, /PEMERIKSAAN DIJEDA[\s\S]*Lanjutkan pemeriksaan/);
+  assert.match(app, /async function resumeOrderReceipt[\s\S]*restoreRestockDraft/);
   assert.match(worker, /\/restock-draft\.mjs/);
 });
