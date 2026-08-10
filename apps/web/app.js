@@ -3688,32 +3688,55 @@ function sortedPurchaseProducts(query = '') {
 
 function renderPurchaseProductResults(kind, query = '') {
   const container = el(`${kind}-product-results`);
-  const products = sortedPurchaseProducts(query);
+  let products = sortedPurchaseProducts(query);
+  if(kind==='restock'&&state.activePurchaseOrder&&!String(query).trim()){
+    const poIds=new Set((state.activePurchaseOrder.items??[]).filter((line)=>Number(line.remaining_qty)>0).map((line)=>line.product_id));
+    products=state.products.filter((product)=>poIds.has(product.id)).sort((a,b)=>{
+      const aRow=document.querySelector(`.restock-line[data-product="${CSS.escape(a.id)}"]`),bRow=document.querySelector(`.restock-line[data-product="${CSS.escape(b.id)}"]`);
+      return Number(Boolean(aRow?.dataset.verificationMethod))-Number(Boolean(bRow?.dataset.verificationMethod))||a.name.localeCompare(b.name,'id');
+    });
+  }
   const canCreate=kind==='restock'&&state.session.permissions.includes('purchasing.receive');
   container.innerHTML = products.map((product) => {
     const stock = Number(product.stockBase ?? 0);
     const baseUnit = product.units.find((unit) => Number(unit.factor) === 1) ?? product.units[0];
     const purchaseUnit = [...product.units].sort((a,b)=>Number(b.factor)-Number(a.factor))[0] ?? baseUnit;
+    const listed=kind==='restock'&&document.querySelector(`.restock-line[data-product="${CSS.escape(product.id)}"]`);
     return `<article class="purchase-product-option ${stock === 0 ? 'zero-stock' : ''}">
       <div><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku ?? '')} · ${escapeHtml(product.brand ?? 'tanpa merek')}</small></div>
       <div class="purchase-product-stock"><span>Stok</span><strong>${stock} pcs</strong></div>
-      <button class="button secondary choose-purchase-product" type="button" data-kind="${kind}" data-product-id="${escapeHtml(product.id)}" data-unit-id="${escapeHtml(purchaseUnit?.id ?? '')}">Tambah</button>
+      <button class="button secondary choose-purchase-product" type="button" data-kind="${kind}" data-product-id="${escapeHtml(product.id)}" data-unit-id="${escapeHtml(purchaseUnit?.id ?? '')}">${listed?'Periksa':'Tambah'}</button>
     </article>`;
   }).join('') || `<div class="empty-state compact"><strong>Barang tidak ditemukan.</strong><br><small>Periksa nama, SKU, atau barcode.</small>${canCreate?'<button class="button primary create-restock-product" type="button">+ Buat produk baru</button>':''}</div>`;
   container.querySelectorAll('.choose-purchase-product').forEach((button) => button.addEventListener('click', () => choosePurchaseProduct(button.dataset.kind, button.dataset.productId, button.dataset.unitId)));
   container.querySelector('.create-restock-product')?.addEventListener('click',()=>openRestockNewProduct(query));
 }
 
-async function choosePurchaseProduct(kind, productId, unitId = null) {
+async function choosePurchaseProduct(kind, productId, unitId = null, {verificationMethod='manual'} = {}) {
   const product = state.products.find((item) => item.id === productId);
   if (!product) return;
   const unit = product.units.find((item) => item.id === unitId) ?? product.units.find((item) => Number(item.factor) === 1) ?? product.units[0];
+  let restockRow=null;
   if (kind === 'po') await appendPoLine(product.id, unit?.id ?? null);
-  else await appendRestockLine(product.id, 1, 0, unit?.name ?? 'pcs');
+  else {
+    restockRow=document.querySelector(`.restock-line[data-product="${CSS.escape(product.id)}"]`);
+    if(!restockRow)restockRow=await appendRestockLine(product.id,state.activePurchaseOrder?'':1,0,unit?.name??'pcs');
+    if(restockRow&&unit?.id&&verificationMethod==='scan'){
+      const select=restockRow.querySelector('.restock-unit'),option=[...select.options].find((item)=>item.value===unit.id);
+      if(option&&select.value!==option.value){select.value=option.value;changeRestockUnit(restockRow);}
+    }
+  }
   const input = el(`${kind}-product-search`);
   input.value = '';
   renderPurchaseProductResults(kind);
-  if(kind==='restock')setRestockExtraPicker(false);
+  if(kind==='restock'){
+    setRestockExtraPicker(false);
+    if(restockRow){
+      openRestockLineDialog(restockRow,verificationMethod);
+      toast(verificationMethod==='scan'?'Barcode cocok. Isi jumlah yang datang.':'Barang dibuka untuk diperiksa manual.');
+      return;
+    }
+  }
   input.focus();
 }
 
@@ -3732,7 +3755,8 @@ async function handlePurchaseProductEnter(kind, event) {
 function setRestockExtraPicker(open){
   el('restock-extra-product-picker').classList.toggle('hidden',!open);
   el('toggle-restock-extra-product').setAttribute('aria-expanded',String(open));
-  el('toggle-restock-extra-product').textContent=open?'Tutup pencarian':'Cari / scan barang';
+  const label=el('toggle-restock-extra-product').querySelector('span');
+  if(label)label.textContent=open?'Tutup pencarian':'Cari tanpa barcode';
   if(open){
     renderPurchaseProductResults('restock',el('restock-product-search').value);
     el('restock-product-search').focus();
@@ -3829,7 +3853,7 @@ function activatePurchaseScanner(kind) {
   input.value = '';
   input.placeholder = 'Scanner siap · scan barcode sekarang';
   input.focus();
-  toast('Scanner siap. Scan barcode lalu barang akan ditambahkan.');
+  toast(kind==='restock'?'Scanner siap. Barang PO yang cocok akan langsung dibuka untuk diperiksa.':'Scanner siap. Scan barcode lalu barang akan ditambahkan.');
 }
 
 function barcodeMatch(value) {
@@ -3858,7 +3882,7 @@ async function handleBarcodeForTarget(value,target) {
     return;
   }
   if (['po', 'restock'].includes(target)) {
-    await choosePurchaseProduct(target, exact.product.id, exact.unit.id);
+    await choosePurchaseProduct(target, exact.product.id, exact.unit.id,{verificationMethod:'scan'});
   }
 }
 
@@ -4038,7 +4062,7 @@ function serializeRestockDraftLine(row){
   return {
     productId:row.dataset.product??null,productKey:row.dataset.productKey??null,
     poLine:row.dataset.poLine==='true',poRemainingPurchaseQty:row.dataset.poRemainingPurchaseQty??'',poRemainingBaseQty:row.dataset.poRemainingBaseQty??'',
-    qty:row.querySelector('.restock-qty')?.value??'',unitId:unit?.value??'',unitName:unit?.selectedOptions[0]?.dataset.name??unit?.selectedOptions[0]?.textContent?.trim()??'pcs',
+    qty:row.querySelector('.restock-qty')?.value??'',verificationMethod:row.dataset.verificationMethod??'',unitId:unit?.value??'',unitName:unit?.selectedOptions[0]?.dataset.name??unit?.selectedOptions[0]?.textContent?.trim()??'pcs',
     cost:row.querySelector('.restock-cost')?.value??'',batch:row.querySelector('.restock-batch')?.value??'',expiry:row.querySelector('.restock-expiry')?.value??'',
     proposedPrices:[...row.querySelectorAll('.restock-proposed-value')].map((input)=>({groupId:input.dataset.groupId,minBaseQty:input.closest('.restock-proposed-price-row')?.querySelector('.restock-proposed-min')?.value??'1',value:input.value}))
   };
@@ -4059,7 +4083,7 @@ function renderRestockDraftStatus(draft=undefined,{saveFailed=false}={}){
   banner.classList.toggle('save-failed',Boolean(active&&saveFailed));
   const navStatus=el('restock-nav-draft-status');
   if(!active){if(navStatus)navStatus.textContent='Catat barang yang sudah tiba';return;}
-  const checked=(active.lines??[]).filter((line)=>String(line.qty??'').trim()!=='').length;
+  const checked=(active.lines??[]).filter((line)=>line.verificationMethod||String(line.qty??'').trim()!=='').length;
   const saved=active.updatedAt?new Date(active.updatedAt).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}):'';
   el('restock-draft-heading').textContent=saveFailed?'Draft belum dapat disimpan':'Draft penerimaan tersimpan';
   el('restock-draft-status').textContent=saveFailed?'Penyimpanan perangkat penuh atau tidak tersedia. Jangan tutup aplikasi sebelum menyelesaikan penerimaan.':`${checked} barang diperiksa${saved?` · tersimpan ${saved}`:''}. Aman untuk membuka Kasir lalu kembali.`;
@@ -4120,7 +4144,7 @@ async function restoreRestockDraft(){
       if(!row)continue;
       const unit=row.querySelector('.restock-unit'),savedOption=[...unit.options].find((option)=>saved.unitId&&option.value===saved.unitId)||[...unit.options].find((option)=>option.dataset.name===saved.unitName);
       if(savedOption){unit.selectedIndex=[...unit.options].indexOf(savedOption);row.dataset.factor=savedOption.dataset.factor??row.dataset.factor;const label=row.querySelector('.restock-cost-label');if(label)label.textContent=`Modal / ${savedOption.dataset.name??saved.unitName}`;}
-      row.querySelector('.restock-qty').value=saved.qty??'';row.querySelector('.restock-cost').value=saved.cost??'';row.querySelector('.restock-batch').value=saved.batch??'';row.querySelector('.restock-expiry').value=saved.expiry??'';
+      row.querySelector('.restock-qty').value=saved.qty??'';row.dataset.verificationMethod=saved.verificationMethod||(String(saved.qty??'').trim()!==''?'manual':'');row.querySelector('.restock-cost').value=saved.cost??'';row.querySelector('.restock-batch').value=saved.batch??'';row.querySelector('.restock-expiry').value=saved.expiry??'';
       if(!saved.productKey)await updateRestockComparison(row);
       applyRestockDraftPrices(row,saved.proposedPrices);updateRestockLineSummary(row);syncRestockApprovalRequirement(row);
     }
@@ -4216,8 +4240,8 @@ function restockStepIsValid(step, { notify = true } = {}) {
   if (step === 'items') {
     const rows = [...document.querySelectorAll('.restock-line')];
     if (!rows.length) { if (notify) toast('Tambahkan minimal satu barang sebelum melanjutkan.'); return false; }
-    const unchecked = rows.some((row) => row.dataset.poLine === 'true' && row.querySelector('.restock-qty').value.trim() === '');
-    if (unchecked) { if (notify) toast('Periksa semua barang PO: isi jumlah yang datang, atau 0 bila tidak datang.'); return false; }
+    const unchecked = rows.some((row) => row.dataset.poLine === 'true' && (!row.dataset.verificationMethod||row.querySelector('.restock-qty').value.trim() === ''));
+    if (unchecked) { if (notify) toast('Masih ada barang PO yang belum diverifikasi. Scan barangnya, atau pilih manual dan isi 0 bila tidak datang.'); return false; }
     const comparisonPending = rows.some((row) => Number(row.querySelector('.restock-qty').value) > 0 && row.dataset.comparisonPending === 'true');
     if (comparisonPending) { if (notify) toast('Tunggu pemeriksaan modal selesai, lalu lanjutkan kembali.'); return false; }
     const invalid = rows.some((row) => {
@@ -5013,6 +5037,26 @@ function changeRestockUnit(row){
   if(row.dataset.product)updateRestockComparison(row);
 }
 
+function restockVerificationLabel(row){
+  const rawQty=row.querySelector('.restock-qty')?.value?.trim()??'';
+  if(rawQty==='')return ['BELUM DIPERIKSA','pending'];
+  if(!row.dataset.verificationMethod)return ['BELUM DIVERIFIKASI','pending'];
+  if(Number(rawQty)===0&&row.dataset.poLine==='true')return ['TIDAK DATANG','neutral'];
+  return row.dataset.verificationMethod==='scan'?['SUDAH SCAN','scanned']:['DIPILIH MANUAL','manual'];
+}
+
+function updateRestockVerificationSummary(){
+  const container=el('restock-verification-summary');
+  if(!container)return;
+  const rows=[...document.querySelectorAll('.restock-line')];
+  if(!rows.length){container.innerHTML='<span>Belum ada barang untuk diperiksa.</span>';return;}
+  const verified=rows.filter((row)=>row.dataset.verificationMethod&&row.querySelector('.restock-qty')?.value.trim()!=='').length;
+  const scanned=rows.filter((row)=>row.dataset.verificationMethod==='scan'&&row.querySelector('.restock-qty')?.value.trim()!=='').length;
+  const manual=rows.filter((row)=>row.dataset.verificationMethod==='manual'&&row.querySelector('.restock-qty')?.value.trim()!=='').length;
+  const pending=rows.length-verified;
+  container.innerHTML=`<div><strong>${verified}/${rows.length}</strong><span>Selesai diperiksa</span></div><div class="verified"><strong>${scanned}</strong><span>Melalui scan</span></div><div><strong>${manual}</strong><span>Dipilih manual</span></div><div class="${pending?'pending':'complete'}"><strong>${pending}</strong><span>Belum diperiksa</span></div>`;
+}
+
 function updateRestockLineSummary(row){
   const rawQty=row.querySelector('.restock-qty')?.value?.trim()??'';
   const qty=Number(rawQty);
@@ -5022,10 +5066,13 @@ function updateRestockLineSummary(row){
   const expiry=row.querySelector('.restock-expiry')?.value.trim();
   const summary=row.querySelector('.restock-line-summary');
   if(!summary)return;
+  const [verificationLabel,verificationTone]=restockVerificationLabel(row),verification=summary.querySelector('.restock-line-verification');
+  if(verification){verification.textContent=verificationLabel;verification.className=`restock-line-verification ${verificationTone}`;}
   summary.querySelector('.restock-line-summary-qty').textContent=rawQty===''?'Belum diperiksa':qty===0&&row.dataset.poLine==='true'?'Tidak datang':`${qty.toLocaleString('id-ID')} ${unit}`;
   summary.querySelector('.restock-line-summary-cost').textContent=canReviewRestockCostDetails()?`${money.format(cost)} / ${restockSelectedUnit(row).name}`:'Modal dicatat dari nota';
   const variance=restockPoQuantityVariance(row);
   summary.querySelector('.restock-line-summary-extra').textContent=[variance?.excess>0?`Lebih kirim ${variance.excess.toLocaleString('id-ID')} dasar`:null,batch?`Batch ${batch}`:null,expiry?`EXP ${expiry}`:null].filter(Boolean).join(' · ')||'Batch & EXP belum diisi';
+  updateRestockVerificationSummary();
 }
 
 function prepareRestockLineEditor(row,product,{newProduct=false}={}){
@@ -5033,32 +5080,46 @@ function prepareRestockLineEditor(row,product,{newProduct=false}={}){
   while(row.firstChild)editor.append(row.firstChild);
   const summary=document.createElement('button');summary.type='button';summary.className='restock-line-summary';
   summary.innerHTML=`<span class="restock-line-summary-main"><span class="eyebrow">${newProduct?'BARANG BARU · PERLU OWNER':'BARANG DATANG'}</span><strong>${escapeHtml(product?.name??'Barang')}</strong><small>${escapeHtml(product?.sku??'')}</small></span><span class="restock-line-summary-values"><strong class="restock-line-summary-qty">-</strong><small class="restock-line-summary-cost">-</small><small class="restock-line-summary-extra">-</small></span><span class="restock-line-summary-arrow" aria-hidden="true">›</span>`;
+  const verification=summary.querySelector('.eyebrow');verification.className='restock-line-verification pending';verification.textContent='BELUM DIPERIKSA';
   row.append(summary,editor);
-  summary.addEventListener('click',()=>openRestockLineDialog(row));
+  summary.addEventListener('click',()=>openRestockLineDialog(row,'manual'));
   editor.addEventListener('input',()=>{updateRestockLineSummary(row);syncRestockApprovalRequirement(row);});
   editor.addEventListener('change',()=>{updateRestockLineSummary(row);syncRestockApprovalRequirement(row);});
   updateRestockLineSummary(row);
 }
 
-function openRestockLineDialog(row){
+function openRestockLineDialog(row,verificationMethod='manual'){
   const dialog=el('restock-line-dialog'),body=el('restock-line-dialog-body');
   if(!row.querySelector('.restock-line-editor'))return;
   closeRestockLineDialog();
   state.activeRestockLine=row;
+  row.dataset.pendingVerificationMethod=verificationMethod;
   const placeholder=document.createElement('div');placeholder.className='restock-line-placeholder';placeholder.style.height=`${row.offsetHeight}px`;
   row.before(placeholder);state.activeRestockLinePlaceholder=placeholder;
   row.classList.add('restock-line-editing');
   const title=row.querySelector('.restock-line-summary strong')?.textContent??'Detail barang';
   el('restock-line-dialog-title').textContent=title;
-  el('restock-line-dialog-subtitle').textContent='Isi jumlah, satuan, modal, batch, EXP, dan usulan harga bila diperlukan.';
+  el('restock-line-dialog-subtitle').textContent=verificationMethod==='scan'?'Barcode cocok. Isi jumlah fisik yang datang, lalu simpan.':'Periksa barang tanpa barcode: isi jumlah fisik yang datang, lalu simpan.';
   body.append(row);
   dialog.showModal();
   requestAnimationFrame(()=>row.querySelector('.restock-qty')?.focus({preventScroll:true}));
 }
 
+function completeRestockLineDialog(){
+  const row=state.activeRestockLine;
+  if(!row)return;
+  const rawQty=row.querySelector('.restock-qty')?.value.trim()??'';
+  if(rawQty===''||!Number.isFinite(Number(rawQty))||Number(rawQty)<0){toast('Isi jumlah yang datang. Gunakan 0 bila barang PO tidak datang.');row.querySelector('.restock-qty')?.focus();return;}
+  if(Number(rawQty)===0&&row.dataset.poLine!=='true')return toast('Jumlah barang tambahan harus lebih dari 0.');
+  row.dataset.verificationMethod=row.dataset.pendingVerificationMethod||'manual';
+  delete row.dataset.pendingVerificationMethod;
+  updateRestockLineSummary(row);scheduleRestockDraftSave();closeRestockLineDialog();
+  toast(row.dataset.verificationMethod==='scan'?'Barang hasil scan sudah diperiksa.':'Barang sudah diperiksa manual.');
+}
+
 function closeRestockLineDialog(){
   const dialog=el('restock-line-dialog'),row=state.activeRestockLine,placeholder=state.activeRestockLinePlaceholder;
-  if(row&&placeholder?.isConnected){placeholder.replaceWith(row);row.classList.remove('restock-line-editing');updateRestockLineSummary(row);}
+  if(row&&placeholder?.isConnected){delete row.dataset.pendingVerificationMethod;placeholder.replaceWith(row);row.classList.remove('restock-line-editing');updateRestockLineSummary(row);}
   state.activeRestockLine=null;
   state.activeRestockLinePlaceholder=null;
   if(dialog?.open)dialog.close();
@@ -5175,7 +5236,8 @@ async function receiveAllPurchaseOrderItems(){
     updateRestockLineSummary(row);updateRestockTotal();
   });
   await Promise.all(rows.map(updateRestockComparison));
-  toast('Semua jumlah diisi sesuai sisa PO. Periksa kembali sebelum melanjutkan.');
+  updateRestockVerificationSummary();
+  toast('Jumlah PO sudah diisikan sebagai panduan. Setiap barang tetap harus discan atau diperiksa manual.');
 }
 
 function costMeta(comparison) {
@@ -5277,6 +5339,7 @@ function syncRestockVisibility() {
   el('restock-empty').classList.toggle('hidden', hasLines);
   el('restock-table').classList.toggle('hidden', !hasLines);
   updateRestockTotal();
+  updateRestockVerificationSummary();
 }
 
 async function showCostHistory(productId) {
@@ -8985,7 +9048,7 @@ el('scan-restock-product').addEventListener('click', () => activatePurchaseScann
 el('camera-restock-product').addEventListener('click', () => openBarcodeCamera('restock'));
 el('restock-new-product-form').addEventListener('submit',saveRestockNewProduct);
 el('close-restock-line-dialog').addEventListener('click',closeRestockLineDialog);
-el('done-restock-line-dialog').addEventListener('click',closeRestockLineDialog);
+el('done-restock-line-dialog').addEventListener('click',completeRestockLineDialog);
 el('restock-line-dialog').addEventListener('cancel',(event)=>{event.preventDefault();closeRestockLineDialog();});
 el('restock-new-barcode-mode').addEventListener('change',syncRestockNewBarcodeMode);
 el('add-restock-new-unit').addEventListener('click',()=>{state.restockNewUnits.push({name:'',factor:2,barcode:''});renderRestockNewUnits();});

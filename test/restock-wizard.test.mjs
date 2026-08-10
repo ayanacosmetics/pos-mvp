@@ -39,15 +39,26 @@ test('wizard memvalidasi dokumen dan barang sebelum maju', () => {
 
 test('penerimaan PO membedakan belum diperiksa, tidak datang, dan jumlah aktual', () => {
   assert.match(html, /id="receive-all-po-items"/);
-  assert.match(html, /Isi 0 bila barang PO tidak datang/);
+  assert.match(html, /Scan setiap barang PO/);
   assert.match(app, /appendRestockLine\(item\.product_id,'',item\.unit_cost/);
   assert.match(app, /row\.dataset\.poLine='true'/);
-  assert.match(app, /Periksa semua barang PO: isi jumlah yang datang, atau 0 bila tidak datang/);
+  assert.match(app, /Masih ada barang PO yang belum diverifikasi/);
   assert.match(app, /receivedRows=rows\.filter\(\(row\)=>Number\(row\.querySelector\('\.restock-qty'\)\.value\)>0\)/);
   assert.match(app, /submitRestockForApproval\(payload,receivedRows\)/);
   assert.match(app, /TIDAK DATANG/);
   assert.match(api, /function requirePositiveReceiptItems/);
   assert.match(api, /Barang yang tidak datang tidak boleh dikirim sebagai penerimaan/);
+});
+
+test('scan dan pilihan manual membuka barang PO lalu mencatat cara verifikasinya', () => {
+  assert.match(html, /id="restock-verification-summary"/);
+  assert.match(html, /Cari tanpa barcode/);
+  assert.match(app, /verificationMethod:'scan'/);
+  assert.match(app, /openRestockLineDialog\(restockRow,verificationMethod\)/);
+  assert.match(app, /function completeRestockLineDialog/);
+  assert.match(app, /row\.dataset\.verificationMethod=row\.dataset\.pendingVerificationMethod/);
+  assert.match(app, /function updateRestockVerificationSummary/);
+  assert.match(css, /\.restock-line-verification\.scanned/);
 });
 
 test('tahap periksa membangun ringkasan tanpa memindahkan input transaksi', () => {
