@@ -25,3 +25,11 @@ test('draft lokal lama otomatis dipindahkan menjadi draft bersama',async()=>{
   assert.match(app,/receipt-draft\/claim[\s\S]*release:true/);
   assert.match(app,/if\(await migrateLocalRestockDraftToShared\(\)\)[\s\S]*request\('\/api\/purchase-orders'\)/);
 });
+
+test('akun staff yang sama dapat memindahkan pemeriksaan ke perangkat lain dengan aman',async()=>{
+  const sql=await readFile(new URL('../supabase/migrations/202608100005_same_staff_receipt_device_handoff.sql',import.meta.url),'utf8');
+  assert.match(sql,/v_draft\.claimed_by is distinct from p_actor_id then/);
+  assert.doesNotMatch(sql,/v_draft\.claimed_by is distinct from p_actor_id or v_draft\.claim_token is distinct from p_client_token/);
+  assert.match(sql,/claim_token=p_client_token/);
+  assert.match(sql,/Pemeriksaan telah dipindahkan ke perangkat lain/);
+});
