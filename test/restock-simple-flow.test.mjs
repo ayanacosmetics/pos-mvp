@@ -112,6 +112,11 @@ test('daftar PO ringkas membuka halaman detail penuh yang aman', () => {
   assert.match(app, /function purchaseOrderDetailActions/);
   assert.match(css, /\.purchase-metrics\{\s*grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
   assert.match(css, /\.purchase-order-detail-page/);
+  assert.match(html,/purchase-refresh-icon[\s\S]*aria-label="Muat ulang pesanan supplier"/);
+  assert.match(app,/purchase-documents-active[\s\S]*purchase-detail-active/);
+  assert.match(css,/#purchase-order-list\{min-height:0;flex:1;overflow-y:auto/);
+  assert.match(css,/#purchase-order-detail-content\{display:flex;min-height:0;flex:1/);
+  assert.match(css,/\.purchase-order-detail-lines\{min-height:100px;flex:1;overflow-y:auto/);
   assert.match(css, /#purchase-view-documents \.purchase-metrics\{\s*display:grid;\s*grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\s*overflow:hidden/);
   assert.match(css, /#purchase-view-documents \.purchase-metrics \.metric:last-child\{\s*grid-column:1\/-1/);
 });

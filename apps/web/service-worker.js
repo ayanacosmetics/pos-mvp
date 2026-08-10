@@ -1,8 +1,8 @@
-const CACHE = 'nusa-pos-shell-v224';
+const CACHE = 'nusa-pos-shell-v225';
 // Only cache the critical shell during an update. Large spreadsheet/scanner
 // assets are cached by the fetch handler when used, so an update cannot
 // compete with login and catalog recovery on a shop device.
-const SHELL = ['/', '/styles.css?v=214', '/app.js?v=217', '/restock-draft.mjs', '/product-categories.mjs', '/manifest.webmanifest'];
+const SHELL = ['/', '/styles.css?v=215', '/app.js?v=218', '/restock-draft.mjs', '/product-categories.mjs', '/manifest.webmanifest'];
 const RUNTIME_SHELL = ['/vendor/xlsx.full.min.js', '/vendor/zxing-browser.min.js', '/auth-store.mjs', '/date.mjs', '/pricing.mjs', '/receipt.mjs', '/escpos-printer.mjs', '/offline-store.mjs', '/pos-units.mjs', '/payment-keypad.mjs', '/product-workbook.mjs', '/product-labels.mjs', '/kaspin-import.mjs', '/variant-suggestions.mjs', '/icon-192.svg', '/icon-512.svg'];
 self.addEventListener('install', (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener('activate', (event) => event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))).then(() => self.clients.claim())));

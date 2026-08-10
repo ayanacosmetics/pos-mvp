@@ -4320,6 +4320,8 @@ function showPurchaseView(name,{approvalId=null}={}) {
     return;
   }
   document.querySelectorAll('.purchase-view').forEach((view) => view.classList.toggle('hidden', view.id !== `purchase-view-${name}`));
+  el('page-restock').classList.toggle('purchase-documents-active',name==='documents');
+  el('page-restock').classList.toggle('purchase-detail-active',name==='detail');
   document.querySelectorAll('.purchase-tab').forEach((button) => button.classList.toggle('active', button.dataset.purchaseView === name));
   document.querySelectorAll('[data-purchase-view-target]').forEach((button)=>button.classList.toggle('active',button.dataset.purchaseViewTarget===name));
   if (name === 'receipt') { setRestockWizardStep(restockDraftHasContent()?state.restockWizardStep:'document', { focus: false }); renderRestockDraftStatus(); loadPurchaseOrders().then(renderRestockSourceSelector); }

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102c32">
   <title>Kasir Nusa POS</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=214">
+  <link rel="stylesheet" href="/styles.css?v=215">
 </head>
 <body>
   <section id="session-view" class="session-view" aria-live="polite">
@@ -298,7 +298,7 @@
           <div id="purchase-view-documents" class="purchase-view hidden">
             <div id="purchase-metrics" class="purchase-metrics"></div>
             <div class="surface purchase-documents">
-              <div class="document-toolbar"><div><p class="eyebrow">LANGKAH 2</p><h2>Pesanan supplier</h2><small>Cetak atau bagikan dokumen ini ke supplier. Dokumen bukan bukti pembayaran.</small></div><div><select id="purchase-status-filter"><option value="">Semua status</option><option value="DRAFT">Belum dikirim</option><option value="SUBMITTED">Menunggu persetujuan</option><option value="APPROVED">Sudah dikirim / menunggu barang</option><option value="PARTIALLY_RECEIVED">Tiba sebagian</option><option value="RECEIVED">Selesai</option><option value="CANCELLED">Dibatalkan</option></select><button id="refresh-purchase-orders" class="button secondary">Muat ulang</button><button id="new-purchase-order" class="button secondary">Pesanan manual</button></div></div>
+              <div class="document-toolbar"><div><p class="eyebrow">LANGKAH 2</p><h2>Pesanan supplier</h2><small>Cetak atau bagikan dokumen ini ke supplier. Dokumen bukan bukti pembayaran.</small></div><div><select id="purchase-status-filter"><option value="">Semua status</option><option value="DRAFT">Belum dikirim</option><option value="SUBMITTED">Menunggu persetujuan</option><option value="APPROVED">Sudah dikirim / menunggu barang</option><option value="PARTIALLY_RECEIVED">Tiba sebagian</option><option value="RECEIVED">Selesai</option><option value="CANCELLED">Dibatalkan</option></select><button id="new-purchase-order" class="button secondary">Pesanan manual</button><button id="refresh-purchase-orders" class="button secondary purchase-refresh-icon" type="button" aria-label="Muat ulang pesanan supplier" title="Muat ulang"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M18.5 10A7 7 0 0 0 6.7 6.7L4 9M5.5 14A7 7 0 0 0 17.3 17.3L20 15"/></svg></button></div></div>
               <div id="purchase-order-list"></div>
             </div>
           </div>
@@ -1201,6 +1201,6 @@
       }
     }, 12000);
   </script>
-  <script type="module" src="/app.js?v=217"></script>
+  <script type="module" src="/app.js?v=218"></script>
 </body>
 </html>
