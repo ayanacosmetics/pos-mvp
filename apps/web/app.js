@@ -1527,6 +1527,18 @@ function syncProductStockFields(){
   const tracks=el('new-track-stock').value==='1';
   el('new-min-stock').disabled=!tracks;el('new-track-expiry').disabled=!tracks;
   if(!tracks){el('new-min-stock').value=0;el('new-track-expiry').checked=false;}
+  const openingAvailable=!el('product-opening-section').classList.contains('hidden')&&tracks;
+  el('new-add-opening-stock').disabled=!openingAvailable;
+  if(!openingAvailable)el('new-add-opening-stock').checked=false;
+  syncProductOpeningFields();
+}
+
+function syncProductOpeningFields(){
+  const enabled=el('new-add-opening-stock').checked&&!el('new-add-opening-stock').disabled;
+  el('new-opening-stock-fields').classList.toggle('hidden',!enabled);
+  for(const id of ['new-opening-location','new-opening-qty','new-opening-cost','new-opening-batch','new-opening-expiry'])el(id).disabled=!enabled;
+  el('new-opening-expiry-field').classList.toggle('hidden',!el('new-track-expiry').checked);
+  if(!el('new-track-expiry').checked)el('new-opening-expiry').value='';
 }
 
 function openProductEditor(productId=null){
@@ -1541,7 +1553,14 @@ function openProductEditor(productId=null){
   state.productImageFile=null;state.productImagePreviewUrl=product?.imageUrl??'';
   renderProductPhotoPreview(state.productImagePreviewUrl);
   el('new-variant-group').value=product?.variantGroup??'';el('new-variant-name').value=product?.variantName??'';
-  el('new-track-stock').value=product?.trackStock===false?'0':'1';el('new-min-stock').value=product?.minimumStock??0;el('new-track-expiry').checked=Boolean(product?.trackExpiry);syncProductStockFields();
+  el('new-track-stock').value=product?.trackStock===false?'0':'1';el('new-min-stock').value=product?.minimumStock??0;el('new-track-expiry').checked=Boolean(product?.trackExpiry);
+  const canSetOpening=!product&&state.session.permissions.includes('inventory.manage')&&state.session.permissions.includes('purchasing.view_cost');
+  el('product-opening-section').classList.toggle('hidden',!canSetOpening);
+  el('new-add-opening-stock').checked=false;
+  el('new-opening-location').innerHTML=state.locations.map((location)=>`<option value="${location.id}">${escapeHtml(location.name)} · ${location.kind==='WAREHOUSE'?'Gudang':'Toko'}</option>`).join('');
+  el('new-opening-location').value=state.locations.find((location)=>location.kind==='STORE')?.id??state.locations[0]?.id??'';
+  el('new-opening-qty').value=1;el('new-opening-cost').value=0;el('new-opening-batch').value='';el('new-opening-expiry').value='';
+  syncProductStockFields();
   state.productPriceTiers=defaultProductPriceTiers(product);renderProductPriceTierEditor();
   state.productUnitsDraft=product?product.units.map((unit)=>({...unit})):[{id:null,name:'pcs',factor:1,barcode:''}];
   renderProductUnitEditor();el('product-dialog').showModal();
@@ -1560,6 +1579,15 @@ function productPayload(){
   };
 }
 
+function productOpeningPayload(){
+  if(el('product-opening-section').classList.contains('hidden')||!el('new-add-opening-stock').checked)return null;
+  return {
+    locationId:el('new-opening-location').value,quantity:Number(el('new-opening-qty').value),
+    unitCost:Number(el('new-opening-cost').value),batchNo:el('new-opening-batch').value.trim(),
+    expiresOn:el('new-opening-expiry').value||null
+  };
+}
+
 async function saveProduct(event) {
   event.preventDefault();el('product-error').textContent='';
   const payload=productPayload(),button=el('save-product-button');button.disabled=true;
@@ -1573,7 +1601,8 @@ async function saveProduct(event) {
     }
     button.textContent='Menyimpan...';
     const path=payload.id?`/api/products/${payload.id}`:'/api/products';
-    const product=await request(path,{method:payload.id?'PUT':'POST',body:JSON.stringify(payload)});
+    const openingStock=payload.id?null:productOpeningPayload();
+    const product=await request(path,{method:payload.id?'PUT':'POST',body:JSON.stringify(openingStock?{...payload,openingStock}:payload)});
     toast(`${product.name} berhasil ${payload.id?'diperbarui':'ditambahkan'}`);el('product-dialog').close();
     await refreshCatalog();await renderRestock();if(state.session.permissions.includes('inventory.manage'))await loadInventory();
   }catch(error){el('product-error').textContent=error.message;}finally{button.disabled=false;button.textContent='Simpan produk';}
@@ -9435,6 +9464,8 @@ el('product-table').addEventListener('change',(event)=>{
 });
 el('product-form').addEventListener('submit', saveProduct);
 el('new-track-stock').addEventListener('change',syncProductStockFields);
+el('new-track-expiry').addEventListener('change',syncProductOpeningFields);
+el('new-add-opening-stock').addEventListener('change',syncProductOpeningFields);
 el('new-image-file').addEventListener('change',(event)=>{
   const file=event.target.files?.[0];if(!file)return;
   if(!file.type.match(/^image\/(png|jpeg|webp)$/))return el('product-error').textContent='Pilih foto PNG, JPEG, atau WebP.';

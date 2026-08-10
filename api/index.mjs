@@ -3318,8 +3318,23 @@ async function routeRequest(request, response, route) {
 
   if (request.method === 'POST' && route === 'products') {
     requirePermission(session, 'catalog.manage');
-    const input = await canonicalizeProductInputCategory(context.tenantId,normalizeProductInput(bodyOf(request)));
+    const rawInput=bodyOf(request),openingInput=rawInput.openingStock??null;
+    const input = await canonicalizeProductInputCategory(context.tenantId,normalizeProductInput(rawInput));
     await assertNoSharedBarcodeConflict(context.tenantId,input);
+    if(openingInput){
+      requirePermission(session,'inventory.manage');requirePermission(session,'purchasing.view_cost');
+      if(!input.trackStock)throw Object.assign(new Error('Produk tanpa stok tidak dapat memiliki stok awal'),{status:400});
+      const locationId=String(openingInput.locationId??'').trim();requireLocationAccess(context,locationId);
+      const quantity=moneyInput(openingInput.quantity,'Jumlah stok awal');
+      const unitCost=moneyInput(openingInput.unitCost,'Modal per pcs',{allowZero:true});
+      const expiresOn=String(openingInput.expiresOn??'').trim()||null;
+      if(expiresOn&&!/^\d{4}-\d{2}-\d{2}$/.test(expiresOn))throw Object.assign(new Error('Tanggal EXP tidak valid'),{status:400});
+      return send(response,201,await rpc('save_product_with_opening_stock_v1',{
+        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_product:input,
+        p_opening:{locationId,quantity,unitCost,batchNo:String(openingInput.batchNo??'').trim()||null,
+          expiresOn:input.trackExpiry?expiresOn:null,idempotencyKey:`PRODUCT-OPENING:${crypto.randomUUID()}`}
+      }));
+    }
     return send(response, 201, await rpc('save_product_v6', { p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_product: input }));
   }
 
