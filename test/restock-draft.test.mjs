@@ -55,6 +55,7 @@ test('halaman penerimaan mempertahankan langkah, autosave saat pindah ke Kasir, 
   assert.match(app, /visibilitychange'[\s\S]*document\.hidden[\s\S]*saveRestockDraftNow/);
   assert.match(app, /function pauseRestockReceipt/);
   assert.match(app, /Draft tersimpan\. Silakan tutup shift, absen, atau logout/);
+  assert.match(app, /showPurchaseView\('documents'\)/);
   assert.match(app, /const receipt = await request\(endpoint[\s\S]*clearRestockDraft\(\)[\s\S]*renderRestock\(\{preserveDraft:false\}\)/);
   assert.match(app, /submitRestockForApproval[\s\S]*clearRestockDraft\(\)/);
   assert.match(app, /window\.confirm\(`Batalkan draft penerimaan/);

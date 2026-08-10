@@ -5123,6 +5123,7 @@ function pauseRestockReceipt(){
   const hasDraft=restockDraftHasContent(),saved=saveRestockDraftNow();
   if(hasDraft&&!saved)return toast('Draft belum dapat disimpan. Jangan logout sebelum penyimpanan berhasil.');
   toast(hasDraft?'Draft tersimpan. Silakan tutup shift, absen, atau logout.':'Tidak ada draft penerimaan yang perlu disimpan.');
+  showPurchaseView('documents');
   setSidebarOpen(true);
 }
 
