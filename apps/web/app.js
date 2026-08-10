@@ -1556,7 +1556,7 @@ function openProductEditor(productId=null){
   renderProductPhotoPreview(state.productImagePreviewUrl);
   el('new-variant-group').value=product?.variantGroup??'';el('new-variant-name').value=product?.variantName??'';
   el('new-track-stock').value=product?.trackStock===false?'0':'1';el('new-min-stock').value=product?.minimumStock??0;el('new-track-expiry').checked=Boolean(product?.trackExpiry);
-  const canSetOpening=!product&&state.session.permissions.includes('inventory.manage')&&state.session.permissions.includes('purchasing.view_cost');
+  const canSetOpening=!product&&state.session.permissions.includes('inventory.manage');
   el('product-opening-section').classList.toggle('hidden',!canSetOpening);
   el('new-add-opening-stock').checked=false;
   el('new-opening-location').innerHTML=state.locations.map((location)=>`<option value="${location.id}">${escapeHtml(location.name)} · ${location.kind==='WAREHOUSE'?'Gudang':'Toko'}</option>`).join('');

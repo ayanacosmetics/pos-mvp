@@ -9,11 +9,22 @@ test('product create form offers permission-scoped opening stock and cost',async
   for(const id of ['product-opening-section','new-add-opening-stock','new-opening-location','new-opening-qty','new-opening-cost','new-opening-batch','new-opening-expiry']){
     assert.match(html,new RegExp(`id="${id}"`));
   }
-  assert.match(app,/!product&&state\.session\.permissions\.includes\('inventory\.manage'\)&&state\.session\.permissions\.includes\('purchasing\.view_cost'\)/);
+  assert.match(app,/!product&&state\.session\.permissions\.includes\('inventory\.manage'\)/);
   assert.match(app,/function productOpeningPayload\(\)/);
-  assert.match(api,/requirePermission\(session,'inventory\.manage'\);requirePermission\(session,'purchasing\.view_cost'\)/);
+  assert.match(api,/requirePermission\(session,'inventory\.manage'\);\s+if\(!input\.trackStock\)/);
   assert.match(api,/requireLocationAccess\(context,locationId\)/);
   assert.match(api,/rpc\('save_product_with_opening_stock_v1'/);
+});
+
+test('opening cost is write-only for inventory staff without cost visibility',async()=>{
+  const [sql,api]=await Promise.all([
+    read('supabase/migrations/202608100003_write_only_opening_cost.sql'),read('api/index.mjs')
+  ]);
+  assert.match(sql,/profile_has_permission_v1\(p_tenant_id,p_actor_id,'catalog\.manage'\)/);
+  assert.match(sql,/profile_has_permission_v1\(p_tenant_id,p_actor_id,'inventory\.manage'\)/);
+  assert.doesNotMatch(sql,/profile_has_permission_v1\(p_tenant_id,p_actor_id,'purchasing\.view_cost'\)/);
+  assert.match(api,/includeCost:session\.permissions\.includes\('purchasing\.view_cost'\)/);
+  assert.match(api,/const canViewCost=session\.permissions\.includes\('purchasing\.view_cost'\)/);
 });
 
 test('opening stock SQL is atomic, new-product-only, and audited through stock adjustment',async()=>{

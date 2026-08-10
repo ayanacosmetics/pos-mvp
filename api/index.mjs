@@ -3323,7 +3323,7 @@ async function routeRequest(request, response, route) {
     const input = await canonicalizeProductInputCategory(context.tenantId,normalizeProductInput(rawInput));
     await assertNoSharedBarcodeConflict(context.tenantId,input);
     if(openingInput){
-      requirePermission(session,'inventory.manage');requirePermission(session,'purchasing.view_cost');
+      requirePermission(session,'inventory.manage');
       if(!input.trackStock)throw Object.assign(new Error('Produk tanpa stok tidak dapat memiliki stok awal'),{status:400});
       const locationId=String(openingInput.locationId??'').trim();requireLocationAccess(context,locationId);
       const quantity=moneyInput(openingInput.quantity,'Jumlah stok awal');
