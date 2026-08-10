@@ -112,6 +112,8 @@ let attendanceCameraBusy=false;
 let lastTelemetryAt = 0;
 let productManagementPromise = null;
 let deferredBootstrapRun = 0;
+let purchaseOrdersLoadPromise = null;
+let purchaseOrdersLoaded = false;
 let posProductMatches = [];
 let posProductSearchIndex = new Map();
 let posProductIndexSource = null;
@@ -685,6 +687,7 @@ function startDeferredBootstrapLoads() {
   const run = ++deferredBootstrapRun;
   const can = (permission) => state.session?.permissions?.includes(permission);
   const tasks = [
+    ...((can('purchasing.view_cost')||can('purchasing.receive')) ? [loadPurchaseOrders] : []),
     ...(can('pos.sell') ? [loadHeldSales] : []),
     ...(can('report.view') ? [loadReport, loadCrmDashboard] : []),
     ...(can('promotion.manage') ? [loadPromotionManagement] : []),
@@ -4643,18 +4646,34 @@ async function createPlanningDraft() {
 }
 
 async function loadPurchaseOrders() {
-  try {
-    let data = await request('/api/purchase-orders');
-    state.purchaseOrders = data.orders;
-    if(await migrateLocalRestockDraftToShared()){
-      data=await request('/api/purchase-orders');
-      state.purchaseOrders=data.orders;
-    }
-    renderPurchaseOrders();
-    renderRestockSourceSelector();
-  } catch (error) {
-    el('purchase-order-list').innerHTML = `<div class="empty-state compact"><strong>Dokumen pembelian belum dapat dimuat.</strong><br><small>${error.message}</small></div>`;
+  if(purchaseOrdersLoaded){renderPurchaseOrders();renderRestockSourceSelector();}
+  if(purchaseOrdersLoadPromise)return purchaseOrdersLoadPromise;
+  if(!purchaseOrdersLoaded){
+    el('purchase-order-list').innerHTML='<div class="empty-state compact purchase-orders-loading"><strong>Memuat pesanan supplier...</strong><br><small>Daftar akan langsung tampil setelah data utama tersedia.</small></div>';
   }
+  const pending=(async()=>{
+    try {
+      let data=await request('/api/purchase-orders');
+      state.purchaseOrders=data.orders;
+      purchaseOrdersLoaded=true;
+      // Do not hold the list behind one-time local-to-shared draft migration.
+      renderPurchaseOrders();
+      renderRestockSourceSelector();
+      if(await migrateLocalRestockDraftToShared()){
+        data=await request('/api/purchase-orders');
+        state.purchaseOrders=data.orders;
+        renderPurchaseOrders();
+        renderRestockSourceSelector();
+      }
+      return state.purchaseOrders;
+    } catch (error) {
+      if(!purchaseOrdersLoaded)el('purchase-order-list').innerHTML=`<div class="empty-state compact"><strong>Dokumen pembelian belum dapat dimuat.</strong><br><small>${error.message}</small></div>`;
+      return state.purchaseOrders;
+    }
+  })();
+  purchaseOrdersLoadPromise=pending;
+  try{return await pending;}
+  finally{if(purchaseOrdersLoadPromise===pending)purchaseOrdersLoadPromise=null;}
 }
 
 function renderPurchaseOrders() {

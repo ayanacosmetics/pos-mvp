@@ -1238,6 +1238,17 @@ async function loadPurchaseOrders(tenantId, orderId = null, locationIds = []) {
     rest('purchase_order_items', `tenant_id=eq.${tenant}&order_id=in.(${orderIds})&select=*&order=product_name`),
     rest('restock_approval_requests', `tenant_id=eq.${tenant}&status=in.(PENDING,REVISION_REQUIRED,APPROVED)&select=id,status,document_no,items_json,requester_id,requested_at&order=requested_at.desc`)
   ]);
+  const itemsByOrder=new Map();
+  for(const item of items){
+    const mapped={
+      ...item,ordered_qty:Number(item.ordered_qty),received_qty:Number(item.received_qty),
+      remaining_qty:Number(item.ordered_qty)-Number(item.received_qty),unit_cost:Number(item.unit_cost),
+      line_discount:Number(item.line_discount),line_total:Number(item.line_total),
+      purchase_unit_factor:Number(item.purchase_unit_factor??1),ordered_purchase_qty:Number(item.ordered_purchase_qty??item.ordered_qty),
+      purchase_unit_cost:Number(item.purchase_unit_cost??item.unit_cost)
+    };
+    const bucket=itemsByOrder.get(item.order_id)??[];bucket.push(mapped);itemsByOrder.set(item.order_id,bucket);
+  }
   const approvalByOrder=new Map();
   for(const approval of activeApprovals){
     const purchaseOrderId=approval.items_json?.find?.((item)=>item?.purchaseOrderId)?.purchaseOrderId??null;
@@ -1247,13 +1258,7 @@ async function loadPurchaseOrders(tenantId, orderId = null, locationIds = []) {
   }
   const today = new Date().toISOString().slice(0, 10);
   return orders.map((order) => {
-    const mappedItems = items.filter((item) => item.order_id === order.id).map((item) => ({
-      ...item, ordered_qty: Number(item.ordered_qty), received_qty: Number(item.received_qty),
-      remaining_qty: Number(item.ordered_qty) - Number(item.received_qty), unit_cost: Number(item.unit_cost),
-      line_discount: Number(item.line_discount), line_total: Number(item.line_total),
-      purchase_unit_factor:Number(item.purchase_unit_factor??1),ordered_purchase_qty:Number(item.ordered_purchase_qty??item.ordered_qty),
-      purchase_unit_cost:Number(item.purchase_unit_cost??item.unit_cost)
-    }));
+    const mappedItems=itemsByOrder.get(order.id)??[];
     return {
     ...order, approval_required: Boolean(order.approval_required),receiving_approval:approvalByOrder.get(order.id)??null,
     subtotal: Number(order.subtotal), discount_amount: Number(order.discount_amount), tax_amount: Number(order.tax_amount),
@@ -5006,16 +5011,21 @@ async function routeRequest(request, response, route) {
 
   if (request.method === 'GET' && route === 'purchase-orders') {
     requireAnyPermission(session, ['purchasing.view_cost','purchasing.receive']);
-    const orders=await loadPurchaseOrders(context.tenantId,null,context.locationIds);
-    const drafts=orders.length?await rest(
+    const ordersPromise=loadPurchaseOrders(context.tenantId,null,context.locationIds);
+    const draftLocationFilter=context.locationIds.length?`&location_id=${inFilter(context.locationIds)}`:'';
+    const drafts=await rest(
       'purchase_receipt_drafts',
-      `tenant_id=eq.${encodeURIComponent(context.tenantId)}&purchase_order_id=${inFilter(orders.map((order)=>order.id))}&select=*&order=updated_at.desc`
-    ):[];
+      `tenant_id=eq.${encodeURIComponent(context.tenantId)}${draftLocationFilter}&select=*&order=updated_at.desc`
+    );
     const actorIds=[...new Set(drafts.flatMap((draft)=>[draft.claimed_by,draft.updated_by]).filter(Boolean))];
-    const actors=actorIds.length?await rest('profiles',`tenant_id=eq.${context.tenantId}&user_id=${inFilter(actorIds)}&select=user_id,display_name`):[];
-    const actorName=(id)=>actors.find((actor)=>actor.user_id===id)?.display_name??'Staff';
+    const actorsPromise=actorIds.length?rest('profiles',`tenant_id=eq.${context.tenantId}&user_id=${inFilter(actorIds)}&select=user_id,display_name`):Promise.resolve([]);
+    const [orders,actors]=await Promise.all([ordersPromise,actorsPromise]);
+    const visibleOrderIds=new Set(orders.map((order)=>order.id));
+    const draftByOrder=new Map(drafts.filter((draft)=>visibleOrderIds.has(draft.purchase_order_id)).map((draft)=>[draft.purchase_order_id,draft]));
+    const actorById=new Map(actors.map((actor)=>[actor.user_id,actor.display_name]));
+    const actorName=(id)=>actorById.get(id)??'Staff';
     return send(response,200,{orders:orders.map((order)=>{
-      const draft=drafts.find((item)=>item.purchase_order_id===order.id);
+      const draft=draftByOrder.get(order.id);
       return {...order,receipt_draft:draft?{
         id:draft.id,purchaseOrderId:draft.purchase_order_id,payload:draft.payload,version:Number(draft.version),
         claimedBy:draft.claimed_by,claimedByName:draft.claimed_by?actorName(draft.claimed_by):null,
