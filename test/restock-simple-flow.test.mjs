@@ -113,6 +113,8 @@ test('daftar PO ringkas membuka halaman detail penuh yang aman', () => {
   assert.match(app,/purchase-order-icon-action po-print[\s\S]*aria-label="Cetak atau bagikan PO"/);
   assert.match(app,/purchase-order-icon-action po-whatsapp[\s\S]*aria-label="Kirim PO ke WhatsApp supplier"/);
   assert.match(app,/purchase-order-utility-actions[\s\S]*purchase-order-workflow-actions/);
+  assert.match(app,/purchase-order-utility-actions[\s\S]*purchaseOrderDetailTotals\(order\)[\s\S]*purchase-order-workflow-actions/);
+  assert.match(app,/data-action="cancel">Batalkan PO<\/button>`:''[\s\S]*po-receive[\s\S]*Terima barang/);
   assert.match(css, /\.purchase-metrics\{\s*grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
   assert.match(css, /\.purchase-order-detail-page/);
   assert.match(html,/purchase-refresh-icon[\s\S]*aria-label="Muat ulang pesanan supplier"/);
@@ -132,4 +134,6 @@ test('daftar PO ringkas membuka halaman detail penuh yang aman', () => {
   assert.match(css,/\.purchase-order-detail-lines>\.purchase-order-detail-line\{grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
   assert.match(css,/\.purchase-order-detail-totals\{display:grid;grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
   assert.match(css,/\.purchase-order-detail-actions\{position:static;grid-template-columns:auto minmax\(0,1fr\)/);
+  assert.match(css,/\.purchase-order-detail-actions\{grid-template-columns:auto minmax\(330px,1fr\) auto/);
+  assert.match(css,/grid-template-areas:"totals totals" "utility workflow"/);
 });

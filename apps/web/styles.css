@@ -1649,6 +1649,46 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
   #page-pos #product-grid{align-content:start}
 }
 
+/* Purchase order detail: maximize the scrollable item list on laptop and tablet. */
+.purchase-detail-active .content-width{padding-top:10px;padding-bottom:8px}
+.purchase-detail-active .restock-page-title{margin-bottom:5px!important;padding-bottom:5px!important}
+.purchase-detail-active .restock-page-title .eyebrow,.purchase-detail-active .restock-page-title .muted{display:none}
+.purchase-detail-active .restock-page-title h1{font-size:21px!important}
+.purchase-detail-active .restock-page-title .pill{padding:5px 8px;font-size:8px}
+.purchase-order-detail-head{padding:7px 10px}
+.purchase-order-detail-summary>div{gap:2px;padding:7px 11px}
+.purchase-order-detail-lines{padding:5px 8px;gap:5px}
+.purchase-order-detail-lines>.purchase-order-detail-line{padding:7px 9px}
+.purchase-order-detail-note{display:flex;min-width:0;align-items:center;gap:7px;margin:2px 10px;padding:5px 8px}
+.purchase-order-detail-note>span{flex:0 0 auto;font-size:7px}.purchase-order-detail-note p{min-width:0;margin:0;overflow:hidden;font-size:9px;line-height:1.2;white-space:nowrap;text-overflow:ellipsis}
+.purchase-order-detail-actions{grid-template-columns:auto minmax(330px,1fr) auto;gap:8px;padding:5px 10px}
+.purchase-order-detail-actions .purchase-order-detail-totals{display:grid;width:100%;max-width:610px;margin:0 auto;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.purchase-order-detail-actions .purchase-order-detail-totals>div{min-width:0;padding:5px 7px;border:0;border-right:1px solid var(--line)}
+.purchase-order-detail-actions .purchase-order-detail-totals>div:last-child{border-right:0}
+.purchase-order-detail-actions .purchase-order-detail-totals .grand{min-width:0;background:var(--paper)}
+.purchase-order-detail-actions .purchase-order-detail-totals span{font-size:7px;line-height:1.1}.purchase-order-detail-actions .purchase-order-detail-totals strong{font-size:10px;line-height:1.15}.purchase-order-detail-actions .purchase-order-detail-totals .grand strong{font-size:12px}
+.purchase-order-utility-actions,.purchase-order-workflow-actions{flex-wrap:nowrap}.purchase-order-workflow-actions .button{min-height:36px;padding:7px 10px;white-space:nowrap}
+.purchase-order-icon-action{width:36px;min-width:36px;height:36px}
+
+@media(max-width:1050px){
+  .purchase-detail-active .content-width{padding-top:7px}
+  .purchase-order-detail-actions{grid-template-columns:auto minmax(0,1fr);grid-template-areas:"totals totals" "utility workflow";gap:5px 7px}
+  .purchase-order-detail-actions .purchase-order-detail-totals{grid-area:totals;max-width:none}
+  .purchase-order-utility-actions{grid-area:utility}.purchase-order-workflow-actions{grid-area:workflow}
+  .purchase-order-detail-actions .purchase-order-detail-totals>div{padding:4px 6px}
+}
+
+@media(max-width:760px){
+  .purchase-detail-active .content-width{padding-top:5px}
+  .purchase-detail-active .restock-page-title{margin-bottom:4px!important;padding-bottom:4px!important}
+  .purchase-detail-active .restock-page-title h1{font-size:18px!important}
+  .purchase-detail-active .restock-page-title .pill{display:none}
+  .purchase-order-detail-actions{grid-template-columns:auto minmax(0,1fr);grid-template-areas:"totals totals" "utility workflow";padding:4px 7px max(5px,env(safe-area-inset-bottom))}
+  .purchase-order-detail-actions .purchase-order-detail-totals{margin:0}
+  .purchase-order-detail-actions .purchase-order-detail-totals>div{padding:3px 4px}
+  .purchase-order-detail-actions .purchase-order-detail-totals span{font-size:5.5px}.purchase-order-detail-actions .purchase-order-detail-totals strong{font-size:8px}.purchase-order-detail-actions .purchase-order-detail-totals .grand strong{font-size:10px}
+}
+
 /* Purchase order workspaces keep controls frozen and scroll only their lists. */
 .purchase-refresh-icon{display:grid;width:38px;min-width:38px;height:38px;padding:0;place-items:center}
 .purchase-refresh-icon svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}

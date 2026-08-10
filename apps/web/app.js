@@ -4714,6 +4714,10 @@ function renderPurchaseOrders() {
   });
 }
 
+function purchaseOrderDetailTotals(order){
+  return `<section class="purchase-order-detail-totals"><div><span>Subtotal</span><strong>${money.format(order.subtotal)}</strong></div><div><span>Diskon</span><strong>${money.format(order.discount_amount)}</strong></div><div><span>Pajak</span><strong>${money.format(order.tax_amount)}</strong></div><div><span>Biaya lain</span><strong>${money.format(order.other_cost)}</strong></div><div class="grand"><span>Total PO</span><strong>${money.format(order.grand_total)}</strong></div></section>`;
+}
+
 function purchaseOrderDetailActions(order) {
   const canApprove=['OWNER','ADMIN'].includes(state.session.user.role);
   const receivingApproval=order.receiving_approval;
@@ -4728,11 +4732,11 @@ function purchaseOrderDetailActions(order) {
   const workflowActions=[
     order.status==='DRAFT'?`<button class="button secondary po-open" data-id="${escapeHtml(order.id)}">Ubah draft</button><button class="button primary po-action" data-id="${escapeHtml(order.id)}" data-action="submit">Siapkan pesanan</button>`:'',
     order.status==='SUBMITTED'&&canApprove?`<button class="button primary po-action" data-id="${escapeHtml(order.id)}" data-action="approve">Setujui</button>`:'',
+    !['RECEIVED','CANCELLED','PARTIALLY_RECEIVED'].includes(order.status)&&canApprove?`<button class="button danger po-action" data-id="${escapeHtml(order.id)}" data-action="cancel">Batalkan PO</button>`:'',
     pausedDraft?(lockedByOther?`<button class="button secondary" disabled>Sedang diperiksa ${escapeHtml(sharedDraft.claimedByName??'staff lain')}</button>`:`<button class="button primary po-resume-receipt" data-id="${escapeHtml(order.id)}">Lanjutkan pemeriksaan</button>`):['APPROVED','PARTIALLY_RECEIVED'].includes(order.status)&&!receivingApproval?`<button class="button primary po-receive" data-id="${escapeHtml(order.id)}">Terima barang</button>`:'',
-    canOpenApproval?`<button class="button secondary po-open-receiving-approval" data-id="${escapeHtml(receivingApproval.id)}">Lihat proses penerimaan</button>`:'',
-    !['RECEIVED','CANCELLED','PARTIALLY_RECEIVED'].includes(order.status)&&canApprove?`<button class="button danger po-action" data-id="${escapeHtml(order.id)}" data-action="cancel">Batalkan PO</button>`:''
+    canOpenApproval?`<button class="button secondary po-open-receiving-approval" data-id="${escapeHtml(receivingApproval.id)}">Lihat proses penerimaan</button>`:''
   ].join('');
-  return `<div class="purchase-order-utility-actions">${utilityActions}</div><div class="purchase-order-workflow-actions">${workflowActions}</div>`;
+  return `<div class="purchase-order-utility-actions">${utilityActions}</div>${purchaseOrderDetailTotals(order)}<div class="purchase-order-workflow-actions">${workflowActions}</div>`;
 }
 
 function bindPurchaseOrderDetailActions(root) {
@@ -4766,7 +4770,7 @@ function openPurchaseOrderDetail(orderId) {
     return `<article class="purchase-order-detail-line"><div><strong>${escapeHtml(item.product_name)}</strong><small>${escapeHtml(item.sku??'')}</small></div><div><span>Dipesan</span><strong>${orderedPurchase.toLocaleString('id-ID')} ${escapeHtml(unitName)}</strong><small>${factor>1?`${Number(item.ordered_qty).toLocaleString('id-ID')} pcs`:''}</small></div><div><span>Diterima</span><strong>${receivedPurchase.toLocaleString('id-ID')} ${escapeHtml(unitName)}</strong><small>${factor>1?`${Number(item.received_qty).toLocaleString('id-ID')} pcs`:''}</small></div><div><span>Sisa</span><strong>${remainingPurchase.toLocaleString('id-ID')} ${escapeHtml(unitName)}</strong><small>${factor>1?`${Number(item.remaining_qty).toLocaleString('id-ID')} pcs`:''}</small></div><div><span>Estimasi modal</span><strong>${money.format(item.purchase_unit_cost??Number(item.unit_cost)*factor)}</strong><small>/ ${escapeHtml(unitName)}</small></div><div class="purchase-order-detail-line-total"><span>Jumlah</span><strong>${money.format(item.line_total)}</strong></div></article>`;
   }).join('');
   const location=state.locations.find((item)=>item.id===order.location_id);
-  el('purchase-order-detail-content').innerHTML=`<section class="purchase-order-detail-summary"><div><span>Lokasi tujuan</span><strong>${escapeHtml(location?.name??'-')}</strong></div><div><span>Perkiraan tiba</span><strong>${order.expected_on?new Date(`${order.expected_on}T00:00:00`).toLocaleDateString('id-ID'):'Belum ditentukan'}</strong></div><div><span>Jenis barang</span><strong>${order.items.length.toLocaleString('id-ID')}</strong></div><div><span>Progres</span><strong>${received.toLocaleString('id-ID')} / ${ordered.toLocaleString('id-ID')} pcs</strong><small>Sisa ${remaining.toLocaleString('id-ID')} pcs</small></div></section><section class="purchase-order-detail-lines">${rows||'<div class="empty-state compact">PO ini belum memiliki barang.</div>'}</section>${order.notes?`<section class="purchase-order-detail-note"><span>Catatan supplier</span><p>${escapeHtml(order.notes)}</p></section>`:''}<section class="purchase-order-detail-totals"><div><span>Subtotal</span><strong>${money.format(order.subtotal)}</strong></div><div><span>Diskon</span><strong>${money.format(order.discount_amount)}</strong></div><div><span>Pajak</span><strong>${money.format(order.tax_amount)}</strong></div><div><span>Biaya lain</span><strong>${money.format(order.other_cost)}</strong></div><div class="grand"><span>Total PO</span><strong>${money.format(order.grand_total)}</strong></div></section><footer class="purchase-order-detail-actions">${purchaseOrderDetailActions(order)}</footer>`;
+  el('purchase-order-detail-content').innerHTML=`<section class="purchase-order-detail-summary"><div><span>Lokasi tujuan</span><strong>${escapeHtml(location?.name??'-')}</strong></div><div><span>Perkiraan tiba</span><strong>${order.expected_on?new Date(`${order.expected_on}T00:00:00`).toLocaleDateString('id-ID'):'Belum ditentukan'}</strong></div><div><span>Jenis barang</span><strong>${order.items.length.toLocaleString('id-ID')}</strong></div><div><span>Progres</span><strong>${received.toLocaleString('id-ID')} / ${ordered.toLocaleString('id-ID')} pcs</strong><small>Sisa ${remaining.toLocaleString('id-ID')} pcs</small></div></section><section class="purchase-order-detail-lines">${rows||'<div class="empty-state compact">PO ini belum memiliki barang.</div>'}</section>${order.notes?`<section class="purchase-order-detail-note"><span>Catatan supplier</span><p>${escapeHtml(order.notes)}</p></section>`:''}<footer class="purchase-order-detail-actions">${purchaseOrderDetailActions(order)}</footer>`;
   bindPurchaseOrderDetailActions(el('purchase-order-detail-content'));
   showPurchaseView('detail');
   window.scrollTo({top:0,behavior:'smooth'});
