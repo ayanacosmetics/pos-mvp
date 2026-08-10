@@ -54,7 +54,7 @@ test('halaman penerimaan mempertahankan langkah, autosave saat pindah ke Kasir, 
   assert.match(app, /pagehide',saveRestockDraftNow/);
   assert.match(app, /visibilitychange'[\s\S]*document\.hidden[\s\S]*saveRestockDraftNow/);
   assert.match(app, /function pauseRestockReceipt/);
-  assert.match(app, /Draft tersimpan\. Silakan tutup shift, absen, atau logout/);
+  assert.match(app, /Pemeriksaan dijeda dan dapat dilanjutkan staff lain/);
   assert.match(app, /showPurchaseView\('documents'\)/);
   assert.match(app, /const receipt = await request\(endpoint[\s\S]*clearRestockDraft\(\)[\s\S]*renderRestock\(\{preserveDraft:false\}\)/);
   assert.match(app, /submitRestockForApproval[\s\S]*clearRestockDraft\(\)/);
@@ -66,5 +66,8 @@ test('halaman penerimaan mempertahankan langkah, autosave saat pindah ke Kasir, 
   assert.match(html, /id="pause-restock-line-dialog"[^>]+type="button"/);
   assert.match(app, /PEMERIKSAAN DIJEDA[\s\S]*Lanjutkan pemeriksaan/);
   assert.match(app, /async function resumeOrderReceipt[\s\S]*restoreRestockDraft/);
+  assert.match(app, /claimSharedRestockDraft[\s\S]*receipt-draft\/claim/);
+  assert.match(app, /saveSharedRestockDraft[\s\S]*release/);
+  assert.match(app, /SEDANG DIPERIKSA[\s\S]*Terkunci/);
   assert.match(worker, /\/restock-draft\.mjs/);
 });

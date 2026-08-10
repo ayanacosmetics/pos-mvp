@@ -34,6 +34,8 @@ state.restockPlanningLimit = 100;
 state.restockWizardStep = 'document';
 state.restockDraftRestoring = false;
 state.restockDraftSaveTimer = null;
+state.restockSharedSaveTimer = null;
+state.restockDraftLeaseToken = null;
 state.salesPeriodLevel = 'DAY';
 state.salesPeriodValue = null;
 state.salesReportOpen = false;
@@ -4065,9 +4067,15 @@ function storedRestockDraft(){
   return readRestockDraft(localStorage,currentRestockDraftKey());
 }
 
+function sharedRestockDraftForOrder(orderId){
+  return state.purchaseOrders.find((order)=>order.id===orderId)?.receipt_draft??null;
+}
+
 function restockDraftForOrder(orderId){
-  const draft=storedRestockDraft();
-  return draft?.activePurchaseOrder?.id===orderId?draft:null;
+  const shared=sharedRestockDraftForOrder(orderId);
+  if(shared?.payload?.activePurchaseOrder?.id===orderId)return shared.payload;
+  const local=storedRestockDraft();
+  return local?.activePurchaseOrder?.id===orderId?local:null;
 }
 
 function buildRestockDraft(){
@@ -4101,14 +4109,58 @@ function saveRestockDraftNow(){
   return saved;
 }
 
+function sharedRestockClaimToken(orderId){
+  const key=`pos_restock_claim_token:${orderId}`;
+  let token=localStorage.getItem(key);
+  if(!token){token=crypto.randomUUID();localStorage.setItem(key,token);}
+  return token;
+}
+
+async function claimSharedRestockDraft(order,{payload=null}={}){
+  const clientToken=sharedRestockClaimToken(order.id);
+  const claimed=await request(`/api/purchase-orders/${order.id}/receipt-draft/claim`,{
+    method:'POST',body:JSON.stringify({clientToken,payload})
+  });
+  state.restockDraftLeaseToken=clientToken;
+  return claimed;
+}
+
+async function saveSharedRestockDraft({release=false}={}){
+  clearTimeout(state.restockSharedSaveTimer);state.restockSharedSaveTimer=null;
+  const orderId=state.activePurchaseOrder?.id,clientToken=state.restockDraftLeaseToken;
+  if(!orderId||!clientToken)return true;
+  const payload=buildRestockDraft();
+  await request(`/api/purchase-orders/${orderId}/receipt-draft`,{
+    method:'PUT',body:JSON.stringify({clientToken,payload,release})
+  });
+  if(release){
+    localStorage.removeItem(`pos_restock_claim_token:${orderId}`);
+    state.restockDraftLeaseToken=null;
+  }
+  return true;
+}
+
+function scheduleSharedRestockDraftSave(){
+  if(!state.activePurchaseOrder?.id||!state.restockDraftLeaseToken||state.restockDraftRestoring)return;
+  clearTimeout(state.restockSharedSaveTimer);
+  state.restockSharedSaveTimer=setTimeout(()=>saveSharedRestockDraft().catch((error)=>{
+    renderRestockDraftStatus(buildRestockDraft(),{saveFailed:true});
+    console.error('Shared restock draft save failed',error);
+  }),1000);
+}
+
 function scheduleRestockDraftSave(){
   if(state.restockDraftRestoring)return;
   clearTimeout(state.restockDraftSaveTimer);
   state.restockDraftSaveTimer=setTimeout(saveRestockDraftNow,250);
+  scheduleSharedRestockDraftSave();
 }
 
 function clearRestockDraft(){
   clearTimeout(state.restockDraftSaveTimer);state.restockDraftSaveTimer=null;
+  clearTimeout(state.restockSharedSaveTimer);state.restockSharedSaveTimer=null;
+  if(state.activePurchaseOrder?.id&&state.restockDraftLeaseToken)localStorage.removeItem(`pos_restock_claim_token:${state.activePurchaseOrder.id}`);
+  state.restockDraftLeaseToken=null;
   removeRestockDraft(localStorage,currentRestockDraftKey());
   state.restockDraftProducts.clear();
   renderRestockDraftStatus(null);
@@ -4160,6 +4212,13 @@ async function discardRestockDraft(){
   const count=restockDraftLines().length;
   if(!restockDraftHasContent())return;
   if(!window.confirm(`Batalkan draft penerimaan${count?` berisi ${count} barang`:''}? Data pemeriksaan yang belum diposting akan dihapus.`))return;
+  if(state.activePurchaseOrder?.id){
+    try{
+      await request(`/api/purchase-orders/${state.activePurchaseOrder.id}/receipt-draft`,{
+        method:'DELETE',body:JSON.stringify({clientToken:state.restockDraftLeaseToken})
+      });
+    }catch(error){return toast(error.message);}
+  }
   clearRestockDraft();state.activePurchaseOrder=null;
   await renderRestock({preserveDraft:false});toast('Draft penerimaan dibatalkan. Stok tidak berubah.');
 }
@@ -4220,6 +4279,12 @@ const purchaseStatus = {
 };
 
 function showPurchaseView(name,{approvalId=null}={}) {
+  if(name==='receipt'&&state.activePurchaseOrder?.id&&!state.restockDraftLeaseToken){
+    showPurchaseView('documents');
+    loadPurchaseOrders();
+    toast('Lanjutkan pemeriksaan melalui PO di Pesanan supplier agar tidak dikerjakan bersamaan.');
+    return;
+  }
   document.querySelectorAll('.purchase-view').forEach((view) => view.classList.toggle('hidden', view.id !== `purchase-view-${name}`));
   document.querySelectorAll('.purchase-tab').forEach((button) => button.classList.toggle('active', button.dataset.purchaseView === name));
   document.querySelectorAll('[data-purchase-view-target]').forEach((button)=>button.classList.toggle('active',button.dataset.purchaseViewTarget===name));
@@ -4567,13 +4632,16 @@ function renderPurchaseOrders() {
     const received = order.items.reduce((sum,item)=>sum+item.received_qty,0);
     const progress = ordered ? Math.round((received/ordered)*100) : 0;
     const receivingApproval=order.receiving_approval;
-    const pausedDraft=restockDraftForOrder(order.id);
+    const sharedDraft=sharedRestockDraftForOrder(order.id);
+    const pausedDraft=sharedDraft?.payload??restockDraftForOrder(order.id);
     const checkedDraft=(pausedDraft?.lines??[]).filter((line)=>line.verificationMethod||String(line.qty??'').trim()!=='').length;
+    const claimActive=Boolean(sharedDraft?.claimedBy&&new Date(sharedDraft.claimExpiresAt)>new Date());
+    const claimedByCurrent=claimActive&&sharedDraft.claimedBy===state.session.user.id;
     const receivingApprovalLabel={PENDING:'Menunggu Owner',REVISION_REQUIRED:'Perlu revisi',APPROVED:'Disetujui · lanjutkan penerimaan'}[receivingApproval?.status]??receivingApproval?.status;
     const overdue=order.overdue?'<span class="status-badge out">TERLAMBAT</span>':'';
     const approval=order.status==='SUBMITTED'?` · di atas batas ${money.format(order.approval_threshold??0)}`:order.status==='APPROVED'&&!order.approval_required?' · disetujui otomatis':'';
     const receivingNotice=receivingApproval?`<div class="purchase-receiving-lock"><span class="badge warning">PENERIMAAN DIPROSES</span><div><strong>${escapeHtml(receivingApprovalLabel)}</strong><small>Faktur ${escapeHtml(receivingApproval.documentNo??'-')} · selesaikan pengajuan ini sebelum menerima barang lagi.</small></div></div>`:'';
-    const draftNotice=pausedDraft?`<div class="purchase-draft-resume"><div><span class="status-badge partial">PEMERIKSAAN DIJEDA</span><small>${checkedDraft} barang sudah diperiksa dan tersimpan di perangkat ini.</small></div><button class="button primary po-resume-receipt" data-id="${escapeHtml(order.id)}" type="button">Lanjutkan pemeriksaan</button></div>`:'';
+    const draftNotice=pausedDraft?`<div class="purchase-draft-resume"><div><span class="status-badge partial">${claimActive?'SEDANG DIPERIKSA':'PEMERIKSAAN DIJEDA'}</span><small>${checkedDraft} barang sudah diperiksa · ${claimActive?`${escapeHtml(sharedDraft.claimedByName??'Staff')} sedang mengerjakan`:`terakhir oleh ${escapeHtml(sharedDraft?.updatedByName??'staff')}`}.</small></div>${claimActive&&!claimedByCurrent?'<button class="button secondary" type="button" disabled>Terkunci</button>':`<button class="button primary po-resume-receipt" data-id="${escapeHtml(order.id)}" type="button">${claimedByCurrent?'Kembali ke pemeriksaan':'Lanjutkan pemeriksaan'}</button>`}</div>`:'';
     return `<article class="purchase-document purchase-document-open" data-id="${escapeHtml(order.id)}" role="button" tabindex="0" aria-label="Lihat detail ${escapeHtml(order.po_no)}"><div class="purchase-document-main"><div><div class="document-number"><strong>${escapeHtml(order.po_no)}</strong><span class="status-badge ${statusClass}">${escapeHtml(label)}</span>${overdue}</div><p>${escapeHtml(order.supplier_name)}</p><small>Dibuat ${new Date(order.created_at).toLocaleDateString('id-ID')}${order.expected_on ? ` · estimasi ${new Date(`${order.expected_on}T00:00:00`).toLocaleDateString('id-ID')}` : ''}${approval}</small></div><div class="document-amount"><strong>${money.format(order.grand_total)}</strong><small>${order.items.length} jenis · sisa ${Number(order.outstanding_qty).toLocaleString('id-ID')} pcs</small></div></div>${receivingNotice}${draftNotice}<div class="receipt-progress"><span style="width:${progress}%"></span></div><div class="purchase-document-footer"><small>Diterima ${received} dari ${ordered} pcs · ${progress}%</small><strong class="purchase-document-detail-link">Lihat detail <span aria-hidden="true">›</span></strong></div></article>`;
   }).join('') || '<div class="empty-state compact">Belum ada Purchase Order dengan status ini.</div>';
   el('purchase-order-list').querySelectorAll('.purchase-document-open').forEach((card)=>{
@@ -4592,12 +4660,14 @@ function purchaseOrderDetailActions(order) {
   const receivingApproval=order.receiving_approval;
   const canOpenApproval=receivingApproval&&(canApprove||receivingApproval.requesterId===state.session.user.id);
   const pausedDraft=restockDraftForOrder(order.id);
+  const sharedDraft=sharedRestockDraftForOrder(order.id);
+  const lockedByOther=sharedDraft?.claimedBy&&new Date(sharedDraft.claimExpiresAt)>new Date()&&sharedDraft.claimedBy!==state.session.user.id;
   return [
     order.status!=='CANCELLED'?`<button class="button secondary po-print" data-id="${escapeHtml(order.id)}">Cetak / bagikan</button>`:'',
     ['SUBMITTED','APPROVED','PARTIALLY_RECEIVED'].includes(order.status)?`<button class="button secondary po-whatsapp" data-id="${escapeHtml(order.id)}">WhatsApp supplier</button>`:'',
     order.status==='DRAFT'?`<button class="button secondary po-open" data-id="${escapeHtml(order.id)}">Ubah draft</button><button class="button primary po-action" data-id="${escapeHtml(order.id)}" data-action="submit">Siapkan pesanan</button>`:'',
     order.status==='SUBMITTED'&&canApprove?`<button class="button primary po-action" data-id="${escapeHtml(order.id)}" data-action="approve">Setujui</button>`:'',
-    pausedDraft?`<button class="button primary po-resume-receipt" data-id="${escapeHtml(order.id)}">Lanjutkan pemeriksaan</button>`:['APPROVED','PARTIALLY_RECEIVED'].includes(order.status)&&!receivingApproval?`<button class="button primary po-receive" data-id="${escapeHtml(order.id)}">Terima barang</button>`:'',
+    pausedDraft?(lockedByOther?`<button class="button secondary" disabled>Sedang diperiksa ${escapeHtml(sharedDraft.claimedByName??'staff lain')}</button>`:`<button class="button primary po-resume-receipt" data-id="${escapeHtml(order.id)}">Lanjutkan pemeriksaan</button>`):['APPROVED','PARTIALLY_RECEIVED'].includes(order.status)&&!receivingApproval?`<button class="button primary po-receive" data-id="${escapeHtml(order.id)}">Terima barang</button>`:'',
     canOpenApproval?`<button class="button secondary po-open-receiving-approval" data-id="${escapeHtml(receivingApproval.id)}">Lihat proses penerimaan</button>`:'',
     !['RECEIVED','CANCELLED','PARTIALLY_RECEIVED'].includes(order.status)&&canApprove?`<button class="button danger po-action" data-id="${escapeHtml(order.id)}" data-action="cancel">Batalkan PO</button>`:''
   ].join('');
@@ -4957,32 +5027,37 @@ async function prepareOrderReceipt(orderId) {
   if (!order) return;
   if(restockDraftForOrder(orderId))return resumeOrderReceipt(orderId);
   if(order.receiving_approval)return toast('PO sedang diproses. Lanjutkan dari pengajuan penerimaan yang sudah dibuat.');
-  if(restockDraftHasContent()&&state.activePurchaseOrder?.id!==orderId&&!window.confirm('Ganti draft penerimaan yang sedang dikerjakan dengan PO ini? Data pemeriksaan pada draft saat ini akan dihapus.'))return renderRestockSourceSelector();
-  clearRestockDraft();
-  state.activePurchaseOrder=order;
-  await renderRestock({preserveDraft:false});
-  for (const item of order.items.filter((line)=>line.remaining_qty>0)) {
-    const factor=Number(item.purchase_unit_factor??1),remainingBase=Number(item.remaining_qty);
-    await appendRestockLine(item.product_id,'',item.unit_cost,item.purchase_unit_name??'pcs',{
-      poReceiving:true,
-      remainingPurchaseQty:remainingBase/factor,
-      remainingBaseQty:remainingBase
-    });
-  }
-  el('receive-all-po-items').classList.remove('hidden');
-  renderRestockSourceSelector();
-  showPurchaseView('receipt');
-  saveRestockDraftNow();
+  if(state.restockDraftLeaseToken&&state.activePurchaseOrder?.id!==orderId)return toast('Jeda pemeriksaan PO yang sedang dibuka sebelum membuka PO lain.');
+  try{
+    const initial={sourceType:'PO',supplierId:order.supplier_id,documentNo:'',locationId:order.location_id,wizardStep:'document',activePurchaseOrder:order,lines:[],draftProducts:[],updatedAt:new Date().toISOString()};
+    clearRestockDraft();
+    await claimSharedRestockDraft(order,{payload:initial});
+    state.activePurchaseOrder=order;
+    await renderRestock({preserveDraft:false});
+    for (const item of order.items.filter((line)=>line.remaining_qty>0)) {
+      const factor=Number(item.purchase_unit_factor??1),remainingBase=Number(item.remaining_qty);
+      await appendRestockLine(item.product_id,'',item.unit_cost,item.purchase_unit_name??'pcs',{
+        poReceiving:true,remainingPurchaseQty:remainingBase/factor,remainingBaseQty:remainingBase
+      });
+    }
+    el('receive-all-po-items').classList.remove('hidden');renderRestockSourceSelector();showPurchaseView('receipt');
+    saveRestockDraftNow();await saveSharedRestockDraft();
+  }catch(error){state.restockDraftLeaseToken=null;toast(error.message);await loadPurchaseOrders();}
 }
 
 async function resumeOrderReceipt(orderId){
   const draft=restockDraftForOrder(orderId);
-  if(!draft)return toast('Draft pemeriksaan PO ini tidak ditemukan pada perangkat ini.');
-  await renderRestock({preserveDraft:false});
-  const restored=await restoreRestockDraft();
-  if(!restored)return toast('Draft tidak dapat dipulihkan. Jangan memulai ulang sebelum diperiksa.');
-  showPurchaseView('receipt');
-  toast('Pemeriksaan dilanjutkan dari data yang tersimpan.');
+  const order=state.purchaseOrders.find((item)=>item.id===orderId);
+  if(!draft||!order)return toast('Draft pemeriksaan PO ini tidak ditemukan. Muat ulang Pesanan supplier.');
+  try{
+    clearRestockDraft();
+    const claimed=await claimSharedRestockDraft(order,{payload:sharedRestockDraftForOrder(orderId)?null:draft});
+    writeRestockDraft(localStorage,currentRestockDraftKey(),claimed.payload??draft);
+    await renderRestock({preserveDraft:false});
+    const restored=await restoreRestockDraft();
+    if(!restored)throw new Error('Draft tidak dapat dipulihkan. Jangan memulai ulang sebelum diperiksa.');
+    showPurchaseView('receipt');toast('Pemeriksaan dilanjutkan dari data bersama yang tersimpan.');
+  }catch(error){state.restockDraftLeaseToken=null;toast(error.message);await loadPurchaseOrders();}
 }
 
 async function openPurchaseOrderReceivingApproval(approvalId) {
@@ -5139,15 +5214,17 @@ function completeRestockLineDialog(){
   toast(row.dataset.verificationMethod==='scan'?'Barang hasil scan sudah diperiksa.':'Barang sudah diperiksa manual.');
 }
 
-function pauseRestockReceipt(event){
+async function pauseRestockReceipt(event){
   event?.preventDefault();
   closeRestockLineDialog();
   setRestockExtraPicker(false);
   const hasDraft=restockDraftHasContent(),saved=saveRestockDraftNow();
   if(hasDraft&&!saved)return toast('Draft belum dapat disimpan. Jangan logout sebelum penyimpanan berhasil.');
-  toast(hasDraft?'Draft tersimpan. Silakan tutup shift, absen, atau logout.':'Tidak ada draft penerimaan yang perlu disimpan.');
-  showPurchaseView('documents');
-  setSidebarOpen(true);
+  try{
+    if(hasDraft)await saveSharedRestockDraft({release:true});
+    toast(hasDraft?'Pemeriksaan dijeda dan dapat dilanjutkan staff lain.':'Tidak ada draft penerimaan yang perlu disimpan.');
+    await loadPurchaseOrders();showPurchaseView('documents');setSidebarOpen(true);
+  }catch(error){toast(`Draft belum aman: ${error.message}`);}
 }
 
 function closeRestockLineDialog(){
@@ -5952,7 +6029,8 @@ async function receivePurchase() {
     supplierId: selectedSupplier.id,
     supplierName: selectedSupplier.name,
     locationId: el('restock-location').value,
-    items: lines
+    items: lines,
+    draftToken:state.activePurchaseOrder?state.restockDraftLeaseToken:null
   };
   const button = el('receive-button');
   const wizardButton = el('restock-wizard-next');
@@ -8710,6 +8788,8 @@ el('register-owner-form').addEventListener('submit', async (event) => {
 
 async function endCurrentSession(nextPortal = null) {
   saveRestockDraftNow();
+  try{await saveSharedRestockDraft({release:true});}
+  catch(error){toast(`Belum dapat logout: draft penerimaan belum aman (${error.message})`);return;}
   try{if(nativePushStatus())await deactivateNativePushDevice();}catch{}
   try {
     await request('/api/logout', {
@@ -9787,6 +9867,11 @@ window.addEventListener('online', () => { el('network-dot').classList.remove('of
 window.addEventListener('offline', () => { el('network-dot').classList.add('offline'); el('network-status').textContent = 'Offline'; });
 window.addEventListener('pagehide',saveRestockDraftNow);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)saveRestockDraftNow();});
+setInterval(()=>{
+  if(state.activePurchaseOrder?.id&&state.restockDraftLeaseToken){
+    saveSharedRestockDraft().catch((error)=>console.error('Restock draft heartbeat failed',error));
+  }
+},60000);
 window.addEventListener('storage', (event) => {
   if (event.key === 'pos_owner_context_id') {
     state.ownerContextId = event.newValue || null;
