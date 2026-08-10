@@ -4074,6 +4074,7 @@ function sharedRestockDraftForOrder(orderId){
 async function migrateLocalRestockDraftToShared(){
   const draft=storedRestockDraft(),orderId=draft?.activePurchaseOrder?.id;
   if(!orderId||!state.purchaseOrders.some((order)=>order.id===orderId))return false;
+  if(state.activePurchaseOrder?.id===orderId&&state.restockDraftLeaseToken)return false;
   const shared=sharedRestockDraftForOrder(orderId),sharedPayload=shared?.payload;
   if(shared){
     const claimActive=shared.claimedBy&&new Date(shared.claimExpiresAt)>new Date();
@@ -4114,7 +4115,7 @@ function buildRestockDraft(){
 function renderRestockDraftStatus(draft=undefined,{saveFailed=false}={}){
   const active=draft===undefined?(restockDraftHasContent()?buildRestockDraft():null):draft,banner=el('restock-draft-banner');
   if(!banner)return;
-  banner.classList.toggle('hidden',!active);
+  banner.classList.toggle('hidden',!active||!saveFailed);
   banner.classList.toggle('save-failed',Boolean(active&&saveFailed));
   const navStatus=el('restock-nav-draft-status');
   if(!active){if(navStatus)navStatus.textContent='Catat barang yang sudah tiba';return;}
@@ -5258,7 +5259,14 @@ async function pauseRestockReceipt(event){
   const hasDraft=restockDraftHasContent(),saved=saveRestockDraftNow();
   if(hasDraft&&!saved)return toast('Draft belum dapat disimpan. Jangan logout sebelum penyimpanan berhasil.');
   try{
-    if(hasDraft)await saveSharedRestockDraft({release:true});
+    if(hasDraft){
+      try{await saveSharedRestockDraft({release:true});}
+      catch(error){
+        if(!state.activePurchaseOrder?.id)throw error;
+        await claimSharedRestockDraft(state.activePurchaseOrder,{payload:null});
+        await saveSharedRestockDraft({release:true});
+      }
+    }
     toast(hasDraft?'Pemeriksaan dijeda dan dapat dilanjutkan staff lain.':'Tidak ada draft penerimaan yang perlu disimpan.');
     await loadPurchaseOrders();showPurchaseView('documents');setSidebarOpen(true);
   }catch(error){toast(`Draft belum aman: ${error.message}`);}

@@ -25,6 +25,7 @@ test('draft lokal lama otomatis dipindahkan menjadi draft bersama',async()=>{
   assert.match(app,/receipt-draft\/claim[\s\S]*release:true/);
   assert.match(app,/if\(await migrateLocalRestockDraftToShared\(\)\)[\s\S]*request\('\/api\/purchase-orders'\)/);
   assert.match(app,/localIsRicher=localInspected>sharedInspected/);
+  assert.match(app,/activePurchaseOrder\?\.id===orderId&&state\.restockDraftLeaseToken\)return false/);
 });
 
 test('akun staff yang sama dapat memindahkan pemeriksaan ke perangkat lain dengan aman',async()=>{
