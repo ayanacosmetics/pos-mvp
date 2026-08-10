@@ -53,9 +53,13 @@ test('halaman penerimaan mempertahankan langkah, autosave saat pindah ke Kasir, 
   assert.match(app, /receiptOpen[\s\S]*saveRestockDraftNow\(\)/);
   assert.match(app, /pagehide',saveRestockDraftNow/);
   assert.match(app, /visibilitychange'[\s\S]*document\.hidden[\s\S]*saveRestockDraftNow/);
+  assert.match(app, /function pauseRestockReceipt/);
+  assert.match(app, /Draft tersimpan\. Silakan tutup shift, absen, atau logout/);
   assert.match(app, /const receipt = await request\(endpoint[\s\S]*clearRestockDraft\(\)[\s\S]*renderRestock\(\{preserveDraft:false\}\)/);
   assert.match(app, /submitRestockForApproval[\s\S]*clearRestockDraft\(\)/);
   assert.match(app, /window\.confirm\(`Batalkan draft penerimaan/);
   assert.match(html, /id="restock-draft-banner"[\s\S]*id="discard-restock-draft"/);
+  assert.match(html, /id="pause-restock-receipt"/);
+  assert.match(html, /id="pause-restock-line-dialog"/);
   assert.match(worker, /\/restock-draft\.mjs/);
 });

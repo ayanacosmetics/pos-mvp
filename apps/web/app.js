@@ -5117,6 +5117,15 @@ function completeRestockLineDialog(){
   toast(row.dataset.verificationMethod==='scan'?'Barang hasil scan sudah diperiksa.':'Barang sudah diperiksa manual.');
 }
 
+function pauseRestockReceipt(){
+  closeRestockLineDialog();
+  setRestockExtraPicker(false);
+  const hasDraft=restockDraftHasContent(),saved=saveRestockDraftNow();
+  if(hasDraft&&!saved)return toast('Draft belum dapat disimpan. Jangan logout sebelum penyimpanan berhasil.');
+  toast(hasDraft?'Draft tersimpan. Silakan tutup shift, absen, atau logout.':'Tidak ada draft penerimaan yang perlu disimpan.');
+  setSidebarOpen(true);
+}
+
 function closeRestockLineDialog(){
   const dialog=el('restock-line-dialog'),row=state.activeRestockLine,placeholder=state.activeRestockLinePlaceholder;
   if(row&&placeholder?.isConnected){delete row.dataset.pendingVerificationMethod;placeholder.replaceWith(row);row.classList.remove('restock-line-editing');updateRestockLineSummary(row);}
@@ -9041,6 +9050,7 @@ el('purchase-view-receipt').addEventListener('change',scheduleRestockDraftSave);
 el('receive-all-po-items').addEventListener('click',receiveAllPurchaseOrderItems);
 el('toggle-restock-extra-product').addEventListener('click',()=>setRestockExtraPicker(el('restock-extra-product-picker').classList.contains('hidden')));
 el('open-restock-new-product').addEventListener('click',()=>openRestockNewProduct(''));
+el('pause-restock-receipt').addEventListener('click',pauseRestockReceipt);
 el('restock-product-search').addEventListener('input', (event) => renderPurchaseProductResults('restock', event.currentTarget.value));
 el('restock-product-search').addEventListener('keydown', (event) => handlePurchaseProductEnter('restock', event));
 el('search-restock-product').addEventListener('click', () => renderPurchaseProductResults('restock', el('restock-product-search').value));
@@ -9048,6 +9058,7 @@ el('scan-restock-product').addEventListener('click', () => activatePurchaseScann
 el('camera-restock-product').addEventListener('click', () => openBarcodeCamera('restock'));
 el('restock-new-product-form').addEventListener('submit',saveRestockNewProduct);
 el('close-restock-line-dialog').addEventListener('click',closeRestockLineDialog);
+el('pause-restock-line-dialog').addEventListener('click',pauseRestockReceipt);
 el('done-restock-line-dialog').addEventListener('click',completeRestockLineDialog);
 el('restock-line-dialog').addEventListener('cancel',(event)=>{event.preventDefault();closeRestockLineDialog();});
 el('restock-new-barcode-mode').addEventListener('change',syncRestockNewBarcodeMode);
