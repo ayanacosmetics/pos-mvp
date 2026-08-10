@@ -35,7 +35,7 @@ test('foto produk dapat dipilih dari galeri dan gambar rusak kembali ke placehol
   ]);
   assert.match(html, /id="new-image-file" type="file"/);
   assert.match(html, /id="new-image-url" type="url"/);
-  assert.match(html, /Foto otomatis diperkecil sebelum diunggah/);
+  assert.match(script, /canvas\.toDataURL\('image\/jpeg'/);
   assert.match(script, /imageUrl:el\('new-image-url'\)\.value/);
   assert.match(script, /function bindProductImageFallbacks/);
   assert.match(script, /image\.addEventListener\('error', \(\) => image\.remove\(\)/);

@@ -1547,7 +1547,9 @@ function openProductEditor(productId=null){
   el('edit-product-id').value=product?.id??'';
   el('product-dialog-eyebrow').textContent=product?'EDIT PRODUK':'PRODUK BARU';
   el('product-dialog-title').textContent=product?'Ubah produk':'Tambah produk';
-  el('new-sku').value=product?.sku??'';el('new-name').value=product?.name??'';
+  el('new-sku').value=product?.sku??'';el('new-sku').readOnly=!product;
+  el('new-sku-help').textContent=product?'SKU tersimpan.':'Dibuat otomatis oleh Nusa.';
+  el('new-name').value=product?.name??'';
   renderProductCategorySelect('new-category',product?.category??'Lainnya');el('new-brand').value=product?.brand??'';
   el('new-image-url').value=product?.imageUrl??'';
   state.productImageFile=null;state.productImagePreviewUrl=product?.imageUrl??'';
@@ -1563,10 +1565,13 @@ function openProductEditor(productId=null){
   syncProductStockFields();
   state.productPriceTiers=defaultProductPriceTiers(product);renderProductPriceTierEditor();
   state.productUnitsDraft=product?product.units.map((unit)=>({...unit})):[{id:null,name:'pcs',factor:1,barcode:''}];
+  el('new-barcode').value=state.productUnitsDraft.find((unit)=>Number(unit.factor)===1)?.barcode??'';
   renderProductUnitEditor();el('product-dialog').showModal();
 }
 
 function productPayload(){
+  const baseUnit=state.productUnitsDraft.find((unit)=>Number(unit.factor)===1);
+  if(baseUnit)baseUnit.barcode=el('new-barcode').value.trim();
   const prices=Object.entries(readProductPriceTierDraft()).flatMap(([customerGroupId,tiers])=>tiers
     .filter((tier)=>Number(tier.unitPriceBase)>0)
     .map((tier)=>({customerGroupId,minBaseQty:Number(tier.minBaseQty),unitPriceBase:Number(tier.unitPriceBase)})));
@@ -9385,8 +9390,8 @@ el('add-product-unit').addEventListener('click',()=>{state.productUnitsDraft.pus
 el('product-units-editor').addEventListener('input',(event)=>{
   const row=event.target.closest('.product-unit-row');if(!row)return;const unit=state.productUnitsDraft[Number(row.dataset.index)];
   if(event.target.classList.contains('unit-name'))unit.name=event.target.value;
-  if(event.target.classList.contains('unit-factor'))unit.factor=Number(event.target.value);
-  if(event.target.classList.contains('unit-barcode'))unit.barcode=event.target.value;
+  if(event.target.classList.contains('unit-factor')){unit.factor=Number(event.target.value);if(unit.factor===1)el('new-barcode').value=unit.barcode??'';}
+  if(event.target.classList.contains('unit-barcode')){unit.barcode=event.target.value;if(Number(unit.factor)===1)el('new-barcode').value=event.target.value;}
 });
 el('product-units-editor').addEventListener('click',(event)=>{
   const button=event.target.closest('.remove-product-unit');if(!button)return;
@@ -9463,6 +9468,7 @@ el('product-table').addEventListener('change',(event)=>{
   renderProductTable();
 });
 el('product-form').addEventListener('submit', saveProduct);
+el('new-barcode').addEventListener('input',(event)=>{const base=state.productUnitsDraft.find((unit)=>Number(unit.factor)===1);if(base)base.barcode=event.target.value;renderProductUnitEditor();});
 el('new-track-stock').addEventListener('change',syncProductStockFields);
 el('new-track-expiry').addEventListener('change',syncProductOpeningFields);
 el('new-add-opening-stock').addEventListener('change',syncProductOpeningFields);

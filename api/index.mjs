@@ -3319,6 +3319,7 @@ async function routeRequest(request, response, route) {
   if (request.method === 'POST' && route === 'products') {
     requirePermission(session, 'catalog.manage');
     const rawInput=bodyOf(request),openingInput=rawInput.openingStock??null;
+    if(!String(rawInput.sku??'').trim())rawInput.sku=`PRD-${crypto.randomUUID().replaceAll('-','').slice(0,12).toUpperCase()}`;
     const input = await canonicalizeProductInputCategory(context.tenantId,normalizeProductInput(rawInput));
     await assertNoSharedBarcodeConflict(context.tenantId,input);
     if(openingInput){

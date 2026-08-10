@@ -11,9 +11,9 @@ test('logo struk dan foto produk mengutamakan galeri atau kamera',async()=>{
   assert.match(html,/id="setting-receipt-logo-file" type="file"/);
   assert.match(html,/Logo dari galeri atau kamera/);
   assert.match(html,/id="new-image-file" type="file"/);
-  assert.match(html,/Pilih dari galeri atau kamera/);
+  assert.match(html,/Pilih foto/);
   assert.match(html,/id="new-image-preview"/);
-  assert.match(html,/Gunakan URL gambar \(opsional\)/);
+  assert.match(html,/URL gambar/);
   assert.match(app,/productImageDataFromFile/);
   assert.match(app,/\/api\/media\/product-image/);
   assert.match(app,/Mengunggah foto/);

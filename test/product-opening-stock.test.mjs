@@ -26,3 +26,21 @@ test('opening stock SQL is atomic, new-product-only, and audited through stock a
   assert.match(sql,/v_adjustment:=public\.adjust_product_stock_v1/);
   assert.match(sql,/begin;[\s\S]*commit;/);
 });
+
+test('new catalog products expose their main barcode and receive a server-generated SKU',async()=>{
+  const [html,app,api]=await Promise.all([read('apps/web/index.html'),read('apps/web/app.js'),read('api/index.mjs')]);
+  assert.match(html,/Barcode utama<input id="new-barcode"/);
+  assert.doesNotMatch(html,/id="new-sku" required/);
+  assert.match(app,/el\('new-sku'\)\.readOnly=!product/);
+  assert.match(app,/baseUnit\.barcode=el\('new-barcode'\)\.value\.trim\(\)/);
+  assert.match(api,/rawInput\.sku=`PRD-\$\{crypto\.randomUUID\(\)/);
+});
+
+test('product editor puts a compact photo block before identity and removes verbose guidance',async()=>{
+  const [html,css]=await Promise.all([read('apps/web/index.html'),read('apps/web/styles.css')]);
+  assert.ok(html.indexOf('product-editor-media-section')<html.indexOf('IDENTITAS BARANG'));
+  assert.match(html,/FOTO PRODUK[\s\S]*Pilih foto/);
+  assert.doesNotMatch(html,/Setiap varian mempunyai SKU, barcode, harga, dan stok sendiri/);
+  assert.doesNotMatch(html,/Setiap tipe dimulai dari minimal 1 pcs/);
+  assert.match(css,/\.product-editor-media-section\.product-photo-editor/);
+});
