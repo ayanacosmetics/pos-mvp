@@ -1236,7 +1236,7 @@ async function loadPurchaseOrders(tenantId, orderId = null, locationIds = []) {
   const orderIds = orders.map((order) => order.id).join(',');
   const [items,activeApprovals] = await Promise.all([
     rest('purchase_order_items', `tenant_id=eq.${tenant}&order_id=in.(${orderIds})&select=*&order=product_name`),
-    rest('restock_approval_requests', `tenant_id=eq.${tenant}&status=in.(PENDING,REVISION_REQUIRED,APPROVED)&select=id,status,document_no,items_json,requester_id,requested_at&order=requested_at.desc`)
+    rest('restock_approval_requests', `tenant_id=eq.${tenant}&status=in.(PENDING,REVISION_REQUIRED,APPROVED)&select=id,status,document_no,items_json,source_purchase_order_id,requester_id,requested_at&order=requested_at.desc`)
   ]);
   const itemsByOrder=new Map();
   for(const item of items){
@@ -1251,7 +1251,7 @@ async function loadPurchaseOrders(tenantId, orderId = null, locationIds = []) {
   }
   const approvalByOrder=new Map();
   for(const approval of activeApprovals){
-    const purchaseOrderId=approval.items_json?.find?.((item)=>item?.purchaseOrderId)?.purchaseOrderId??null;
+    const purchaseOrderId=approval.source_purchase_order_id??approval.items_json?.find?.((item)=>item?.purchaseOrderId)?.purchaseOrderId??null;
     if(purchaseOrderId&&!approvalByOrder.has(purchaseOrderId))approvalByOrder.set(purchaseOrderId,{
       id:approval.id,status:approval.status,documentNo:approval.document_no,requesterId:approval.requester_id,requestedAt:approval.requested_at
     });
@@ -5184,18 +5184,13 @@ async function routeRequest(request, response, route) {
     if (!key) { const error = new Error('Idempotency-Key wajib diisi'); error.status = 400; throw error; }
     const accessibleOrder = (await loadPurchaseOrders(context.tenantId, orderId, context.locationIds))[0];
     if (!accessibleOrder) { const error = new Error('Purchase Order tidak ditemukan pada lokasi user'); error.status = 404; throw error; }
-    const ownsDraft=await rpc('validate_purchase_receipt_draft_lock_v1',{
-      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,
-      p_purchase_order_id:orderId,p_client_token:input.draftToken??null
-    });
-    if(!ownsDraft)throw Object.assign(new Error('Pemeriksaan PO belum aktif untuk akun ini atau sedang dibuka staff lain. Buka kembali dari Pesanan supplier.'),{status:409});
     if(accessibleOrder.receiving_approval)throw Object.assign(new Error('PO sedang diproses dalam pengajuan penerimaan. Lanjutkan dari menu Persetujuan harga agar stok tidak diterima dua kali.'),{status:409});
     if(await restockNeedsPriceApproval(context.tenantId,receiptItems))throw Object.assign(new Error('Modal berubah. Ajukan harga kepada Owner sebelum menerima barang.'),{status:409});
-    const result = await rpc('receive_purchase_order', {
+    const result = await rpc('receive_purchase_order_draft_v1', {
       p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_order_id: orderId,
-      p_idempotency_key: key, p_document_no: input.documentNo, p_items: receiptItems
+      p_client_token:input.draftToken??null,p_document_no: input.documentNo,
+      p_items:receiptItems,p_inspection:input.inspection??{}
     });
-    await rest('purchase_receipt_drafts',`tenant_id=eq.${context.tenantId}&purchase_order_id=eq.${orderId}`,{method:'DELETE'});
     return send(response, result.duplicate ? 200 : 201, result);
   }
 
@@ -5207,7 +5202,8 @@ async function routeRequest(request, response, route) {
     return send(response,200,{requests:rows.map((row)=>({
       id:row.id,requesterId:row.requester_id,approverId:row.approver_id,supplierId:row.supplier_id,
       locationId:row.location_id,documentNo:row.document_no,items:row.items_json,proposedPrices:row.proposed_prices_json,
-      approvedPrices:row.approved_prices_json,status:row.status,requesterNote:row.requester_note,decisionNote:row.decision_note,
+      approvedPrices:row.approved_prices_json,inspection:row.inspection_json??{},sourcePurchaseOrderId:row.source_purchase_order_id??null,
+      status:row.status,requesterNote:row.requester_note,decisionNote:row.decision_note,
       requestedAt:row.requested_at,decidedAt:row.decided_at,receivedAt:row.received_at,receiptId:row.receipt_id
     }))});
   }
@@ -5221,18 +5217,13 @@ async function routeRequest(request, response, route) {
       const purchaseOrder=(await loadPurchaseOrders(context.tenantId,purchaseOrderId,context.locationIds))[0];
       if(!purchaseOrder)throw Object.assign(new Error('Purchase Order tidak ditemukan pada lokasi user'),{status:404});
       if(purchaseOrder.receiving_approval)throw Object.assign(new Error('PO ini sudah memiliki pengajuan penerimaan yang masih diproses.'),{status:409});
-      const ownsDraft=await rpc('validate_purchase_receipt_draft_lock_v1',{
-        p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,
-        p_purchase_order_id:purchaseOrderId,p_client_token:input.draftToken??null
-      });
-      if(!ownsDraft)throw Object.assign(new Error('Pemeriksaan PO tidak lagi aktif untuk akun ini. Buka kembali dari Pesanan supplier.'),{status:409});
     }
-    const result=await rpc('submit_restock_approval_v2',{
+    const result=await rpc('submit_restock_approval_v3',{
       p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_supplier_id:input.supplierId,
       p_location_id:input.locationId,p_document_no:input.documentNo,p_items:receiptItems,
-      p_proposed_prices:input.proposedPrices??[],p_note:input.note??''
+      p_proposed_prices:input.proposedPrices??[],p_note:input.note??'',
+      p_inspection:input.inspection??{},p_draft_token:input.draftToken??null
     });
-    if(purchaseOrderId)await rest('purchase_receipt_drafts',`tenant_id=eq.${context.tenantId}&purchase_order_id=eq.${purchaseOrderId}`,{method:'DELETE'});
     queueTenantOwnerNotification(context.tenantId,{
       type:'RESTOCK_APPROVAL',severity:'WARNING',title:`Persetujuan restok ${input.documentNo}`,
       message:`${session.profile.display_name} mengajukan ${Array.isArray(input.items)?input.items.length:0} barang untuk diperiksa Owner.`,
@@ -5273,9 +5264,9 @@ async function routeRequest(request, response, route) {
     requirePermission(session,'purchasing.receive');
     const [,requestId]=route.split('/'),input=bodyOf(request);
     const receiptItems=requirePositiveReceiptItems(input.items);
-    const result=await rpc('resubmit_restock_approval_v1',{
+    const result=await rpc('resubmit_restock_approval_v2',{
       p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_request_id:requestId,
-      p_items:receiptItems,p_note:input.note??''
+      p_items:receiptItems,p_note:input.note??'',p_inspection:input.inspection??{}
     });
     return send(response,200,result);
   }
@@ -5284,8 +5275,8 @@ async function routeRequest(request, response, route) {
     requirePermission(session,'purchasing.receive');
     const requestId=route.split('/')[1],key=request.headers['idempotency-key'];
     if(!key)throw Object.assign(new Error('Idempotency-Key wajib diisi'),{status:400});
-    const result=await rpc('receive_approved_restock_v1',{
-      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_request_id:requestId,p_idempotency_key:key
+    const result=await rpc('receive_approved_restock_v2',{
+      p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_request_id:requestId
     });
     return send(response,result.duplicate?200:201,result);
   }

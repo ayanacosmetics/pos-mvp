@@ -44,7 +44,7 @@ test('penerimaan PO membedakan belum diperiksa, tidak datang, dan jumlah aktual'
   assert.match(app, /row\.dataset\.poLine='true'/);
   assert.match(app, /Masih ada barang PO yang belum diverifikasi/);
   assert.match(app, /receivedRows=rows\.filter\(\(row\)=>Number\(row\.querySelector\('\.restock-qty'\)\.value\)>0\)/);
-  assert.match(app, /submitRestockForApproval\(payload,receivedRows\)/);
+  assert.match(app, /submitRestockForApproval\(payload,receivedRows,inspection\)/);
   assert.match(app, /TIDAK DATANG/);
   assert.match(api, /function requirePositiveReceiptItems/);
   assert.match(api, /Barang yang tidak datang tidak boleh dikirim sebagai penerimaan/);

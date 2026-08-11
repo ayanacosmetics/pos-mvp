@@ -3,8 +3,9 @@ import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 
 test('draft penerimaan PO dibagikan dan dikunci atomik di database', async()=>{
-  const [sql,api]=await Promise.all([
+  const [sql,safeSql,api]=await Promise.all([
     readFile(new URL('../supabase/migrations/202608100004_shared_purchase_receipt_drafts.sql',import.meta.url),'utf8'),
+    readFile(new URL('../supabase/migrations/202608110001_safe_purchase_receipt_continuation.sql',import.meta.url),'utf8'),
     readFile(new URL('../api/index.mjs',import.meta.url),'utf8')
   ]);
   assert.match(sql,/create table if not exists public\.purchase_receipt_drafts/);
@@ -14,8 +15,10 @@ test('draft penerimaan PO dibagikan dan dikunci atomik di database', async()=>{
   assert.match(sql,/save_purchase_receipt_draft_v1[\s\S]*p_release boolean/);
   assert.match(sql,/validate_purchase_receipt_draft_lock_v1/);
   assert.match(api,/claim_purchase_receipt_draft_v1/);
-  assert.match(api,/validate_purchase_receipt_draft_lock_v1[\s\S]*receive_purchase_order/);
-  assert.match(api,/purchase_receipt_drafts[\s\S]*method:'DELETE'/);
+  assert.match(safeSql,/receive_purchase_order_draft_v1[\s\S]*for update[\s\S]*receive_purchase_order/);
+  assert.match(safeSql,/'PO-RECEIPT-DRAFT:'\|\|v_draft\.id::text/);
+  assert.match(api,/rpc\('receive_purchase_order_draft_v1'/);
+  assert.doesNotMatch(api,/receive_purchase_order_draft_v1'[\s\S]{0,500}purchase_receipt_drafts[\s\S]{0,100}method:'DELETE'/);
   assert.match(api,/const ordersPromise=loadPurchaseOrders\(context\.tenantId,null,context\.locationIds\)/);
   assert.match(api,/draftLocationFilter=context\.locationIds\.length/);
   assert.match(api,/Promise\.all\(\[ordersPromise,actorsPromise\]\)/);

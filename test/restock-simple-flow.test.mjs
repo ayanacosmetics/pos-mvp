@@ -126,7 +126,8 @@ test('daftar PO ringkas membuka halaman detail penuh yang aman', () => {
   assert.match(app,/purchase-order-icon-action po-whatsapp[\s\S]*aria-label="Kirim PO ke WhatsApp supplier"/);
   assert.match(app,/purchase-order-utility-actions[\s\S]*purchase-order-workflow-actions/);
   assert.match(app,/purchase-order-utility-actions[\s\S]*purchaseOrderDetailTotals\(order\)[\s\S]*purchase-order-workflow-actions/);
-  assert.match(app,/data-action="cancel">Batalkan PO<\/button>`:''[\s\S]*po-receive[\s\S]*Terima barang/);
+  assert.match(app,/const receiveLabel=order\.status==='PARTIALLY_RECEIVED'\?`Terima sisa \$\{Number\(order\.outstanding_qty\)[\s\S]*:'Terima barang'/);
+  assert.match(app,/data-action="cancel">Batalkan PO<\/button>`:''[\s\S]*po-receive[\s\S]*\$\{receiveLabel\}/);
   assert.match(css, /\.purchase-metrics\{\s*grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
   assert.match(css, /\.purchase-order-detail-page/);
   assert.match(html,/purchase-refresh-icon[\s\S]*aria-label="Muat ulang pesanan supplier"/);

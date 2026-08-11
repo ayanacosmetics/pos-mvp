@@ -92,7 +92,7 @@ test('Owner dapat meminta revisi dan Staff mengirim ulang pengajuan yang sama',(
   assert.match(sqlRevision,/revision_history_json/);
   assert.match(sqlRevision,/resubmit_restock_approval_v1/);
   assert.match(api,/approve\|reject\|revise/);
-  assert.match(api,/resubmit_restock_approval_v1/);
+  assert.match(api,/resubmit_restock_approval_v2/);
   assert.match(app,/Minta revisi/);
   assert.match(app,/Kirim ulang ke Owner/);
   assert.match(app,/function resubmitRestockApproval/);
@@ -117,7 +117,7 @@ test('staff hanya melihat pemberitahuan approval tanpa modal lama dan saran harg
 });
 
 test('kelebihan kiriman PO hanya diterima melalui persetujuan Owner',()=>{
-  assert.match(api,/submit_restock_approval_v2/);
+  assert.match(api,/submit_restock_approval_v3/);
   assert.match(app,/function restockPoQuantityVariance/);
   assert.match(app,/Lebih kirim/);
   assert.match(app,/SELISIH JUMLAH/);
