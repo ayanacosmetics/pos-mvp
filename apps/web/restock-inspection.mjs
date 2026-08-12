@@ -7,16 +7,34 @@ export function reconcilePurchaseReceiptDraft(draft,currentOrder) {
   if(!draft?.activePurchaseOrder?.id||!currentOrder?.id||draft.activePurchaseOrder.id!==currentOrder.id){
     return {draft,changed:false,removedCount:0,resetCount:0,addedCount:0};
   }
+  const orderLines=new Map(
+    (currentOrder.items??[]).map((item)=>[item.product_id,item])
+  );
   const outstanding=new Map(
     (currentOrder.items??[])
       .filter((item)=>number(item.remaining_qty)>0)
       .map((item)=>[item.product_id,item])
   );
+  const explicitPoProducts=new Set(
+    (draft.lines??[])
+      .filter((line)=>line.poLine===true&&line.productId)
+      .map((line)=>line.productId)
+  );
   const seen=new Set(),lines=[];
   let removedCount=0,resetCount=0;
   for(const original of draft.lines??[]){
     const saved={...original};
-    if(saved.poLine!==true){lines.push(saved);continue;}
+    if(saved.poLine!==true){
+      const originalOrderLine=orderLines.get(saved.productId);
+      if(!originalOrderLine){lines.push(saved);continue;}
+      // Older drafts could save a PO product again as a supplemental line.
+      // A fully received product must disappear, while an outstanding product
+      // is represented by exactly one canonical PO line.
+      if(number(originalOrderLine.remaining_qty)<=0||explicitPoProducts.has(saved.productId)||seen.has(saved.productId)){
+        removedCount++;continue;
+      }
+      saved.poLine=true;
+    }
     const current=outstanding.get(saved.productId);
     if(!current||seen.has(saved.productId)){removedCount++;continue;}
     seen.add(saved.productId);

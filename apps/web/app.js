@@ -5236,6 +5236,9 @@ function restockVerificationLabel(row){
   const rawQty=row.querySelector('.restock-qty')?.value?.trim()??'';
   if(rawQty==='')return ['BELUM DIPERIKSA','pending'];
   if(!row.dataset.verificationMethod)return ['BELUM DIVERIFIKASI','pending'];
+  if(row.dataset.productKey)return ['BARANG BARU · PERLU OWNER','manual'];
+  const variance=restockPoQuantityVariance(row);
+  if(variance?.unplanned)return ['DI LUAR PO · PERLU OWNER','manual'];
   if(Number(rawQty)===0&&row.dataset.poLine==='true')return ['TIDAK DATANG','neutral'];
   return row.dataset.verificationMethod==='scan'?['SUDAH SCAN','scanned']:['DIPILIH MANUAL','manual'];
 }
@@ -5266,7 +5269,14 @@ function updateRestockLineSummary(row){
   summary.querySelector('.restock-line-summary-qty').textContent=rawQty===''?'Belum diperiksa':qty===0&&row.dataset.poLine==='true'?'Tidak datang':`${qty.toLocaleString('id-ID')} ${unit}`;
   summary.querySelector('.restock-line-summary-cost').textContent=canReviewRestockCostDetails()?`${money.format(cost)} / ${restockSelectedUnit(row).name}`:'Modal dicatat dari nota';
   const variance=restockPoQuantityVariance(row);
-  summary.querySelector('.restock-line-summary-extra').textContent=[variance?.excess>0?`Lebih kirim ${variance.excess.toLocaleString('id-ID')} dasar`:null,batch?`Batch ${batch}`:null,expiry?`EXP ${expiry}`:null].filter(Boolean).join(' · ')||'Batch & EXP belum diisi';
+  const quantityNote=row.dataset.productKey
+    ?'Belum masuk stok · wajib persetujuan Owner'
+    :variance?.unplanned&&variance.actual>0
+      ?`Di luar PO ${variance.actual.toLocaleString('id-ID')} dasar · perlu Owner`
+      :variance?.excess>0
+        ?`Lebih kirim ${variance.excess.toLocaleString('id-ID')} dasar`
+        :null;
+  summary.querySelector('.restock-line-summary-extra').textContent=[quantityNote,batch?`Batch ${batch}`:null,expiry?`EXP ${expiry}`:null].filter(Boolean).join(' · ')||'Batch & EXP belum diisi';
   updateRestockVerificationSummary();
 }
 

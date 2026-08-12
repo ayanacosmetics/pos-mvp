@@ -38,6 +38,39 @@ test('jumlah draft yang melebihi sisa terbaru direset agar tidak diposting ulang
   assert.equal(result.draft.lines[0].poRemainingBaseQty,'3');
 });
 
+test('baris tambahan lama untuk produk PO yang sudah diterima penuh ikut dibuang',()=>{
+  const result=reconcilePurchaseReceiptDraft({
+    activePurchaseOrder:{id:'po-1',outstanding_qty:3},
+    lines:[
+      {productId:'done',poLine:false,qty:'3',verificationMethod:'manual'},
+      {productId:null,productKey:'new-item',poLine:false,qty:'3',verificationMethod:'manual'},
+      {productId:'left',poLine:true,qty:'3',verificationMethod:'scan',poRemainingBaseQty:'3'}
+    ]
+  },{
+    id:'po-1',outstanding_qty:3,items:[
+      {product_id:'done',remaining_qty:0,purchase_unit_factor:1},
+      {product_id:'left',remaining_qty:3,purchase_unit_factor:1,purchase_unit_name:'pcs'}
+    ]
+  });
+  assert.equal(result.removedCount,1);
+  assert.deepEqual(result.draft.lines.map((line)=>line.productId??line.productKey),['new-item','left']);
+  assert.equal(result.draft.lines.find((line)=>line.productKey==='new-item').poLine,false);
+});
+
+test('baris tambahan lama untuk produk yang masih tersisa dinormalkan menjadi baris PO',()=>{
+  const result=reconcilePurchaseReceiptDraft({
+    activePurchaseOrder:{id:'po-1',outstanding_qty:3},
+    lines:[{productId:'left',poLine:false,qty:'3',verificationMethod:'manual'}]
+  },{
+    id:'po-1',outstanding_qty:3,
+    items:[{product_id:'left',remaining_qty:3,purchase_unit_factor:1,purchase_unit_name:'pcs'}]
+  });
+  assert.equal(result.removedCount,0);
+  assert.equal(result.draft.lines.length,1);
+  assert.equal(result.draft.lines[0].poLine,true);
+  assert.equal(result.draft.lines[0].poRemainingBaseQty,'3');
+});
+
 test('ringkasan pemeriksaan membedakan stok masuk dan jumlah PO yang belum datang',()=>{
   const inspection=buildPurchaseReceiptInspection({
     purchaseOrderId:'po-1',documentNo:'INV-1',
