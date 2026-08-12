@@ -5186,7 +5186,7 @@ async function routeRequest(request, response, route) {
     if (!accessibleOrder) { const error = new Error('Purchase Order tidak ditemukan pada lokasi user'); error.status = 404; throw error; }
     if(accessibleOrder.receiving_approval)throw Object.assign(new Error('PO sedang diproses dalam pengajuan penerimaan. Lanjutkan dari menu Persetujuan harga agar stok tidak diterima dua kali.'),{status:409});
     if(await restockNeedsPriceApproval(context.tenantId,receiptItems))throw Object.assign(new Error('Modal berubah. Ajukan harga kepada Owner sebelum menerima barang.'),{status:409});
-    const result = await rpc('receive_purchase_order_draft_v1', {
+    const result = await rpc('receive_purchase_order_draft_v2', {
       p_tenant_id: context.tenantId, p_actor_id: session.authUser.id, p_order_id: orderId,
       p_client_token:input.draftToken??null,p_document_no: input.documentNo,
       p_items:receiptItems,p_inspection:input.inspection??{}
@@ -5218,7 +5218,7 @@ async function routeRequest(request, response, route) {
       if(!purchaseOrder)throw Object.assign(new Error('Purchase Order tidak ditemukan pada lokasi user'),{status:404});
       if(purchaseOrder.receiving_approval)throw Object.assign(new Error('PO ini sudah memiliki pengajuan penerimaan yang masih diproses.'),{status:409});
     }
-    const result=await rpc('submit_restock_approval_v3',{
+    const result=await rpc('submit_restock_approval_v4',{
       p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_supplier_id:input.supplierId,
       p_location_id:input.locationId,p_document_no:input.documentNo,p_items:receiptItems,
       p_proposed_prices:input.proposedPrices??[],p_note:input.note??'',
@@ -5275,7 +5275,7 @@ async function routeRequest(request, response, route) {
     requirePermission(session,'purchasing.receive');
     const requestId=route.split('/')[1],key=request.headers['idempotency-key'];
     if(!key)throw Object.assign(new Error('Idempotency-Key wajib diisi'),{status:400});
-    const result=await rpc('receive_approved_restock_v2',{
+    const result=await rpc('receive_approved_restock_v3',{
       p_tenant_id:context.tenantId,p_actor_id:session.authUser.id,p_request_id:requestId
     });
     return send(response,result.duplicate?200:201,result);

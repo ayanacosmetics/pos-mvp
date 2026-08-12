@@ -117,7 +117,7 @@ test('staff hanya melihat pemberitahuan approval tanpa modal lama dan saran harg
 });
 
 test('kelebihan kiriman PO hanya diterima melalui persetujuan Owner',()=>{
-  assert.match(api,/submit_restock_approval_v3/);
+  assert.match(api,/submit_restock_approval_v4/);
   assert.match(app,/function restockPoQuantityVariance/);
   assert.match(app,/Lebih kirim/);
   assert.match(app,/SELISIH JUMLAH/);

@@ -3,6 +3,59 @@ function number(value) {
   return Number.isFinite(parsed)?parsed:0;
 }
 
+export function reconcilePurchaseReceiptDraft(draft,currentOrder) {
+  if(!draft?.activePurchaseOrder?.id||!currentOrder?.id||draft.activePurchaseOrder.id!==currentOrder.id){
+    return {draft,changed:false,removedCount:0,resetCount:0,addedCount:0};
+  }
+  const outstanding=new Map(
+    (currentOrder.items??[])
+      .filter((item)=>number(item.remaining_qty)>0)
+      .map((item)=>[item.product_id,item])
+  );
+  const seen=new Set(),lines=[];
+  let removedCount=0,resetCount=0;
+  for(const original of draft.lines??[]){
+    const saved={...original};
+    if(saved.poLine!==true){lines.push(saved);continue;}
+    const current=outstanding.get(saved.productId);
+    if(!current||seen.has(saved.productId)){removedCount++;continue;}
+    seen.add(saved.productId);
+    const factor=Math.max(0.000001,number(current.purchase_unit_factor??1));
+    const remainingBase=number(current.remaining_qty);
+    const hasQty=String(saved.qty??'').trim()!=='';
+    const savedBase=number(saved.qty)*factor;
+    const exceedsCurrent=hasQty&&savedBase>remainingBase+0.000001;
+    if(exceedsCurrent){saved.qty='';saved.verificationMethod='';resetCount++;}
+    lines.push({
+      ...saved,poLine:true,
+      unitId:current.purchase_unit_id??saved.unitId??'',
+      unitName:current.purchase_unit_name??saved.unitName??'pcs',
+      poRemainingBaseQty:String(remainingBase),
+      poRemainingPurchaseQty:String(remainingBase/factor)
+    });
+  }
+  let addedCount=0;
+  for(const current of outstanding.values()){
+    if(seen.has(current.product_id))continue;
+    const factor=Math.max(0.000001,number(current.purchase_unit_factor??1));
+    lines.push({
+      productId:current.product_id,productKey:null,poLine:true,
+      poRemainingPurchaseQty:String(number(current.remaining_qty)/factor),
+      poRemainingBaseQty:String(number(current.remaining_qty)),qty:'',verificationMethod:'',
+      unitId:current.purchase_unit_id??'',unitName:current.purchase_unit_name??'pcs',
+      cost:String(current.purchase_unit_cost??number(current.unit_cost)*factor),
+      batch:'',expiry:'',proposedPrices:[]
+    });
+    addedCount++;
+  }
+  const changed=removedCount>0||resetCount>0||addedCount>0
+    ||number(draft.activePurchaseOrder.outstanding_qty)!==number(currentOrder.outstanding_qty);
+  return {
+    draft:{...draft,activePurchaseOrder:structuredClone(currentOrder),lines,updatedAt:new Date().toISOString()},
+    changed,removedCount,resetCount,addedCount
+  };
+}
+
 export function buildPurchaseReceiptInspection({
   purchaseOrderId=null,documentNo='',orderItems=[],lines=[],inspectedAt=new Date().toISOString()
 }={}) {

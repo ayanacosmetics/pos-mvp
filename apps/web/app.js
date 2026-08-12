@@ -12,7 +12,7 @@ import { parseKaspinProductWorkbook, parseKaspinProductExtensionWorkbook, parseK
 import { buildVariantSuggestions } from './variant-suggestions.mjs';
 import { readRestockDraft, removeRestockDraft, restockDraftStorageKey, writeRestockDraft } from './restock-draft.mjs';
 import { canonicalProductCategories, canonicalProductCategory } from './product-categories.mjs';
-import { buildPurchaseReceiptInspection, purchaseReceiptShortageMessage } from './restock-inspection.mjs';
+import { buildPurchaseReceiptInspection, purchaseReceiptShortageMessage, reconcilePurchaseReceiptDraft } from './restock-inspection.mjs';
 
 const storedAuth = loadAuth();
 let kaspinMigrationPackage=null;
@@ -4225,8 +4225,14 @@ function restockDraftResumeStep(draft){
 }
 
 async function restoreRestockDraft(){
-  const draft=readRestockDraft(localStorage,currentRestockDraftKey());
+  let draft=readRestockDraft(localStorage,currentRestockDraftKey());
   if(!draft){renderRestockDraftStatus(null);return false;}
+  const currentOrder=state.purchaseOrders.find((order)=>order.id===draft.activePurchaseOrder?.id);
+  if(currentOrder){
+    const reconciliation=reconcilePurchaseReceiptDraft(draft,currentOrder);
+    draft=reconciliation.draft;
+    if(reconciliation.changed)writeRestockDraft(localStorage,currentRestockDraftKey(),draft);
+  }
   state.restockDraftRestoring=true;
   try{
     state.activePurchaseOrder=draft.activePurchaseOrder??null;
@@ -5138,11 +5144,17 @@ async function resumeOrderReceipt(orderId){
   try{
     clearRestockDraft();
     const claimed=await claimSharedRestockDraft(order,{payload:sharedRestockDraftForOrder(orderId)?null:draft});
-    writeRestockDraft(localStorage,currentRestockDraftKey(),claimed.payload??draft);
+    const reconciliation=reconcilePurchaseReceiptDraft(claimed.payload??draft,order);
+    writeRestockDraft(localStorage,currentRestockDraftKey(),reconciliation.draft);
     await renderRestock({preserveDraft:false});
     const restored=await restoreRestockDraft();
     if(!restored)throw new Error('Draft tidak dapat dipulihkan. Jangan memulai ulang sebelum diperiksa.');
-    showPurchaseView('receipt');toast('Pemeriksaan dilanjutkan dari data bersama yang tersimpan.');
+    saveRestockDraftNow();await saveSharedRestockDraft();
+    showPurchaseView('receipt');
+    if(reconciliation.changed){
+      const details=[reconciliation.removedCount?`${reconciliation.removedCount} barang yang sudah diterima dihapus`:null,reconciliation.addedCount?`${reconciliation.addedCount} barang sisa ditambahkan`:null,reconciliation.resetCount?`${reconciliation.resetCount} jumlah lama perlu diperiksa ulang`:null].filter(Boolean).join(' · ');
+      toast(`Draft disesuaikan dengan sisa PO terbaru${details?` · ${details}`:''}.`);
+    }else toast('Pemeriksaan dilanjutkan dari data bersama yang tersimpan.');
   }catch(error){state.restockDraftLeaseToken=null;toast(error.message);await loadPurchaseOrders();}
 }
 
