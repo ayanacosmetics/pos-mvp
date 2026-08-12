@@ -5175,6 +5175,22 @@ async function routeRequest(request, response, route) {
     return send(response, 200, result);
   }
 
+  if (request.method === 'POST' && /^purchase-orders\/[^/]+\/close-remainder$/.test(route)) {
+    requirePermission(session, 'purchasing.receive');
+    if (!['OWNER','ADMIN'].includes(session.profile.role)) {
+      const error = new Error('Hanya Owner/Admin dapat menutup sisa Purchase Order'); error.status = 403; throw error;
+    }
+    const [, orderId] = route.split('/');
+    const input = bodyOf(request);
+    const accessibleOrder = (await loadPurchaseOrders(context.tenantId, orderId, context.locationIds))[0];
+    if (!accessibleOrder) { const error = new Error('Purchase Order tidak ditemukan pada lokasi user'); error.status = 404; throw error; }
+    const result = await rpc('close_purchase_order_remainder_v1', {
+      p_tenant_id: context.tenantId, p_actor_id: session.authUser.id,
+      p_order_id: orderId, p_reason: input.reason ?? ''
+    });
+    return send(response, 200, result);
+  }
+
   if (request.method === 'POST' && /^purchase-orders\/[^/]+\/receipts$/.test(route)) {
     requirePermission(session, 'purchasing.receive');
     const [, orderId] = route.split('/');

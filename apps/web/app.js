@@ -4090,7 +4090,12 @@ function sharedRestockDraftForOrder(orderId){
 
 async function migrateLocalRestockDraftToShared(){
   const draft=storedRestockDraft(),orderId=draft?.activePurchaseOrder?.id;
-  if(!orderId||!state.purchaseOrders.some((order)=>order.id===orderId))return false;
+  const order=state.purchaseOrders.find((item)=>item.id===orderId);
+  if(!orderId||!order)return false;
+  if(!['APPROVED','PARTIALLY_RECEIVED'].includes(order.status)){
+    removeRestockDraft(localStorage,currentRestockDraftKey());
+    return false;
+  }
   if(state.activePurchaseOrder?.id===orderId&&state.restockDraftLeaseToken)return false;
   const shared=sharedRestockDraftForOrder(orderId),sharedPayload=shared?.payload;
   if(shared){
@@ -4115,6 +4120,8 @@ async function migrateLocalRestockDraftToShared(){
 }
 
 function restockDraftForOrder(orderId){
+  const order=state.purchaseOrders.find((item)=>item.id===orderId);
+  if(order&&!['APPROVED','PARTIALLY_RECEIVED'].includes(order.status))return null;
   const shared=sharedRestockDraftForOrder(orderId);
   if(shared?.payload?.activePurchaseOrder?.id===orderId)return shared.payload;
   const local=storedRestockDraft();
@@ -4228,6 +4235,12 @@ async function restoreRestockDraft(){
   let draft=readRestockDraft(localStorage,currentRestockDraftKey());
   if(!draft){renderRestockDraftStatus(null);return false;}
   const currentOrder=state.purchaseOrders.find((order)=>order.id===draft.activePurchaseOrder?.id);
+  if(currentOrder&&!['APPROVED','PARTIALLY_RECEIVED'].includes(currentOrder.status)){
+    removeRestockDraft(localStorage,currentRestockDraftKey());
+    state.restockDraftProducts.clear();
+    renderRestockDraftStatus(null);
+    return false;
+  }
   if(currentOrder){
     const reconciliation=reconcilePurchaseReceiptDraft(draft,currentOrder);
     draft=reconciliation.draft;
@@ -4332,7 +4345,8 @@ async function renderRestock({preserveDraft=true}={}) {
 
 const purchaseStatus = {
   DRAFT: ['Draft', 'draft'], SUBMITTED: ['Menunggu persetujuan', 'submitted'], APPROVED: ['Disetujui', 'approved'],
-  PARTIALLY_RECEIVED: ['Diterima sebagian', 'partial'], RECEIVED: ['Selesai', 'received'], CANCELLED: ['Dibatalkan', 'cancelled']
+  PARTIALLY_RECEIVED: ['Diterima sebagian', 'partial'], RECEIVED: ['Selesai', 'received'],
+  CLOSED_PARTIAL: ['Ditutup sebagian', 'partial'], CANCELLED: ['Dibatalkan', 'cancelled']
 };
 
 function showPurchaseView(name,{approvalId=null}={}) {
@@ -4706,7 +4720,7 @@ function renderPurchaseOrders() {
   el('purchase-metrics').innerHTML = [
     ['Semua PO', state.purchaseOrders.length], ['Perlu persetujuan', count(['SUBMITTED'])],
     ['Siap diterima', state.purchaseOrders.filter((order)=>['APPROVED','PARTIALLY_RECEIVED'].includes(order.status)&&!order.receiving_approval).length],
-    ['Sedang diproses',state.purchaseOrders.filter((order)=>order.receiving_approval).length],['Selesai', count(['RECEIVED'])]
+    ['Sedang diproses',state.purchaseOrders.filter((order)=>order.receiving_approval).length],['Selesai', count(['RECEIVED','CLOSED_PARTIAL'])]
   ].map(([label,value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('');
   el('purchase-order-list').innerHTML = orders.map((order) => {
     const [label, statusClass] = purchaseStatus[order.status] ?? [order.status, 'draft'];
@@ -4723,9 +4737,10 @@ function renderPurchaseOrders() {
     const overdue=order.overdue?'<span class="status-badge out">TERLAMBAT</span>':'';
     const approval=order.status==='SUBMITTED'?` · di atas batas ${money.format(order.approval_threshold??0)}`:order.status==='APPROVED'&&!order.approval_required?' · disetujui otomatis':'';
     const receivingNotice=receivingApproval?`<div class="purchase-receiving-lock"><span class="badge warning">PENERIMAAN DIPROSES</span><div><strong>${escapeHtml(receivingApprovalLabel)}</strong><small>Faktur ${escapeHtml(receivingApproval.documentNo??'-')} · selesaikan pengajuan ini sebelum menerima barang lagi.</small></div></div>`:'';
+    const closedNotice=order.status==='CLOSED_PARTIAL'?`<div class="purchase-receiving-lock"><span class="badge neutral">SISA DITUTUP</span><div><strong>${Number(order.outstanding_qty).toLocaleString('id-ID')} pcs tidak diposting dari PO ini</strong><small>${escapeHtml(order.close_reason??'Sisa PO ditutup Owner tanpa mengubah stok.')}</small></div></div>`:'';
     const resumeLabel=order.status==='PARTIALLY_RECEIVED'?(claimedByCurrent?'Kembali ke penerimaan sisa':`Terima sisa ${Number(order.outstanding_qty).toLocaleString('id-ID')} pcs`):(claimedByCurrent?'Kembali ke pemeriksaan':'Lanjutkan pemeriksaan');
     const draftNotice=pausedDraft?`<div class="purchase-draft-resume"><div><span class="status-badge partial">${claimActive?'SEDANG DIPERIKSA':'PEMERIKSAAN DIJEDA'}</span><small>${checkedDraft} barang sudah diperiksa · ${claimActive?`${escapeHtml(sharedDraft.claimedByName??'Staff')} sedang mengerjakan`:`terakhir oleh ${escapeHtml(sharedDraft?.updatedByName??'staff')}`}.</small></div>${claimActive&&!claimedByCurrent?'<button class="button secondary" type="button" disabled>Terkunci</button>':`<button class="button primary po-resume-receipt" data-id="${escapeHtml(order.id)}" type="button">${resumeLabel}</button>`}</div>`:'';
-    return `<article class="purchase-document purchase-document-open" data-id="${escapeHtml(order.id)}" role="button" tabindex="0" aria-label="Lihat detail ${escapeHtml(order.po_no)}"><div class="purchase-document-main"><div><div class="document-number"><strong>${escapeHtml(order.po_no)}</strong><span class="status-badge ${statusClass}">${escapeHtml(label)}</span>${overdue}</div><p>${escapeHtml(order.supplier_name)}</p><small>Dibuat ${new Date(order.created_at).toLocaleDateString('id-ID')}${order.expected_on ? ` · estimasi ${new Date(`${order.expected_on}T00:00:00`).toLocaleDateString('id-ID')}` : ''}${approval}</small></div><div class="document-amount"><strong>${money.format(order.grand_total)}</strong><small>${order.items.length} jenis · sisa ${Number(order.outstanding_qty).toLocaleString('id-ID')} pcs</small></div></div>${receivingNotice}${draftNotice}<div class="receipt-progress"><span style="width:${progress}%"></span></div><div class="purchase-document-footer"><small>Diterima ${received} dari ${ordered} pcs · ${progress}%</small><strong class="purchase-document-detail-link">Lihat detail <span aria-hidden="true">›</span></strong></div></article>`;
+    return `<article class="purchase-document purchase-document-open" data-id="${escapeHtml(order.id)}" role="button" tabindex="0" aria-label="Lihat detail ${escapeHtml(order.po_no)}"><div class="purchase-document-main"><div><div class="document-number"><strong>${escapeHtml(order.po_no)}</strong><span class="status-badge ${statusClass}">${escapeHtml(label)}</span>${overdue}</div><p>${escapeHtml(order.supplier_name)}</p><small>Dibuat ${new Date(order.created_at).toLocaleDateString('id-ID')}${order.expected_on ? ` · estimasi ${new Date(`${order.expected_on}T00:00:00`).toLocaleDateString('id-ID')}` : ''}${approval}</small></div><div class="document-amount"><strong>${money.format(order.grand_total)}</strong><small>${order.items.length} jenis · sisa ${Number(order.outstanding_qty).toLocaleString('id-ID')} pcs</small></div></div>${receivingNotice}${closedNotice}${draftNotice}<div class="receipt-progress"><span style="width:${progress}%"></span></div><div class="purchase-document-footer"><small>Diterima ${received} dari ${ordered} pcs · ${progress}%</small><strong class="purchase-document-detail-link">Lihat detail <span aria-hidden="true">›</span></strong></div></article>`;
   }).join('') || '<div class="empty-state compact">Belum ada Purchase Order dengan status ini.</div>';
   el('purchase-order-list').querySelectorAll('.purchase-document-open').forEach((card)=>{
     const open=()=>openPurchaseOrderDetail(card.dataset.id);
@@ -4758,7 +4773,8 @@ function purchaseOrderDetailActions(order) {
   const workflowActions=[
     order.status==='DRAFT'?`<button class="button secondary po-open" data-id="${escapeHtml(order.id)}">Ubah draft</button><button class="button primary po-action" data-id="${escapeHtml(order.id)}" data-action="submit">Siapkan pesanan</button>`:'',
     order.status==='SUBMITTED'&&canApprove?`<button class="button primary po-action" data-id="${escapeHtml(order.id)}" data-action="approve">Setujui</button>`:'',
-    !['RECEIVED','CANCELLED','PARTIALLY_RECEIVED'].includes(order.status)&&canApprove?`<button class="button danger po-action" data-id="${escapeHtml(order.id)}" data-action="cancel">Batalkan PO</button>`:'',
+    !['RECEIVED','CLOSED_PARTIAL','CANCELLED','PARTIALLY_RECEIVED'].includes(order.status)&&canApprove?`<button class="button danger po-action" data-id="${escapeHtml(order.id)}" data-action="cancel">Batalkan PO</button>`:'',
+    order.status==='PARTIALLY_RECEIVED'&&canApprove&&!receivingApproval?`<button class="button danger po-close-remainder" data-id="${escapeHtml(order.id)}">Tutup sisa PO</button>`:'',
     pausedDraft?(lockedByOther?`<button class="button secondary" disabled>Sedang diperiksa ${escapeHtml(sharedDraft.claimedByName??'staff lain')}</button>`:`<button class="button primary po-resume-receipt" data-id="${escapeHtml(order.id)}">${resumeLabel}</button>`):['APPROVED','PARTIALLY_RECEIVED'].includes(order.status)&&!receivingApproval?`<button class="button primary po-receive" data-id="${escapeHtml(order.id)}">${receiveLabel}</button>`:'',
     canOpenApproval?`<button class="button secondary po-open-receiving-approval" data-id="${escapeHtml(receivingApproval.id)}">Lihat proses penerimaan</button>`:''
   ].join('');
@@ -4768,6 +4784,7 @@ function purchaseOrderDetailActions(order) {
 function bindPurchaseOrderDetailActions(root) {
   root.querySelectorAll('.po-open').forEach((button)=>button.addEventListener('click',()=>editPurchaseOrder(button.dataset.id)));
   root.querySelectorAll('.po-action').forEach((button)=>button.addEventListener('click',()=>transitionPurchaseOrder(button.dataset.id,button.dataset.action)));
+  root.querySelectorAll('.po-close-remainder').forEach((button)=>button.addEventListener('click',()=>closePurchaseOrderRemainder(button.dataset.id)));
   root.querySelectorAll('.po-receive').forEach((button)=>button.addEventListener('click',()=>prepareOrderReceipt(button.dataset.id)));
   root.querySelectorAll('.po-resume-receipt').forEach((button)=>button.addEventListener('click',()=>resumeOrderReceipt(button.dataset.id)));
   root.querySelectorAll('.po-open-receiving-approval').forEach((button)=>button.addEventListener('click',()=>openPurchaseOrderReceivingApproval(button.dataset.id)));
@@ -5112,6 +5129,21 @@ async function savePurchaseOrder() {
 async function transitionPurchaseOrder(orderId,action) {
   try { const result=await request(`/api/purchase-orders/${orderId}/${action}`,{method:'POST',body:'{}'}); toast(`${result.po_no}: ${purchaseStatus[result.status]?.[0] ?? result.status}`); await loadPurchaseOrders(); if(state.activePurchaseOrderDetailId===orderId)openPurchaseOrderDetail(orderId); }
   catch(error){ toast(error.message); }
+}
+
+async function closePurchaseOrderRemainder(orderId){
+  const order=state.purchaseOrders.find((item)=>item.id===orderId);
+  if(!order||order.status!=='PARTIALLY_RECEIVED')return toast('PO ini tidak memiliki sisa aktif yang dapat ditutup.');
+  const reason=window.prompt('Tuliskan alasan dan nomor faktur Tanpa PO yang sudah memasukkan barang. Contoh: Barang diterima melalui Tanpa PO INV-2026-0012.');
+  if(reason===null)return;
+  if(reason.trim().length<8)return toast('Alasan dan nomor faktur wajib ditulis agar histori dapat diaudit.');
+  if(!window.confirm(`Tutup sisa ${Number(order.outstanding_qty).toLocaleString('id-ID')} pcs pada ${order.po_no}?\n\nStok tidak akan bertambah atau berkurang. Jumlah diterima PO tidak akan dipalsukan menjadi 100%.`))return;
+  try{
+    const result=await request(`/api/purchase-orders/${orderId}/close-remainder`,{method:'POST',body:JSON.stringify({reason:reason.trim()})});
+    toast(`${result.po_no}: sisa ${Number(result.closedRemainingQty).toLocaleString('id-ID')} pcs ditutup tanpa mengubah stok.`);
+    await loadPurchaseOrders();
+    if(state.activePurchaseOrderDetailId===orderId)openPurchaseOrderDetail(orderId);
+  }catch(error){toast(error.message);}
 }
 
 async function prepareOrderReceipt(orderId) {
